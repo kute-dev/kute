@@ -1,0 +1,68 @@
+version: 2
+updates:
+  # Go modules
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      k8s-io:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+        update-types:
+          - "minor"
+          - "patch"
+      charmbracelet:
+        patterns:
+          - "github.com/charmbracelet/*"
+          - "charm.land/*"
+        update-types:
+          - "minor"
+          - "patch"
+      go-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+          - "github.com/charmbracelet/*"
+          - "charm.land/*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # k8s.io major version bumps (e.g. v0 -> v1) need manual review —
+      # client-go's API surface can shift significantly
+      - dependency-name: "k8s.io/*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
