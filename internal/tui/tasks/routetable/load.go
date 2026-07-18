@@ -1,0 +1,553 @@
+package routetable
+
+import (
+	"context"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
+)
+
+// load dispatches to the flavor-specific loader for m.kind — the single
+// entry point Init/actions.ResultMsg-driven reloads call.
+func (m Model) load() tea.Cmd {
+	switch m.flavor {
+	case flavorGateway:
+		return m.loadGateway()
+	case flavorIngress:
+		return m.loadIngress()
+	default:
+		return m.loadRoute()
+	}
+}
+
+// loadIngress resolves 23a: the Ingress itself, one row per rule host+path,
+// and a TLS fact per Spec.TLS block.
+func (m Model) loadIngress() tea.Cmd {
+	lister, ns, name, timeout := m.lister, m.namespace, m.name, m.timeout
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		objs, err := lister.ListRaw(ctx, kube.KindIngress, ns)
+		if err != nil {
+			return loadedMsg{err: err}
+		}
+		var ing *networkingv1.Ingress
+		for _, obj := range objs {
+			if i, ok := obj.(*networkingv1.Ingress); ok && i.Name == name {
+				ing = i
+				break
+			}
+		}
+		if ing == nil {
+			return loadedMsg{err: fmt.Errorf("ingress %q not found", name)}
+		}
+
+		class := "-"
+		if ing.Spec.IngressClassName != nil && *ing.Spec.IngressClassName != "" {
+			class = *ing.Spec.IngressClassName
+		}
+
+		httpsHosts := map[string]bool{}
+		for _, t := range ing.Spec.TLS {
+			if len(t.Hosts) == 0 {
+				httpsHosts[""] = true // no hosts named = covers every rule
+			}
+			for _, h := range t.Hosts {
+				httpsHosts[h] = true
+			}
+		}
+
+		// facts + hostFactIdx resolve every rule host to the TLS block that
+		// covers it — hostFactIdx feeds each row's compact TLS cell,
+		// wildcardFactIdx is the "no Hosts named" block that covers every
+		// rule (mirrors httpsHosts[""] above).
+		var facts []tlsFact
+		hostFactIdx := map[string]int{}
+		wildcardFactIdx := -1
+		for i, t := range ing.Spec.TLS {
+			expiry, ec := resolveCertExpiry(ctx, lister, ns, t.SecretName)
+			facts = append(facts, tlsFact{secretName: t.SecretName, hosts: t.Hosts, expiry: expiry, class: ec})
+			if len(t.Hosts) == 0 {
+				wildcardFactIdx = i
+			}
+			for _, h := range t.Hosts {
+				hostFactIdx[h] = i
+			}
+		}
+
+		var rows []routeRow
+		hostSet := map[string]struct{}{}
+		for _, r := range ing.Spec.Rules {
+			if r.HTTP == nil {
+				continue
+			}
+			host := r.Host
+			hostText := host
+			if hostText == "" {
+				hostText = "*"
+			}
+			hostSet[hostText] = struct{}{}
+			scheme := "http"
+			if httpsHosts[""] || httpsHosts[host] {
+				scheme = "https"
+			}
+			tlsText, tlsClass := "", resources.StatusNeutral
+			if idx, ok := hostFactIdx[host]; ok {
+				tlsText, tlsClass = compactExpiry(facts[idx].expiry), facts[idx].class
+			} else if wildcardFactIdx >= 0 {
+				tlsText, tlsClass = compactExpiry(facts[wildcardFactIdx].expiry), facts[wildcardFactIdx].class
+			}
+			for _, p := range r.HTTP.Paths {
+				if p.Backend.Service == nil {
+					continue
+				}
+				svcName := p.Backend.Service.Name
+				state := resources.ResolveServiceBackend(ctx, lister, ns, svcName)
+				glyph, class := state.Glyph()
+				port := backendPortText(ctx, lister, ns, svcName, p.Backend.Service.Port)
+				rows = append(rows, routeRow{
+					match:         hostText + " " + p.Path,
+					backendNS:     ns,
+					backendName:   svcName,
+					backendText:   svcName + ":" + port,
+					glyph:         glyph,
+					class:         class,
+					endpointsText: formatEndpoints(state),
+					tlsText:       tlsText,
+					tlsClass:      tlsClass,
+					url:           scheme + "://" + host + p.Path,
+				})
+			}
+		}
+
+		return loadedMsg{
+			flavor: flavorIngress, ingressClass: class, ingressHostCount: len(hostSet),
+			rows: rows, tlsFacts: facts,
+		}
+	}
+}
+
+// formatEndpoints renders a resolved backend's ready-pod count for the
+// ENDPOINTS column (docs/design README.md §23a/§23b) — "N ready" when
+// resolvable, "—" when the Service doesn't exist or its readiness can't be
+// computed (no selector).
+func formatEndpoints(state resources.BackendState) string {
+	if !state.Exists || state.Unresolvable {
+		return "—"
+	}
+	return fmt.Sprintf("%d ready", state.Ready)
+}
+
+// compactExpiry drops resolveCertExpiry's "expires in " prefix for the
+// row-level TLS cell ("61d" rather than "expires in 61d") — the bottom "tls"
+// strip keeps the full phrase.
+func compactExpiry(full string) string {
+	return strings.TrimPrefix(full, "expires in ")
+}
+
+// backendPortText resolves an Ingress path's backend port to its numeric
+// display form: Number is used directly; a named port is looked up against
+// the Service's own declared ports (falling back to the bare name if the
+// Service can't be read, rather than erroring the whole row).
+func backendPortText(ctx context.Context, lister resources.RawLister, ns, svcName string, port networkingv1.ServiceBackendPort) string {
+	if port.Number != 0 {
+		return fmt.Sprintf("%d", port.Number)
+	}
+	if port.Name == "" {
+		return "-"
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindService, ns)
+	if err == nil {
+		for _, obj := range objs {
+			svc, ok := obj.(*corev1.Service)
+			if !ok || svc.Name != svcName {
+				continue
+			}
+			for _, sp := range svc.Spec.Ports {
+				if sp.Name == port.Name {
+					return fmt.Sprintf("%d", sp.Port)
+				}
+			}
+		}
+	}
+	return port.Name
+}
+
+// resolveCertExpiry parses a TLS Secret's tls.crt to report expiry, per
+// docs/design README.md §23a: "yellow <30d, red expired".
+func resolveCertExpiry(ctx context.Context, lister resources.RawLister, ns, secretName string) (text string, class resources.StatusClass) {
+	if lister == nil || secretName == "" {
+		return "–", resources.StatusNeutral
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindSecret, ns)
+	if err != nil {
+		return "–", resources.StatusNeutral
+	}
+	for _, obj := range objs {
+		secret, ok := obj.(*corev1.Secret)
+		if !ok || secret.Name != secretName {
+			continue
+		}
+		raw := secret.Data["tls.crt"]
+		if len(raw) == 0 {
+			return "no cert data", resources.StatusWarn
+		}
+		block, _ := pem.Decode(raw)
+		if block == nil {
+			return "invalid cert", resources.StatusWarn
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return "invalid cert", resources.StatusWarn
+		}
+		days := int(time.Until(cert.NotAfter).Hours() / 24)
+		switch {
+		case days < 0:
+			return fmt.Sprintf("expired %dd ago", -days), resources.StatusFail
+		case days < 30:
+			return fmt.Sprintf("expires in %dd", days), resources.StatusWarn
+		default:
+			return fmt.Sprintf("expires in %dd", days), resources.StatusOK
+		}
+	}
+	return "secret not found", resources.StatusFail
+}
+
+// loadRoute resolves 23b's HTTPRoute/GRPCRoute/TCPRoute flavor: one row per
+// rule-match x backendRef (weighted splits stacked under their match) plus
+// the parent-Gateway summary from status.parents. Every field is read
+// tolerantly via unstructured.Nested* so GRPCRoute/TCPRoute (which lack
+// hostnames/path matches) degrade to backendRef-only rows instead of
+// erroring.
+func (m Model) loadRoute() tea.Cmd {
+	lister, kind, ns, name, timeout := m.lister, m.kind, m.namespace, m.name, m.timeout
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		u, err := findUnstructured(ctx, lister, kind, ns, name)
+		if err != nil {
+			return loadedMsg{err: err}
+		}
+
+		rows := routeRowsFromRoute(ctx, lister, ns, u)
+		parentText, attached, parentNS, parentName, sectionName := parentSummary(ns, u)
+		listenerText := ""
+		if parentName != "" {
+			listenerText = resolveParentListenerDetail(ctx, lister, parentNS, parentName, sectionName)
+		}
+
+		hostnames, _, _ := unstructured.NestedStringSlice(u.Object, "spec", "hostnames")
+		hostText := "*"
+		if len(hostnames) > 0 {
+			hostText = strings.Join(hostnames, ",")
+		}
+		rulesRaw, _, _ := unstructured.NestedSlice(u.Object, "spec", "rules")
+
+		return loadedMsg{
+			flavor: flavorRoute, rows: rows,
+			parentText: parentText, parentAttached: attached,
+			parentGatewayNS: parentNS, parentGatewayName: parentName,
+			parentListenerText: listenerText,
+			routeHostText:      hostText, routeRuleCount: len(rulesRaw),
+		}
+	}
+}
+
+// resolveParentListenerDetail resolves the accepted parent Gateway's own
+// listener into the below-table "parent" line's detail (docs/design
+// README.md §23b: "gw/public · listener https:443 · secret/nva-tls-prod
+// expires in 61d") — best-effort: a Gateway that can't be read, or a listener
+// name that no longer matches, still returns the bare "gw/<name>" identity
+// rather than an empty line.
+func resolveParentListenerDetail(ctx context.Context, lister resources.RawLister, gatewayNS, gatewayName, sectionName string) string {
+	base := "gw/" + gatewayName
+	u, err := findUnstructured(ctx, lister, kube.KindGateway, gatewayNS, gatewayName)
+	if err != nil {
+		return base
+	}
+	listenersSpec, _, _ := unstructured.NestedSlice(u.Object, "spec", "listeners")
+	for _, l := range listenersSpec {
+		lm, ok := l.(map[string]any)
+		if !ok {
+			continue
+		}
+		lname, _, _ := unstructured.NestedString(lm, "name")
+		if sectionName != "" && lname != sectionName {
+			continue
+		}
+		proto, _, _ := unstructured.NestedString(lm, "protocol")
+		port, _, _ := unstructured.NestedInt64(lm, "port")
+		detail := fmt.Sprintf("%s · listener %s:%d", base, proto, port)
+		certRefs, found, _ := unstructured.NestedSlice(lm, "tls", "certificateRefs")
+		if !found || len(certRefs) == 0 {
+			return detail
+		}
+		cr, ok := certRefs[0].(map[string]any)
+		if !ok {
+			return detail
+		}
+		secretName, _, _ := unstructured.NestedString(cr, "name")
+		expiry, _ := resolveCertExpiry(ctx, lister, gatewayNS, secretName)
+		return fmt.Sprintf("%s · secret/%s %s", detail, secretName, expiry)
+	}
+	return base
+}
+
+func findUnstructured(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, ns, name string) (*unstructured.Unstructured, error) {
+	objs, err := lister.ListRaw(ctx, kind, ns)
+	if err != nil {
+		return nil, err
+	}
+	for _, obj := range objs {
+		if u, ok := obj.(*unstructured.Unstructured); ok && u.GetName() == name {
+			return u, nil
+		}
+	}
+	return nil, fmt.Errorf("%s %q not found", kind, name)
+}
+
+func routeRowsFromRoute(ctx context.Context, lister resources.RawLister, ns string, u *unstructured.Unstructured) []routeRow {
+	rulesRaw, _, _ := unstructured.NestedSlice(u.Object, "spec", "rules")
+	var rows []routeRow
+	for _, rr := range rulesRaw {
+		rule, ok := rr.(map[string]any)
+		if !ok {
+			continue
+		}
+		matchText := routeMatchText(rule)
+
+		type backendRef struct {
+			name   string
+			port   int64
+			weight int64
+		}
+		var refs []backendRef
+		var totalWeight int64
+		backendRefsRaw, _, _ := unstructured.NestedSlice(rule, "backendRefs")
+		for _, b := range backendRefsRaw {
+			bm, ok := b.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _, _ := unstructured.NestedString(bm, "name")
+			port, _, _ := unstructured.NestedInt64(bm, "port")
+			weight, found, _ := unstructured.NestedInt64(bm, "weight")
+			if !found {
+				weight = 1
+			}
+			refs = append(refs, backendRef{name: name, port: port, weight: weight})
+			totalWeight += weight
+		}
+
+		for i, ref := range refs {
+			state := resources.ResolveServiceBackend(ctx, lister, ns, ref.name)
+			glyph, class := state.Glyph()
+			match := ""
+			if i == 0 {
+				match = matchText
+			}
+			weightPct := ""
+			if len(refs) > 1 && totalWeight > 0 {
+				weightPct = fmt.Sprintf("%d%%", ref.weight*100/totalWeight)
+			}
+			portText := "-"
+			if ref.port != 0 {
+				portText = fmt.Sprintf("%d", ref.port)
+			}
+			rows = append(rows, routeRow{
+				match: match, backendNS: ns, backendName: ref.name,
+				backendText: ref.name + ":" + portText,
+				glyph:       glyph, class: class, weightPct: weightPct,
+				endpointsText: formatEndpoints(state),
+			})
+		}
+	}
+	return rows
+}
+
+// routeMatchText renders one rule's match summary: the path match plus its
+// type ("prefix"/"exact"/"regex") and any header matches (docs/design
+// README.md §23b: "/internal prefix · header x-env=stage") — hostnames live
+// in the top strip, not here. GRPCRoute/TCPRoute rules carry no "matches"
+// field at all, so this degrades to "*" (match-all).
+func routeMatchText(rule map[string]any) string {
+	matches, _, _ := unstructured.NestedSlice(rule, "matches")
+	if len(matches) == 0 {
+		return "*"
+	}
+	pm, ok := matches[0].(map[string]any)
+	if !ok {
+		return "*"
+	}
+	path, _, _ := unstructured.NestedString(pm, "path", "value")
+	if path == "" {
+		return "*"
+	}
+	var extras []string
+	if label := routeMatchTypeLabel(pm); label != "" {
+		extras = append(extras, label)
+	}
+	if headers := routeHeaderMatchSummary(pm); headers != "" {
+		extras = append(extras, headers)
+	}
+	if len(extras) == 0 {
+		return path
+	}
+	return path + " " + strings.Join(extras, " · ")
+}
+
+// routeMatchTypeLabel renders spec.rules[].matches[].path.type in the
+// mockups' lowercase form ("prefix", "exact", "regex"); PathPrefix is
+// Gateway API's default when type is unset.
+func routeMatchTypeLabel(pathMatch map[string]any) string {
+	switch t, _, _ := unstructured.NestedString(pathMatch, "path", "type"); t {
+	case "Exact":
+		return "exact"
+	case "RegularExpression":
+		return "regex"
+	default:
+		return "prefix"
+	}
+}
+
+// routeHeaderMatchSummary renders matches[0].headers as "header k=v"
+// clauses, joined for the rare multi-header rule.
+func routeHeaderMatchSummary(pathMatch map[string]any) string {
+	headers, _, _ := unstructured.NestedSlice(pathMatch, "headers")
+	if len(headers) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(headers))
+	for _, h := range headers {
+		hm, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _, _ := unstructured.NestedString(hm, "name")
+		if name == "" {
+			continue
+		}
+		value, _, _ := unstructured.NestedString(hm, "value")
+		parts = append(parts, "header "+name+"="+value)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// parentSummary resolves status.parents' first Accepted condition into the
+// docs/design README.md §23b parent strip text ("gw/public › https:443 ·
+// accepted" — the leading ✓/✕ glyph is the view's own span, styled off
+// attached) plus the Gateway identity 'p'/the below-table listener lookup
+// need.
+func parentSummary(routeNamespace string, u *unstructured.Unstructured) (text string, attached bool, gatewayNS, gatewayName, sectionName string) {
+	parents, _, _ := unstructured.NestedSlice(u.Object, "status", "parents")
+	for _, p := range parents {
+		pm, ok := p.(map[string]any)
+		if !ok {
+			continue
+		}
+		parentName, _, _ := unstructured.NestedString(pm, "parentRef", "name")
+		parentNS, hasNS, _ := unstructured.NestedString(pm, "parentRef", "namespace")
+		if !hasNS || parentNS == "" {
+			parentNS = routeNamespace
+		}
+		section, _, _ := unstructured.NestedString(pm, "parentRef", "sectionName")
+
+		conds, _, _ := unstructured.NestedSlice(pm, "conditions")
+		for _, c := range conds {
+			cm, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			if typ, _, _ := unstructured.NestedString(cm, "type"); typ != "Accepted" {
+				continue
+			}
+			label := "gw/" + parentName
+			if section != "" {
+				label += " › " + section
+			}
+			if st, _, _ := unstructured.NestedString(cm, "status"); st == "True" {
+				return label + " · accepted", true, parentNS, parentName, section
+			}
+			msg, _, _ := unstructured.NestedString(cm, "message")
+			text := label + " · not accepted"
+			if msg != "" {
+				text += ": " + msg
+			}
+			return text, false, parentNS, parentName, section
+		}
+	}
+	return "no parent status yet", false, "", "", ""
+}
+
+// loadGateway resolves 23b's Gateway flavor: one row per spec.listeners
+// entry, its status.listeners counterpart supplying the attached-route
+// count.
+func (m Model) loadGateway() tea.Cmd {
+	lister, ns, name, timeout := m.lister, m.namespace, m.name, m.timeout
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		u, err := findUnstructured(ctx, lister, kube.KindGateway, ns, name)
+		if err != nil {
+			return loadedMsg{err: err}
+		}
+
+		gwClass, _, _ := unstructured.NestedString(u.Object, "spec", "gatewayClassName")
+
+		attachedByName := map[string]int64{}
+		statusListeners, _, _ := unstructured.NestedSlice(u.Object, "status", "listeners")
+		for _, sl := range statusListeners {
+			slm, ok := sl.(map[string]any)
+			if !ok {
+				continue
+			}
+			lname, _, _ := unstructured.NestedString(slm, "name")
+			n, _, _ := unstructured.NestedInt64(slm, "attachedRoutes")
+			attachedByName[lname] = n
+		}
+
+		var rows []listenerRow
+		listenersSpec, _, _ := unstructured.NestedSlice(u.Object, "spec", "listeners")
+		for _, l := range listenersSpec {
+			lm, ok := l.(map[string]any)
+			if !ok {
+				continue
+			}
+			lname, _, _ := unstructured.NestedString(lm, "name")
+			proto, _, _ := unstructured.NestedString(lm, "protocol")
+			port, _, _ := unstructured.NestedInt64(lm, "port")
+			hostname, _, _ := unstructured.NestedString(lm, "hostname")
+			if hostname == "" {
+				hostname = "*"
+			}
+
+			tlsText, tlsClass := "–", resources.StatusNeutral
+			if certRefs, found, _ := unstructured.NestedSlice(lm, "tls", "certificateRefs"); found && len(certRefs) > 0 {
+				if cr, ok := certRefs[0].(map[string]any); ok {
+					secretName, _, _ := unstructured.NestedString(cr, "name")
+					tlsText, tlsClass = resolveCertExpiry(ctx, lister, ns, secretName)
+				}
+			}
+
+			rows = append(rows, listenerRow{
+				name: lname, protoPort: fmt.Sprintf("%s:%d", proto, port), hostname: hostname,
+				tlsText: tlsText, tlsClass: tlsClass, attached: int(attachedByName[lname]),
+			})
+		}
+
+		return loadedMsg{flavor: flavorGateway, gatewayClass: gwClass, listeners: rows}
+	}
+}

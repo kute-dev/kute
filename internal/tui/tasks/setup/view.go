@@ -1,0 +1,367 @@
+package setup
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
+)
+
+func (m Model) View() tea.View { return tea.NewView(m.Render()) }
+
+func (m Model) Render() string { return tui.Frame(m.width, m.height, m) }
+
+func (m Model) Theme() tui.Theme {
+	if m.session != nil {
+		return m.session.Theme
+	}
+	return tui.Dark()
+}
+
+// Header names the failing cluster (4c) or omits the segment entirely
+// (10b, where there's no context to name yet) — docs/design README.md
+// §4c/§10b: no namespace/kind breadcrumb, since neither screen has one.
+func (m Model) Header() tui.HeaderState {
+	theme := m.Theme()
+	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
+
+	crumbs := []tui.Crumb{{Text: "kute", Style: accent}}
+	if m.clusterName != "" {
+		crumbs = append(crumbs, tui.Crumb{Text: " │ ", Style: ghost2}, tui.Crumb{Text: m.clusterName, Style: dim})
+	}
+
+	var conn tui.ConnBadge
+	if m.state == Unreachable {
+		conn = tui.ConnBadge{Text: tui.GlyphProbing + " connecting failed", Style: lipgloss.NewStyle().Foreground(theme.Bad)}
+	} else {
+		conn = tui.ConnBadge{Text: tui.GlyphCompleted + " no cluster", Style: dim}
+	}
+	return tui.HeaderState{Crumbs: crumbs, Conn: conn}
+}
+
+func (m Model) Strips(int) []string { return nil }
+
+func (m Model) Keybar() tui.Keybar {
+	if m.editing {
+		return tui.Keybar{
+			Pill:     tui.ModeSetup,
+			PillText: "EDIT PATH",
+			Groups:   [][]tui.KeyHint{{{Key: "enter", Label: "connect"}, {Key: "esc", Label: "cancel"}}},
+		}
+	}
+	switch m.state {
+	case Unreachable:
+		return tui.Keybar{
+			Pill:      tui.ModeNoCluster,
+			PillText:  "NO CLUSTER",
+			Groups:    [][]tui.KeyHint{{verbs.Context.Hint(), verbs.Retry.Hint(), {Key: "e", Label: "edit kubeconfig path"}}},
+			RightNote: "probing other kubeconfig contexts in the background",
+		}
+	default:
+		return tui.Keybar{
+			Pill:       tui.ModeSetup,
+			PillText:   "SETUP",
+			Groups:     [][]tui.KeyHint{{verbs.Retry.Hint(), {Key: "k", Label: "enter kubeconfig path"}}},
+			RightHints: []tui.KeyHint{{Key: "q", Label: "quit"}},
+		}
+	}
+}
+
+func (m Model) Body(width, height int) string {
+	if m.state == Unreachable {
+		return m.unreachableBody(width, height)
+	}
+	return m.noConfigBody(width, height)
+}
+
+// blockWidth is the centered content column's width, per the mockups' ~560px
+// panels — floored so narrow terminals still get usable text.
+func blockWidth(width int) int {
+	return min(64, max(width-8, 24))
+}
+
+// hintBlockWidth is the provider-hint line's own, wider column — per the
+// mockup, that line sits in its own centered block sized to fit the three
+// provider commands on one row (~87 cols), rather than being squeezed into
+// blockWidth's ~560px wordmark column.
+func hintBlockWidth(width int) int {
+	return min(92, max(width-8, 24))
+}
+
+// centerBlock left-aligns every line up to bw (so multi-line sub-boxes like
+// the error/LOOKED IN panels keep their own internal alignment, and so short
+// single lines land under the wordmark's own snug column) and centers the
+// resulting block within width×height, mirroring components.Card's placement
+// without forcing an outer border around everything. Lines already wider
+// than bw (e.g. hintBlockWidth-centered provider hints) are passed through
+// untouched — lipgloss.Place centers those independently by their own width
+// rather than folding them into the bw column.
+func centerBlock(lines []string, bw, width, height int) string {
+	padded := make([]string, len(lines))
+	for i, l := range lines {
+		if lipgloss.Width(l) > bw {
+			padded[i] = l
+			continue
+		}
+		padded[i] = components.Pad(l, bw)
+	}
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, strings.Join(padded, "\n"))
+}
+
+func padBetween(left, right string, width int) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+// unreachableBody is 4c: title + retry countdown, the raw error, a SWITCH
+// CONTEXT preview (names only — live reachability is one 'c' away via the
+// context palette), and — while editing — the inline kubeconfig-path input.
+func (m Model) unreachableBody(width, height int) string {
+	theme := m.Theme()
+	bw := blockWidth(width)
+
+	bad := lipgloss.NewStyle().Foreground(theme.Bad)
+	title := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	errStyle := lipgloss.NewStyle().Foreground(theme.BadMuted).
+		Background(theme.ErrCardBg).Padding(0, 1).Width(bw - 2)
+
+	ctx := m.clusterName
+	if ctx == "" {
+		ctx = "cluster"
+	}
+	left := bad.Render(tui.GlyphFailed) + " " + title.Render(ctx+" is unreachable")
+	right := faint.Render(retryCountdown(m.conn, m.now))
+
+	errText := m.conn.Err
+	if errText == "" && m.err != nil {
+		errText = m.err.Error()
+	}
+	if errText == "" {
+		errText = "unreachable"
+	}
+
+	lines := []string{
+		padBetween(left, right, bw),
+		errStyle.Render(errText),
+		"",
+	}
+	lines = append(lines, m.switchContextLines(theme)...)
+	lines = append(lines, m.statusLines(theme, bw)...)
+
+	return centerBlock(lines, bw, width, height)
+}
+
+// statusLines renders whichever of the three mutually-exclusive retry
+// states applies below the main body: the inline kubeconfig-path editor
+// ('e'/'k'), a "connecting…" note while Reconnect's Cmd is in flight, or the
+// last attempt's error — shared by both Unreachable and NoConfig.
+func (m Model) statusLines(theme tui.Theme, bw int) []string {
+	switch {
+	case m.editing:
+		return append([]string{""}, m.editLines(theme, bw)...)
+	case m.retrying:
+		return []string{"", lipgloss.NewStyle().Foreground(theme.TextDim).Render("connecting…")}
+	case m.retryErr != nil:
+		return []string{"", lipgloss.NewStyle().Foreground(theme.Bad).Render(tui.GlyphFailed + " " + m.retryErr.Error())}
+	default:
+		return nil
+	}
+}
+
+func (m Model) switchContextLines(theme tui.Theme) []string {
+	label := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("SWITCH CONTEXT")
+	if len(m.otherContexts) == 0 {
+		return []string{label, lipgloss.NewStyle().Foreground(theme.TextGhost).Render("  (no other contexts configured)")}
+	}
+	item := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	names := make([]string, len(m.otherContexts))
+	for i, n := range m.otherContexts {
+		names[i] = item.Render(n)
+	}
+	dot := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(" · ")
+	return []string{label, "  " + strings.Join(names, dot)}
+}
+
+// noConfigWordmark is 10b's ASCII wordmark verbatim from the mockup (docs/
+// design/Kute Spec.dc.html §10b) — the block letters spelling "KUTE", with
+// the product name, tagline, and version captions inline on rows 2/3/5
+// exactly as the mockup places them. Rendered as one left-aligned unit (the
+// mockup's own wordmark div is itself text-align:left; only the block as a
+// whole sits in the centered column) so the letterforms stay aligned across
+// rows regardless of each row's differing caption-driven length.
+func noConfigWordmark() string {
+	return "██  ██  ██  ██  ██████  ██████\n" +
+		"██ ██   ██  ██    ██    ██        kute\n" +
+		"████    ██  ██    ██    █████     a console for your clusters\n" +
+		"██ ██   ██  ██    ██    ██\n" +
+		"██  ██   ████     ██    ██████    v" + tui.Version
+}
+
+// noConfigBody is 10b: the wordmark, "no kubeconfig found", the LOOKED IN
+// diagnostic box (from a *kube.ConfigLookupError when Err is one), a
+// provider hint line, and — while editing — the inline path input.
+func (m Model) noConfigBody(width, height int) string {
+	theme := m.Theme()
+	bw := blockWidth(width)
+	hw := hintBlockWidth(width)
+
+	wordmark := lipgloss.NewStyle().Foreground(theme.TextGhost2)
+	text := lipgloss.NewStyle().Foreground(theme.TextPrimary)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	hintLine := lipgloss.NewStyle().Width(hw).Align(lipgloss.Center)
+
+	lines := strings.Split(wordmark.Render(noConfigWordmark()), "\n")
+	lines = append(lines, "", text.Render("no kubeconfig found"))
+	lines = append(lines, m.lookedInBox(theme)...)
+	lines = append(lines, hintLine.Render(faint.Render("get a kubeconfig from your cluster provider or run")))
+	lines = append(lines, providerHintLines(dim, faint, hw)...)
+
+	lines = append(lines, m.statusLines(theme, bw)...)
+
+	return centerBlock(lines, bw, width, height)
+}
+
+// providerHintLines wraps 10b's three copy-pasteable provider commands
+// ("·"-joined in the mockup) across as many lines as hw needs, never
+// breaking a command mid-word — the mockup's fixed 960px canvas fits them on
+// one centered line, but a narrow terminal may not, and silently truncating
+// a command with "…" would make it uncopyable. Each resulting line is
+// centered within hw (matching the mockup's own centered block) rather than
+// left-aligned.
+func providerHintLines(cmdStyle, dotStyle lipgloss.Style, hw int) []string {
+	commands := []string{"aws eks update-kubeconfig", "gcloud container clusters get-credentials", "microk8s config"}
+	const sep = " · "
+	center := lipgloss.NewStyle().Width(hw).Align(lipgloss.Center)
+	var out []string
+	var cur string
+	curWidth := 0
+	for _, c := range commands {
+		w := lipgloss.Width(c)
+		if cur != "" && curWidth+lipgloss.Width(sep)+w > hw {
+			out = append(out, center.Render(cur))
+			cur, curWidth = "", 0
+		}
+		if cur == "" {
+			cur = cmdStyle.Render(c)
+			curWidth = w
+		} else {
+			cur += dotStyle.Render(sep) + cmdStyle.Render(c)
+			curWidth += lipgloss.Width(sep) + w
+		}
+	}
+	if cur != "" {
+		out = append(out, center.Render(cur))
+	}
+	return out
+}
+
+// lookedInBox renders the LOOKED IN diagnostic — from a
+// *kube.ConfigLookupError's Paths, falling back to Err's plain message when
+// it isn't one (any other build failure — e.g. a malformed kubeconfig once
+// in-cluster config also isn't available) — inside the mockup's bordered
+// panel (BorderSubtle border, BgStrip fill), split back into lines for
+// centerBlock.
+func (m Model) lookedInBox(theme tui.Theme) []string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderSubtle).
+		// Background(theme.BgStrip).
+		Padding(0, 2).
+		Render(strings.Join(m.lookedInLines(theme), "\n"))
+	return strings.Split(box, "\n")
+}
+
+// lookedInLines renders the LOOKED IN box's inner content (the label plus
+// one row per checked path) — lookedInBox wraps this in the bordered panel.
+// Every span here must carry BgStrip explicitly: lipgloss's outer
+// Background(BgStrip) on the box only fills the border/padding it adds
+// itself, not the content — each inner span's own ANSI reset would
+// otherwise fall through to the terminal's default background.
+func (m Model) lookedInLines(theme tui.Theme) []string {
+	fill := lipgloss.NewStyle() //.Background(theme.BgStrip)
+	label := fill.Foreground(theme.TextFaint).Render("LOOKED IN")
+	bad := fill.Foreground(theme.Bad)
+	name := fill.Foreground(theme.TextSecondary)
+	reason := fill.Foreground(theme.TextGhost)
+
+	var lookup *kube.ConfigLookupError
+	if m.err != nil {
+		lookup, _ = asConfigLookupError(m.err)
+	}
+	if lookup == nil {
+		msg := "unknown error"
+		if m.err != nil {
+			msg = m.err.Error()
+		}
+		return []string{label, reason.Render(msg)}
+	}
+
+	gap := fill.Render(" ")
+	out := []string{label}
+	for _, p := range lookup.Paths {
+		row := bad.Render(tui.GlyphFailed) + gap + name.Render(p.Label)
+		if p.Path != "" {
+			row += gap + reason.Render(p.Path)
+		}
+		row += gap + reason.Render("— "+p.Reason)
+		out = append(out, row)
+	}
+	return out
+}
+
+// asConfigLookupError unwraps err looking for a *kube.ConfigLookupError,
+// following the standard errors.Unwrap chain (Cluster/client construction
+// may wrap it).
+func asConfigLookupError(err error) (*kube.ConfigLookupError, bool) {
+	for err != nil {
+		if lookup, ok := err.(*kube.ConfigLookupError); ok {
+			return lookup, true
+		}
+		u, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			return nil, false
+		}
+		err = u.Unwrap()
+	}
+	return nil, false
+}
+
+// editLines renders the inline kubeconfig-path input (shown by 'e'/'k')
+// with a block cursor, or nil when not editing.
+func (m Model) editLines(theme tui.Theme, bw int) []string {
+	if !m.editing {
+		return nil
+	}
+	label := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("kubeconfig path")
+	accent := lipgloss.NewStyle().Foreground(theme.Accent)
+	text := lipgloss.NewStyle().Foreground(theme.Text)
+	cursor := accent.Render(tui.GlyphSelBar)
+	hint := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("enter connect · esc cancel")
+	line := text.Render(m.pathInput) + cursor
+	return []string{label, "  " + line, components.Pad(hint, bw)}
+}
+
+// retryCountdown formats 4c's "retrying in Ns · attempt N" from conn as of
+// now — a zero conn (no ConnStateMsg observed yet) renders a neutral
+// placeholder instead of "retrying in 0s".
+func retryCountdown(conn kube.ConnState, now time.Time) string {
+	if conn.Attempt == 0 {
+		return "connecting…"
+	}
+	next := max(conn.NextRetryAt.Sub(now), 0)
+	return fmt.Sprintf("retrying in %ds · attempt %d", int(next.Round(time.Second).Seconds()), conn.Attempt)
+}

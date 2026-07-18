@@ -1,0 +1,369 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/kute-dev/kute/internal/kube"
+)
+
+func fitBody(content string, width, height int) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	for i := range lines {
+		lines[i] = PadLine(lines[i], width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// --- Chrome v2 (mvp-plan.md §0.3) ---
+//
+// The inverted-layout skeleton every new screen renders through: header ·
+// optional strips · body · keybar. Individual text spans arrive pre-styled
+// (Crumb, KeyHint groups render via the screen's own Theme/Styles) so Frame
+// itself stays render-agnostic aside from the full-width background fills,
+// which it reads off Screen.Theme().
+
+// Crumb is one pre-styled header breadcrumb segment, e.g. "kute", "›",
+// "prod-eks", "default", "Pods".
+type Crumb struct {
+	Text  string
+	Style lipgloss.Style
+}
+
+// ConnBadge is the pre-styled connection indicator shown at the right of the
+// header: "● connected · 12ms" / "◌ disconnected" / "○ no cluster".
+type ConnBadge struct {
+	Text  string
+	Style lipgloss.Style
+}
+
+// LiveConnBadge builds the header's connection badge from the last
+// kube.ConnStateMsg the screen saw (the root shell forwards it to the active
+// task): connectedText — plus a "· 12ms" latency suffix when known — in
+// green while connected, a red "◌ disconnected" once the watch/ping loop
+// reports Reconnecting/Failed. Screens with genuinely stateful badges
+// (podlogs' following/paused, setup's connecting-failed) build their own.
+func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnBadge {
+	if conn.Phase == kube.ConnReconnecting || conn.Phase == kube.ConnFailed {
+		return ConnBadge{
+			Text:  GlyphProbing + " disconnected",
+			Style: lipgloss.NewStyle().Foreground(theme.Bad),
+		}
+	}
+	text := connectedText
+	if ms := conn.Latency.Milliseconds(); ms > 0 {
+		text += fmt.Sprintf(" · %dms", ms)
+	}
+	return ConnBadge{Text: text, Style: lipgloss.NewStyle().Foreground(theme.Good)}
+}
+
+// HeaderState is the data a Chrome v2 screen exposes for the shared header
+// band: "kute │ ctx › ns › Kind (+ "(g to jump)" hint)" on the left,
+// SyncNote + Conn on the right.
+type HeaderState struct {
+	Crumbs   []Crumb
+	SyncNote string // e.g. "sync 2s"
+	// ForwardChip is 13d's ambient port-forward indicator — empty (zero
+	// value) renders nothing at all, so a screen with no active forwards
+	// leaves the header untouched (docs/design README.md §13d: "zero
+	// chrome when no forwards exist"). Built via BuildForwardChip.
+	ForwardChip ConnBadge
+	Conn        ConnBadge
+}
+
+// ForwardSummary is the counts BuildForwardChip needs — kept minimal so a
+// screen's Header() doesn't need a *kube.ForwardManager import just to
+// render the chip (Session.ForwardSummary computes it).
+type ForwardSummary struct {
+	Active, Reconnecting int
+}
+
+// BuildForwardChip renders 13d's header chip from summary: nothing when no
+// forwards exist, a quiet purple "⇄ N" while every session is healthy, or a
+// yellow "⇄ N · ◌ M" the moment any session is reconnecting (docs/design
+// README.md §13d: "one reconnecting: the chip goes yellow").
+func BuildForwardChip(theme Theme, summary ForwardSummary) ConnBadge {
+	switch {
+	case summary.Active == 0 && summary.Reconnecting == 0:
+		return ConnBadge{}
+	case summary.Reconnecting > 0:
+		text := fmt.Sprintf("%s %d", GlyphProbing, summary.Reconnecting)
+		if summary.Active > 0 {
+			text = fmt.Sprintf("%s %d · %s", GlyphForward, summary.Active, text)
+		}
+		return ConnBadge{Text: text, Style: lipgloss.NewStyle().Foreground(theme.Warn)}
+	default:
+		return ConnBadge{
+			Text:  fmt.Sprintf("%s %d", GlyphForward, summary.Active),
+			Style: lipgloss.NewStyle().Foreground(theme.Accent),
+		}
+	}
+}
+
+// Mode names the current interaction mode, driving the keybar's colored mode
+// pill (purple = normal modes, blue = ALL NS, red = OFFLINE/CONFIRM, gray =
+// SETUP — docs/design/README.md §Design Tokens).
+type Mode string
+
+const (
+	ModeBrowse    Mode = "browse"
+	ModeFilter    Mode = "filter"
+	ModeGoto      Mode = "goto"
+	ModeAllNS     Mode = "all-ns"
+	ModeOffline   Mode = "offline"
+	ModeNoCluster Mode = "no-cluster"
+	ModeConfirm   Mode = "confirm"
+	ModeHelp      Mode = "help"
+	ModeYAML      Mode = "yaml"
+	ModeExec      Mode = "exec"
+	ModeSetup     Mode = "setup"
+)
+
+// KeyHint is one key/label pair rendered in a keybar group, sourced from a
+// verbs.Verb reference (mvp-plan.md §0.4) — screens never inline a key or
+// label string literal here.
+type KeyHint struct {
+	Key      string
+	Label    string
+	Disabled bool
+}
+
+// Keybar is the shared bottom-of-screen band: a colored mode pill, curated
+// key-hint groups (joined with "│"), and an optional right-aligned side
+// (plain note and/or key hints — hints render accent-key + dim-label like
+// the left groups, mockup 2a's "? help").
+type Keybar struct {
+	Pill       Mode
+	PillText   string // e.g. "PODS", "GOTO", "OFFLINE"
+	Groups     [][]KeyHint
+	RightNote  string    // e.g. "mutating actions disabled", "type to narrow"
+	RightHints []KeyHint // e.g. the ? help verb; rendered after RightNote
+}
+
+// Screen is the Chrome v2 contract every redesigned task implements. Frame
+// wraps Body between the header, strips, and keybar bands, so no screen
+// hand-rolls its own chrome. Theme is exposed so Frame can style the parts
+// of the chrome it owns (keybar hints, mode pill, header sync note) without
+// every render call threading a Theme argument through
+// Header/Strips/Keybar/Body — those already return pre-styled content built
+// from the same Theme value. Chrome bands render transparent: the
+// terminal's own background shows through everywhere.
+type Screen interface {
+	Theme() Theme
+	Header() HeaderState
+	// Strips returns 0..n full-width lines rendered under the header
+	// (health/stale/error banner), pre-fit to width.
+	Strips(width int) []string
+	Keybar() Keybar
+	// Body returns the inner content for the given width and the exact body
+	// height Frame has budgeted. Frame truncates/pads the result.
+	Body(width, height int) string
+}
+
+// InputCapturer is implemented by a Task with an active free-text input
+// (e.g. browse's "/" filter) that needs every keystroke verbatim —
+// including letters the root shell would otherwise treat as global
+// shortcuts (g/n/c/?). The root shell checks this before routing a key to
+// its own handling; a Task that doesn't implement it behaves as before.
+type InputCapturer interface {
+	CapturingInput() bool
+}
+
+// FrameInset is the Chrome v2 horizontal inset: every chrome band's text
+// starts FrameInset cells in and ends FrameInset cells short of the right
+// edge (the mockups' 14px padding). Exported so screens building their own
+// full-width strip lines (browse's health/filter strips) align to it. The
+// table body doesn't use it — its 2-cell marker slot ("▎ ") provides the
+// same inset with the selection bar/background still reaching the screen
+// edge.
+const FrameInset = 2
+
+// frameHeaderLines is the header band's height: just the breadcrumb line —
+// matching the design README's "header = 1 line" terminal mapping. Flush
+// against the top edge, mirroring the keybar sitting flush against the
+// bottom edge; the rule below it (and the rule above the keybar) is each
+// band's only separation, so the two stay genuinely symmetric.
+const frameHeaderLines = 1
+
+// borderHorizontal is the rule rune drawn below the header, below the strip
+// band (when a screen renders one), and below the body — the design
+// README's four bands (breadcrumb/header, cluster summary, table, context/
+// help footer) visually separated without a full boxed border around them.
+const borderHorizontal = "─"
+
+// frameChromeLines is every fixed-height row Frame wraps the header/strip/
+// body/keybar bands in: the header band's frameHeaderLines, the rule below
+// the header, the rule below the body, and the keybar's own line. The rule
+// below the strips (present only when a screen renders any) is added on top
+// of this in FrameBodyHeight.
+const frameChromeLines = frameHeaderLines + 1 + 1 + LegendHeight
+
+// FrameBodyHeight is the body height Frame budgets for a screen rendering
+// stripLines strip lines — exported so screens (browse's table viewport
+// math) compute the same number instead of hardcoding band heights.
+func FrameBodyHeight(height, stripLines int) int {
+	h := NormalizeSize(DefaultWidth, height).Height - frameChromeLines - stripLines
+	if stripLines > 0 {
+		h-- // divider rule between the strip band and the table body
+	}
+	return max(h, 1)
+}
+
+// Frame composes a Chrome v2 screen: header (frameHeaderLines lines) · rule
+// · strips (n lines) · rule (only when n > 0) · body (budgeted) · rule ·
+// keybar (1 line) — the four bands the design README calls out (breadcrumb/
+// header, cluster summary, table, context/help footer), each set off by a
+// horizontal rule so they read as distinct bands even though the chrome
+// itself stays transparent, always totalling exactly the normalized height.
+func Frame(width, height int, s Screen) string {
+	size := NormalizeSize(width, height)
+	width, height = size.Width, size.Height
+	theme := s.Theme()
+
+	header := renderHeaderV2(s.Header(), theme, width)
+	strips := s.Strips(width)
+	stripLines := make([]string, len(strips))
+	for i, line := range strips {
+		stripLines[i] = PadLine(line, width)
+	}
+	keybar := renderKeybarV2(s.Keybar(), theme, width)
+
+	bodyHeight := FrameBodyHeight(height, len(strips))
+	body := fitBody(s.Body(width, bodyHeight), width, bodyHeight)
+
+	// Rules read as visible-but-quiet structural glyphs rather than a loud
+	// boxed border, so they use the text ramp's ghost tones (already the
+	// convention for other subtle structural marks, e.g. the table
+	// footer's scrollbar glyphs) instead of the darker Border/BorderSubtle
+	// tokens, which nearly disappear against a real terminal's own
+	// background once rendered without an explicit bg fill.
+	primaryRule := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	stripRule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
+	rule := func(style lipgloss.Style) string {
+		return style.Render(strings.Repeat(borderHorizontal, width))
+	}
+
+	lines := make([]string, 0, frameChromeLines+len(stripLines))
+	lines = append(lines, header...)
+	lines = append(lines, rule(primaryRule))
+	lines = append(lines, stripLines...)
+	if len(stripLines) > 0 {
+		lines = append(lines, rule(stripRule))
+	}
+	for l := range strings.SplitSeq(body, "\n") {
+		lines = append(lines, l)
+	}
+	lines = append(lines, rule(primaryRule))
+	// The keybar band is the dedicated footer surface: the rule just
+	// appended sets it off from the table body, the same way the header
+	// band's own rule sets it off from the strip/body content above.
+	lines = append(lines, keybar)
+	return strings.Join(lines, "\n")
+}
+
+// insetChromeLine places pre-styled left/right content within width with
+// FrameInset margins on both sides. Chrome renders transparent — the
+// terminal's own background shows through (decided when the header's
+// padding rows first made the BgChrome fill visible as a black bar on
+// non-matching terminals). When there isn't room for both, right is
+// dropped.
+func insetChromeLine(left, right string, width int) string {
+	inner := max(width-2*FrameInset, 0)
+	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
+	line := left
+	if gap >= 1 && right != "" {
+		line += strings.Repeat(" ", gap) + right
+	}
+	margin := strings.Repeat(" ", FrameInset)
+	return PadLine(margin+line, width)
+}
+
+// renderHeaderV2 returns the header band's frameHeaderLines lines: just the
+// breadcrumb line.
+func renderHeaderV2(h HeaderState, theme Theme, width int) []string {
+	var left strings.Builder
+	for _, c := range h.Crumbs {
+		left.WriteString(c.Style.Render(c.Text))
+	}
+
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	var right string
+	if h.SyncNote != "" {
+		right = dim.Render(h.SyncNote) + "  "
+	}
+	if h.ForwardChip.Text != "" {
+		right += h.ForwardChip.Style.Render(h.ForwardChip.Text) + "  "
+	}
+	right += h.Conn.Style.Render(h.Conn.Text)
+
+	return []string{insetChromeLine(left.String(), right, width)}
+}
+
+func renderKeybarV2(k Keybar, theme Theme, width int) string {
+	accent := lipgloss.NewStyle().Foreground(theme.Accent)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	// The inter-group │ is quieter than the labels around it (mockup 2a:
+	// Border, not TextDim).
+	sep := lipgloss.NewStyle().Foreground(theme.Border)
+
+	var left strings.Builder
+	if k.PillText != "" {
+		left.WriteString(pillStyle(k.Pill, theme).Render(" " + k.PillText + " "))
+		left.WriteString(" ")
+	}
+	renderHints := func(group []KeyHint) string {
+		hints := make([]string, 0, len(group))
+		for _, hint := range group {
+			style := accent
+			if hint.Disabled {
+				style = faint
+			}
+			hints = append(hints, style.Render(hint.Key)+dim.Render(" "+hint.Label))
+		}
+		return strings.Join(hints, "  ")
+	}
+
+	groupStrs := make([]string, 0, len(k.Groups))
+	for _, group := range k.Groups {
+		groupStrs = append(groupStrs, renderHints(group))
+	}
+	left.WriteString(strings.Join(groupStrs, sep.Render(" │ ")))
+
+	right := ""
+	if k.RightNote != "" {
+		right = dim.Render(k.RightNote)
+	}
+	if len(k.RightHints) > 0 {
+		if right != "" {
+			right += "   "
+		}
+		right += renderHints(k.RightHints)
+	}
+	return insetChromeLine(left.String(), right, width)
+}
+
+// pillStyle picks the mode pill's hue per docs/design/README.md §Design
+// Tokens: purple = normal modes, blue = ALL NS, red = OFFLINE/CONFIRM, gray =
+// SETUP.
+func pillStyle(mode Mode, theme Theme) lipgloss.Style {
+	switch mode {
+	case ModeAllNS:
+		return lipgloss.NewStyle().Background(theme.AllNsPillBg).Foreground(theme.AllNsPillText)
+	case ModeOffline, ModeConfirm, ModeNoCluster:
+		return lipgloss.NewStyle().Background(theme.ConfirmPillBg).Foreground(theme.Bad)
+	case ModeSetup:
+		// docs/design README.md §10b: pill bg #1c1c2c / text #9a9ab2 — BorderSubtle/TextSecondary.
+		return lipgloss.NewStyle().Background(theme.BorderSubtle).Foreground(theme.TextSecondary)
+	default:
+		return lipgloss.NewStyle().Background(theme.SelBg).Foreground(theme.Accent)
+	}
+}

@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › default › Pods (g to jump)                          
+────────────────────────────────────────────────────────────────────────────────
+  ● 1 running   ◐ 1 pending   ✕ 1 crashloop   ○ 1 completed   4 pods · 3 nodes  
+────────────────────────────────────────────────────────────────────────────────
+     NAME    READY  STATUS ↑          ↺     CPU           MEM           NODE   …
+────────────────────────────────────────────────────────────────────────────────
+▎ ✕  worke…  0/1    CrashLoopBackOff  6     ■■■■■■ 890m   ■■■■■■ 612Mi  node-...
+  ◐  cache…  0/1    Pending           0     □□□□□□ –      □□□□□□ –      –    ...
+  ●  api-7…  1/1    Running           0     ■□□□□□ 45m    ■■□□□□ 128Mi  node-...
+  ○  migra…  1/1    Completed         0     □□□□□□ –      □□□□□□ –      node-...
+  1–4 of 4                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   PODS  g goto  / filter  space mark  E edit │ x exec │ n namespace  c conte...

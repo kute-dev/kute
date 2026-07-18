@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › default › Pods (g to jump)                                     sync 2s  ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ● 1 running   ◐ 1 pending   ✕ 1 crashloop   ○ 1 completed                                           4 pods · 3 nodes  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                   READY  STATUS ↑          ↺     CPU           MEM           NODE        AGE  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ✕  worker-0                               0/1    CrashLoopBackOff  6     ■■■■■■ 890m   ■■■■■■ 612Mi  node-a       1h  
+  ◐  cache-0                                0/1    Pending           0     □□□□□□ –      □□□□□□ –      –            1h  
+  ●  api-7d9f6c8-abcde                      1/1    Running           0     ■□□□□□ 45m    ■■□□□□ 128Mi  node-a       1h  
+  ○  migrate-job-x8z2p                      1/1    Completed         0     □□□□□□ –      □□□□□□ –      node-a       1h  
+  1–4 of 4                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   PODS  g goto  / filter  space mark  E edit │ x exec │ n namespace  c context  a all namespaces               ? help  

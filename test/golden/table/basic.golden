@@ -1,0 +1,4 @@
+  NAME                                STATUS         AGE ↑  
+  api-7d9f-abcde                      Running           2d  
+▎ worker-0                            CrashLoop        14h  
+  cache-0                             Pending           3m  

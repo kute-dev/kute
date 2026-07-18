@@ -1,0 +1,5 @@
+  NAME                                STATUS           AGE  
+▎▸ default · 3 pods · all running                          
+  api-7d9f-abcde                      Running           2d  
+  ▸ kube-system · 2 pods · 1 degraded                       
+  coredns-abc                         Degraded         10d  

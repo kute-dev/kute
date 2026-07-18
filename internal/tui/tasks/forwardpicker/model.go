@@ -1,0 +1,169 @@
+// Package forwardpicker is 13a (docs/design/README.md §13a): the small
+// centered panel 'f' pushes from tasks/browse for a Pod/Service/Deployment
+// row (docs/design README.md §13a, mirroring 10a's execpicker shape) —
+// candidate ports discovered from the target object itself, a per-row local
+// port pre-filled (and edited in place), a "will run" documentation line,
+// and Enter starting the forward via kube.ForwardManager before popping
+// back to the caller. Unlike execpicker/nodeshell, this never suspends the
+// program — the forward keeps running in the background after the picker
+// closes.
+package forwardpicker
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"strconv"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
+)
+
+// Config are forwardpicker's dependencies, per repo convention
+// (package-local Config struct, interface-typed fields, New fills zero
+// values).
+type Config struct {
+	Session  *tui.Session
+	Lister   resources.RawLister
+	Resolver kube.PodResolver
+	Dialer   kube.ForwardDialer
+	Manager  *kube.ForwardManager
+	Target   kube.ForwardTarget
+}
+
+// portRow is one candidate port plus its editable local-port state.
+type portRow struct {
+	kube.PortOption
+	localPort int
+	// busyFrom is the originally pre-filled port when it turned out to be
+	// bound already and localPort got bumped past it (docs/design
+	// README.md §13a: "8080 busy → 18080") — 0 when no bump was needed.
+	busyFrom int
+	editing  bool
+	editBuf  string
+}
+
+type Model struct {
+	width, height int
+
+	session  *tui.Session
+	lister   resources.RawLister
+	resolver kube.PodResolver
+	dialer   kube.ForwardDialer
+	manager  *kube.ForwardManager
+	target   kube.ForwardTarget
+
+	state    tui.TaskState
+	feedback string
+
+	resolvedPod string // best-effort backing pod for Service/Deployment targets
+	rows        []portRow
+	selected    int
+
+	conn kube.ConnState
+}
+
+func New(cfg Config) Model {
+	return Model{
+		width:    tui.DefaultWidth,
+		height:   tui.DefaultHeight,
+		session:  cfg.Session,
+		lister:   cfg.Lister,
+		resolver: cfg.Resolver,
+		dialer:   cfg.Dialer,
+		manager:  cfg.Manager,
+		target:   cfg.Target,
+		state:    tui.TaskStateLoading,
+		feedback: "Loading ports...",
+	}
+}
+
+func (m *Model) SetSize(width, height int) {
+	size := tui.NormalizeSize(width, height)
+	m.width, m.height = size.Width, size.Height
+}
+
+// portsLoadedMsg carries the target object's discovered ports plus its
+// best-effort resolved backing pod (Service/Deployment targets only — a Pod
+// target's resolvedPod is always just its own name).
+type portsLoadedMsg struct {
+	ports       []kube.PortOption
+	resolvedPod string
+	err         error
+}
+
+func (m Model) Init() tea.Cmd {
+	if m.lister == nil {
+		return nil
+	}
+	target := m.target
+	lister := m.lister
+	resolver := m.resolver
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		objs, err := lister.ListRaw(ctx, target.Kind, target.Namespace)
+		if err != nil {
+			return portsLoadedMsg{err: err}
+		}
+		for _, o := range objs {
+			accessor, err := apimeta.Accessor(o)
+			if err != nil || accessor.GetName() != target.Name {
+				continue
+			}
+			ports := kube.ForwardablePorts(o)
+			resolvedPod := target.Name
+			if target.Kind != kube.KindPod {
+				resolvedPod = ""
+				if resolver != nil {
+					if pod, rerr := resolver.ResolveForwardPod(ctx, target); rerr == nil {
+						resolvedPod = pod
+					}
+				}
+			}
+			return portsLoadedMsg{ports: ports, resolvedPod: resolvedPod}
+		}
+		return portsLoadedMsg{err: fmt.Errorf("%s %q not found", target.Kind, target.Name)}
+	}
+}
+
+// preferredLocalPort is 13a's pre-fill rule: privileged remote ports (<1024)
+// pre-fill 8000 above (80 → 8080); everything else pre-fills at the same
+// number (9090 → 9090).
+func preferredLocalPort(remote int32) int {
+	if remote < 1024 {
+		return int(remote) + 8000
+	}
+	return int(remote)
+}
+
+// pickLocalPort probes preferred for an available local bind, walking
+// upward on a busy port (docs/design README.md §13a: "if the pre-fill is
+// busy, the row says so inline and pre-fills the next free one"). Returns
+// the chosen port and, if it differs from preferred, the busy port that was
+// skipped.
+func pickLocalPort(preferred int) (chosen, busyFrom int) {
+	for port := preferred; port < preferred+64; port++ {
+		if portFree(port) {
+			if port != preferred {
+				return port, preferred
+			}
+			return port, 0
+		}
+	}
+	return preferred, 0
+}
+
+func portFree(port int) bool {
+	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	ln.Close()
+	return true
+}

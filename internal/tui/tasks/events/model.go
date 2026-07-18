@@ -1,0 +1,192 @@
+// Package events is 9b (docs/design/README.md §9b): a deduped, severity-
+// colored feed of cluster Events. Reached namespace-scoped from
+// tasks/browse's 'e' (or all-namespaces, mirroring 6b's namespace == ""
+// triage) and object-scoped from tasks/poddetail and tasks/nodedetail's 'e'
+// (kube.Cluster.ObjectEvents — the same seam poddetail's own EVENTS grid
+// already reads).
+//
+// Not built on components.Table: the mockup's REASON/OBJECT cell is two
+// lines tall ("reason colored by severity, object pod/name under it"),
+// which the shared Table only ever renders as a single line per row — so
+// this screen hand-rolls its row layout instead (view.go), the same call
+// nodedetail's facts panel already made for its own two-column layout.
+package events
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/components"
+)
+
+// EventsReader is the seam events needs — satisfied by *kube.Cluster and
+// *fake.Cluster already (kube/events.go, kube/fake/fake.go). ObjectEvents
+// is the same method poddetail's own EventsReader already declares;
+// NamespaceEvents is new (this phase).
+type EventsReader interface {
+	NamespaceEvents(ctx context.Context, namespace string) ([]kube.Event, error)
+	ObjectEvents(ctx context.Context, namespace string, kind kube.ResourceKind, name string) ([]kube.Event, error)
+}
+
+// Config are events' dependencies, per repo convention (package-local
+// Config struct, interface-typed fields, New fills zero values).
+// ObjectKind/ObjectName non-empty switches the screen into object-scoped
+// mode (poddetail/nodedetail's 'e'); empty means namespace-scoped
+// (browse's 'e'), where Namespace == "" mirrors 6b's all-namespaces mode.
+type Config struct {
+	Session     *tui.Session
+	Events      EventsReader
+	Lister      resources.RawLister // optional: best-effort "actively-failing object" red cross-check
+	Namespace   string
+	ObjectKind  kube.ResourceKind
+	ObjectName  string
+	LoadTimeout time.Duration
+}
+
+// rowKind distinguishes a real deduped event group from the folded "N
+// normal events" summary row (docs/design README.md §9b: "normal events
+// fold into one group line").
+type rowKind int
+
+const (
+	rowGroup rowKind = iota
+	rowFolded
+)
+
+// displayRow is one row events walks/renders — either a single EventGroup
+// or (rowFolded) the summary standing in for every folded normal group.
+type displayRow struct {
+	kind   rowKind
+	group  kube.EventGroup
+	folded []kube.EventGroup
+}
+
+// eventWindows are the 't' time-window cycle's steps; 0 means "all time".
+var eventWindows = []time.Duration{15 * time.Minute, time.Hour, 6 * time.Hour, 24 * time.Hour, 0}
+
+type Model struct {
+	width, height int
+
+	session *tui.Session
+	events  EventsReader
+	lister  resources.RawLister
+	timeout time.Duration
+
+	namespace  string
+	objectKind kube.ResourceKind
+	objectName string
+
+	groups   []kube.EventGroup
+	failing  map[string]bool // pod name -> currently StatusFail, for the red/yellow warning cross-check
+	rows     []displayRow    // recomputeVisible's output: what's walked/rendered right now
+	selected int
+
+	warningsOnly   bool
+	normalExpanded bool
+	window         time.Duration
+	filterActive   bool
+	filterQuery    string
+
+	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
+	// header badge's real connection state (never a hardcoded "connected").
+	conn kube.ConnState
+
+	fetchedAt time.Time
+	state     tui.TaskState
+	feedback  string
+	spinner   components.Spinner
+}
+
+// loadedMsg carries one load()'s result.
+type loadedMsg struct {
+	groups  []kube.EventGroup
+	failing map[string]bool
+	err     error
+}
+
+func New(cfg Config) Model {
+	if cfg.LoadTimeout == 0 {
+		cfg.LoadTimeout = 10 * time.Second
+	}
+	state := tui.TaskStateLoading
+	feedback := "Loading events..."
+	if cfg.Events == nil {
+		state = tui.TaskStateError
+		feedback = "no cluster connection"
+	}
+	return Model{
+		width:      tui.DefaultWidth,
+		height:     tui.DefaultHeight,
+		session:    cfg.Session,
+		events:     cfg.Events,
+		lister:     cfg.Lister,
+		timeout:    cfg.LoadTimeout,
+		namespace:  cfg.Namespace,
+		objectKind: cfg.ObjectKind,
+		objectName: cfg.ObjectName,
+		window:     time.Hour, // docs/design README.md §9b: "last hour" default
+		state:      state,
+		feedback:   feedback,
+	}
+}
+
+func (m Model) Init() tea.Cmd {
+	if m.events == nil {
+		return nil
+	}
+	return tea.Batch(m.load(), components.SpinnerTick())
+}
+
+func (m *Model) SetSize(width, height int) {
+	size := tui.NormalizeSize(width, height)
+	m.width, m.height = size.Width, size.Height
+}
+
+func (m Model) selectedRow() (displayRow, bool) {
+	if m.selected < 0 || m.selected >= len(m.rows) {
+		return displayRow{}, false
+	}
+	return m.rows[m.selected], true
+}
+
+// openSelectedObject is 9b's "↵ go to object": pop back to whatever pushed
+// this screen and dispatch a jump to the event's involved object, via the
+// same tui.BackMsg/GotoResourceMsg pair the root shell's palette Enter
+// already uses — the real tea.Program runtime runs a tea.Sequence's Cmds in
+// order and feeds each result back through Update, so this needs no new
+// root-shell plumbing (poddetail's own doc comment flagged this exact
+// "tea.Sequence(BackMsg, GotoResourceMsg)" shape as the follow-up once a key
+// existed to hang it on — this is that key). A no-op for the folded summary
+// row or an involvedObject kind the registry doesn't carry (e.g.
+// "Endpoints") — ok reports whether a navigation was dispatched.
+func (m Model) openSelectedObject() (tea.Cmd, bool) {
+	row, ok := m.selectedRow()
+	if !ok || row.kind != rowGroup {
+		return nil, false
+	}
+	kind, name := splitObject(row.group.Object)
+	if kind == "" || name == "" {
+		return nil, false
+	}
+	ns := row.group.Namespace
+	return tea.Sequence(
+		func() tea.Msg { return tui.BackMsg{} },
+		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
+	), true
+}
+
+// splitObject splits a kube.Event.Object string ("Pod/nva-worker-9k2ss")
+// into its Kind and Name.
+func splitObject(object string) (kube.ResourceKind, string) {
+	kind, name, ok := strings.Cut(object, "/")
+	if !ok {
+		return "", ""
+	}
+	return kube.ResourceKind(kind), name
+}

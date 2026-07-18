@@ -1,0 +1,36 @@
+  kute │ cluster unavailable › nva-worker-9k2ss › logs · worker                                            ▶ following  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  container worker (tab: metrics-sidecar)  ·  since 15m  ·  wrap on  ·  timestamps on            1 WRN · 1 ERR in view  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+10:23:58 INF starting server                                                                                            
+10:24:00 WRN queue depth rising                                                                                         
+────────────────────────────────────── container restarted · restart 6 · 10:24:02 ──────────────────────────────────────
+10:24:05 ERR panic: nil pointer dereference                                                                             
+10:24:06 back to normal                                                                                                 
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+▶ live · 0 new lines/s                                                                                                  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   LOGS  esc back │ space pause  w/e prev/next warn/err  / filter │ s since 15m  tab cycle container  ctrl-y copy view  
