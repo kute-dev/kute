@@ -59,7 +59,12 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	rule := fg(theme.TextGhost).Render(strings.Repeat("─", frameWidth))
 
 	colGap := 3
-	colWidth := max((frameWidth-2*colGap)/3, 12)
+	// innerWidth is the row's real budget: helpInset reserves a 1-cell
+	// margin on each side, so columns sized against frameWidth itself came
+	// out two cells too wide and got truncated with a stray "…" (7b: help.go
+	// docs/design README.md §7b).
+	innerWidth := frameWidth - 2
+	colWidth := max((innerWidth-2*colGap)/3, 12)
 	cols := [][]string{
 		helpColumn(viewTitle+" VIEW", flattenHints(kb.Groups), headStyle, keyStyle, labelStyle, fill, colWidth),
 		helpColumn("SCOPE", scope, headStyle, keyStyle, labelStyle, fill, colWidth),
