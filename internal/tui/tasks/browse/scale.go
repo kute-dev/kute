@@ -9,11 +9,13 @@
 package browse
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -34,6 +36,11 @@ type scaleTarget struct {
 	// next digit appends instead of replacing the prefill (docs/design
 	// README.md §17b: "typing a number replaces it").
 	typed bool
+	// hpaName is the name of the HorizontalPodAutoscaler targeting this
+	// row, or "" when none does (docs/design README.md §17b: "HPA-managed
+	// workloads show managed by hpa/<name> ... as a yellow note instead of
+	// blocking" — scaling still applies, it's just informational).
+	hpaName string
 }
 
 // scalable reports whether kind takes 17b's scale prompt — Deployments and
@@ -69,6 +76,31 @@ func scaleValue(s string) int32 {
 	return int32(n)
 }
 
+// hpaManaging finds an autoscaling/v2 HorizontalPodAutoscaler in namespace
+// whose scaleTargetRef points at kind/name (docs/design README.md §17b:
+// "HPA-managed workloads show managed by hpa/<name>"). Returns "" when
+// there's no lister, the list fails, or no HPA targets this row — never
+// blocks the scale prompt itself, purely informational.
+func hpaManaging(lister resources.RawLister, kind kube.ResourceKind, namespace, name string) string {
+	if lister == nil {
+		return ""
+	}
+	objs, err := lister.ListRaw(context.Background(), kube.KindHorizontalPodAutoscaler, namespace)
+	if err != nil {
+		return ""
+	}
+	for _, obj := range objs {
+		hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+		if !ok {
+			continue
+		}
+		if hpa.Spec.ScaleTargetRef.Kind == string(kind) && hpa.Spec.ScaleTargetRef.Name == name {
+			return hpa.Name
+		}
+	}
+	return ""
+}
+
 // beginScale opens 17b's prompt for the selected row, pre-filled to
 // current+delta clamped at 0 (delta is +1 for '+' and -1 for '−'). Returns
 // false (no-op) when nothing applies — wrong kind, no mutator, not ready, or
@@ -84,7 +116,8 @@ func (m *Model) beginScale(delta int32) bool {
 	value := max(currentReplicas(row)+delta, 0)
 	m.pendingScale = &scaleTarget{
 		kind: m.kind, namespace: row.Namespace, name: row.Name,
-		value: strconv.Itoa(int(value)),
+		value:   strconv.Itoa(int(value)),
+		hpaName: hpaManaging(m.lister, m.kind, row.Namespace, row.Name),
 	}
 	return true
 }

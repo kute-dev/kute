@@ -271,6 +271,8 @@ func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string
 		return listNamespaced(f.Batch().V1().Jobs().Lister().List, f.Batch().V1().Jobs().Lister().Jobs, namespace, sel)
 	case KindCronJob:
 		return listNamespaced(f.Batch().V1().CronJobs().Lister().List, f.Batch().V1().CronJobs().Lister().CronJobs, namespace, sel)
+	case KindHorizontalPodAutoscaler:
+		return listNamespaced(f.Autoscaling().V2().HorizontalPodAutoscalers().Lister().List, f.Autoscaling().V2().HorizontalPodAutoscalers().Lister().HorizontalPodAutoscalers, namespace, sel)
 	case KindRole:
 		return listNamespaced(f.Rbac().V1().Roles().Lister().List, f.Rbac().V1().Roles().Lister().Roles, namespace, sel)
 	case KindRoleBinding:

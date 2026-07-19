@@ -10,6 +10,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -72,6 +73,9 @@ func NewDemo() *Cluster {
 
 	c.Seed(kube.KindDeployment, demoMidRolloutDeployment("api", "default", age(30*24*time.Hour)))
 	c.Seed(kube.KindReplicaSet, demoReplicaSet("api-7d9f6c8", "default", "api", "api:2.0", age(30*24*time.Hour)))
+	// 17b: "api" is HPA-managed, so its scale prompt exercises the "managed
+	// by hpa/<name>" yellow note live in --demo mode.
+	c.Seed(kube.KindHorizontalPodAutoscaler, demoHPA("api-hpa", "default", "Deployment", "api"))
 	c.Seed(kube.KindStatefulSet, demoStatefulSet("worker", "default", age(14*time.Hour)))
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
@@ -739,6 +743,21 @@ func demoReplicaSet(name, ns, deployment, image string, created metav1.Time) *ap
 			},
 		},
 		Status: appsv1.ReplicaSetStatus{Replicas: 1, ReadyReplicas: 1},
+	}
+}
+
+// demoHPA is 17b's HPA-managed-workload fixture: a HorizontalPodAutoscaler
+// whose scaleTargetRef points at targetKind/targetName, so beginScale's
+// hpaManaging lookup finds it live in --demo mode.
+func demoHPA(name, ns, targetKind, targetName string) *autoscalingv2.HorizontalPodAutoscaler {
+	minReplicas := int32(2)
+	return &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: targetKind, Name: targetName},
+			MinReplicas:    &minReplicas,
+			MaxReplicas:    10,
+		},
 	}
 }
 

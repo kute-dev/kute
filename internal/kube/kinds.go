@@ -61,6 +61,15 @@ const (
 	KindClusterRole        ResourceKind = "ClusterRole"
 	KindClusterRoleBinding ResourceKind = "ClusterRoleBinding"
 
+	// KindHorizontalPodAutoscaler (autoscaling/v2) backs 17b's scale
+	// prompt's HPA-managed-workload detection (docs/design README.md
+	// §17b: "HPA-managed workloads show managed by hpa/<name> —
+	// scaling overridden on next sync") — a real informer-backed kind
+	// like Pod/Node, just never registered in resources.Registry (no
+	// browse list needed for this feature), same shape as the RBAC kinds
+	// above.
+	KindHorizontalPodAutoscaler ResourceKind = "HorizontalPodAutoscaler"
+
 	// KindWhoCan is a synthetic kind, like KindForward: not a Kubernetes API
 	// type and never registered in resources.Registry (there is nothing to
 	// list — 22a is "a query, not a browser"). It exists purely so the goto

@@ -141,11 +141,16 @@ type KeyHint struct {
 // (plain note and/or key hints — hints render accent-key + dim-label like
 // the left groups, mockup 2a's "? help").
 type Keybar struct {
-	Pill       Mode
-	PillText   string // e.g. "PODS", "GOTO", "OFFLINE"
-	Groups     [][]KeyHint
-	RightNote  string    // e.g. "mutating actions disabled", "type to narrow"
-	RightHints []KeyHint // e.g. the ? help verb; rendered after RightNote
+	Pill      Mode
+	PillText  string // e.g. "PODS", "GOTO", "OFFLINE"
+	Groups    [][]KeyHint
+	RightNote string // e.g. "mutating actions disabled", "type to narrow"
+	// RightWarnNote is a yellow-toned right-side note rendered after
+	// RightNote — 17b's "HPA-managed workloads show ... as a yellow note
+	// instead of blocking" (docs/design README.md §17b) is the one caller;
+	// a plain RightNote always renders dim, with no room for its own color.
+	RightWarnNote string
+	RightHints    []KeyHint // e.g. the ? help verb; rendered after RightNote/RightWarnNote
 }
 
 // Screen is the Chrome v2 contract every redesigned task implements. Frame
@@ -311,6 +316,7 @@ func renderKeybarV2(k Keybar, theme Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
 	// The inter-group │ is quieter than the labels around it (mockup 2a:
 	// Border, not TextDim).
 	sep := lipgloss.NewStyle().Foreground(theme.Border)
@@ -341,6 +347,12 @@ func renderKeybarV2(k Keybar, theme Theme, width int) string {
 	right := ""
 	if k.RightNote != "" {
 		right = dim.Render(k.RightNote)
+	}
+	if k.RightWarnNote != "" {
+		if right != "" {
+			right += "   "
+		}
+		right += warn.Render(k.RightWarnNote)
 	}
 	if len(k.RightHints) > 0 {
 		if right != "" {

@@ -32,7 +32,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 	if m.pendingScale != nil {
-		return tui.Keybar{
+		kb := tui.Keybar{
 			Pill:     tui.ModeBrowse,
 			PillText: "SCALE",
 			Groups: [][]tui.KeyHint{{
@@ -41,8 +41,18 @@ func (m Model) Keybar() tui.Keybar {
 				{Key: "↵", Label: "apply"},
 				{Key: "esc", Label: "cancel"},
 			}},
-			RightNote: m.scaleWillRunLine(),
 		}
+		if hpa := m.pendingScale.hpaName; hpa != "" {
+			// The will-run line and the HPA warning together rarely fit on
+			// one keybar row (insetChromeLine drops the whole right side
+			// rather than truncating either) — the warning is the more
+			// decision-relevant fact at this moment, so it takes the slot
+			// instead of the redundant kubectl-equivalent text.
+			kb.RightWarnNote = fmt.Sprintf("managed by hpa/%s — scaling overridden on next sync", hpa)
+		} else {
+			kb.RightNote = m.scaleWillRunLine()
+		}
+		return kb
 	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {

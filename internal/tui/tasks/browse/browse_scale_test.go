@@ -6,11 +6,21 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
+
+func hpaTargeting(ns, name, targetKind, targetName string) *autoscalingv2.HorizontalPodAutoscaler {
+	return &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: targetKind, Name: targetName},
+		},
+	}
+}
 
 func statefulSetObj(ns, name string, replicas, ready int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
@@ -145,6 +155,50 @@ func TestScaleWillRunLineNamesTheKubectlCommand(t *testing.T) {
 	want := "kubectl scale deploy/api --replicas=4 -n default"
 	if !strings.Contains(kb.RightNote, want) {
 		t.Fatalf("RightNote = %q, want it to contain %q", kb.RightNote, want)
+	}
+}
+
+// TestScalePromptShowsHPAWarningWhenManaged pins 17b (docs/design
+// README.md:252: "HPA-managed workloads show managed by hpa/<name> —
+// scaling overridden on next sync as a yellow note instead of blocking"):
+// an HPA whose scaleTargetRef points at the selected Deployment surfaces
+// that warning in the keybar; a Deployment with no matching HPA doesn't.
+func TestScalePromptShowsHPAWarningWhenManaged(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment:              {deploymentObjReplicas("default", "api", 3)},
+		kube.KindHorizontalPodAutoscaler: {hpaTargeting("default", "api-hpa", "Deployment", "api")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tea.KeyPressMsg{Text: "+"})
+
+	kb := m.Keybar()
+	want := "managed by hpa/api-hpa — scaling overridden on next sync"
+	if kb.RightWarnNote != want {
+		t.Fatalf("RightWarnNote = %q, want %q", kb.RightWarnNote, want)
+	}
+}
+
+// TestScalePromptNoHPAWarningWhenUnmanaged is the converse: a Deployment
+// with no matching HPA (even when other HPAs exist for other workloads)
+// must show no warning at all — never a false positive.
+func TestScalePromptNoHPAWarningWhenUnmanaged(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment:              {deploymentObjReplicas("default", "api", 3)},
+		kube.KindHorizontalPodAutoscaler: {hpaTargeting("default", "other-hpa", "Deployment", "other")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tea.KeyPressMsg{Text: "+"})
+
+	if kb := m.Keybar(); kb.RightWarnNote != "" {
+		t.Fatalf("RightWarnNote = %q, want empty (no HPA targets this Deployment)", kb.RightWarnNote)
 	}
 }
 
