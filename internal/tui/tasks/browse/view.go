@@ -844,7 +844,7 @@ func (m Model) metricCell(name string, cpu bool, maxVal int64, st rowCellStyles)
 		} else {
 			value, used = pm.MEM, pm.MemBytes
 		}
-		if value == "" {
+		if value == "" || value == "n/a" {
 			value = "–"
 		}
 	}

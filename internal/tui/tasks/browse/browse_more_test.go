@@ -238,6 +238,33 @@ func TestPodMetricsRenderAsBars(t *testing.T) {
 	}
 }
 
+// TestUnavailablePodMetricsRenderAsDash pins the 2a fix (docs/design
+// README.md §29): both the real cluster and the fake demo cluster report a
+// pod with no metrics data as the literal string "n/a" (kube.PodMetrics{CPU:
+// "n/a", MEM: "n/a"}), not an empty string — metricCell must still collapse
+// that to the spec's clean "–" rather than leaking the raw sentinel,
+// mirroring nodeMetricCell's own "n/a" fallback for the same data shape.
+func TestUnavailablePodMetricsRenderAsDash(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
+		"api-1": {CPU: "n/a", MEM: "n/a"},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Metrics: metrics})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+	m = step(t, m, m.loadMetrics(m.metricsEpoch)())
+
+	view := ansi.Strip(m.Render())
+	if strings.Contains(view, "n/a") {
+		t.Fatalf("expected the raw \"n/a\" sentinel never to reach the view:\n%s", view)
+	}
+	if !strings.Contains(view, "–") {
+		t.Fatalf("expected the spec's \"–\" placeholder in view:\n%s", view)
+	}
+}
+
 func TestLogsKeyOpensLogsScreen(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {pod("default", "api-1")},
