@@ -106,7 +106,9 @@ func projectPod(obj runtime.Object) Row {
 	// status is the STATUS cell text — the mockup (docs/design §2a) shows the
 	// failure reason ("CrashLoopBackOff") and kubectl's "Completed" wording,
 	// not the raw phase.
-	glyph, class, status := "●", StatusOK, string(p.Status.Phase)
+	status := string(p.Status.Phase)
+	var glyph string
+	var class StatusClass
 	switch {
 	case p.Status.Phase == corev1.PodSucceeded:
 		glyph, class, status = "○", StatusNeutral, "Completed"

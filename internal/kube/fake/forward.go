@@ -128,12 +128,12 @@ func (t *tunnel) Run(activity func()) error {
 		if activity != nil {
 			activity()
 		}
-		conn.Close()
+		_ = conn.Close()
 	}
 }
 
 func (t *tunnel) Close() {
-	t.closeOnce.Do(func() { t.ln.Close() })
+	t.closeOnce.Do(func() { _ = t.ln.Close() })
 }
 
 // flakyTunnel wraps a normal tunnel but abandons it after ttl, simulating
@@ -152,7 +152,7 @@ func (t *flakyTunnel) Run(activity func()) error {
 	case err := <-done:
 		return err
 	case <-time.After(t.ttl):
-		t.tunnel.Close()
+		t.Close()
 		<-done // Accept's own error return, discarded — ours is more specific
 		return fmt.Errorf("connection lost: container restarting")
 	}

@@ -28,10 +28,6 @@ func newModel() Model {
 	})
 }
 
-func key(s string) tea.KeyPressMsg {
-	return tea.KeyPressMsg(tea.Key{Text: s, Code: rune(s[0])})
-}
-
 func TestMoveSelectionClamps(t *testing.T) {
 	t.Parallel()
 	m := newModel()

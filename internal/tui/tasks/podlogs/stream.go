@@ -151,7 +151,7 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 
 		if !first {
 			if !emit(m.boundaryEntry(ctx, container)) {
-				reader.Close()
+				_ = reader.Close()
 				return nil
 			}
 		}
@@ -166,7 +166,7 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 			}
 			return emit(LogEntry{Container: container, Timestamp: ts, Message: msg, Severity: parseSeverity(msg)})
 		})
-		reader.Close()
+		_ = reader.Close()
 		if unretrievable != "" {
 			// The kubelet logs endpoint answers a terminated/GC'd container's
 			// logs with a 200 OK whose body is just this one line (a

@@ -134,7 +134,7 @@ func TestPickLocalPortSkipsBusyPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("net.Listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	busy := ln.Addr().(*net.TCPAddr).Port
 
 	chosen, busyFrom := pickLocalPort(busy)

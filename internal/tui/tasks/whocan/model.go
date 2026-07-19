@@ -86,8 +86,6 @@ type Model struct {
 	state    tui.TaskState
 	feedback string
 	spinner  components.Spinner
-
-	loadStartedAt time.Time
 }
 
 // loadedMsg carries one load()'s result.

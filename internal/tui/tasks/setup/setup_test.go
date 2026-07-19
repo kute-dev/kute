@@ -225,7 +225,7 @@ func TestRetryKeyDispatch(t *testing.T) {
 			RetryNow:  func() { retried = true },
 			Reconnect: func(string) tea.Cmd { reconnected = true; return nil },
 		})
-		m = step(t, m, tea.KeyPressMsg{Text: "r"})
+		step(t, m, tea.KeyPressMsg{Text: "r"})
 		if !retried || reconnected {
 			t.Fatalf("retried=%v reconnected=%v, want retried only", retried, reconnected)
 		}
@@ -238,7 +238,7 @@ func TestRetryKeyDispatch(t *testing.T) {
 			State:     NoConfig,
 			Reconnect: func(p string) tea.Cmd { called, gotPath = true, p; return nil },
 		})
-		m = step(t, m, tea.KeyPressMsg{Text: "r"})
+		step(t, m, tea.KeyPressMsg{Text: "r"})
 		if !called || gotPath != "" {
 			t.Fatalf("called=%v gotPath=%q, want called with empty path", called, gotPath)
 		}

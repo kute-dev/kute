@@ -61,14 +61,6 @@ func step(t *testing.T, m Model, msg tea.Msg) Model {
 	return next
 }
 
-func warningGroup(reason, object, message string, count int32, age time.Duration) kube.EventGroup {
-	return kube.EventGroup{Type: "Warning", Reason: reason, Object: object, Message: message, Count: count, LastSeen: time.Now().Add(-age)}
-}
-
-func normalGroup(reason, object string, age time.Duration) kube.EventGroup {
-	return kube.EventGroup{Type: "Normal", Reason: reason, Object: object, Message: reason, Count: 1, LastSeen: time.Now().Add(-age)}
-}
-
 func TestNamespaceScopedLoadDedupesAndFoldsNormal(t *testing.T) {
 	events := []kube.Event{
 		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "back-off restarting", Count: 1, LastSeen: time.Now()},

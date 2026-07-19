@@ -165,7 +165,7 @@ func TestStreamPodLogsReplaysSeededLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StreamPodLogs: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 1024)
 	n, _ := rc.Read(buf)
 	got := string(buf[:n])

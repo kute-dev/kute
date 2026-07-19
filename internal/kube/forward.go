@@ -23,7 +23,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	// client-go's portforward.New/spdy.NewDialer (the pair this file uses) still
+	// take apimachinery's httpstream.Dialer, not the k8s.io/streaming replacement
+	// — that's only wired through the parallel NewForStreaming/NewDialerForStreaming
+	// pair, which isn't interface-compatible.
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"

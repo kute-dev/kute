@@ -66,13 +66,6 @@ func (m Model) Header() tui.HeaderState {
 	}
 }
 
-func (m Model) stripLineCount() int {
-	if m.state == tui.TaskStateReady {
-		return 1
-	}
-	return 0
-}
-
 // Strips is 19a's "top-line trouble counts + v1.30.2 · 5 nodes · 125 pods ·
 // 6 namespaces".
 func (m Model) Strips(width int) []string {

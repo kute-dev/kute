@@ -146,7 +146,7 @@ func DecodeHelmReleaseSecret(secret *corev1.Secret) (HelmRelease, error) {
 	if err != nil {
 		return HelmRelease{}, fmt.Errorf("gunzip release: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	jsonBytes, err := io.ReadAll(gz)
 	if err != nil {
 		return HelmRelease{}, fmt.Errorf("read release: %w", err)

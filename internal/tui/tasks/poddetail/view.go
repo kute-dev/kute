@@ -279,7 +279,8 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 	}
 	rows := make([]components.Row, 0, len(m.pod.ContainerInfos))
 	for i, c := range m.pod.ContainerInfos {
-		glyph, glyphStyle := "●", lipgloss.NewStyle().Foreground(theme.Good)
+		var glyph string
+		var glyphStyle lipgloss.Style
 		stateStyle := lipgloss.NewStyle().Foreground(theme.Good)
 		stateText := c.State
 		switch c.State {

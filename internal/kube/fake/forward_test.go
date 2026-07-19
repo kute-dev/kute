@@ -77,7 +77,7 @@ func TestForwardDialerBindsRealLocalPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("net.Listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	port := ln.Addr().(*net.TCPAddr).Port
 
 	d := NewForwardDialer()
@@ -95,7 +95,7 @@ func TestForwardDialerTunnelAcceptsAndCloses(t *testing.T) {
 		t.Fatalf("net.Listen: %v", err)
 	}
 	port := probe.Addr().(*net.TCPAddr).Port
-	probe.Close()
+	_ = probe.Close()
 
 	d := NewForwardDialer()
 	tunnel, err := d.Dial("default", "web-1", port, 80)
@@ -111,7 +111,7 @@ func TestForwardDialerTunnelAcceptsAndCloses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("net.Dial: %v", err)
 	}
-	conn.Close()
+	_ = conn.Close()
 
 	select {
 	case <-activity:
@@ -139,7 +139,7 @@ func TestForwardDialerFlagsFlakyPodDistinctly(t *testing.T) {
 			t.Fatalf("net.Listen: %v", err)
 		}
 		port := ln.Addr().(*net.TCPAddr).Port
-		ln.Close()
+		_ = ln.Close()
 		return port
 	}
 
