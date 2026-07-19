@@ -5,6 +5,12 @@ A TUI Kubernetes console, built with [Bubble Tea](https://github.com/charmbracel
 ## Install
 
 ```sh
+curl -fsSL https://kute.dev/install.sh | sh
+```
+
+Or with Homebrew:
+
+```sh
 brew install kute-dev/tap/kute
 ```
 
