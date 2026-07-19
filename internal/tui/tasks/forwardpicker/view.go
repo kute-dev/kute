@@ -41,9 +41,17 @@ func (m Model) Header() tui.HeaderState {
 		{Text: m.target.Name, Style: text},
 	}
 
+	var chip tui.ConnBadge
+	if m.session != nil {
+		// docs/design README.md §13d: every screen's Header() carries the
+		// ambient forward chip — this one and execpicker's own were the
+		// two omitting it.
+		chip = tui.BuildForwardChip(theme, m.session.ForwardSummary())
+	}
 	return tui.HeaderState{
-		Crumbs: crumbs,
-		Conn:   tui.LiveConnBadge(theme, m.conn, tui.GlyphRunning+" connected"),
+		Crumbs:      crumbs,
+		ForwardChip: chip,
+		Conn:        tui.LiveConnBadge(theme, m.conn, tui.GlyphRunning+" connected"),
 	}
 }
 

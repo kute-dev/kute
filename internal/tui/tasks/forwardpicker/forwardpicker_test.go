@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -61,6 +62,28 @@ func loadPorts(t *testing.T, m Model) Model {
 	msg := cmd()
 	m.applyPortsLoaded(msg.(portsLoadedMsg))
 	return m
+}
+
+// TestHeaderShowsForwardChipWhenActive pins 13d: every screen's Header()
+// carries the ambient forward chip — forwardpicker was one of two omitting
+// it.
+func TestHeaderShowsForwardChipWhenActive(t *testing.T) {
+	mgr := kube.NewForwardManager()
+	target := kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "web-0"}
+	mgr.Start(fake.NewForwardDialer(), fake.NewPodResolver(fake.New("default", "test")), target, "web-0", 18080, 80, "")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(mgr.List()) == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(mgr.List()) == 0 {
+		t.Fatal("forward session never registered")
+	}
+
+	m := newModel(podWithPort("default", "web-0", 80))
+	m.session.Forwards = mgr
+	if got := m.Header().ForwardChip.Text; got == "" {
+		t.Fatal("expected a non-empty forward chip while a forward is active")
+	}
 }
 
 func TestInitLoadsPortsAndResolvesPod(t *testing.T) {

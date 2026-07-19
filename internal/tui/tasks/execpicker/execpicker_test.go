@@ -4,11 +4,13 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/kube/fake"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -44,6 +46,27 @@ func TestMoveSelectionClamps(t *testing.T) {
 	m.moveSelection(1)
 	if m.selected != 1 {
 		t.Fatalf("selected = %d, want clamped to 1 (last container)", m.selected)
+	}
+}
+
+// TestHeaderShowsForwardChipWhenActive pins 13d: every screen's Header()
+// carries the ambient forward chip — execpicker was one of two omitting it.
+func TestHeaderShowsForwardChipWhenActive(t *testing.T) {
+	mgr := kube.NewForwardManager()
+	target := kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "worker-0"}
+	mgr.Start(fake.NewForwardDialer(), fake.NewPodResolver(fake.New("default", "test")), target, "worker-0", 18080, 80, "")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(mgr.List()) == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(mgr.List()) == 0 {
+		t.Fatal("forward session never registered")
+	}
+
+	m := newModel()
+	m.session.Forwards = mgr
+	if got := m.Header().ForwardChip.Text; got == "" {
+		t.Fatal("expected a non-empty forward chip while a forward is active")
 	}
 }
 

@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,26 @@ func TestForwardOnPodPushesPicker(t *testing.T) {
 	want := kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "api-0"}
 	if gotTarget != want {
 		t.Fatalf("ForwardTarget = %+v, want %+v", gotTarget, want)
+	}
+}
+
+// TestForwardsBreadcrumbShowsAllNamespacesNotClusterScoped pins 13c: the
+// breadcrumb tag reads "all namespaces" (forwards are global, never
+// namespace-filtered), not the generic "cluster-scoped" tag Nodes/
+// Namespaces get from sharing the same ClusterScoped registry flag.
+func TestForwardsBreadcrumbShowsAllNamespacesNotClusterScoped(t *testing.T) {
+	session := newSession()
+	session.Location.Kind = kube.KindForward
+	m := New(Config{Session: session, Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "all namespaces") {
+		t.Fatalf("expected the 'all namespaces' breadcrumb tag:\n%s", view)
+	}
+	if strings.Contains(view, "cluster-scoped") {
+		t.Fatalf("expected no 'cluster-scoped' tag for Forwards:\n%s", view)
 	}
 }
 

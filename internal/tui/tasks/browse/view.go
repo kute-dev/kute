@@ -71,7 +71,16 @@ func (m Model) Header() tui.HeaderState {
 		tui.Crumb{Text: " › ", Style: ghost},
 		tui.Crumb{Text: m.desc.Display, Style: text},
 	)
-	if m.desc.ClusterScoped {
+	switch {
+	case m.kind == kube.KindForward:
+		// docs/design README.md §13c: "all namespaces tag (forwards are
+		// global, never namespace-filtered)" — Forwards reuses Nodes'
+		// ClusterScoped semantics (no per-namespace switching/refetch at
+		// all) but is namespaced data viewed globally, not truly
+		// cluster-scoped like Nodes, so the breadcrumb tag reads
+		// differently — matching 6b's own "all namespaces" blue wording.
+		crumbs = append(crumbs, tui.Crumb{Text: "  " + tui.GlyphAllNS + " all namespaces", Style: lipgloss.NewStyle().Foreground(theme.Info)})
+	case m.desc.ClusterScoped:
 		// 11a: "… cluster › Nodes" + a small cluster-scoped tag — the
 		// namespace segment is already dropped above.
 		crumbs = append(crumbs, tui.Crumb{Text: "  cluster-scoped", Style: faint})
