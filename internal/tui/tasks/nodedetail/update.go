@@ -19,6 +19,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+		m.actions.SetOffline(m.conn.Offline())
 		m.now = time.Now()
 	case loadedMsg:
 		return m.applyLoaded(msg)

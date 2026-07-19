@@ -41,11 +41,24 @@ type Controller struct {
 	typedName string
 	state     tui.TaskState
 	message   string
+	// offline mirrors the screen's kube.ConnState.Offline() (docs/design
+	// README.md §4a: "mutating actions disabled" while OFFLINE) — set via
+	// SetOffline from each screen's ConnStateMsg handler, checked in Begin
+	// so the gate lives in the one place every mutating verb funnels
+	// through, not duplicated per screen/per-key.
+	offline bool
 }
 
 // New builds a Controller that executes through mutator (which may be nil).
 func New(mutator kube.Mutator) Controller {
 	return Controller{mutator: mutator}
+}
+
+// SetOffline records whether the connection is mid-outage. Call it from the
+// screen's kube.ConnStateMsg handler, passing conn.Offline() — Begin refuses
+// to start any mutating action while true.
+func (c *Controller) SetOffline(offline bool) {
+	c.offline = offline
 }
 
 // Active reports whether a confirmation prompt is currently showing.
@@ -82,6 +95,10 @@ func (c Controller) NameMatches() bool {
 // remembering which so screens can render the right surface (inline keybar
 // prompt vs. the centered type-the-name modal).
 func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
+	if c.offline {
+		c.fail("Mutating actions are disabled while offline.")
+		return nil
+	}
 	if c.mutator == nil {
 		c.fail("Mutations are not configured.")
 		return nil

@@ -52,7 +52,7 @@ type ConnBadge struct {
 // reports Reconnecting/Failed. Screens with genuinely stateful badges
 // (podlogs' following/paused, setup's connecting-failed) build their own.
 func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnBadge {
-	if conn.Phase == kube.ConnReconnecting || conn.Phase == kube.ConnFailed {
+	if conn.Offline() {
 		return ConnBadge{
 			Text:  GlyphProbing + " disconnected",
 			Style: lipgloss.NewStyle().Foreground(theme.Bad),

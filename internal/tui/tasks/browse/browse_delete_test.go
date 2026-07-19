@@ -44,6 +44,39 @@ func TestCtrlDNonProdShowsInlinePromptAndDeletesOnY(t *testing.T) {
 	}
 }
 
+// TestCtrlDNoOpsWhileOffline pins the 4a fix: OFFLINE's keybar note ("mutating
+// actions disabled") must actually be enforced, not just displayed — ctrl+d
+// must neither open the confirm prompt nor reach the mutator while the
+// connection is mid-outage.
+func TestCtrlDNoOpsWhileOffline(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "boom"})
+	if !m.offline() {
+		t.Fatal("expected offline() = true after a Reconnecting ConnStateMsg")
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	if m.actions.Active() {
+		t.Fatal("ctrl+d must not open a confirm prompt while offline")
+	}
+	if len(mut.deleted) != 0 {
+		t.Fatalf("mutator must not run while offline, got %v", mut.deleted)
+	}
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	if !m.actions.Active() {
+		t.Fatal("expected ctrl+d to work again once back online")
+	}
+}
+
 // TestCtrlDProdOpensTypeNameModal exercises 8b's PROD escalation: the modal
 // covers the body, enter no-ops until the name is typed, esc cancels.
 func TestCtrlDProdOpensTypeNameModal(t *testing.T) {

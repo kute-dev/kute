@@ -24,6 +24,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+		m.actions.SetOffline(m.conn.Offline())
 		m.now = time.Now()
 	case tui.GotoKindMsg:
 		if msg.Kind == kube.KindWhoCan {

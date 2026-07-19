@@ -28,6 +28,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+		m.actions.SetOffline(m.conn.Offline())
 	case loadedMsg:
 		return m.applyLoaded(msg)
 	case components.SpinnerTickMsg:

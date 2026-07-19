@@ -473,7 +473,7 @@ func (m Model) pollsMetrics() bool {
 // retries under way) rather than a one-shot failure. The table/rows
 // themselves are untouched — browsing the stale snapshot still works.
 func (m Model) offline() bool {
-	return m.conn.Phase == kube.ConnReconnecting || m.conn.Phase == kube.ConnFailed
+	return m.conn.Offline()
 }
 
 func (m Model) Init() tea.Cmd {

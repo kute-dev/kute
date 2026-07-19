@@ -33,6 +33,14 @@ type ConnState struct {
 // ConnState changes.
 type ConnStateMsg ConnState
 
+// Offline reports whether Phase is a mid-outage state (watch/ping failing,
+// backoff retries under way) rather than a one-shot failure — the single
+// predicate every "disconnected"/OFFLINE treatment (4a banner, header badge,
+// mutating-verb gate) shares.
+func (s ConnState) Offline() bool {
+	return s.Phase == ConnReconnecting || s.Phase == ConnFailed
+}
+
 const (
 	pingInterval   = 2 * time.Second // matches the "sync 2s" header chip
 	pingTimeout    = 3 * time.Second

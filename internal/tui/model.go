@@ -264,8 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, next
 			}
-		case m.neverConnected && !m.showingSetup && m.buildSetup != nil &&
-			(m.conn.Phase == kube.ConnReconnecting || m.conn.Phase == kube.ConnFailed):
+		case m.neverConnected && !m.showingSetup && m.buildSetup != nil && m.conn.Offline():
 			m.showingSetup = true
 			m.task = m.buildSetup(m.conn)
 			m.resizeTask()

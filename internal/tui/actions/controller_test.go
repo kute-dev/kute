@@ -143,6 +143,33 @@ func TestNilMutatorReportsUnconfigured(t *testing.T) {
 	}
 }
 
+func TestBeginRefusesWhileOffline(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	c.SetOffline(true)
+
+	if cmd := c.Begin(TierNone, deleteAction()); cmd != nil {
+		t.Fatal("Begin should not return an execution command while offline")
+	}
+	if c.Active() {
+		t.Fatal("Begin should not enter the confirming state while offline")
+	}
+	if c.State() != tui.TaskStateError {
+		t.Fatalf("state = %q, want error", c.State())
+	}
+	if !strings.Contains(c.Message(), "offline") {
+		t.Fatalf("message %q, want mention of offline", c.Message())
+	}
+	if len(mut.deleted) != 0 {
+		t.Fatalf("mutator must not run while offline, got %v", mut.deleted)
+	}
+
+	c.SetOffline(false)
+	if cmd := c.Begin(TierNone, deleteAction()); cmd == nil {
+		t.Fatal("expected Begin to execute again once back online")
+	}
+}
+
 func TestBeginTierNoneExecutesImmediately(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
