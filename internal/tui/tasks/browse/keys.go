@@ -93,6 +93,10 @@ func (m Model) Keybar() tui.Keybar {
 		// docs/design README.md §9a: "Keybar pill DEPLOY", not the plural
 		// "DEPLOYMENTS" every other kind's pill would produce.
 		pillText = "DEPLOY"
+	case kube.KindCustomResourceDefinition:
+		// docs/design README.md §14b: "Keybar pill CRDS" — the built-in CRD
+		// list's own short form, not the full "CUSTOMRESOURCEDEFINITIONS".
+		pillText = "CRDS"
 	}
 	pill := tui.ModeBrowse
 	if m.grouped() {

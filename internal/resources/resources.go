@@ -140,6 +140,11 @@ type Descriptor struct {
 	// palette's type label (14c) uses it instead of the built-in Group
 	// taxonomy.
 	APIGroup string
+	// APIVersion is the discovered kind's display version (e.g. "v1") —
+	// non-empty only when Custom is true. 14a's breadcrumb combines it with
+	// APIGroup for the dim "cert-manager.io/v1" tag (docs/design README.md
+	// §14a).
+	APIVersion string
 }
 
 // InstanceCounter reads a live instance count for a discovered kind — the

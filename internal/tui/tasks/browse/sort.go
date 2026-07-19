@@ -46,6 +46,19 @@ func healthRank(class resources.StatusClass) int {
 // *within* each namespace — a single namespace's rows sort exactly as 2a's
 // plain unhealthy-first.
 func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row) {
+	if kind == kube.KindCustomResourceDefinition {
+		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
+		// own Cells[1] is the CRD's API group; Name breaks ties within a
+		// group so it stays deterministic.
+		sort.SliceStable(rows, func(i, j int) bool {
+			gi, gj := crdGroupCell(rows[i]), crdGroupCell(rows[j])
+			if gi != gj {
+				return gi < gj
+			}
+			return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
+		})
+		return
+	}
 	if !workloadKinds[kind] {
 		return
 	}
@@ -65,6 +78,16 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 		}
 		return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
 	})
+}
+
+// crdGroupCell reads the API group cell off a 14b CRD row (crdColumns'
+// Cells[1], resources.projectCRD's own layout) — empty/out-of-range rows
+// (never expected in practice) sort first, as the empty string.
+func crdGroupCell(r resources.Row) string {
+	if len(r.Cells) < 2 {
+		return ""
+	}
+	return r.Cells[1]
 }
 
 // namespaceTrouble reports, for each namespace, whether it has any

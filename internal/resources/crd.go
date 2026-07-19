@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,15 +38,29 @@ func CustomDescriptor(dk kube.DiscoveredKind) Descriptor {
 	return Descriptor{
 		Kind:          kube.ResourceKind(dk.Kind),
 		Group:         GroupCustomResources,
-		Display:       dk.Plural,
+		Display:       capitalizePlural(dk.Plural),
 		Icon:          "◆",
 		Columns:       columns,
 		Describe:      "custom resource · " + dk.Group,
 		ClusterScoped: dk.ClusterScoped,
 		Custom:        true,
 		APIGroup:      dk.Group,
+		APIVersion:    dk.GVR.Version,
 		Project:       projectCustomResource(dk),
 	}
+}
+
+// capitalizePlural title-cases a CRD's own (conventionally all-lowercase)
+// plural name for display — docs/design README.md §14a: breadcrumb/pill
+// text reads "Certificates", not the raw "certificates" straight off the
+// CRD spec.
+func capitalizePlural(plural string) string {
+	if plural == "" {
+		return plural
+	}
+	r := []rune(plural)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }
 
 // projectCustomResource is the one generic projector every discovered kind
@@ -138,13 +153,14 @@ func httpRouteDescriptor(dk kube.DiscoveredKind) Descriptor {
 	return Descriptor{
 		Kind:          kube.ResourceKind(dk.Kind),
 		Group:         GroupCustomResources,
-		Display:       dk.Plural,
+		Display:       capitalizePlural(dk.Plural),
 		Icon:          "◆",
 		Columns:       columns,
 		Describe:      "custom resource · " + dk.Group,
 		ClusterScoped: dk.ClusterScoped,
 		Custom:        true,
 		APIGroup:      dk.Group,
+		APIVersion:    dk.GVR.Version,
 		Project:       projectHTTPRoute(dk),
 	}
 }

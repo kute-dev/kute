@@ -71,6 +71,11 @@ func (m Model) Header() tui.HeaderState {
 		tui.Crumb{Text: " › ", Style: ghost},
 		tui.Crumb{Text: m.desc.Display, Style: text},
 	)
+	if m.desc.Custom && m.desc.APIGroup != "" && m.desc.APIVersion != "" {
+		// docs/design README.md §14a: "Certificates + cert-manager.io/v1" —
+		// the CRD's own API group/version, dim, right after the kind name.
+		crumbs = append(crumbs, tui.Crumb{Text: " " + m.desc.APIGroup + "/" + m.desc.APIVersion, Style: faint})
+	}
 	switch {
 	case m.kind == kube.KindForward:
 		// docs/design README.md §13c: "all namespaces tag (forwards are
@@ -244,6 +249,15 @@ func (m Model) columnHeaderLine(theme tui.Theme, width int) string {
 // total.
 func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	counts := m.desc.Health(m.rows)
+	if m.desc.Custom && len(m.rows) > 0 && counts.OK+counts.Warn+counts.Fail == 0 {
+		// docs/design README.md §14a: a CRD kind whose instances carry no
+		// Ready/Available condition at all gets no fake health — the strip
+		// drops the per-status counts and says so instead.
+		faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+		note := faint.Render("no status semantics · NAME + AGE only")
+		right := lipgloss.NewStyle().Foreground(theme.TextDim).Render(fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display)))
+		return insetStripLine(padBetween(note, right, stripInnerWidth(width)), width)
+	}
 	segments := []struct {
 		class resources.StatusClass
 		n     int
@@ -569,6 +583,11 @@ type rowCellStyles struct {
 	name, nameBad, ready, restartsZero, restartsHot, dim, match lipgloss.Style
 	bars                                                        components.BarStyles
 	status                                                      map[resources.StatusClass]lipgloss.Style
+	// customNeutral is 14a's "no status semantics" fallback glyph color
+	// (TextFaint) — distinct from status[StatusNeutral]'s Info blue, which
+	// every other kind's legitimately-neutral rows (Completed pods,
+	// cordoned nodes) keep using.
+	customNeutral lipgloss.Style
 }
 
 // newRowCellStyles resolves the table's per-cell colors from theme, or —
@@ -633,6 +652,7 @@ func newRowCellStyles(theme tui.Theme, selected, muted, marked bool) rowCellStyl
 			resources.StatusFail:    style(bad),
 			resources.StatusNeutral: style(info),
 		},
+		customNeutral: style(theme.TextFaint),
 	}
 }
 
@@ -711,6 +731,14 @@ func (m Model) tableBody(width, height int) string {
 					cells[i].Text = defaultGlyphFor(r.Status)
 				}
 				cells[i].Style = st.status[r.Status]
+				if m.desc.Custom && r.Status == resources.StatusNeutral {
+					// docs/design README.md §14a: a CRD instance with no
+					// Ready/Available condition at all — "never fake
+					// health" — renders TextFaint, not the generic Neutral/
+					// Info blue every other kind's Neutral class (Completed
+					// pods, cordoned nodes) uses.
+					cells[i].Style = st.customNeutral
+				}
 			case m.kind == kube.KindPod && cols[i].Title == "CPU":
 				cells[i] = m.metricCell(r.Name, true, cpuMax, st)
 			case m.kind == kube.KindPod && cols[i].Title == "MEM":

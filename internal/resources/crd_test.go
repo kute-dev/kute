@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
@@ -15,6 +16,7 @@ import (
 func certificateDiscoveredKind() kube.DiscoveredKind {
 	return kube.DiscoveredKind{
 		Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
+		GVR:           schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"},
 		Versions:      []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
 		ClusterScoped: false,
 		PrinterColumns: []kube.PrinterColumn{
@@ -47,6 +49,15 @@ func TestCustomDescriptorColumns(t *testing.T) {
 	}
 	if !desc.Custom || desc.APIGroup != "cert-manager.io" {
 		t.Fatalf("expected Custom=true, APIGroup=cert-manager.io, got %+v", desc)
+	}
+	// docs/design README.md §14a: breadcrumb/pill text reads "Certificates"
+	// (capitalized) + the dim "cert-manager.io/v1" API-version tag, not the
+	// CRD's own raw lowercase plural.
+	if desc.Display != "Certificates" {
+		t.Fatalf("Display = %q, want %q", desc.Display, "Certificates")
+	}
+	if desc.APIVersion != "v1" {
+		t.Fatalf("APIVersion = %q, want %q", desc.APIVersion, "v1")
 	}
 	want := []string{"Name", "Ready", "Secret", "Age"}
 	if len(desc.Columns) != len(want) {
