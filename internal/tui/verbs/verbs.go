@@ -23,8 +23,12 @@ type Verb struct {
 	Label string // "delete"
 	Tier  actions.Tier
 	Kinds []kube.ResourceKind // applicable kinds; nil = all
-	// Mutating verbs render disabled in OFFLINE/NoCluster modes — the root
-	// shell greys them out centrally (Phase 4), no per-screen check needed.
+	// Mutating verbs are hidden from the keybar and refused at
+	// actions.Controller.Begin while OFFLINE (docs/design README.md §52,
+	// §301) — screens call HiddenWhileOffline when building their own
+	// Keybar() rather than hardcoding which verbs need the gate; browse's
+	// list view instead swaps its whole keybar to the OFFLINE pill, which
+	// covers every verb at once without consulting this field per-verb.
 	Mutating bool
 	// Bulk declares whether this verb can act on 20a's marked set instead of
 	// just the cursor row (docs/design README.md §20a: "bulk-capability is
@@ -45,6 +49,16 @@ func (v Verb) AppliesTo(kind kube.ResourceKind) bool {
 		return true
 	}
 	return slices.Contains(v.Kinds, kind)
+}
+
+// HiddenWhileOffline reports whether v's keybar hint should be omitted
+// given the connection state — true only for a Mutating verb while offline.
+// Non-mutating verbs (navigation, Exec/Edit/NodeShell's own tty-handoff
+// writes, Forward's local-only session) are never hidden by this, since
+// docs/design README.md §301's "mutating actions disabled" applies strictly
+// to kube.Mutator-routed writes.
+func (v Verb) HiddenWhileOffline(offline bool) bool {
+	return v.Mutating && offline
 }
 
 // Non-mutating navigation/view verbs.

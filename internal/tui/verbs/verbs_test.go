@@ -26,6 +26,23 @@ func TestEditHint(t *testing.T) {
 	}
 }
 
+// TestHiddenWhileOffline pins the cross-cutting fix for the dead Mutating
+// field: HiddenWhileOffline is the one real (non-test) consumer, called by
+// poddetail/nodedetail/helmhistory/objectdetail's Keybar() instead of each
+// hardcoding which verbs need the offline gate.
+func TestHiddenWhileOffline(t *testing.T) {
+	t.Parallel()
+	if !Delete.HiddenWhileOffline(true) {
+		t.Fatal("expected a Mutating verb hidden while offline")
+	}
+	if Delete.HiddenWhileOffline(false) {
+		t.Fatal("expected a Mutating verb shown while online")
+	}
+	if Goto.HiddenWhileOffline(true) {
+		t.Fatal("expected a non-Mutating verb never hidden, even offline")
+	}
+}
+
 func TestAppliesTo(t *testing.T) {
 	t.Parallel()
 

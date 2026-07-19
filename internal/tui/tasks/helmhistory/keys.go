@@ -38,7 +38,7 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}, {Key: "↑↓", Label: "move"}}}
-	if m.mutator != nil && !m.conn.Offline() {
+	if m.mutator != nil && !verbs.Rollback.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Rollback.Hint()})
 	}
 

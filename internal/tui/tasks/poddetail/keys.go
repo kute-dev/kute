@@ -75,7 +75,7 @@ func (m Model) Keybar() tui.Keybar {
 	if len(verbGroup) > 0 {
 		groups = append(groups, verbGroup)
 	}
-	if m.mutator != nil && !m.conn.Offline() {
+	if m.mutator != nil && !verbs.Delete.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Delete.Hint()})
 	}
 

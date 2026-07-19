@@ -64,7 +64,8 @@ func (m Model) Keybar() tui.Keybar {
 	if m.node != nil {
 		groups = append(groups, []tui.KeyHint{verbs.Edit.Hint()})
 	}
-	if m.mutator != nil && !m.conn.Offline() {
+	offline := m.conn.Offline()
+	if m.mutator != nil && !verbs.Cordon.HiddenWhileOffline(offline) && !verbs.Drain.HiddenWhileOffline(offline) {
 		groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})
 	}
 	if m.openYAML != nil {
