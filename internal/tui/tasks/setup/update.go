@@ -23,6 +23,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RetryFailedMsg:
 		m.retrying = false
 		m.retryErr = msg.Err
+	case switchProbeMsg:
+		if msg.gen != m.probeGen {
+			return m, nil // stale run, already superseded — drain silently
+		}
+		if m.probes == nil {
+			m.probes = make(map[string]kube.ProbeResult)
+		}
+		m.probes[msg.res.Name] = msg.res
+		return m, waitForSwitchProbe(msg.gen, msg.ch)
+	case switchProbesDoneMsg:
+		return m, nil
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}

@@ -43,9 +43,9 @@ type Config struct {
 	// backoff countdown.
 	Conn kube.ConnState
 	// OtherContexts lists sibling kubeconfig context names for 4c's SWITCH
-	// CONTEXT preview (excluding the current one). Live reachability is
-	// deliberately not duplicated here — it's one 'c' keystroke away via
-	// the already-probing 7a context palette.
+	// CONTEXT list (excluding the current one) — pre-probed in the
+	// background (docs/design README.md §4c) via kube.ProbeContexts, the
+	// same mechanism the 7a context palette already uses.
 	OtherContexts  []string
 	KubeconfigPath string
 	// RetryNow re-probes the existing cluster without rebuilding it — 4c's
@@ -57,6 +57,11 @@ type Config struct {
 	// 'e' (a changed path can't be applied to an existing client, so
 	// editing the path always means a full rebuild).
 	Reconnect func(path string) tea.Cmd
+	// SwitchToContext rebuilds the cluster pinned to a named sibling
+	// kubeconfig context — 4c's SWITCH CONTEXT list's '↵' (docs/design
+	// README.md §4c: "↵ connect to selected"). Nil for NoConfig, which has
+	// no sibling contexts to switch among.
+	SwitchToContext func(name string) tea.Cmd
 }
 
 // Model is setup's state.
@@ -77,8 +82,17 @@ type Model struct {
 	otherContexts  []string
 	kubeconfigPath string
 
-	retryNow  func()
-	reconnect func(path string) tea.Cmd
+	// probes/probeGen back 4c's SWITCH CONTEXT list's live reachability —
+	// same probe-and-drain shape as tui/context.go's 7a palette (a fresh
+	// probeGen so a stale drain from a previous probe run, e.g. after 'r'
+	// retries the current context, can't clobber a newer one's results).
+	probes    map[string]kube.ProbeResult
+	probeGen  int
+	switchSel int
+
+	retryNow        func()
+	reconnect       func(path string) tea.Cmd
+	switchToContext func(name string) tea.Cmd
 
 	// editing/pathInput back 'e'/'k''s inline kubeconfig-path input —
 	// browse's "/" filter query uses the same free-text-capture pattern.
@@ -90,23 +104,39 @@ type Model struct {
 }
 
 func New(cfg Config) Model {
+	// 4c's SWITCH CONTEXT list defaults to the first sibling context
+	// selected (not "current", which is the one screen already known to
+	// be failing) — falls back to 0 (current) when there are no others.
+	switchSel := 0
+	if len(cfg.OtherContexts) > 0 {
+		switchSel = 1
+	}
 	return Model{
-		width:          tui.DefaultWidth,
-		height:         tui.DefaultHeight,
-		session:        cfg.Session,
-		state:          cfg.State,
-		err:            cfg.Err,
-		clusterName:    cfg.ClusterName,
-		conn:           cfg.Conn,
-		now:            time.Now(),
-		otherContexts:  cfg.OtherContexts,
-		kubeconfigPath: cfg.KubeconfigPath,
-		retryNow:       cfg.RetryNow,
-		reconnect:      cfg.Reconnect,
+		width:           tui.DefaultWidth,
+		height:          tui.DefaultHeight,
+		session:         cfg.Session,
+		state:           cfg.State,
+		err:             cfg.Err,
+		clusterName:     cfg.ClusterName,
+		conn:            cfg.Conn,
+		now:             time.Now(),
+		otherContexts:   cfg.OtherContexts,
+		kubeconfigPath:  cfg.KubeconfigPath,
+		retryNow:        cfg.RetryNow,
+		reconnect:       cfg.Reconnect,
+		switchToContext: cfg.SwitchToContext,
+		switchSel:       switchSel,
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	// 4c: "pre-probed in the background" — kicks off as soon as the screen
+	// exists, not gated on any keypress.
+	if m.state == Unreachable && len(m.otherContexts) > 0 {
+		return probeSwitchContextsCmd(m.probeGen, m.otherContexts)
+	}
+	return nil
+}
 
 func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)

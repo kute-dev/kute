@@ -11,9 +11,32 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "r":
 		return m.doRetry("")
+	case "up":
+		if m.state == Unreachable {
+			m.moveSwitchSelection(-1)
+		}
+	case "down":
+		if m.state == Unreachable {
+			m.moveSwitchSelection(1)
+		}
 	case "k":
-		if m.state == NoConfig {
+		switch m.state {
+		case NoConfig:
 			m.startEdit()
+		case Unreachable:
+			// 4c's SWITCH CONTEXT list: j/k ≡ ↑↓ (CLAUDE.md convention),
+			// distinct from NoConfig's own 'k' = "enter kubeconfig path".
+			m.moveSwitchSelection(-1)
+		}
+	case "j":
+		if m.state == Unreachable {
+			m.moveSwitchSelection(1)
+		}
+	case "enter":
+		if m.state == Unreachable {
+			if cmd, ok := m.connectToSelected(); ok {
+				return m, cmd
+			}
 		}
 	case "e":
 		if m.state == Unreachable {

@@ -114,6 +114,107 @@ func TestNoConfigBodyShowsLookedInBox(t *testing.T) {
 	}
 }
 
+// TestSwitchContextListShowsPreProbedReachability pins 4c (docs/design
+// README.md:65: "pre-probed in the background with reachability + latency
+// — ✕ microk8s-cluster (current · timeout), ● prod-eks (reachable · 32ms)"):
+// the current context shows its already-known failure with no extra probe,
+// a probed-and-reachable sibling shows its latency, and an unprobed sibling
+// still shows "probing…" rather than nothing.
+func TestSwitchContextListShowsPreProbedReachability(t *testing.T) {
+	m := New(Config{
+		Session:       &tui.Session{Theme: tui.Dark()},
+		State:         Unreachable,
+		ClusterName:   "microk8s-cluster",
+		OtherContexts: []string{"prod-eks", "kind-local"},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial tcp: i/o timeout", Attempt: 1})
+	m = step(t, m, switchProbeMsg{gen: m.probeGen, res: kube.ProbeResult{Name: "prod-eks", Latency: 32 * time.Millisecond}})
+
+	body := plain(m.Render())
+	for _, want := range []string{
+		"microk8s-cluster (current · unreachable)",
+		"prod-eks (reachable · 32ms)",
+		"kind-local (probing…)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected %q in the SWITCH CONTEXT list:\n%s", want, body)
+		}
+	}
+}
+
+// TestSwitchContextSelectionMovesAndConnectsOnEnter pins 4c's "↵ connect to
+// selected · ↑↓ move" list navigation: j/k/up/down move the selection among
+// switchContextRows, and ↵ on a selected sibling context calls
+// SwitchToContext with that context's name — but is a no-op on the current
+// (already-failing, index 0) row.
+func TestSwitchContextSelectionMovesAndConnectsOnEnter(t *testing.T) {
+	var gotName string
+	// A non-nil sentinel Cmd, so "did ↵ return this Cmd" is a meaningful
+	// assertion — connectToSelected's own success case can legitimately
+	// return (nil, true) when SwitchToContext itself returns nil.
+	sentinel := func() tea.Msg { return nil }
+	m := New(Config{
+		Session:       &tui.Session{Theme: tui.Dark()},
+		State:         Unreachable,
+		ClusterName:   "microk8s-cluster",
+		OtherContexts: []string{"prod-eks", "kind-local"},
+		SwitchToContext: func(name string) tea.Cmd {
+			gotName = name
+			return sentinel
+		},
+	})
+	if m.switchSel != 1 {
+		t.Fatalf("switchSel = %d, want 1 (defaults to the first sibling, not current)", m.switchSel)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "j"})
+	if m.switchSel != 2 {
+		t.Fatalf("switchSel after 'j' = %d, want 2", m.switchSel)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "down"})
+	if m.switchSel != 2 {
+		t.Fatalf("switchSel after 'down' at the last row = %d, want clamped to 2", m.switchSel)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "k"})
+	if m.switchSel != 1 {
+		t.Fatalf("switchSel after 'k' = %d, want 1", m.switchSel)
+	}
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected ↵ on a sibling context to return the connect cmd")
+	}
+	if gotName != "prod-eks" {
+		t.Fatalf("SwitchToContext called with %q, want %q", gotName, "prod-eks")
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "up"})
+	gotName = ""
+	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("expected ↵ on the current (index 0) row to be a no-op")
+	}
+	if gotName != "" {
+		t.Fatalf("SwitchToContext must not be called for the current row, got %q", gotName)
+	}
+}
+
+// TestInitProbesOtherContextsInBackground pins 4c's "pre-probed in the
+// background": Init returns a non-nil Cmd as soon as the screen exists,
+// with no keypress needed, whenever there are sibling contexts to probe.
+func TestInitProbesOtherContextsInBackground(t *testing.T) {
+	m := New(Config{State: Unreachable, OtherContexts: []string{"prod-eks"}})
+	if m.Init() == nil {
+		t.Fatal("expected a non-nil probe Cmd from Init when other contexts exist")
+	}
+
+	m = New(Config{State: Unreachable, OtherContexts: nil})
+	if m.Init() != nil {
+		t.Fatal("expected a nil Cmd from Init with no other contexts")
+	}
+}
+
 // TestRetryKeyDispatch pins the three "r" behaviors: Unreachable's plain
 // retry calls RetryNow (no rebuild); everything else calls Reconnect.
 func TestRetryKeyDispatch(t *testing.T) {

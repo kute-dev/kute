@@ -2,6 +2,8 @@ package kube
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -49,4 +51,74 @@ func TestBuildConfigLookupErrorPaths(t *testing.T) {
 			t.Errorf("Error() should not be empty")
 		}
 	})
+}
+
+// TestNewClientForContextHonorsExplicitOverride pins a real bug found while
+// building 4c's SwitchToContext (docs/design README.md §4c: "↵ connect to
+// selected"): rawConfig.RawConfig() reflects the kubeconfig file's own
+// current-context verbatim — configOverrides only ever reaches
+// clientConfig.ClientConfig()'s constructed REST config, never this raw
+// view — so requesting a context other than the file's own default must
+// still resolve ContextName/ClusterName/Namespace to the one actually
+// requested, not silently fall back to describing the file's default one
+// (previously: switching from "ctx-a" to "ctx-b" correctly dialed ctx-b's
+// server, but the header kept naming "ctx-a").
+func TestNewClientForContextHonorsExplicitOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: ctx-a
+clusters:
+- name: cluster-a
+  cluster:
+    server: https://127.0.0.1:16440
+- name: cluster-b
+  cluster:
+    server: https://127.0.0.1:16441
+contexts:
+- name: ctx-a
+  context:
+    cluster: cluster-a
+    namespace: ns-a
+    user: user-a
+- name: ctx-b
+  context:
+    cluster: cluster-b
+    namespace: ns-b
+    user: user-b
+users:
+- name: user-a
+  user: {}
+- name: user-b
+  user: {}
+`
+	if err := os.WriteFile(path, []byte(kubeconfig), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv("KUBECONFIG", path)
+
+	client, err := newClientForContext("ctx-b")
+	if err != nil {
+		t.Fatalf("newClientForContext(ctx-b) = %v", err)
+	}
+	if client.Context.ContextName != "ctx-b" {
+		t.Errorf("ContextName = %q, want %q", client.Context.ContextName, "ctx-b")
+	}
+	if client.Context.ClusterName != "cluster-b" {
+		t.Errorf("ClusterName = %q, want %q", client.Context.ClusterName, "cluster-b")
+	}
+	if client.Context.Namespace != "ns-b" {
+		t.Errorf("Namespace = %q, want %q", client.Context.Namespace, "ns-b")
+	}
+
+	// The no-override case ("" — NewCluster's own call) must still fall
+	// back to the file's own current-context, unchanged.
+	client, err = newClientForContext("")
+	if err != nil {
+		t.Fatalf("newClientForContext(\"\") = %v", err)
+	}
+	if client.Context.ContextName != "ctx-a" {
+		t.Errorf("ContextName = %q, want the file's default %q", client.Context.ContextName, "ctx-a")
+	}
 }

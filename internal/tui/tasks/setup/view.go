@@ -60,11 +60,19 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	switch m.state {
 	case Unreachable:
+		hints := []tui.KeyHint{}
+		if len(m.otherContexts) > 0 {
+			// docs/design README.md §4c: "↵ connect to selected" — only
+			// meaningful once there's a SWITCH CONTEXT list to select from.
+			hints = append(hints, tui.KeyHint{Key: "↵", Label: "connect to selected"})
+		}
+		hints = append(hints, verbs.Context.Hint(), verbs.Retry.Hint(), tui.KeyHint{Key: "e", Label: "edit kubeconfig path"})
 		return tui.Keybar{
-			Pill:      tui.ModeNoCluster,
-			PillText:  "NO CLUSTER",
-			Groups:    [][]tui.KeyHint{{verbs.Context.Hint(), verbs.Retry.Hint(), {Key: "e", Label: "edit kubeconfig path"}}},
-			RightNote: "probing other kubeconfig contexts in the background",
+			Pill:       tui.ModeNoCluster,
+			PillText:   "NO CLUSTER",
+			Groups:     [][]tui.KeyHint{hints},
+			RightNote:  "probing other kubeconfig contexts in the background",
+			RightHints: []tui.KeyHint{{Key: "q", Label: "quit"}},
 		}
 	default:
 		return tui.Keybar{
@@ -165,7 +173,7 @@ func (m Model) unreachableBody(width, height int) string {
 		errStyle.Render(errText),
 		"",
 	}
-	lines = append(lines, m.switchContextLines(theme)...)
+	lines = append(lines, m.switchContextLines(theme, bw)...)
 	lines = append(lines, m.statusLines(theme, bw)...)
 
 	return centerBlock(lines, bw, width, height)
@@ -188,18 +196,82 @@ func (m Model) statusLines(theme tui.Theme, bw int) []string {
 	}
 }
 
-func (m Model) switchContextLines(theme tui.Theme) []string {
+// switchContextLines renders 4c's own SWITCH CONTEXT section: a bordered
+// list of every kubeconfig context, pre-probed with reachability + latency
+// (docs/design README.md §4c) — the current (failing) context always stays
+// listed first, per the spec's own worked example.
+func (m Model) switchContextLines(theme tui.Theme, bw int) []string {
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("SWITCH CONTEXT")
-	if len(m.otherContexts) == 0 {
+	rows := m.switchContextRows()
+	if len(rows) <= 1 {
 		return []string{label, lipgloss.NewStyle().Foreground(theme.TextGhost).Render("  (no other contexts configured)")}
 	}
-	item := lipgloss.NewStyle().Foreground(theme.TextSecondary)
-	names := make([]string, len(m.otherContexts))
-	for i, n := range m.otherContexts {
-		names[i] = item.Render(n)
+
+	name := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	dim := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	good := lipgloss.NewStyle().Foreground(theme.Good)
+	bad := lipgloss.NewStyle().Foreground(theme.Bad)
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+
+	lines := make([]string, 0, len(rows))
+	for i, row := range rows {
+		glyph, status, tone := switchRowStatus(row, m.probes[row.name])
+		style := lipgloss.NewStyle()
+		switch tone {
+		case switchToneGood:
+			style = good
+		case switchToneBad:
+			style = bad
+		case switchToneWarn:
+			style = warn
+		}
+		line := style.Render(glyph) + " " + name.Render(row.name) + " " + dim.Render("("+status+")")
+		if i == m.switchSel {
+			line = lipgloss.NewStyle().Background(theme.SelBg).Render(line)
+		}
+		lines = append(lines, "  "+line)
 	}
-	dot := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(" · ")
-	return []string{label, "  " + strings.Join(names, dot)}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderSubtle).
+		Padding(0, 1).
+		Width(bw - 4).
+		Render(strings.Join(lines, "\n"))
+	return append([]string{label}, strings.Split(box, "\n")...)
+}
+
+// switchTone names switchRowStatus's color, since setup's view doesn't
+// otherwise carry a StatusClass-like enum of its own.
+type switchTone int
+
+const (
+	switchToneNone switchTone = iota
+	switchToneGood
+	switchToneBad
+	switchToneWarn
+)
+
+// switchRowStatus renders one SWITCH CONTEXT row's glyph/status text/tone:
+// the current context is always "current · unreachable" — a short, fixed
+// word rather than conn's verbatim dial error (already shown in full in the
+// raw-error box just above this list; a real "dial tcp ... connection
+// refused" string wraps this compact row ugly, unlike the mockup's
+// illustrative one-word "timeout") — every other context reads its own
+// probes entry: "probing…" before a result lands, "reachable · Nms" on
+// success, "unreachable" on error (docs/design README.md §4c).
+func switchRowStatus(row switchContextRow, probe kube.ProbeResult) (glyph, status string, tone switchTone) {
+	if row.current {
+		return tui.GlyphFailed, "current · unreachable", switchToneBad
+	}
+	switch {
+	case probe.Name == "" && probe.Err == nil && probe.Latency == 0:
+		return tui.GlyphProbing, "probing…", switchToneWarn
+	case probe.Err != nil:
+		return tui.GlyphFailed, "unreachable", switchToneBad
+	default:
+		return tui.GlyphRunning, fmt.Sprintf("reachable · %dms", probe.Latency.Milliseconds()), switchToneGood
+	}
 }
 
 // noConfigWordmark is 10b's ASCII wordmark verbatim from the mockup (docs/

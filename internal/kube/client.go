@@ -119,7 +119,18 @@ func newClientForContext(contextName string) (Client, error) {
 	rawConfig, err := clientConfig.RawConfig()
 	ctx := Context{ClusterName: "cluster", Namespace: "default"}
 	if err == nil {
+		// RawConfig() reflects the kubeconfig file's own current-context
+		// verbatim — configOverrides above only ever reaches the REST config
+		// clientConfig.ClientConfig() built, never this raw view — so an
+		// explicit contextName override must win here too, or every field
+		// derived from it below (ClusterName, Namespace, AuthInfo) silently
+		// describes the file's default context instead of the one actually
+		// requested (found via 4c's SwitchToContext: the header kept naming
+		// the old context after a successful switch to a different one).
 		currentName := rawConfig.CurrentContext
+		if contextName != "" {
+			currentName = contextName
+		}
 		ctx.ContextName = currentName
 		if current, ok := rawConfig.Contexts[currentName]; ok {
 			ctx.ClusterName = current.Cluster

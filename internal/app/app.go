@@ -282,14 +282,15 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 func buildSetupFactory(cfg Config, sess *tui.Session, cluster *kube.Cluster) func(kube.ConnState) tui.Task {
 	return func(conn kube.ConnState) tui.Task {
 		s := setup.New(setup.Config{
-			Session:        sess,
-			State:          setup.Unreachable,
-			ClusterName:    cluster.Context.ContextName,
-			Conn:           conn,
-			OtherContexts:  otherContexts(cluster.Context.ContextName),
-			KubeconfigPath: kubeconfigPathOrEmpty(),
-			RetryNow:       cluster.RetryNow,
-			Reconnect:      func(path string) tea.Cmd { return attemptReconnect(cfg, sess, path) },
+			Session:         sess,
+			State:           setup.Unreachable,
+			ClusterName:     cluster.Context.ContextName,
+			Conn:            conn,
+			OtherContexts:   otherContexts(cluster.Context.ContextName),
+			KubeconfigPath:  kubeconfigPathOrEmpty(),
+			RetryNow:        cluster.RetryNow,
+			Reconnect:       func(path string) tea.Cmd { return attemptReconnect(cfg, sess, path) },
+			SwitchToContext: func(name string) tea.Cmd { return attemptSwitchContext(cfg, sess, name) },
 		})
 		return &s
 	}
@@ -340,6 +341,46 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 		// in, best-effort), so DiscoveredKinds is ready by now — no need
 		// for the async CRDsDiscoveredMsg hop this path's initial-connect
 		// counterpart (RunWithConfig) requires.
+		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(cluster.DiscoveredKinds(), cluster)
+
+		return tui.ReplaceRootMsg{
+			Task:        buildBrowseTask(cfg, sess, cluster),
+			Events:      cluster.Events(),
+			Conn:        cluster.ConnEvents(),
+			BuildSetup:  buildSetupFactory(cfg, sess, cluster),
+			BuildBrowse: buildBrowseFactory(cfg, sess, cluster),
+		}
+	}
+}
+
+// attemptSwitchContext is 4c's SWITCH CONTEXT list's '↵' (docs/design
+// README.md §4c: "↵ connect to selected") — the same shape as
+// attemptReconnect, but pinned to a named kubeconfig context via
+// kube.NewClusterForContext instead of re-resolving $KUBECONFIG's own
+// current-context, so selecting a reachable sibling context actually
+// switches to it rather than retrying the same failing one.
+func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea.Cmd {
+	return func() tea.Msg {
+		if sess.Cluster != nil {
+			sess.Cluster.Stop()
+		}
+		cluster, err := kube.NewClusterForContext(contextName)
+		if err != nil {
+			return setup.RetryFailedMsg{Err: err}
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), reconnectStartTimeout)
+		defer cancel()
+		_ = cluster.Start(ctx) // best-effort: an unreachable target still hands back ReplaceRootMsg; 4c's neverConnected watch takes over from there.
+
+		if sess.Forwards == nil {
+			sess.Forwards = kube.NewForwardManager()
+		}
+		sess.Cluster = cluster
+		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
+		sess.Metrics = cluster
+		sess.Location.Context = cluster.Context.ContextName
+		sess.Location.Namespace = cluster.Context.Namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(cluster.DiscoveredKinds(), cluster)
 
 		return tui.ReplaceRootMsg{
