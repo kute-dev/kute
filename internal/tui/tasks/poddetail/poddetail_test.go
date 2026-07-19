@@ -18,6 +18,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func plain(s string) string { return ansi.Strip(s) }
@@ -196,6 +197,44 @@ func TestConnStateDrivesHeaderBadge(t *testing.T) {
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
 	if view := plain(m.Render()); !strings.Contains(view, "disconnected") {
 		t.Fatalf("expected disconnected badge mid-outage:\n%s", view)
+	}
+}
+
+// TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
+// (docs/design README.md §52, §301): poddetail must show the OFFLINE pill
+// and drop its own mutating verb (delete) from the keybar while
+// disconnected, not just browse.
+func TestKeybarGoesOfflineAndHidesDelete(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {runningPod("api-0", "default", "node-a")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut, Namespace: "default", Name: "api-0"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	kb := m.Keybar()
+	if kb.PillText != "POD" {
+		t.Fatalf("PillText = %q before any outage, want POD", kb.PillText)
+	}
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
+	kb = m.Keybar()
+	if kb.Pill != tui.ModeOffline || kb.PillText != "OFFLINE" {
+		t.Fatalf("Pill/PillText = %v/%q while offline, want ModeOffline/OFFLINE", kb.Pill, kb.PillText)
+	}
+	for _, g := range kb.Groups {
+		for _, h := range g {
+			if h.Key == verbs.Delete.Key {
+				t.Fatalf("expected delete hint hidden while offline, got groups %+v", kb.Groups)
+			}
+		}
+	}
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	kb = m.Keybar()
+	if kb.PillText != "POD" {
+		t.Fatalf("PillText = %q after reconnect, want POD", kb.PillText)
 	}
 }
 

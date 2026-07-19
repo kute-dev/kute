@@ -12,6 +12,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func plain(s string) string { return ansi.Strip(s) }
@@ -130,6 +131,41 @@ func TestRollbackToSelectedRevisionConfirmsAndExecutes(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if mut.namespace != "production" || mut.name != "postgresql" || mut.revision != 1 {
 		t.Fatalf("HelmRollback called with ns=%q name=%q rev=%d, want production/postgresql/1", mut.namespace, mut.name, mut.revision)
+	}
+}
+
+// TestKeybarGoesOfflineAndHidesRollback pins the cross-cutting 4a fix
+// (docs/design README.md §52, §301): helmhistory must show the OFFLINE pill
+// and drop rollback from the keybar while disconnected, not just browse.
+func TestKeybarGoesOfflineAndHidesRollback(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {
+			revisionSecret("production", "postgresql", "superseded", 1),
+			revisionSecret("production", "postgresql", "deployed", 2),
+		},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
+	kb := m.Keybar()
+	if kb.Pill != tui.ModeOffline || kb.PillText != "OFFLINE" {
+		t.Fatalf("Pill/PillText = %v/%q while offline, want ModeOffline/OFFLINE", kb.Pill, kb.PillText)
+	}
+	for _, g := range kb.Groups {
+		for _, h := range g {
+			if h.Key == verbs.Rollback.Key {
+				t.Fatalf("expected rollback hint hidden while offline, got groups %+v", kb.Groups)
+			}
+		}
+	}
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	kb = m.Keybar()
+	if kb.PillText != "HELM" {
+		t.Fatalf("PillText = %q after reconnect, want HELM", kb.PillText)
 	}
 }
 

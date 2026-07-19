@@ -38,15 +38,22 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}, {Key: "↑↓", Label: "move"}}}
-	if m.mutator != nil {
+	if m.mutator != nil && !m.conn.Offline() {
 		groups = append(groups, []tui.KeyHint{verbs.Rollback.Hint()})
 	}
 
+	// 4a's offline treatment (docs/design README.md §52, §301): mutating
+	// verbs disappear from the keybar the same way browse's own list does,
+	// not just at the actions.Controller gate.
+	pill, pillText, rightNote := tui.ModeBrowse, "HELM", m.feedback
+	if m.conn.Offline() {
+		pill, pillText, rightNote = tui.ModeOffline, "OFFLINE", "mutating actions disabled"
+	}
 	return tui.Keybar{
-		Pill:       tui.ModeBrowse,
-		PillText:   "HELM",
+		Pill:       pill,
+		PillText:   pillText,
 		Groups:     groups,
-		RightNote:  m.feedback,
+		RightNote:  rightNote,
 		RightHints: []tui.KeyHint{verbs.Help.Hint()},
 	}
 }

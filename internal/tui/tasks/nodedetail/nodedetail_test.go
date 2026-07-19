@@ -16,6 +16,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 type fakeLister struct {
@@ -212,6 +213,38 @@ func TestDKeyConfirmsThenDrains(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.drained) != 1 || mut.drained[0] != "node-a" {
 		t.Fatalf("expected node-a drained, got %v", mut.drained)
+	}
+}
+
+// TestKeybarGoesOfflineAndHidesCordonDrain pins the cross-cutting 4a fix
+// (docs/design README.md §52, §301): nodedetail must show the OFFLINE pill
+// and drop cordon/drain from the keybar while disconnected, not just browse.
+func TestKeybarGoesOfflineAndHidesCordonDrain(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {testNode("node-a")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a", Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
+	kb := m.Keybar()
+	if kb.Pill != tui.ModeOffline || kb.PillText != "OFFLINE" {
+		t.Fatalf("Pill/PillText = %v/%q while offline, want ModeOffline/OFFLINE", kb.Pill, kb.PillText)
+	}
+	for _, g := range kb.Groups {
+		for _, h := range g {
+			if h.Key == verbs.Cordon.Key || h.Key == verbs.Drain.Key {
+				t.Fatalf("expected cordon/drain hints hidden while offline, got groups %+v", kb.Groups)
+			}
+		}
+	}
+
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	kb = m.Keybar()
+	if kb.PillText != "NODE" {
+		t.Fatalf("PillText = %q after reconnect, want NODE", kb.PillText)
 	}
 }
 

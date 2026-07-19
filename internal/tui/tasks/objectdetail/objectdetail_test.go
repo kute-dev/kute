@@ -11,6 +11,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 type fakeLister struct {
@@ -186,5 +187,64 @@ func TestMoveSiblingLoadsNextObject(t *testing.T) {
 	}
 	if m.name != "b" || m.siblingIndex != 1 {
 		t.Fatalf("expected name=b index=1, got name=%s index=%d", m.name, m.siblingIndex)
+	}
+}
+
+type fakeMutator struct {
+	deleted []string
+}
+
+func (f *fakeMutator) DeleteResource(_ context.Context, _ kube.ResourceKind, _, name string) error {
+	f.deleted = append(f.deleted, name)
+	return nil
+}
+func (f *fakeMutator) DeleteResourceForced(context.Context, kube.ResourceKind, string, string) error {
+	return nil
+}
+func (f *fakeMutator) RolloutRestart(context.Context, string, string) error { return nil }
+func (f *fakeMutator) Cordon(context.Context, string, bool) error           { return nil }
+func (f *fakeMutator) Drain(context.Context, string) (int, error)           { return 0, nil }
+func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error {
+	return nil
+}
+func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
+	return nil
+}
+
+// TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
+// (docs/design README.md §52, §301): objectdetail must show the OFFLINE
+// pill and drop delete from the keybar while disconnected, not just browse.
+func TestKeybarGoesOfflineAndHidesDelete(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		certificateKind(): {certObj("api-tls", map[string]any{"type": "Ready", "status": "True"})},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{
+		Session: testSession(), Lister: lister, Events: fakeEvents{}, Mutator: mut,
+		Kind: certificateKind(), Namespace: "default", Name: "api-tls",
+	})
+	updated, _ := step(t, &m, m.load()())
+	got := updated.(*Model)
+
+	got2, _ := step(t, got, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
+	got = got2.(*Model)
+
+	kb := got.Keybar()
+	if kb.Pill != tui.ModeOffline || kb.PillText != "OFFLINE" {
+		t.Fatalf("Pill/PillText = %v/%q while offline, want ModeOffline/OFFLINE", kb.Pill, kb.PillText)
+	}
+	for _, g := range kb.Groups {
+		for _, h := range g {
+			if h.Key == verbs.Delete.Key {
+				t.Fatalf("expected delete hint hidden while offline, got groups %+v", kb.Groups)
+			}
+		}
+	}
+
+	got3, _ := step(t, got, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	got = got3.(*Model)
+	kb = got.Keybar()
+	if kb.PillText != "DETAIL" {
+		t.Fatalf("PillText = %q after reconnect, want DETAIL", kb.PillText)
 	}
 }
