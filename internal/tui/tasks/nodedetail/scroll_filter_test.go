@@ -115,6 +115,12 @@ func TestPodsListFilters(t *testing.T) {
 	if !strings.Contains(view, "FILTER") {
 		t.Fatalf("expected FILTER pill while filtering:\n%s", view)
 	}
+	// docs/design system-wide interactions: "items never silently
+	// disappear" — the strip must say a row was hidden by the filter, not
+	// just show a bare matched count.
+	if !strings.Contains(view, "hidden by filter") {
+		t.Fatalf("expected the 'hidden by filter' notice:\n%s", view)
+	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
 	if m.filterActive {

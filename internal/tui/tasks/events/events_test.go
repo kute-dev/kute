@@ -186,6 +186,13 @@ func TestFilterQueryNarrowsRows(t *testing.T) {
 	if len(m.rows) != 1 || m.rows[0].group.Reason != "BackOff" {
 		t.Fatalf("expected filter to narrow to the worker-0 event, got %+v", m.rows)
 	}
+	// docs/design system-wide interactions: "items never silently
+	// disappear" — the strip must say a row was hidden by the filter, not
+	// just show a bare matched count.
+	view := plain(m.Render())
+	if !strings.Contains(view, "hidden by filter") {
+		t.Fatalf("expected the 'hidden by filter' notice:\n%s", view)
+	}
 }
 
 func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {

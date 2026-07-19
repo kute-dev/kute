@@ -113,16 +113,27 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 }
 
 // filterStripLine mirrors browse's own filter strip (the live "/" query and
-// matched/total), substring rather than fuzzy — events are free-text
-// messages, not short row names, the same reasoning podlogs' live filter
-// uses (mvp-tasks.md's Phase 6 exit notes).
+// matched/total, plus the "N hidden by filter — esc to clear" notice once
+// the query itself hides groups — docs/design system-wide interactions:
+// "items never silently disappear"), substring rather than fuzzy — events
+// are free-text messages, not short row names, the same reasoning podlogs'
+// live filter uses (mvp-tasks.md's Phase 6 exit notes). The denominator is
+// filterBaselineGroups (window/warningsOnly narrowing), not the raw group
+// count, so those separate toggles never get misreported as the query's
+// own doing.
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	text := lipgloss.NewStyle().Foreground(theme.Text)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
-	right := dim.Render(fmt.Sprintf("%d matched", len(m.rows)))
+
+	total, matched := m.filterBaselineGroups, m.filterMatchedGroups
+	right := dim.Render(fmt.Sprintf("%d matched", matched))
+	if matched < total {
+		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
+	}
 	return fillLine(padBetween(left, right, width), width, false, theme)
 }
 

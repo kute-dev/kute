@@ -134,14 +134,21 @@ func pluralize(n int, word string) string {
 	return word + "s"
 }
 
-// filterStripLine mirrors tasks/events' own filter strip.
+// filterStripLine mirrors tasks/events' own filter strip, including the "N
+// hidden by filter — esc to clear" notice once the query hides entries
+// (docs/design system-wide interactions: "items never silently disappear").
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	text := lipgloss.NewStyle().Foreground(theme.Text)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
-	right := dim.Render(fmt.Sprintf("%d matched", len(m.rows)))
+	total, matched := m.filterBaselineRows, len(m.rows)
+	right := dim.Render(fmt.Sprintf("%d matched", matched))
+	if matched < total {
+		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
+	}
 	return fillLine(padBetween(left, right, width), width, false, theme)
 }
 

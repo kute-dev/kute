@@ -90,14 +90,22 @@ func (m Model) Strips(width int) []string {
 }
 
 // filterStripLine renders the live "/" query plus a matched/total count for
-// the pods list — same shape as browse's own filterStripLine.
+// the pods list, and — when rows are hidden — the same "N hidden by filter
+// — esc to clear" notice browse's own filterStripLine shows (docs/design
+// system-wide interactions: "items never silently disappear").
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	text := lipgloss.NewStyle().Foreground(theme.Text)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
-	right := dim.Render(fmt.Sprintf("%d/%d pods", len(m.pods), len(m.allPods)))
+
+	total, matched := len(m.allPods), len(m.pods)
+	right := dim.Render(fmt.Sprintf("%d/%d pods", matched, total))
+	if matched < total {
+		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
+	}
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 

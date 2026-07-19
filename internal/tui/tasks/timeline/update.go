@@ -77,16 +77,19 @@ func (m *Model) recomputeVisible() {
 		cutoff = m.fetchedAt.Add(-m.window)
 	}
 
+	baseline := 0
 	rows := make([]kube.TimelineEntry, 0, len(m.entries))
 	for _, e := range m.entries {
 		if !cutoff.IsZero() && e.Time.Before(cutoff) {
 			continue
 		}
+		baseline++
 		if m.filterQuery != "" && !matchesQuery(e, m.filterQuery) {
 			continue
 		}
 		rows = append(rows, e)
 	}
+	m.filterBaselineRows = baseline
 	m.rows = rows
 	if m.selected >= len(m.rows) {
 		m.selected = max(len(m.rows)-1, 0)

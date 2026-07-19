@@ -65,9 +65,13 @@ type Model struct {
 	objectKind kube.ResourceKind
 	objectName string
 
-	entries  []kube.TimelineEntry // every merged entry, unwindowed
-	rows     []kube.TimelineEntry // entries after the window/filter — what's walked/rendered
-	selected int
+	entries []kube.TimelineEntry // every merged entry, unwindowed
+	rows    []kube.TimelineEntry // entries after the window/filter — what's walked/rendered
+	// filterBaselineRows is recomputeVisible's own window-only tally (no
+	// filterQuery applied) — lets the strip say how many the query itself
+	// hid, same reasoning as tasks/events' filterBaselineGroups.
+	filterBaselineRows int
+	selected           int
 
 	// rail is 16b's revision rail: the resolved owning Deployment's
 	// TimelineRollout entries, newest-first, index 0 == current. Empty in

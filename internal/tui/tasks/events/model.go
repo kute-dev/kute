@@ -87,6 +87,15 @@ type Model struct {
 	rows     []displayRow    // recomputeVisible's output: what's walked/rendered right now
 	selected int
 
+	// filterMatchedGroups/filterBaselineGroups are recomputeVisible's own
+	// group tallies (before displayRow folding, which isn't 1:1 with group
+	// count) — baseline is window+warningsOnly narrowing only, matched adds
+	// filterQuery on top, so the strip can say how many the query itself
+	// hid (docs/design system-wide interactions: "items never silently
+	// disappear") without conflating that with the window/warningsOnly
+	// toggles' own, separately-intentional narrowing.
+	filterMatchedGroups, filterBaselineGroups int
+
 	warningsOnly   bool
 	normalExpanded bool
 	window         time.Duration

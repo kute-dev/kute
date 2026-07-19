@@ -243,6 +243,7 @@ func TestFilterOpensNarrowsAndClears(t *testing.T) {
 	t.Parallel()
 
 	model := testModel()
+	model.stream = StreamStreaming
 	model.buffer.Append(LogEntry{Message: "starting up"})
 	model.buffer.Append(LogEntry{Message: "request failed"})
 
@@ -257,6 +258,12 @@ func TestFilterOpensNarrowsAndClears(t *testing.T) {
 	_, _ = model.Update(tea.KeyPressMsg{Text: "failed"})
 	if len(model.filteredEntries()) != 1 {
 		t.Fatalf("filtered = %+v, want 1 match", model.filteredEntries())
+	}
+	// docs/design system-wide interactions: "items never silently
+	// disappear" — the strip must say a line was hidden by the filter, not
+	// just show a bare matched count.
+	if view := model.Render(); !strings.Contains(view, "hidden by filter") {
+		t.Fatalf("expected the 'hidden by filter' notice:\n%s", view)
 	}
 
 	press(&model, "esc")

@@ -114,6 +114,37 @@ func TestNamespaceScopedLoadMergesEventsAndRestarts(t *testing.T) {
 	}
 }
 
+// TestFilterQueryShowsHiddenNotice pins the cross-cutting fix (docs/design
+// system-wide interactions: "items never silently disappear"): once '/'
+// narrows the merged feed, the strip must say how many entries the query
+// itself hid, not just show a bare matched count.
+func TestFilterQueryShowsHiddenNotice(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "restarting", Count: 1, LastSeen: time.Now()},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {testPod("worker-0", "node-a", 5*time.Minute)},
+	}}
+	m := New(Config{Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "/"})
+	if !m.filterActive {
+		t.Fatal("expected / to activate the filter")
+	}
+	for _, r := range "BackOff" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	if len(m.rows) != 1 {
+		t.Fatalf("expected the filter to narrow to 1 row, got %d", len(m.rows))
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "hidden by filter") {
+		t.Fatalf("expected the 'hidden by filter' notice:\n%s", view)
+	}
+}
+
 func TestObjectScopedPodResolvesRevisionRail(t *testing.T) {
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{

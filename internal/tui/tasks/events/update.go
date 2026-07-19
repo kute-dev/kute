@@ -69,19 +69,26 @@ func (m *Model) recomputeVisible() {
 	}
 
 	var warnings, normal []kube.EventGroup
+	baseline, matched := 0, 0
 	for _, g := range m.groups {
 		if !cutoff.IsZero() && g.LastSeen.Before(cutoff) {
 			continue
 		}
+		if g.Type != "Warning" && m.warningsOnly {
+			continue
+		}
+		baseline++
 		if m.filterQuery != "" && !matchesQuery(g, m.filterQuery) {
 			continue
 		}
+		matched++
 		if g.Type == "Warning" {
 			warnings = append(warnings, g)
-		} else if !m.warningsOnly {
+		} else {
 			normal = append(normal, g)
 		}
 	}
+	m.filterBaselineGroups, m.filterMatchedGroups = baseline, matched
 
 	rows := make([]displayRow, 0, len(warnings)+1)
 	for _, g := range warnings {

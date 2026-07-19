@@ -93,16 +93,22 @@ func (m Model) toolbarLine(width int) string {
 
 // filterStripLine mirrors browse's live "/" query strip (view.go's
 // filterStripLine there) — same left query/marker + right matched/total
-// shape, applied to log entries instead of table rows.
+// shape, applied to log entries instead of table rows, plus the same "N
+// hidden by filter — esc to clear" notice once the query hides lines
+// (docs/design system-wide interactions: "items never silently disappear").
 func (m Model) filterStripLine(width int) string {
 	theme := m.Theme()
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	text := lipgloss.NewStyle().Foreground(theme.Text)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
 	total, matched := len(m.buffer.Entries), len(m.filteredEntries())
 	right := dim.Render(fmt.Sprintf("%d/%d", matched, total))
+	if matched < total {
+		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
+	}
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 
