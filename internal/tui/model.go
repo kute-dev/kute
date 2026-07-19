@@ -878,6 +878,13 @@ func (m Model) View() tea.View {
 			view.Content = replaceLastLine(view.Content, gotoKeybarLine(theme, width))
 		}
 	}
+	// 7b: "Keybar pill HELP" — same reasoning as goto's splice above: Compose
+	// dims the whole base uniformly, including the underlying screen's own
+	// keybar band, so the help overlay needs its own undimmed HELP-pilled
+	// line spliced in on top rather than inventing a new compose path.
+	if m.helpOpen {
+		view.Content = replaceLastLine(view.Content, helpKeybarLine(theme, width))
+	}
 	return view
 }
 
@@ -889,6 +896,16 @@ func gotoKeybarLine(theme Theme, width int) string {
 		Pill:      ModeGoto,
 		PillText:  "GOTO",
 		RightNote: "jump to any kind, resource, namespace, or context",
+	}
+	return renderKeybarV2(kb, theme, width)
+}
+
+// helpKeybarLine renders 7b's "Keybar pill HELP" treatment, the same
+// undimmed-splice shape gotoKeybarLine already establishes for 2b.
+func helpKeybarLine(theme Theme, width int) string {
+	kb := Keybar{
+		Pill:     ModeHelp,
+		PillText: "HELP",
 	}
 	return renderKeybarV2(kb, theme, width)
 }

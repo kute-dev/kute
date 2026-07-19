@@ -63,6 +63,7 @@ func TestRootModelBackMessageRestoresPreviousTask(t *testing.T) {
 // deliberately does not, to guard the legacy-screen passthrough path.
 type screenTask struct {
 	name    string
+	pill    string
 	updates []string
 }
 
@@ -81,7 +82,7 @@ func (t *screenTask) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (t *screenTask) Theme() tui.Theme        { return tui.Dark() }
 func (t *screenTask) Header() tui.HeaderState { return tui.HeaderState{} }
 func (t *screenTask) Strips(int) []string     { return nil }
-func (t *screenTask) Keybar() tui.Keybar      { return tui.Keybar{} }
+func (t *screenTask) Keybar() tui.Keybar      { return tui.Keybar{PillText: t.pill} }
 func (t *screenTask) Body(int, int) string    { return t.name }
 
 // capturingTask is a screenTask with an always-open free-text input (like
@@ -209,6 +210,30 @@ func TestRootModelHelpOverlayRendersScopeGlobalAndViewColumns(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected %q in the help overlay:\n%s", want, view)
 		}
+	}
+}
+
+// TestRootModelQuestionMarkShowsHelpKeybarPill pins 7b (docs/design
+// README.md:114: "Keybar pill HELP"): the underlying screen's own keybar
+// pill (e.g. "PODS") must be replaced by a HELP pill while the help overlay
+// is open, the same undimmed-splice treatment goto's own GOTO pill gets
+// (TestRootModelGShowsGotoKeybarPill, goto_test.go).
+func TestRootModelQuestionMarkShowsHelpKeybarPill(t *testing.T) {
+	t.Parallel()
+
+	task := &screenTask{name: "browse", pill: "PODS"}
+	model := tui.NewWithSession(task, testSession())
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "?"})
+	view := updated.(tui.Model).View().Content
+
+	lines := strings.Split(view, "\n")
+	last := lines[len(lines)-1]
+	if !strings.Contains(last, "HELP") {
+		t.Fatalf("expected the HELP mode pill in the main keybar's last line, got:\n%s", last)
+	}
+	if strings.Contains(last, "PODS") {
+		t.Fatalf("expected the underlying screen's own pill replaced, still saw it in:\n%s", last)
 	}
 }
 
