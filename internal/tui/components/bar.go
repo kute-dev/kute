@@ -25,6 +25,19 @@ type BarStyles struct {
 // than rewired mid-migration). denom <= 0 means metrics are unavailable:
 // MiniBar returns a right-aligned "–" instead of a bar.
 func MiniBar(used, denom int64, width int, styles BarStyles) string {
+	return miniBar(used, denom, width, styles, 1)
+}
+
+// MiniBarBadAt is MiniBar with a caller-chosen Bad threshold instead of the
+// default "at/over denom" (100%) — 5a's MEM bar turns red at 96% usage
+// (docs/design README.md §75), a stricter threshold than every other
+// MiniBar consumer's (2a's relative pod bar, 11a/11b's node capacity bars),
+// so it's opt-in per call site rather than a change to MiniBar's default.
+func MiniBarBadAt(used, denom int64, width int, styles BarStyles, badAt float64) string {
+	return miniBar(used, denom, width, styles, badAt)
+}
+
+func miniBar(used, denom int64, width int, styles BarStyles, badAt float64) string {
 	if width <= 0 {
 		return ""
 	}
@@ -44,7 +57,7 @@ func MiniBar(used, denom int64, width int, styles BarStyles) string {
 		filled = 0
 	}
 
-	bar := fillStyleFor(ratio, styles).Render(strings.Repeat("■", filled))
+	bar := fillStyleFor(ratio, badAt, styles).Render(strings.Repeat("■", filled))
 	if empty := width - filled; empty > 0 {
 		bar += styles.Track.Render(strings.Repeat("□", empty))
 	}
@@ -52,10 +65,10 @@ func MiniBar(used, denom int64, width int, styles BarStyles) string {
 }
 
 // fillStyleFor picks the fill span's style by usage ratio: Bad at/over
-// denom, Warn at/above 70%, Fill (accent) otherwise.
-func fillStyleFor(ratio float64, styles BarStyles) lipgloss.Style {
+// badAt, Warn at/above 70%, Fill (accent) otherwise.
+func fillStyleFor(ratio, badAt float64, styles BarStyles) lipgloss.Style {
 	switch {
-	case ratio >= 1:
+	case ratio >= badAt:
 		return styles.Bad
 	case ratio >= 0.7:
 		return styles.Warn

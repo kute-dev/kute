@@ -356,7 +356,7 @@ func (m Model) barsLine(theme tui.Theme, width int) string {
 	if memRatio >= 0.96 {
 		memStyle = lipgloss.NewStyle().Foreground(theme.BadText)
 	}
-	memBar := components.MiniBar(m.pod.MEMBytes, m.pod.MEMLimitBytes, barWidth, barStyles)
+	memBar := components.MiniBarBadAt(m.pod.MEMBytes, m.pod.MEMLimitBytes, barWidth, barStyles, 0.96)
 	memText := memStyle.Render(fmt.Sprintf("%s / %s", usageText(m.pod.MEM), limitText(m.pod.MEMLimitBytes, formatBytes)))
 
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)

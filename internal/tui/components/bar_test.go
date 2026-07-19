@@ -55,11 +55,33 @@ func TestFillStyleForThresholds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := fillStyleFor(tt.ratio, styles)
+			got := fillStyleFor(tt.ratio, 1, styles)
 			if got.GetForeground() != tt.want.GetForeground() {
 				t.Fatalf("fillStyleFor(%v) foreground = %v, want %v", tt.ratio, got.GetForeground(), tt.want.GetForeground())
 			}
 		})
+	}
+}
+
+// TestMiniBarBadAtCustomThreshold pins the 5a fix (docs/design README.md
+// §75): "MEM at 96% renders the bar and text red" — a stricter Bad
+// threshold than MiniBar's own at/over-100% default, opt-in per call site
+// via MiniBarBadAt rather than changing every other consumer's behavior.
+func TestMiniBarBadAtCustomThreshold(t *testing.T) {
+	t.Parallel()
+	styles := BarStyles{
+		Fill: lipgloss.NewStyle().Foreground(lipgloss.Color("#a78bfa")),
+		Warn: lipgloss.NewStyle().Foreground(lipgloss.Color("#e8c74a")),
+		Bad:  lipgloss.NewStyle().Foreground(lipgloss.Color("#ef6a6a")),
+	}
+	if got := fillStyleFor(0.96, 1, styles); got.GetForeground() != styles.Warn.GetForeground() {
+		t.Fatalf("fillStyleFor(0.96, badAt=1) = %v, want Warn (MiniBar's default threshold is unaffected)", got.GetForeground())
+	}
+	if got := fillStyleFor(0.96, 0.96, styles); got.GetForeground() != styles.Bad.GetForeground() {
+		t.Fatalf("fillStyleFor(0.96, badAt=0.96) = %v, want Bad", got.GetForeground())
+	}
+	if got := fillStyleFor(0.95, 0.96, styles); got.GetForeground() != styles.Warn.GetForeground() {
+		t.Fatalf("fillStyleFor(0.95, badAt=0.96) = %v, want Warn (just under the custom threshold)", got.GetForeground())
 	}
 }
 
