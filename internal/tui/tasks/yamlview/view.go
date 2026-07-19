@@ -185,7 +185,7 @@ func (m Model) renderRow(theme tui.Theme, rl renderLine, selected bool, gutterWi
 	var content string
 	switch {
 	case rl.SecretRevealed:
-		content = renderSecretRevealedLine(theme, rl, bg)
+		content = renderSecretRevealedLine(theme, rl, bg, width-gutterWidth-1)
 	case rl.SecretKey != "":
 		content = renderSecretMaskedLine(theme, rl, bg)
 	case rl.FoldKey != "":
@@ -228,14 +228,26 @@ func renderSecretMaskedLine(theme tui.Theme, rl renderLine, bg lipgloss.Terminal
 // (making it visually indistinguishable from ordinary YAML strings except
 // for the trailing "revealed" tag) — continuation lines of a multi-line
 // decoded value carry no "key:" prefix and get no tag of their own.
-func renderSecretRevealedLine(theme tui.Theme, rl renderLine, bg lipgloss.TerminalColor) string {
+//
+// avail is the line's total content budget (renderRow's width-gutterWidth-1)
+// — the value is truncated to leave the tag room, rather than letting the
+// caller's own Pad(content, avail) truncate the assembled string as one
+// blob, which silently dropped the tag for any decoded value long enough to
+// fill the line (21a's whole point is flagging plaintext-on-screen, so the
+// tag must never be the part that goes missing; docs/design README.md
+// §271-274).
+func renderSecretRevealedLine(theme tui.Theme, rl renderLine, bg lipgloss.TerminalColor, avail int) string {
 	indent, value, isKeyLine := secretKeyPrefixSplit(rl)
 	valStyle := lipgloss.NewStyle().Foreground(theme.YamlStr).Background(bg)
 	if !isKeyLine {
 		return valStyle.Render(rl.Text)
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(theme.YamlKey).Background(bg)
-	return indent + keyStyle.Render(rl.SecretKey+":") + valStyle.Render(" "+value) + " " + revealedTag(theme)
+	tag := revealedTag(theme)
+	prefixWidth := lipgloss.Width(indent + rl.SecretKey + ": ")
+	budget := avail - prefixWidth - lipgloss.Width(tag) - 1 // 1: space before the tag
+	value = components.Truncate(value, max(budget, 0))
+	return indent + keyStyle.Render(rl.SecretKey+":") + valStyle.Render(" "+value) + " " + tag
 }
 
 // revealedTag is 21a's "bordered revealed tag" — a filled pill (the

@@ -88,6 +88,51 @@ func TestSecretDataIsMaskedByDefault(t *testing.T) {
 	}
 }
 
+// TestRevealedTagSurvivesLongValue pins the 21a fix (docs/design README.md
+// §271-274): a decoded value long enough to fill the line must still show
+// the "revealed" tag on its own row — the whole line (value + tag) used to
+// be truncated as one blob with no budget reserved for the tag, so a long
+// real secret (certs, kubeconfigs, tokens) silently lost the marker that
+// flags plaintext-on-screen. The assertion scopes to the password row
+// specifically (not just "revealed" anywhere in the view) since the strip
+// line above always says "N revealed" as part of its own summary count,
+// which would mask the tag going missing on the data row itself.
+func TestRevealedTagSurvivesLongValue(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	yaml := strings.Join([]string{
+		"apiVersion: v1",
+		"kind: Secret",
+		"metadata:",
+		"  name: app-secret",
+		"  namespace: staging",
+		"data:",
+		"  password: " + b64(long),
+		"type: Opaque",
+	}, "\n")
+	m := newSecretModel(yaml, "app-secret")
+	m = step(t, m, m.Init()())
+	secretDataCursor(t, &m, "password")
+
+	m = step(t, m, tea.KeyPressMsg{Text: "x"})
+	if !m.revealed["password"] {
+		t.Fatal("expected 'x' to reveal the cursor's key")
+	}
+	view := plain(m.Render())
+	var passwordLine string
+	for line := range strings.SplitSeq(view, "\n") {
+		if strings.Contains(line, "password:") {
+			passwordLine = line
+			break
+		}
+	}
+	if passwordLine == "" {
+		t.Fatalf("expected a rendered password: row:\n%s", view)
+	}
+	if !strings.Contains(passwordLine, "revealed") {
+		t.Fatalf("expected the revealed tag on the password row itself:\n%q", passwordLine)
+	}
+}
+
 func TestXTogglesRevealAtCursorInPlace(t *testing.T) {
 	m := newSecretModel(secretYAML, "app-secret")
 	m = step(t, m, m.Init()())
