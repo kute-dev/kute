@@ -164,7 +164,7 @@ func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	view := plain(m.Render())
 	for _, want := range []string{
 		"worker-0", "CrashLoopBackOff", "6 restarts",
-		"Last termination", "OOMKilled", "exit 137",
+		"Last termination", "OOMKilled", "exit 137", "Next backoff ~5m",
 		"node-a", "10.0.0.5", "Burstable", "ReplicaSet/worker-abc123",
 		"CONTAINERS", "worker", "example.com/worker:v1",
 		"EVENTS", "BackOff",

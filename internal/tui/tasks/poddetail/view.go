@@ -195,13 +195,16 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	)
 
 	// mock 5a's body line names the container and says what happened —
-	// the OOMKilled wording only when the limit that was exceeded is known.
+	// the OOMKilled wording only when the limit that was exceeded is known —
+	// then the next backoff estimate (docs/design README.md §5a: "the
+	// memory limit + next backoff").
 	bodyStyle := lipgloss.NewStyle().Foreground(theme.BadText)
 	container := lipgloss.NewStyle().Foreground(theme.Warn).Render(lt.Container)
 	what := fmt.Sprintf(" exited with code %d.", lt.ExitCode)
 	if lt.Reason == "OOMKilled" && m.pod.MEMLimitBytes > 0 {
 		what = " exceeded memory limit " + formatBytes(m.pod.MEMLimitBytes) + "."
 	}
+	what += fmt.Sprintf(" Next backoff ~%s.", shortDur(lt.NextBackoff()))
 	body := bodyStyle.Render("Container ") + container + bodyStyle.Render(what)
 
 	content := title + "  " + facts + "\n" + body

@@ -49,7 +49,8 @@ type Pod struct {
 	GracePeriodSeconds int64
 }
 
-// ContainerInfo is one row of the 5a CONTAINERS grid.
+// ContainerInfo is one row of the 5a CONTAINERS grid (and 10a's exec
+// picker).
 type ContainerInfo struct {
 	Name     string
 	Image    string
@@ -57,6 +58,11 @@ type ContainerInfo struct {
 	Reason   string // e.g. "CrashLoopBackOff", "Completed"
 	Restarts int32
 	Ready    bool
+	// IsSidecar is true for a native sidecar container (KEP-753: an
+	// initContainer with restartPolicy: Always) — a real API-level signal,
+	// not a name heuristic (docs/design README.md §10a: "sidecars labeled
+	// sidecar").
+	IsSidecar bool
 }
 
 // LastTermination is the 5a last-termination banner: the most recent
@@ -68,6 +74,34 @@ type LastTermination struct {
 	Reason     string
 	Age        time.Duration
 	FinishedAt time.Time
+	// RestartCount is the container's current restart count, used by
+	// NextBackoff to estimate kubelet's CrashLoopBackOff delay.
+	RestartCount int32
+}
+
+// NextBackoff estimates kubelet's CrashLoopBackOff delay before the next
+// restart attempt (docs/design README.md §5a: body line names "the memory
+// limit + next backoff"): 10s, doubling per restart, capped at 5 minutes —
+// the same base/cap kubelet's own SyncTerminatedPod backoff uses. This is an
+// estimate, not a scheduled instant read from the API (Kubernetes doesn't
+// expose one).
+func (lt LastTermination) NextBackoff() time.Duration {
+	const (
+		base   = 10 * time.Second
+		capDur = 5 * time.Minute
+	)
+	restarts := lt.RestartCount
+	if restarts < 1 {
+		restarts = 1
+	}
+	d := base
+	for i := int32(1); i < restarts; i++ {
+		d *= 2
+		if d >= capDur {
+			return capDur
+		}
+	}
+	return d
 }
 
 // PodFromObject projects a *corev1.Pod into the domain Pod struct, list
@@ -115,7 +149,7 @@ func PodFromObject(pod *corev1.Pod) Pod {
 		QoSClass:        string(pod.Status.QOSClass),
 		Labels:          pod.Labels,
 		Tolerations:     formatTolerations(pod.Spec.Tolerations),
-		ContainerInfos:  buildContainerInfos(pod.Spec.Containers, pod.Status.ContainerStatuses),
+		ContainerInfos:  buildContainerInfos(pod),
 		LastTermination: findLastTermination(pod.Status.ContainerStatuses),
 		GracePeriodSeconds: func() int64 {
 			if pod.Spec.TerminationGracePeriodSeconds != nil {
@@ -149,33 +183,55 @@ func formatTolerations(tolerations []corev1.Toleration) []string {
 }
 
 // buildContainerInfos merges spec (name/image) with status (state/ready/
-// restarts) for the 5a CONTAINERS grid. A container with no status yet
-// (still being created) gets a zero-value State.
-func buildContainerInfos(containers []corev1.Container, statuses []corev1.ContainerStatus) []ContainerInfo {
-	byName := make(map[string]corev1.ContainerStatus, len(statuses))
-	for _, s := range statuses {
+// restarts) for the 5a CONTAINERS grid and 10a's exec picker. A container
+// with no status yet (still being created) gets a zero-value State. Native
+// sidecars (initContainers with restartPolicy: Always) are appended after
+// the regular containers, flagged IsSidecar, matched against
+// InitContainerStatuses rather than ContainerStatuses.
+func buildContainerInfos(pod *corev1.Pod) []ContainerInfo {
+	byName := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
+	for _, s := range pod.Status.ContainerStatuses {
 		byName[s.Name] = s
 	}
-	out := make([]ContainerInfo, 0, len(containers))
-	for _, c := range containers {
+	out := make([]ContainerInfo, 0, len(pod.Spec.Containers))
+	for _, c := range pod.Spec.Containers {
 		info := ContainerInfo{Name: c.Name, Image: c.Image}
 		if s, ok := byName[c.Name]; ok {
-			info.Ready = s.Ready
-			info.Restarts = s.RestartCount
-			switch {
-			case s.State.Running != nil:
-				info.State = "Running"
-			case s.State.Terminated != nil:
-				info.State = "Terminated"
-				info.Reason = s.State.Terminated.Reason
-			case s.State.Waiting != nil:
-				info.State = "Waiting"
-				info.Reason = s.State.Waiting.Reason
-			}
+			applyContainerStatus(&info, s)
+		}
+		out = append(out, info)
+	}
+
+	initByName := make(map[string]corev1.ContainerStatus, len(pod.Status.InitContainerStatuses))
+	for _, s := range pod.Status.InitContainerStatuses {
+		initByName[s.Name] = s
+	}
+	for _, c := range pod.Spec.InitContainers {
+		if c.RestartPolicy == nil || *c.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+			continue // a regular (non-sidecar) init container, not part of the running-containers grid
+		}
+		info := ContainerInfo{Name: c.Name, Image: c.Image, IsSidecar: true}
+		if s, ok := initByName[c.Name]; ok {
+			applyContainerStatus(&info, s)
 		}
 		out = append(out, info)
 	}
 	return out
+}
+
+func applyContainerStatus(info *ContainerInfo, s corev1.ContainerStatus) {
+	info.Ready = s.Ready
+	info.Restarts = s.RestartCount
+	switch {
+	case s.State.Running != nil:
+		info.State = "Running"
+	case s.State.Terminated != nil:
+		info.State = "Terminated"
+		info.Reason = s.State.Terminated.Reason
+	case s.State.Waiting != nil:
+		info.State = "Waiting"
+		info.Reason = s.State.Waiting.Reason
+	}
 }
 
 // findLastTermination scans both current and last-known termination states
@@ -185,27 +241,29 @@ func buildContainerInfos(containers []corev1.Container, statuses []corev1.Contai
 func findLastTermination(statuses []corev1.ContainerStatus) *LastTermination {
 	var best *corev1.ContainerStateTerminated
 	var bestName string
-	consider := func(name string, t *corev1.ContainerStateTerminated) {
+	var bestRestarts int32
+	consider := func(name string, t *corev1.ContainerStateTerminated, restarts int32) {
 		if t == nil {
 			return
 		}
 		if best == nil || t.FinishedAt.After(best.FinishedAt.Time) {
-			best, bestName = t, name
+			best, bestName, bestRestarts = t, name, restarts
 		}
 	}
 	for _, s := range statuses {
-		consider(s.Name, s.State.Terminated)
-		consider(s.Name, s.LastTerminationState.Terminated)
+		consider(s.Name, s.State.Terminated, s.RestartCount)
+		consider(s.Name, s.LastTerminationState.Terminated, s.RestartCount)
 	}
 	if best == nil {
 		return nil
 	}
 	return &LastTermination{
-		Container:  bestName,
-		ExitCode:   best.ExitCode,
-		Reason:     best.Reason,
-		Age:        metav1.Now().Sub(best.FinishedAt.Time).Round(0),
-		FinishedAt: best.FinishedAt.Time,
+		Container:    bestName,
+		ExitCode:     best.ExitCode,
+		Reason:       best.Reason,
+		Age:          metav1.Now().Sub(best.FinishedAt.Time).Round(0),
+		FinishedAt:   best.FinishedAt.Time,
+		RestartCount: bestRestarts,
 	}
 }
 

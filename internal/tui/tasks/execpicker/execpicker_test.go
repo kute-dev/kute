@@ -125,6 +125,41 @@ func TestExecResultFailureSetsFeedback(t *testing.T) {
 	}
 }
 
+// TestViewLabelsSidecarContainers pins 10a (docs/design README.md:141:
+// "sidecars labeled sidecar"): a container flagged IsSidecar gets a visible
+// "sidecar" label next to its image; a regular container must not.
+func TestViewLabelsSidecarContainers(t *testing.T) {
+	t.Parallel()
+	m := New(Config{
+		Session:   &tui.Session{Theme: tui.Dark()},
+		Namespace: "default",
+		PodName:   "nva-gateway-2b81x",
+		Containers: []kube.ContainerInfo{
+			{Name: "gateway", Image: "nva-gateway:1.19.0", State: "Running"},
+			{Name: "envoy", Image: "envoy:1.28", State: "Running", IsSidecar: true},
+		},
+	})
+	m.SetSize(120, 36)
+	out := plain(m.Render())
+
+	lines := strings.Split(out, "\n")
+	var gatewayLine, envoyLine string
+	for _, l := range lines {
+		switch {
+		case strings.Contains(l, "gateway") && !strings.Contains(l, "envoy"):
+			gatewayLine = l
+		case strings.Contains(l, "envoy"):
+			envoyLine = l
+		}
+	}
+	if strings.Contains(gatewayLine, "sidecar") {
+		t.Errorf("regular container's line unexpectedly labeled sidecar:\n%s", gatewayLine)
+	}
+	if !strings.Contains(envoyLine, "sidecar") {
+		t.Errorf("expected the sidecar container's line to be labeled 'sidecar', got:\n%s", envoyLine)
+	}
+}
+
 func TestViewRendersContainers(t *testing.T) {
 	t.Parallel()
 	m := newModel()

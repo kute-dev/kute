@@ -128,7 +128,11 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 		}
 	}
 
-	name := nameStyle.Render(c.Name) + "  " + imgStyle.Render(c.Image)
+	img := c.Image
+	if c.IsSidecar {
+		img += " sidecar"
+	}
+	name := nameStyle.Render(c.Name) + "  " + imgStyle.Render(img)
 	state := stateStyle.Render(glyph + " " + text)
 	shells := shellStyle.Render("sh, bash")
 

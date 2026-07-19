@@ -114,6 +114,47 @@ func TestPodFromObjectContainerWithoutStatusYet(t *testing.T) {
 	}
 }
 
+// TestPodFromObjectFlagsNativeSidecars pins 10a (docs/design README.md:141:
+// "sidecars labeled sidecar"): a native sidecar (KEP-753's initContainer
+// with restartPolicy: Always) must be flagged IsSidecar and appended after
+// the regular containers; a plain init container (no RestartPolicy) must
+// not appear in ContainerInfos at all — the exec picker's grid is "the
+// running containers," not "everything in the spec."
+func TestPodFromObjectFlagsNativeSidecars(t *testing.T) {
+	t.Parallel()
+	always := corev1.ContainerRestartPolicyAlways
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "with-sidecar"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}},
+			InitContainers: []corev1.Container{
+				{Name: "migrate", Image: "migrate:1.0"}, // plain init container, no restart policy
+				{Name: "envoy", Image: "envoy:1.0", RestartPolicy: &always},
+			},
+		},
+		Status: corev1.PodStatus{
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{Name: "envoy", Ready: true, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+
+	got := PodFromObject(pod)
+	if len(got.ContainerInfos) != 2 {
+		t.Fatalf("ContainerInfos = %+v, want 2 (app + envoy sidecar, migrate excluded)", got.ContainerInfos)
+	}
+	if got.ContainerInfos[0].IsSidecar {
+		t.Errorf("app should not be flagged IsSidecar")
+	}
+	sidecar := got.ContainerInfos[1]
+	if sidecar.Name != "envoy" || !sidecar.IsSidecar {
+		t.Errorf("ContainerInfos[1] = %+v, want envoy flagged IsSidecar", sidecar)
+	}
+	if sidecar.State != "Running" {
+		t.Errorf("sidecar State = %q, want Running (matched from InitContainerStatuses)", sidecar.State)
+	}
+}
+
 func TestPodFromObjectSharesListProjectionFields(t *testing.T) {
 	t.Parallel()
 	pod := &corev1.Pod{

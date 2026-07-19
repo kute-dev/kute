@@ -173,6 +173,49 @@ func TestNotReadyConditionRendersRedNotYellow(t *testing.T) {
 	}
 }
 
+// TestActiveConditionAppendsAgeWithoutDanglingSeparator pins 11b (docs/design
+// README.md:163: "active pressure yellow with kubelet message + age"): an
+// active condition's line must append its age, and a condition with no
+// kubelet message must not leave a dangling "— " separator with nothing
+// after it.
+func TestActiveConditionAppendsAgeWithoutDanglingSeparator(t *testing.T) {
+	transitioned := time.Now().Add(-5 * time.Minute)
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				{
+					Type:               corev1.NodeMemoryPressure,
+					Status:             corev1.ConditionTrue,
+					Message:            "system is low on memory",
+					LastTransitionTime: metav1.NewTime(transitioned),
+				},
+				{
+					Type:               corev1.NodeDiskPressure,
+					Status:             corev1.ConditionTrue,
+					LastTransitionTime: metav1.NewTime(transitioned),
+				},
+			},
+		},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindNode: {node}}}
+	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "MemoryPressure true — system is low on memory · 5m") {
+		t.Fatalf("expected the message clause followed by age, got:\n%s", view)
+	}
+	if strings.Contains(view, "DiskPressure true — ") {
+		t.Fatalf("expected no dangling '— ' separator for an empty message, got:\n%s", view)
+	}
+	if !strings.Contains(view, "DiskPressure true · 5m") {
+		t.Fatalf("expected the age still appended when the message is empty, got:\n%s", view)
+	}
+}
+
 // TestAllocationTextTurnsYellowWhenHot pins 11b: the "used / total" text
 // next to a bar must also turn yellow at the same ≥70% "hot" threshold the
 // bar's own fill segment already uses — previously only the bar changed

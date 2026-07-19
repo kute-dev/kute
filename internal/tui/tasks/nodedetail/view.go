@@ -3,6 +3,7 @@ package nodedetail
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
@@ -232,7 +233,16 @@ func (m Model) conditionLines() []string {
 			// diverged with yellow for the same condition.
 			lines = append(lines, bad.Render(label+" false"))
 		case active:
-			lines = append(lines, warn.Render(label+" true — "+c.Message))
+			// docs/design README.md §11b: "active pressure yellow with
+			// kubelet message + age" — the message clause is only appended
+			// when non-empty, so a condition with no kubelet message doesn't
+			// leave a dangling "— " with nothing after it.
+			line := label + " true"
+			if c.Message != "" {
+				line += " — " + c.Message
+			}
+			line += " · " + shortAge(time.Since(c.LastTransitionTime.Time))
+			lines = append(lines, warn.Render(line))
 		default:
 			lines = append(lines, dim.Render(label+" false"))
 		}
@@ -371,4 +381,22 @@ func (m Model) confirmBody(width, height int) string {
 		Label:  lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
 	return components.ConfirmCard(title, "", styles, width, height)
+}
+
+// shortAge renders a duration as a compact "12m"/"3h"/"5d" string — the same
+// format every other package's own copy of this helper uses (e.g.
+// poddetail's, resources/projections.go's).
+func shortAge(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return "0s"
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
 }
