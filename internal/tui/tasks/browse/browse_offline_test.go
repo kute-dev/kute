@@ -49,8 +49,8 @@ func TestOfflineRendersBannerStaleStripAndOfflineKeybar(t *testing.T) {
 	}
 
 	strips := m.Strips(120)
-	if len(strips) != 2 {
-		t.Fatalf("Strips() = %d lines while offline, want 2 (banner + stale)", len(strips))
+	if len(strips) != 3 {
+		t.Fatalf("Strips() = %d lines while offline, want 3 (banner + border-bottom rule + stale)", len(strips))
 	}
 	banner := plain(strips[0])
 	if !strings.Contains(banner, "dial tcp 10.0.0.5:16443: i/o timeout") {
@@ -59,7 +59,7 @@ func TestOfflineRendersBannerStaleStripAndOfflineKeybar(t *testing.T) {
 	if !strings.Contains(banner, "retry 3") {
 		t.Errorf("banner strip = %q, want the attempt count", banner)
 	}
-	stale := plain(strips[1])
+	stale := plain(strips[2])
 	if !strings.Contains(stale, "showing snapshot from") {
 		t.Errorf("stale strip = %q, want the snapshot-age note", stale)
 	}
@@ -165,6 +165,14 @@ func TestPermissionDeniedRendersCardAndCopiesError(t *testing.T) {
 	body := plain(m.permissionDeniedBody(120, 30))
 	if !strings.Contains(body, "403 Forbidden") {
 		t.Errorf("body missing 403 Forbidden title:\n%s", body)
+	}
+	// 4b: every recovery line except "r retry" carries an explanatory "—
+	// ..." clause in the spec; "c switch context" and "y copy error"
+	// previously dropped theirs silently (empty string passed to recover()).
+	for _, want := range []string{"— another context may grant access", "— paste to your cluster admin"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing recovery-line explanation %q:\n%s", want, body)
+		}
 	}
 	// apierrors.NewForbidden prefixes the cause with "<resource> is
 	// forbidden: "; the card also word-wraps the line — check the quoted

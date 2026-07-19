@@ -135,8 +135,15 @@ func (m Model) unreachableBody(width, height int) string {
 	bad := lipgloss.NewStyle().Foreground(theme.Bad)
 	title := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	// docs/design README.md §4c: "raw error in a red-tinted box (bg #16121a,
+	// border #3a2a30, …)" — matching the 10b LOOKED IN box's own bordered
+	// treatment (lookedInBox), which this previously lacked.
 	errStyle := lipgloss.NewStyle().Foreground(theme.BadMuted).
-		Background(theme.ErrCardBg).Padding(0, 1).Width(bw - 2)
+		Background(theme.ErrCardBg).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ErrCardBorder).
+		BorderBackground(theme.ErrCardBg).
+		Padding(0, 1).Width(bw - 4)
 
 	ctx := m.clusterName
 	if ctx == "" {

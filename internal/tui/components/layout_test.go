@@ -19,6 +19,21 @@ func TestPadUsesTerminalCellWidth(t *testing.T) {
 	}
 }
 
+// TestPadHandlesEmbeddedNewlinesPerLine pins 4c's word-wrap truncation bug
+// (docs/design README.md §4c): a value already wrapped into multiple lines
+// (e.g. by lipgloss.Style.Width) must be padded/truncated line-by-line, not
+// measured as one run — the old ansi.StringWidth-over-the-whole-string
+// behavior truncated a realistic two-line error down to a bare "…",
+// dropping the second line's content entirely.
+func TestPadHandlesEmbeddedNewlinesPerLine(t *testing.T) {
+	value := "dial tcp 10.0.0.5:16443:\ni/o timeout after 30s"
+	got := Pad(value, 30)
+	want := "dial tcp 10.0.0.5:16443:      \ni/o timeout after 30s         "
+	if got != want {
+		t.Fatalf("Pad(multiline) = %q, want %q", got, want)
+	}
+}
+
 func TestTruncateDoesNotSplitUnicode(t *testing.T) {
 	got := Truncate("alertmanager-prometheus-0", 14)
 	if got != "alertmanager-…" {

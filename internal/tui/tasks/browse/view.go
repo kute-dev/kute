@@ -141,7 +141,7 @@ func (m Model) Strips(width int) []string {
 	case tui.TaskStateReady:
 		var lines []string
 		if m.offline() {
-			lines = []string{m.offlineBannerLine(theme, width), m.staleStripLine(theme, width)}
+			lines = []string{m.offlineBannerLine(theme, width), m.errorBannerRuleLine(theme, width), m.staleStripLine(theme, width)}
 		} else {
 			lines = []string{m.healthStripLine(theme, width)}
 		}
@@ -155,25 +155,40 @@ func (m Model) Strips(width int) []string {
 }
 
 // offlineBannerLine is 4a's reconnect banner: verbatim watch/ping error,
-// attempt/backoff countdown, and the r/c exits (docs/design README.md §4a).
+// attempt/backoff countdown, and the r/c exits (docs/design README.md §4a:
+// "bg #2a1518, border-bottom #4a2228"). Unlike every other strip line (the
+// transparent, terminal-background convention documented on paletteStyles),
+// this one carries a real fill — every span below bakes theme.ErrBannerBg
+// in explicitly, including the pad/gap fills, since an outer wrap can't do
+// it: each inner Render's own ANSI reset would cancel it before the line
+// finishes.
 func (m Model) offlineBannerLine(theme tui.Theme, width int) string {
-	warn := lipgloss.NewStyle().Foreground(theme.Bad)
-	text := lipgloss.NewStyle().Foreground(theme.BadText)
-	dim := lipgloss.NewStyle().Foreground(theme.BadMuted)
-	key := lipgloss.NewStyle().Foreground(theme.BadSoft)
+	fill := lipgloss.NewStyle().Background(theme.ErrBannerBg)
+	warn := fill.Foreground(theme.Bad)
+	text := fill.Foreground(theme.BadText)
+	dim := fill.Foreground(theme.BadMuted)
+	key := fill.Foreground(theme.BadSoft)
 
 	errText := m.conn.Err
 	if errText == "" {
 		errText = "connection lost"
 	}
-	left := warn.Render(tui.GlyphWarning) + " " + text.Render(errText)
+	left := warn.Render(tui.GlyphWarning) + fill.Render(" ") + text.Render(errText)
 
 	next := max(m.conn.NextRetryAt.Sub(m.now), 0)
 	right := dim.Render(fmt.Sprintf("retry %d · next in %ds", m.conn.Attempt, int(next.Round(time.Second).Seconds()))) +
-		"   " + key.Render("r") + " " + dim.Render("retry now") +
-		"   " + key.Render("c") + " " + dim.Render("switch context")
+		fill.Render("   ") + key.Render("r") + fill.Render(" ") + dim.Render("retry now") +
+		fill.Render("   ") + key.Render("c") + fill.Render(" ") + dim.Render("switch context")
 
-	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
+	return insetStripLineFill(padBetweenFill(left, right, stripInnerWidth(width), fill), width, fill)
+}
+
+// errorBannerRuleLine draws 4a's "border-bottom #4a2228" under the offline
+// banner — the one strip divider that isn't Frame's own inter-band rule,
+// since offlineBannerLine is the one strip line with a real background fill
+// the others don't carry.
+func (m Model) errorBannerRuleLine(theme tui.Theme, width int) string {
+	return lipgloss.NewStyle().Foreground(theme.ErrBannerBorder).Render(strings.Repeat("─", width))
 }
 
 // staleStripLine is 4a's strip replacing the health strip: the age of the
@@ -323,6 +338,19 @@ func insetStripLine(line string, width int) string {
 	return components.Pad(strings.Repeat(" ", tui.FrameInset)+line, width)
 }
 
+// insetStripLineFill is insetStripLine's background-filled counterpart —
+// 4a's offline banner is the one strip line with a real bg (theme.
+// ErrBannerBg), so its inset/trailing pad must carry fill's background
+// explicitly rather than components.Pad's plain unstyled spaces.
+func insetStripLineFill(line string, width int, fill lipgloss.Style) string {
+	content := fill.Render(strings.Repeat(" ", tui.FrameInset)) + line
+	slack := width - lipgloss.Width(content)
+	if slack <= 0 {
+		return content
+	}
+	return content + fill.Render(strings.Repeat(" ", slack))
+}
+
 // defaultGlyphFor is the status-column glyph a row falls back to when its
 // own projection leaves Row.Glyph unset (every kind but Pods today).
 func defaultGlyphFor(class resources.StatusClass) string {
@@ -360,6 +388,17 @@ func padBetween(left, right string, width int) string {
 		return left
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// padBetweenFill is padBetween's background-filled counterpart, for the one
+// strip line (4a's offline banner) with a real bg fill — see
+// insetStripLineFill's doc comment.
+func padBetweenFill(left, right string, width int, fill lipgloss.Style) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + fill.Render(strings.Repeat(" ", gap)) + right
 }
 
 func (m Model) Body(width, height int) string {
@@ -433,9 +472,9 @@ func (m Model) permissionDeniedBody(width, height int) string {
 		highlightQuoted(m.feedback, body, entity),
 		"",
 		recover("g", "jump to another kind", "everything else still works"),
-		recover("c", "switch context", ""),
+		recover("c", "switch context", "another context may grant access"),
 		recover("w", "who-can", "see who does have access"),
-		recover("y", "copy error", ""),
+		recover("y", "copy error", "paste to your cluster admin"),
 		recover("r", "retry", ""),
 	}
 

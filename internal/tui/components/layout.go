@@ -7,7 +7,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// Truncate ellipsizes value to width cells. A value already word-wrapped
+// into multiple lines (embedded "\n", e.g. setup's raw-error box after
+// lipgloss.Style.Width triggers its own wrap) is truncated line-by-line —
+// ansi.StringWidth has no concept of line breaks and would otherwise measure
+// the wrapped lines' combined length as one run, truncating the whole block
+// down to a bare "…" and silently dropping every line after the first
+// (docs/design README.md §4c).
 func Truncate(value string, width int) string {
+	if strings.Contains(value, "\n") {
+		lines := strings.Split(value, "\n")
+		for i, l := range lines {
+			lines[i] = Truncate(l, width)
+		}
+		return strings.Join(lines, "\n")
+	}
 	if width <= 0 {
 		return ""
 	}
@@ -20,7 +34,16 @@ func Truncate(value string, width int) string {
 	return ansi.Truncate(value, width, "…")
 }
 
+// Pad truncates/pads value to exactly width cells, per line — see
+// Truncate's doc comment on multi-line handling.
 func Pad(value string, width int) string {
+	if strings.Contains(value, "\n") {
+		lines := strings.Split(value, "\n")
+		for i, l := range lines {
+			lines[i] = Pad(l, width)
+		}
+		return strings.Join(lines, "\n")
+	}
 	value = Truncate(value, width)
 	cellWidth := ansi.StringWidth(value)
 	if cellWidth >= width {
