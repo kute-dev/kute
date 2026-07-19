@@ -635,6 +635,11 @@ func demoPod(name, ns string, created metav1.Time, phase corev1.PodPhase, qos co
 			NodeName: node,
 			Containers: []corev1.Container{{
 				Name: "app", Image: "app:1.0",
+				// Every demo pod exposes a container port so 13a/13c's
+				// forward picker has something to offer — without this,
+				// every demo pod hit "no forwardable ports found" and no
+				// forward could ever actually be started in --demo mode.
+				Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: 8080}},
 				// Every demo pod carries a request/limit pair so 2a/5a/6a's
 				// CPU/MEM bars have a real denominator in --demo mode
 				// (CLAUDE.md: "the fake provider must stay feature-complete

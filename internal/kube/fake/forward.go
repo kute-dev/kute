@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -84,12 +85,30 @@ type dialer struct{}
 // NewForwardDialer builds the fake kube.ForwardDialer.
 func NewForwardDialer() kube.ForwardDialer { return dialer{} }
 
-func (dialer) Dial(_ string, _ string, localPort int, _ int32) (kube.Tunnel, error) {
+// flakyForwardPod is the one demo pod whose forwards periodically drop —
+// worker-0, the fixture's crashlooping pod: a forward into a container
+// that keeps restarting realistically would lose its connection, unlike
+// every other (stable) demo pod. Without this, 13c/13d's failing/retry/
+// backoff state and the hard "never modal/banner" invariant it drives
+// could only ever be checked by reading code, never by driving --demo mode
+// (CLAUDE.md: "the fake provider must stay feature-complete for tests/demo
+// mode").
+const flakyForwardPod = "worker-0"
+
+// flakyTunnelTTL is how long a forward into flakyForwardPod stays Active
+// before ForwardManager.run sees Run() fail and flips it to Reconnecting.
+const flakyTunnelTTL = 8 * time.Second
+
+func (dialer) Dial(_ string, pod string, localPort int, _ int32) (kube.Tunnel, error) {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
 	if err != nil {
 		return nil, err
 	}
-	return &tunnel{ln: ln}, nil
+	t := &tunnel{ln: ln}
+	if pod == flakyForwardPod {
+		return &flakyTunnel{tunnel: t, ttl: flakyTunnelTTL}, nil
+	}
+	return t, nil
 }
 
 // tunnel accepts and immediately closes local connections — enough to make
@@ -115,4 +134,26 @@ func (t *tunnel) Run(activity func()) error {
 
 func (t *tunnel) Close() {
 	t.closeOnce.Do(func() { t.ln.Close() })
+}
+
+// flakyTunnel wraps a normal tunnel but abandons it after ttl, simulating
+// the container-restart-driven disconnect flakyForwardPod's doc comment
+// describes — ForwardManager.run reads the returned error the same way it
+// would a real dropped connection, entering Reconnecting/backoff.
+type flakyTunnel struct {
+	*tunnel
+	ttl time.Duration
+}
+
+func (t *flakyTunnel) Run(activity func()) error {
+	done := make(chan error, 1)
+	go func() { done <- t.tunnel.Run(activity) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(t.ttl):
+		t.tunnel.Close()
+		<-done // Accept's own error return, discarded — ours is more specific
+		return fmt.Errorf("connection lost: container restarting")
+	}
 }
