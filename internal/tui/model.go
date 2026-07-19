@@ -3,6 +3,7 @@ package tui
 import (
 	"reflect"
 	"sort"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
@@ -846,7 +847,44 @@ func (m Model) View() tea.View {
 		panel = renderHelp(theme, screen, m.session.HelpScope, m.session.HelpGlobal, width)
 	}
 	view.Content = components.Compose(view.Content, panel, width, height, paletteTop, dim)
+
+	// 2b: "Main keybar while open: GOTO mode pill + one-line explanation" —
+	// Compose dims the whole base uniformly (including the underlying
+	// screen's own keybar band, which still reads its own PillText), so the
+	// goto palette needs its own undimmed keybar line spliced in on top,
+	// the same way the palette panel itself stays undimmed. Scoped to goto
+	// only: 6a/7a's namespace/context palettes have no equivalent spec'd
+	// bullet, so inventing pill copy for them isn't a spec-driven fix.
+	if m.palette != nil && m.palette.Scope == palette.ScopeGoto {
+		panelHeight := len(strings.Split(panel, "\n"))
+		actualTop := max(min(paletteTop, height-panelHeight), 0)
+		if actualTop+panelHeight <= height-1 {
+			view.Content = replaceLastLine(view.Content, gotoKeybarLine(theme, width))
+		}
+	}
 	return view
+}
+
+// gotoKeybarLine renders 2b's main-keybar-while-open treatment: a GOTO mode
+// pill plus a one-line explanation, reusing renderKeybarV2 for the exact
+// same chrome (border/inset/pill shape) every other screen's keybar gets.
+func gotoKeybarLine(theme Theme, width int) string {
+	kb := Keybar{
+		Pill:      ModeGoto,
+		PillText:  "GOTO",
+		RightNote: "jump to any kind, resource, namespace, or context",
+	}
+	return renderKeybarV2(kb, theme, width)
+}
+
+// replaceLastLine swaps content's final "\n"-joined line for line — the
+// keybar band is always exactly Frame's last line (LegendHeight == 1).
+func replaceLastLine(content, line string) string {
+	idx := strings.LastIndex(content, "\n")
+	if idx < 0 {
+		return line
+	}
+	return content[:idx+1] + line
 }
 
 // paletteTop is the palette overlay's fixed anchor row — a couple of rows

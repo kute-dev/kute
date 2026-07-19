@@ -363,6 +363,11 @@ func pillStyle(mode Mode, theme Theme) lipgloss.Style {
 	case ModeSetup:
 		// docs/design README.md §10b: pill bg #1c1c2c / text #9a9ab2 — BorderSubtle/TextSecondary.
 		return lipgloss.NewStyle().Background(theme.BorderSubtle).Foreground(theme.TextSecondary)
+	case ModeGoto:
+		// docs/design README.md §39: pill bg #1d1633 / text #c4b5fd, bold —
+		// SelBg/AccentHi, brighter and bolder than every other mode's plain
+		// Accent pill.
+		return lipgloss.NewStyle().Background(theme.SelBg).Foreground(theme.AccentHi).Bold(true)
 	default:
 		return lipgloss.NewStyle().Background(theme.SelBg).Foreground(theme.Accent)
 	}

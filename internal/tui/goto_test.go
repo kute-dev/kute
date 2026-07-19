@@ -82,6 +82,32 @@ func TestRootModelGBrowseRankedListHasChipsCountsAndFooter(t *testing.T) {
 	}
 }
 
+// TestRootModelGShowsGotoKeybarPill pins the cross-cutting fix (docs/design
+// README.md §39: "Main keybar while open: GOTO mode pill + one-line
+// explanation"): the underlying screen's own keybar pill must be replaced
+// by a GOTO pill while the jump palette is open, not just dimmed to gray
+// along with the rest of the background.
+func TestRootModelGShowsGotoKeybarPill(t *testing.T) {
+	t.Parallel()
+	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {gotoTestPod("default", "api-1")},
+	}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	view := updated.(tui.Model).View().Content
+
+	if !strings.Contains(view, "GOTO") {
+		t.Fatalf("expected the GOTO mode pill in the main keybar:\n%s", view)
+	}
+	if !strings.Contains(view, "jump to any kind, resource, namespace, or context") {
+		t.Fatalf("expected the one-line explanation next to the pill:\n%s", view)
+	}
+}
+
 // TestRootModelGThenTypeSwitchesToFuzzyResults covers 12a→2b: typing a
 // multi-character query after 'g' switches from the ranked list to fuzzy
 // results, which include both matching kinds and the current kind's
