@@ -55,9 +55,11 @@ func deleteWillRunLine(scope tui.TaskScope) string {
 // that kind too, not just the one row.
 func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 	var owner string
+	var gracePeriod *int64
 	if m.kind == kube.KindPod {
 		if pod, ok := m.pods[row.Name]; ok {
 			owner = pod.Owner
+			gracePeriod = &pod.GracePeriodSeconds
 		}
 	}
 	tier := verbs.TierFor(verbs.Delete, m.isProd())
@@ -65,9 +67,10 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 		tier = actions.TierModal
 	}
 	return m.actions.Begin(tier, tui.TaskAction{
-		ID:    "delete-" + string(m.kind) + "-" + row.Namespace + "/" + row.Name,
-		Label: fmt.Sprintf("Delete %s %s?", singularDisplay(m.desc.Display), row.Name),
-		Owner: owner,
+		ID:                 "delete-" + string(m.kind) + "-" + row.Namespace + "/" + row.Name,
+		Label:              fmt.Sprintf("Delete %s %s?", singularDisplay(m.desc.Display), row.Name),
+		Owner:              owner,
+		GracePeriodSeconds: gracePeriod,
 		Scope: tui.TaskScope{
 			ResourceKind: string(m.kind),
 			ResourceName: row.Name,
@@ -97,7 +100,15 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		if pending.Scope.Verb == "force-delete" {
 			detail = "grace period 0 — force delete, immediate"
 		} else {
-			detail = "default grace period applies"
+			// docs/design README.md §8b: the concrete figure (e.g. "30s"),
+			// not a generic "default grace period applies" — falls back to
+			// the generic text when the caller didn't resolve one (every
+			// non-Pod kind).
+			if pending.GracePeriodSeconds != nil {
+				detail = fmt.Sprintf("grace period %ds applies", *pending.GracePeriodSeconds)
+			} else {
+				detail = "default grace period applies"
+			}
 			if pending.Scope.ResourceKind == string(kube.KindPod) {
 				detail += " · ctrl-k force delete (immediate)"
 			}

@@ -42,6 +42,11 @@ type Pod struct {
 	Tolerations     []string // formatted "key=value:Effect" / "key (exists):Effect"
 	ContainerInfos  []ContainerInfo
 	LastTermination *LastTermination // nil when no container has ever terminated
+	// GracePeriodSeconds is Spec.TerminationGracePeriodSeconds, or the
+	// cluster default (30) when unset — 8b's delete confirm shows this
+	// concrete figure instead of a generic "default grace period applies"
+	// (docs/design README.md §8b: "30s").
+	GracePeriodSeconds int64
 }
 
 // ContainerInfo is one row of the 5a CONTAINERS grid.
@@ -112,6 +117,12 @@ func PodFromObject(pod *corev1.Pod) Pod {
 		Tolerations:     formatTolerations(pod.Spec.Tolerations),
 		ContainerInfos:  buildContainerInfos(pod.Spec.Containers, pod.Status.ContainerStatuses),
 		LastTermination: findLastTermination(pod.Status.ContainerStatuses),
+		GracePeriodSeconds: func() int64 {
+			if pod.Spec.TerminationGracePeriodSeconds != nil {
+				return *pod.Spec.TerminationGracePeriodSeconds
+			}
+			return 30 // corev1's own default when the field is unset
+		}(),
 	}
 }
 

@@ -5,12 +5,49 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui/actions"
 )
+
+// TestCtrlDShowsConcreteGracePeriod pins 8b's fix: the confirm modal must
+// show the pod's actual terminationGracePeriodSeconds (docs/design
+// README.md §8b: "30s"), not the generic "default grace period applies" —
+// this pod's spec sets a non-default 45s, so a hardcoded "30" would also be
+// wrong, proving the value is actually threaded through rather than
+// hardcoded.
+func TestCtrlDShowsConcreteGracePeriod(t *testing.T) {
+	grace := int64(45)
+	podWithGrace := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api-0", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Containers:                    []corev1.Container{{Name: "c"}},
+			TerminationGracePeriodSeconds: &grace,
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {podWithGrace},
+	}}
+	sess := newSession()
+	sess.Config = config.Config{ProdContexts: []string{sess.Location.Context}}
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	view := plain(m.Render())
+	if !strings.Contains(view, "grace period 45s applies") {
+		t.Fatalf("expected the concrete grace period in the modal:\n%s", view)
+	}
+	if strings.Contains(view, "default grace period applies") {
+		t.Fatalf("expected the generic fallback text to be gone once a real value is known:\n%s", view)
+	}
+}
 
 // TestCtrlDNonProdShowsInlinePromptAndDeletesOnY exercises 8b's non-prod
 // path from browse: the table stays visible (no modal body override), the

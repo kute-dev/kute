@@ -62,6 +62,11 @@ type TaskAction struct {
 	Label string
 	Scope TaskScope
 	Owner string
+	// GracePeriodSeconds is the target pod's actual termination grace
+	// period (8b's delete confirm shows this concrete figure per docs/
+	// design README.md §8b, e.g. "30s") — nil when not known/applicable
+	// (every non-Pod kind, or Pod kinds whose caller doesn't resolve it).
+	GracePeriodSeconds *int64
 }
 
 // Task is the contract each active Bubble Tea task model must implement.
