@@ -142,9 +142,9 @@ func joinColumns(theme tui.Theme, main, sidebar string, mainWidth, sidebarWidth,
 
 func (m Model) titleLine(theme tui.Theme, width int) string {
 	name := lipgloss.NewStyle().Foreground(theme.Text).Bold(true).Render(m.name)
-	_, class, text := statusClass(m.pod)
+	glyph, class, text := statusClass(m.pod)
 	statusStyle := lipgloss.NewStyle().Foreground(statusColor(theme, class))
-	status := statusStyle.Render(text)
+	status := statusStyle.Render(glyph + " " + text)
 	restarts := ""
 	if m.pod.Restarts > 0 {
 		restarts = lipgloss.NewStyle().Foreground(theme.Warn).Render(fmt.Sprintf("%s %d restarts", tui.GlyphRestarts, m.pod.Restarts))
@@ -233,8 +233,8 @@ func (m Model) metaGrid(theme tui.Theme) string {
 	}
 	controller := "–"
 	controllerStyle := value
-	if m.pod.Owner != "" {
-		controller = m.pod.Owner + " ↗"
+	if m.controller != "" {
+		controller = m.controller + " ↗"
 		controllerStyle = link
 	}
 
@@ -407,15 +407,26 @@ func (m Model) eventsBlock(theme tui.Theme, width int) string {
 		return title + "\n" + lipgloss.NewStyle().Foreground(theme.TextDim).Render(note)
 	}
 	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	bad := lipgloss.NewStyle().Foreground(theme.Bad)
 	info := lipgloss.NewStyle().Foreground(theme.Info)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	msgStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+
+	// docs/design README.md §5a: "type (Warning yellow/red, Normal blue)" —
+	// 9b's sibling events screen already escalates Warning to red for a
+	// currently-failing object (severityStyle); this pod IS the object, so
+	// its own current status class stands in for 9b's cross-object lookup.
+	_, class, _ := statusClass(m.pod)
+	failing := class == "fail"
 
 	lines := []string{title}
 	for _, e := range m.eventRows {
 		typeStyle := info
 		if e.Type == "Warning" {
 			typeStyle = warn
+			if failing {
+				typeStyle = bad
+			}
 		}
 		age := shortAge(e.LastSeen)
 		msg := ellipsize(e.Message, max(width-40, 10))

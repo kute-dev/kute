@@ -90,6 +90,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.found = true
 	m.eventRows = msg.events
 	m.eventsErr = msg.eventsErr
+	m.controller = msg.controller
 	if m.selectedContainer >= len(m.pod.ContainerInfos) {
 		m.selectedContainer = max(len(m.pod.ContainerInfos)-1, 0)
 	}

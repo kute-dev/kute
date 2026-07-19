@@ -127,6 +127,11 @@ type Model struct {
 	// delete) — Body() renders the "pod gone" banner and every key becomes
 	// "go back" rather than the normal keymap.
 	gone bool
+	// controller is 5a's resolved CONTROLLER display text (loadedMsg's own
+	// field doc comment explains the ReplicaSet→Deployment hop) — separate
+	// from pod.Owner, which RELATED/alt+o still read as the pod's direct,
+	// unresolved owner.
+	controller string
 
 	eventRows []kube.Event
 	// eventsErr is the last events fetch's failure — the EVENTS grid shows
@@ -162,6 +167,12 @@ type loadedMsg struct {
 	// from a genuinely empty result.
 	eventsErr error
 	err       error
+	// controller is 5a's CONTROLLER field display text — pod.Owner, except
+	// a ReplicaSet owner resolves one hop further to its own owning
+	// Deployment (docs/design README.md §5a: "deploy/nva-worker ↗"), since a
+	// Deployment never appears as a pod's direct owner. Resolved here
+	// (load()'s tea.Cmd) rather than in metaGrid, which must stay pure.
+	controller string
 }
 
 func New(cfg Config) Model {

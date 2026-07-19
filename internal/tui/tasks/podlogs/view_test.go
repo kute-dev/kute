@@ -3,6 +3,9 @@ package podlogs
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
@@ -61,9 +64,48 @@ func TestFormatEntryTrimsHorizontalOffsetWhenWrapOff(t *testing.T) {
 	model.view.Wrap = false
 	model.view.HorizontalOffset = 8
 	theme := model.Theme()
-	got := model.formatEntry(theme, LogEntry{Container: "app", Message: "0123456789"}, 80)
+	got := model.formatEntry(theme, LogEntry{Container: "app", Message: "0123456789"}, 80, false)
 	if strings.Contains(got, "0123456789") || !strings.Contains(got, "89") {
 		t.Fatalf("horizontal offset did not trim: %q", got)
+	}
+}
+
+// TestOnlyMostRecentErrLineGetsFullTint pins 5b's two-tier ERR treatment
+// (docs/design README.md §5b: "ERR lines get message text … and a
+// full-width red-tinted row … for the most significant one"): every ERR
+// line's message renders red, but only the latest (most recent) one gets
+// the extra full-width ErrBannerBg tint — a stale error scrolling further
+// up the buffer must lose the tint once a newer one arrives.
+func TestOnlyMostRecentErrLineGetsFullTint(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	model := testModel()
+	model.SetSize(120, 24)
+	model.appendEntry(LogEntry{Container: "app", Message: "first failure", Severity: SeverityErr})
+	model.appendEntry(LogEntry{Container: "app", Message: "second failure", Severity: SeverityErr})
+	view := model.Render()
+
+	lines := strings.Split(view, "\n")
+	var first, second string
+	for _, l := range lines {
+		switch {
+		case strings.Contains(l, "first failure"):
+			first = l
+		case strings.Contains(l, "second failure"):
+			second = l
+		}
+	}
+	if first == "" || second == "" {
+		t.Fatalf("expected both ERR lines in the rendered view:\n%s", view)
+	}
+	bg := "48;2;42;21;24" // theme.ErrBannerBg dark-mode RGB, per lipgloss TrueColor encoding
+	if strings.Contains(first, bg) {
+		t.Errorf("expected the older ERR line to NOT carry the full-width tint:\n%q", first)
+	}
+	if !strings.Contains(second, bg) {
+		t.Errorf("expected the most recent ERR line to carry the full-width tint:\n%q", second)
 	}
 }
 

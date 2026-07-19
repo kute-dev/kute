@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,6 +98,18 @@ func goldenPodDetailModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {goldenCrashLoopPod()},
+		// docs/design README.md §5a: CONTROLLER resolves a ReplicaSet owner
+		// one hop further to its own Deployment ("deploy/nva-worker ↗") —
+		// this ReplicaSet mirrors goldenCrashLoopPod's own OwnerReferences
+		// (Kind: "ReplicaSet", Name: "nva-worker-7f9d2") so the golden
+		// fixture actually exercises the resolution instead of falling back
+		// to the raw ReplicaSet owner.
+		kube.KindReplicaSet: {&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "nva-worker-7f9d2", Namespace: "nva-stage",
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "nva-worker"}},
+			},
+		}},
 	}}
 	metrics := fakeGoldenMetrics{metrics: map[string]kube.PodMetrics{
 		// mock 5a: CPU 4m / 500m, MEM 246Mi / 256Mi (≥96% ⇒ red bar + text).

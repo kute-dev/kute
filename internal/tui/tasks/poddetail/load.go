@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 )
 
 // load fetches the pod itself (found=false, not an error, when it's no
@@ -52,8 +54,41 @@ func (m Model) load() tea.Cmd {
 			eventRows, eventsErr = events.ObjectEvents(ctx, namespace, kube.KindPod, name)
 		}
 
-		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr}
+		controller := resolveControllerDisplay(ctx, lister, namespace, pod.Owner)
+
+		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller}
 	}
+}
+
+// resolveControllerDisplay resolves owner (pod.Owner, "Kind/name") for 5a's
+// CONTROLLER field: a ReplicaSet-owned pod resolves one hop further to its
+// own owning Deployment (docs/design README.md §5a: "deploy/nva-worker ↗"),
+// since a Deployment never appears as a pod's direct owner — every other
+// owner kind (StatefulSet, DaemonSet, Job) already IS the display-worthy
+// controller and passes through unchanged. Runs inside load()'s tea.Cmd, not
+// the render path, so the extra ReplicaSet lookup is fine here (CLAUDE.md:
+// render functions are pure, no I/O).
+func resolveControllerDisplay(ctx context.Context, lister resources.RawLister, namespace, owner string) string {
+	kind, name, ok := splitOwner(owner)
+	if !ok || kind != kube.KindReplicaSet || lister == nil {
+		return owner
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindReplicaSet, namespace)
+	if err != nil {
+		return owner
+	}
+	for _, obj := range objs {
+		rs, ok := obj.(*appsv1.ReplicaSet)
+		if !ok || rs.Name != name {
+			continue
+		}
+		if depOwner := ownerRef(rs.OwnerReferences); depOwner != "" {
+			if depKind, _, ok := splitOwner(depOwner); ok && depKind == kube.KindDeployment {
+				return depOwner
+			}
+		}
+	}
+	return owner
 }
 
 func findPod(objs []runtime.Object, name string) *corev1.Pod {

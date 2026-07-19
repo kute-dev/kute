@@ -1,6 +1,6 @@
   kute │ test-cluster › nva-stage › Pods › nva-worker-9k2ss ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────
-nva-worker-9k2ss  CrashLoopBackOff  ↺ 6 restarts          │ LABELS              
+nva-worker-9k2ss  ✕ CrashLoopBackOff  ↺ 6 restarts        │ LABELS              
                                                           │ app=nva-worker      
 ╭──────────────────────────────────────────────────────╮  │ tier=backend        
 │ Last termination  exit 137 · OOMKilled · 4m ago      │  │                     
@@ -8,7 +8,7 @@ nva-worker-9k2ss  CrashLoopBackOff  ↺ 6 restarts          │ LABELS
 ╰──────────────────────────────────────────────────────╯  │ ReplicaSet/nva-work…
                                                           │                     
 NODE         IP            QOS          CONTROLLER     …  │ TOLERATIONS         
-worker-01    10.1.34.19    Burstable    ReplicaSet/nva-…  │ node.kubernetes.io/…
+worker-01    10.1.34.19    Burstable    Deployment/nva-…  │ node.kubernetes.io/…
                                                           │                     
 CONTAINERS                                                │                     
      NAME        IMAGE         STATE                 RE…  │                     

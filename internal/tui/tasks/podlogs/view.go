@@ -117,9 +117,18 @@ func (m Model) Body(width, height int) string {
 
 	theme := m.Theme()
 	entries := m.filteredEntries()
+	// docs/design README.md §5b: "a full-width red-tinted row for the most
+	// significant one" — every ERR line gets red message/level text, but
+	// only the latest (highest-index) ERR entry gets the extra tinted
+	// background row.
+	lastErr := lastErrIndex(entries)
+	start := m.view.VerticalOffset
+	if start > len(entries) {
+		start = len(entries)
+	}
 	lines := make([]string, 0, height)
-	for _, entry := range m.visibleEntries(entries) {
-		lines = append(lines, m.formatEntry(theme, entry, width))
+	for i, entry := range m.visibleEntries(entries) {
+		lines = append(lines, m.formatEntry(theme, entry, width, start+i == lastErr))
 	}
 	if m.buffer.DroppedCount > 0 {
 		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextFaint).Render(fmt.Sprintf("… %d older log lines dropped …", m.buffer.DroppedCount)))
@@ -143,7 +152,22 @@ func (m Model) visibleEntries(entries []LogEntry) []LogEntry {
 	return entries[start:end]
 }
 
-func (m Model) formatEntry(theme tui.Theme, entry LogEntry, width int) string {
+// lastErrIndex returns the index of the last (most recent) ERR-severity
+// entry in entries, or -1 if none.
+func lastErrIndex(entries []LogEntry) int {
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Severity == SeverityErr {
+			return i
+		}
+	}
+	return -1
+}
+
+// formatEntry renders one log line. mostSignificantErr is true only for the
+// single ERR entry (lastErrIndex) that gets the spec's extra full-width
+// tinted background row — every ERR line still gets red message/level text
+// regardless (docs/design README.md §5b).
+func (m Model) formatEntry(theme tui.Theme, entry LogEntry, width int, mostSignificantErr bool) string {
 	if entry.Boundary {
 		return centeredRule(entry.Message+" · "+entry.Timestamp, width, lipgloss.NewStyle().Foreground(theme.TextFaint))
 	}
@@ -151,12 +175,17 @@ func (m Model) formatEntry(theme tui.Theme, entry LogEntry, width int) string {
 	dimTS := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	msgStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	levelStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
-	tinted := entry.Severity == SeverityErr
+	isErr := entry.Severity == SeverityErr
+	tinted := isErr && mostSignificantErr
 	switch {
-	case tinted:
-		dimTS = dimTS.Background(theme.ErrBannerBg)
-		levelStyle = lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ErrBannerBg)
-		msgStyle = lipgloss.NewStyle().Foreground(theme.BadText).Background(theme.ErrBannerBg)
+	case isErr:
+		levelStyle = lipgloss.NewStyle().Foreground(theme.Bad)
+		msgStyle = lipgloss.NewStyle().Foreground(theme.BadText)
+		if tinted {
+			dimTS = dimTS.Background(theme.ErrBannerBg)
+			levelStyle = levelStyle.Background(theme.ErrBannerBg)
+			msgStyle = msgStyle.Background(theme.ErrBannerBg)
+		}
 	case entry.Severity == SeverityWarn:
 		levelStyle = lipgloss.NewStyle().Foreground(theme.Warn)
 	}
