@@ -1,0 +1,54 @@
+version: 2
+
+project_name: kute
+
+builds:
+  - main: ./cmd/kute
+    binary: kute
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+homebrew_casks:
+  - name: kute
+    binaries:
+      - kute
+    homepage: "https://github.com/kute-dev/kute"
+    description: "A TUI Kubernetes console, built with Bubble Tea and Lip Gloss."
+    license: "Apache-2.0"
+    repository:
+      owner: kute-dev
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: kute-release-bot
+      email: releases@kute.dev
