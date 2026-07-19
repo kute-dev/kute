@@ -43,6 +43,24 @@ func TestDeploymentColumnsRenderRolloutAndImage(t *testing.T) {
 	}
 }
 
+// TestDeploymentsKeybarPillIsShortForm pins 9a: the keybar pill reads
+// "DEPLOY", not the plural "DEPLOYMENTS" the generic
+// strings.ToUpper(desc.Display) path would otherwise produce.
+func TestDeploymentsKeybarPillIsShortForm(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if got := m.Keybar().PillText; got != "DEPLOY" {
+		t.Fatalf("Keybar().PillText = %q, want %q", got, "DEPLOY")
+	}
+}
+
 func TestRKeyRestartsRollout(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {deploymentObj("default", "api")},

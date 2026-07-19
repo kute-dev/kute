@@ -730,6 +730,16 @@ func (m Model) tableBody(width, height int) string {
 				cells[i] = components.Cell{Text: text}
 			case cols[i].Title == "Ready":
 				cells[i].Style = st.ready
+			case m.kind == kube.KindNode && cols[i].Title == "Status":
+				// docs/design README.md §11a: "healthy state renders dim,
+				// not green" — the same carve-out 9a's ROLLOUT column
+				// already gets (rowKindHeader case above), extended to
+				// Nodes' own STATUS column: Ready dims, NotReady/other keep
+				// the usual status color.
+				cells[i].Style = st.dim
+				if r.Status != resources.StatusOK {
+					cells[i].Style = st.status[r.Status]
+				}
 			case cols[i].Title == "Status":
 				cells[i].Style = st.status[r.Status]
 			case cols[i].Title == "Rollout":

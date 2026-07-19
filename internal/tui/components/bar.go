@@ -57,9 +57,13 @@ func miniBar(used, denom int64, width int, styles BarStyles, badAt float64) stri
 		filled = 0
 	}
 
-	bar := fillStyleFor(ratio, badAt, styles).Render(strings.Repeat("■", filled))
+	// docs/design README.md §11a: "Bars are block glyphs (▐▌▌░░░)" — the
+	// half-block fill glyph and light-shade track glyph, not a solid/hollow
+	// square (this component's other consumers — 2a's relative pod bar, 5a's
+	// CPU/MEM bars — share this same glyph pair).
+	bar := fillStyleFor(ratio, badAt, styles).Render(strings.Repeat("▌", filled))
 	if empty := width - filled; empty > 0 {
-		bar += styles.Track.Render(strings.Repeat("□", empty))
+		bar += styles.Track.Render(strings.Repeat("░", empty))
 	}
 	return bar
 }

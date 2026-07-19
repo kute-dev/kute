@@ -208,6 +208,7 @@ func (m Model) conditionLines() []string {
 	theme := m.Theme()
 	good := lipgloss.NewStyle().Foreground(theme.Good)
 	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	bad := lipgloss.NewStyle().Foreground(theme.Bad)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	lines := make([]string, 0, len(m.node.Status.Conditions))
@@ -218,7 +219,10 @@ func (m Model) conditionLines() []string {
 		case c.Type == corev1.NodeReady && active:
 			lines = append(lines, good.Render(label+" true"))
 		case c.Type == corev1.NodeReady:
-			lines = append(lines, warn.Render(label+" false"))
+			// docs/design README.md §11a: NotReady renders red on the nodes
+			// list (the identical signal) — this detail screen previously
+			// diverged with yellow for the same condition.
+			lines = append(lines, bad.Render(label+" false"))
 		case active:
 			lines = append(lines, warn.Render(label+" true — "+c.Message))
 		default:
@@ -262,6 +266,7 @@ func (m Model) taintLines() []string {
 func allocationBarLine(label string, used, total int64, theme tui.Theme, format func(int64) string) string {
 	const barWidth = 12
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
 	bars := components.BarStyles{
 		Track: lipgloss.NewStyle().Foreground(theme.BarTrack),
 		Fill:  lipgloss.NewStyle().Foreground(theme.Accent),
@@ -269,7 +274,14 @@ func allocationBarLine(label string, used, total int64, theme tui.Theme, format 
 		Bad:   lipgloss.NewStyle().Foreground(theme.Bad),
 	}
 	bar := components.MiniBar(used, total, barWidth, bars)
-	return dim.Render(fmt.Sprintf("%-4s ", label)) + bar + " " + dim.Render(format(used)+" / "+format(total))
+	// docs/design README.md §11b: "used / total text, hot values yellow" —
+	// previously only the bar's own fill segment changed color, matching
+	// the same 70% "hot" threshold MiniBar's fillStyleFor uses internally.
+	textStyle := dim
+	if total > 0 && float64(used)/float64(total) >= 0.7 {
+		textStyle = warn
+	}
+	return dim.Render(fmt.Sprintf("%-4s ", label)) + bar + " " + textStyle.Render(format(used)+" / "+format(total))
 }
 
 func formatBytes(v int64) string {

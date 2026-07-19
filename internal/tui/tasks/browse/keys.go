@@ -84,10 +84,15 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	pillText := strings.ToUpper(m.desc.Display)
-	if m.kind == kube.KindHelmRelease {
+	switch m.kind {
+	case kube.KindHelmRelease:
 		// docs/design README.md §18a: "Keybar pill HELM" — the short form,
 		// unlike every other kind's pill (its full uppercase Display name).
 		pillText = "HELM"
+	case kube.KindDeployment:
+		// docs/design README.md §9a: "Keybar pill DEPLOY", not the plural
+		// "DEPLOYMENTS" every other kind's pill would produce.
+		pillText = "DEPLOY"
 	}
 	pill := tui.ModeBrowse
 	if m.grouped() {

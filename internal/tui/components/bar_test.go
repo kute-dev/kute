@@ -22,10 +22,12 @@ func TestMiniBarUnavailableMetrics(t *testing.T) {
 func TestMiniBarFillsProportionally(t *testing.T) {
 	t.Parallel()
 	got := MiniBar(5, 10, 10, BarStyles{})
-	if n := strings.Count(got, "■"); n != 5 {
+	// docs/design README.md §11a: "Bars are block glyphs (▐▌▌░░░)" — ▌ for
+	// filled cells, ░ for track, not a solid/hollow square.
+	if n := strings.Count(got, "▌"); n != 5 {
 		t.Fatalf("filled cells = %d, want 5: %q", n, got)
 	}
-	if n := strings.Count(got, "□"); n != 5 {
+	if n := strings.Count(got, "░"); n != 5 {
 		t.Fatalf("track cells = %d, want 5: %q", n, got)
 	}
 }

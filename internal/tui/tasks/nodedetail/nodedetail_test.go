@@ -2,12 +2,16 @@ package nodedetail
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +22,20 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
+
+// ansiFGCode renders a single character through style and extracts the
+// color code lipgloss wraps it in, so color assertions compare against the
+// theme's own resolved value rather than a hand-copied hex guess.
+func ansiFGCode(t *testing.T, style lipgloss.Style) string {
+	t.Helper()
+	rendered := style.Render("X")
+	re := regexp.MustCompile(`\x1b\[([0-9;]+)mX`)
+	m := re.FindStringSubmatch(rendered)
+	if m == nil {
+		t.Fatalf("could not extract an ANSI color code from %q", rendered)
+	}
+	return m[1]
+}
 
 type fakeLister struct {
 	objs map[kube.ResourceKind][]runtime.Object
@@ -117,6 +135,83 @@ func TestLoadRendersConditionsAllocationAndPods(t *testing.T) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
 	}
+}
+
+// TestNotReadyConditionRendersRedNotYellow pins 11b: a NotReady condition
+// must render the same Bad/red color 11a's own nodes list uses for the
+// identical NotReady signal, not Warn/yellow.
+func TestNotReadyConditionRendersRedNotYellow(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionFalse}},
+		},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindNode: {node}}}
+	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := m.Render()
+	re := regexp.MustCompile(`\x1b\[([0-9;]+)mReady false`)
+	match := re.FindStringSubmatch(view)
+	if match == nil {
+		t.Fatalf("could not find the styled 'Ready false' condition line:\n%s", plain(view))
+	}
+	theme := tui.Dark()
+	badCode := ansiFGCode(t, lipgloss.NewStyle().Foreground(theme.Bad))
+	warnCode := ansiFGCode(t, lipgloss.NewStyle().Foreground(theme.Warn))
+	if !strings.Contains(match[1], badCode) {
+		t.Errorf("NotReady condition color = %q, want to contain Bad %q", match[1], badCode)
+	}
+	if strings.Contains(match[1], warnCode) {
+		t.Errorf("NotReady condition color = %q, should not be Warn %q", match[1], warnCode)
+	}
+}
+
+// TestAllocationTextTurnsYellowWhenHot pins 11b: the "used / total" text
+// next to a bar must also turn yellow at the same ≥70% "hot" threshold the
+// bar's own fill segment already uses — previously only the bar changed
+// color.
+func TestAllocationTextTurnsYellowWhenHot(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	theme := tui.Dark()
+	// 8m / 10m = 80% ⇒ hot.
+	hot := allocationBarLine("cpu", 8, 10, theme, func(v int64) string { return fmt.Sprintf("%dm", v) })
+	// 1m / 10m = 10% ⇒ not hot.
+	cool := allocationBarLine("cpu", 1, 10, theme, func(v int64) string { return fmt.Sprintf("%dm", v) })
+
+	warnCode := ansiFGCode(t, lipgloss.NewStyle().Foreground(theme.Warn))
+	dimCode := ansiFGCode(t, lipgloss.NewStyle().Foreground(theme.TextDim))
+
+	hotTextCode := textColorBefore(t, hot, "8m / 10m")
+	coolTextCode := textColorBefore(t, cool, "1m / 10m")
+	if !strings.Contains(hotTextCode, warnCode) {
+		t.Errorf("hot usage text color = %q, want to contain Warn %q", hotTextCode, warnCode)
+	}
+	if !strings.Contains(coolTextCode, dimCode) {
+		t.Errorf("cool usage text color = %q, want to contain TextDim %q", coolTextCode, dimCode)
+	}
+}
+
+// textColorBefore extracts the ANSI color code directly preceding word in
+// line, same technique as ansiFGCode but reading an already-rendered line
+// instead of rendering fresh.
+func textColorBefore(t *testing.T, line, word string) string {
+	t.Helper()
+	re := regexp.MustCompile(regexp.QuoteMeta("\x1b[") + `([0-9;]+)m` + regexp.QuoteMeta(word))
+	m := re.FindStringSubmatch(line)
+	if m == nil {
+		t.Fatalf("could not find a styled %q run in line:\n%q", word, line)
+	}
+	return m[1]
 }
 
 // TestLoadingStateRender pins 11b's applied-15a shape: the shell

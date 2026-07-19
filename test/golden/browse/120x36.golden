@@ -4,10 +4,10 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                   READY  STATUS ↑          ↺     CPU           MEM           NODE        AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▎ ✕  worker-0                               0/1    CrashLoopBackOff  6     ■■■■■■ 890m   ■■■■■■ 612Mi  node-a       1h  
-  ◐  cache-0                                0/1    Pending           0     □□□□□□ –      □□□□□□ –      –            1h  
-  ●  api-7d9f6c8-abcde                      1/1    Running           0     ■□□□□□ 45m    ■■□□□□ 128Mi  node-a       1h  
-  ○  migrate-job-x8z2p                      1/1    Completed         0     □□□□□□ –      □□□□□□ –      node-a       1h  
+▎ ✕  worker-0                               0/1    CrashLoopBackOff  6     ▌▌▌▌▌▌ 890m   ▌▌▌▌▌▌ 612Mi  node-a       1h  
+  ◐  cache-0                                0/1    Pending           0     ░░░░░░ –      ░░░░░░ –      –            1h  
+  ●  api-7d9f6c8-abcde                      1/1    Running           0     ▌░░░░░ 45m    ▌▌░░░░ 128Mi  node-a       1h  
+  ○  migrate-job-x8z2p                      1/1    Completed         0     ░░░░░░ –      ░░░░░░ –      node-a       1h  
   1–4 of 4                                                                                                      ██████  
                                                                                                                         
                                                                                                                         

@@ -14,8 +14,8 @@ CONTAINERS                                                                      
      NAME                    IMAGE                    STATE                 RESTARTS    │                               
   ◐  worker                  nva/worker:1.42.0        Waiting · CrashLoop…       6 ↺    │                               
   ●  metrics-sidecar         nva/sidecar:0.9.1        Running                    0 ↺    │                               
-CPU ■□□□□□□□□□□□□□□□ 4m / 500m                                                          │                               
-MEM ■■■■■■■■■■■■■■■■ 246Mi / 256Mi                                                      │                               
+CPU ▌░░░░░░░░░░░░░░░ 4m / 500m                                                          │                               
+MEM ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌ 246Mi / 256Mi                                                      │                               
                                                                                         │                               
 EVENTS · newest first                                                                   │                               
 Warning   BackOff           1m      Back-off restarting failed container worker         │                               

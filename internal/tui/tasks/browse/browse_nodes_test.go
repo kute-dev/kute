@@ -2,10 +2,13 @@ package browse
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -104,6 +107,66 @@ func TestNodeColumnsRenderStatusPodsAndVersion(t *testing.T) {
 			t.Fatalf("node view missing %q:\n%s", want, view)
 		}
 	}
+}
+
+// TestNodeStatusReadyRendersDimNotGreen pins 11a: STATUS "Ready" renders
+// TextDim, matching the ROLLOUT column's own "healthy state renders dim,
+// not green" carve-out — NotReady still gets the usual Bad/red status color.
+func TestNodeStatusReadyRendersDimNotGreen(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {nodeObj("node-a", true, false), nodeObj("node-b", false, false)},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindNode
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := m.Render()
+	var readyLine, notReadyLine string
+	for _, l := range strings.Split(view, "\n") {
+		switch {
+		case strings.Contains(l, "node-a"):
+			readyLine = l
+		case strings.Contains(l, "node-b"):
+			notReadyLine = l
+		}
+	}
+	if readyLine == "" || notReadyLine == "" {
+		t.Fatalf("expected both node rows in the rendered view:\n%s", plain(view))
+	}
+	// Isolate the STATUS column's own text run (the color code immediately
+	// preceding "Ready"/"NotReady") rather than scanning the whole row,
+	// which also legitimately contains the leading status glyph column in
+	// theme.Good — that column is untouched by this fix.
+	readyCode := statusTextColorCode(t, readyLine, "Ready")
+	notReadyCode := statusTextColorCode(t, notReadyLine, "NotReady")
+	dim := "38;2;103;103;128" // theme.TextDim
+	bad := "38;2;239;105;105" // theme.Bad
+	if !strings.Contains(readyCode, dim) {
+		t.Errorf("Ready's STATUS cell color = %q, want to contain TextDim %q", readyCode, dim)
+	}
+	if !strings.Contains(notReadyCode, bad) {
+		t.Errorf("NotReady's STATUS cell color = %q, want to contain Bad %q", notReadyCode, bad)
+	}
+}
+
+// statusTextColorCode extracts the ANSI color code immediately preceding
+// word's own text run in line (an ANSI-styled Render() output), where
+// Render wraps each span as "\x1b[<code>m<text>\x1b[0m" with no
+// intervening escape between the code and the text it colors.
+func statusTextColorCode(t *testing.T, line, word string) string {
+	t.Helper()
+	re := regexp.MustCompile("\x1b\\[([0-9;]+)m" + word)
+	m := re.FindStringSubmatch(line)
+	if m == nil {
+		t.Fatalf("could not find a styled %q run in line:\n%q", word, line)
+	}
+	return m[1]
 }
 
 func TestCKeyCordonsAndUncordonsNode(t *testing.T) {
