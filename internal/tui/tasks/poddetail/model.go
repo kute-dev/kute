@@ -59,6 +59,13 @@ type OpenTimelineFunc func(kind kube.ResourceKind, namespace, name string, width
 // per the repo's package-local-seam convention.
 type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd)
 
+// OpenForwardFunc pushes tasks/forwardpicker (13a) for the loaded pod — same
+// shape as browse.OpenForwardFunc. The spec lists 'f' alongside 'x'/'y' as
+// available "on any object row" (docs/design README.md §304, §308); browse
+// already wires it for Pod rows, this closes the gap on the pod's own
+// detail screen.
+type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Model, tea.Cmd)
+
 // Config are poddetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values). Siblings/
 // SiblingIndex are the ordered pod-name list + cursor browse hands over so
@@ -75,6 +82,7 @@ type Config struct {
 	OpenEvents   OpenEventsFunc
 	OpenTimeline OpenTimelineFunc
 	OpenExec     OpenExecFunc
+	OpenForward  OpenForwardFunc
 	Namespace    string
 	Name         string
 	Siblings     []string
@@ -96,6 +104,7 @@ type Model struct {
 	openEvents   OpenEventsFunc
 	openTimeline OpenTimelineFunc
 	openExec     OpenExecFunc
+	openForward  OpenForwardFunc
 	timeout      time.Duration
 	// execFeedback carries a non-zero directly-run kubectl-exec exit's
 	// message (single-container pods exec straight from poddetail without
@@ -179,6 +188,7 @@ func New(cfg Config) Model {
 		openEvents:   cfg.OpenEvents,
 		openTimeline: cfg.OpenTimeline,
 		openExec:     cfg.OpenExec,
+		openForward:  cfg.OpenForward,
 		timeout:      cfg.LoadTimeout,
 		namespace:    cfg.Namespace,
 		name:         cfg.Name,

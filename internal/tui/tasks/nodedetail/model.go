@@ -59,6 +59,13 @@ type OpenEventsFunc func(kind kube.ResourceKind, namespace, name string, width, 
 // shape as poddetail.OpenTimelineFunc.
 type OpenTimelineFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenForwardFunc pushes tasks/forwardpicker (13a) for a selected pod row —
+// same shape as browse.OpenForwardFunc. The spec lists 'f' alongside 'x'/'y'
+// as available "on any object row" (docs/design README.md §304, §308);
+// browse already wires it for Pod rows, this closes the gap on a node's own
+// pod rows.
+type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Model, tea.Cmd)
+
 // Config are nodedetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values).
 type Config struct {
@@ -72,6 +79,7 @@ type Config struct {
 	OpenYAML     OpenYAMLFunc
 	OpenEvents   OpenEventsFunc
 	OpenTimeline OpenTimelineFunc
+	OpenForward  OpenForwardFunc
 	NodeName     string
 	LoadTimeout  time.Duration
 }
@@ -104,6 +112,7 @@ type Model struct {
 	openYAML     OpenYAMLFunc
 	openEvents   OpenEventsFunc
 	openTimeline OpenTimelineFunc
+	openForward  OpenForwardFunc
 	timeout      time.Duration
 
 	nodeName string
@@ -180,6 +189,7 @@ func New(cfg Config) Model {
 		openYAML:      cfg.OpenYAML,
 		openEvents:    cfg.OpenEvents,
 		openTimeline:  cfg.OpenTimeline,
+		openForward:   cfg.OpenForward,
 		timeout:       cfg.LoadTimeout,
 		nodeName:      cfg.NodeName,
 		state:         state,

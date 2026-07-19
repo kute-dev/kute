@@ -152,6 +152,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
+	case "f":
+		if task, cmd, ok := m.openSelectedForward(); ok {
+			return task, cmd
+		}
 	case "E":
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
@@ -447,6 +451,18 @@ func ingressReferencesServices(ing *networkingv1.Ingress, services map[string]bo
 		}
 	}
 	return false
+}
+
+// openSelectedForward resolves 'f' for the loaded pod (docs/design
+// README.md §304, §308: "on any object row") by pushing tasks/forwardpicker
+// (13a) — mirrors browse.openSelectedForward's contract.
+func (m Model) openSelectedForward() (tea.Model, tea.Cmd, bool) {
+	if !m.found || m.openForward == nil {
+		return nil, nil, false
+	}
+	target := kube.ForwardTarget{Kind: kube.KindPod, Namespace: m.namespace, Name: m.name}
+	task, cmd := m.openForward(target, m.width, m.height)
+	return task, cmd, task != nil
 }
 
 // openSelectedExec resolves 'x' for the loaded pod (docs/design README.md

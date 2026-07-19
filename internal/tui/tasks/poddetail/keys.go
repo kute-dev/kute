@@ -59,6 +59,9 @@ func (m Model) Keybar() tui.Keybar {
 	if m.found && len(m.pod.ContainerInfos) > 0 {
 		verbGroup = append(verbGroup, verbs.Exec.Hint())
 	}
+	if m.found && m.openForward != nil {
+		verbGroup = append(verbGroup, verbs.Forward.Hint())
+	}
 	// alt+o/i share one hint slot (owner/ingress jump, mvp-tasks.md poddetail
 	// follow-up) — spelling them out as two separate entries doesn't fit
 	// this band's width budget alongside everything else already curated

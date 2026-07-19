@@ -271,6 +271,34 @@ func TestOpenEventsHandoff(t *testing.T) {
 	}
 }
 
+// TestOpenForwardHandoff pins the cross-cutting missing-verb fix (docs/design
+// README.md §304, §308: "on any object row") — 'f' must push the forward
+// picker for the selected pod row, the same as browse's own Pod rows
+// already do.
+func TestOpenForwardHandoff(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {testNode("node-a")},
+		kube.KindPod:  {schedPod("default", "big", "node-a", "1Gi")},
+	}}
+	var openedTarget kube.ForwardTarget
+	openForward := func(target kube.ForwardTarget, _, _ int) (tea.Model, tea.Cmd) {
+		openedTarget = target
+		return sentinelTask{}, nil
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a", OpenForward: openForward})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "f"})
+	if _, ok := updated.(sentinelTask); !ok {
+		t.Fatalf("expected 'f' to hand off to the forward picker, got %T", updated)
+	}
+	want := kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "big"}
+	if openedTarget != want {
+		t.Fatalf("openForward called with %+v, want %+v", openedTarget, want)
+	}
+}
+
 type sentinelTask struct{}
 
 func (sentinelTask) Init() tea.Cmd                       { return nil }

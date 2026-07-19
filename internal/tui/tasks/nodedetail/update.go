@@ -165,6 +165,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
+	case "f":
+		if task, cmd, ok := m.openSelectedForward(); ok {
+			return task, cmd
+		}
 	case "s":
 		return m, m.nodeShellCmd()
 	case "C":
@@ -316,6 +320,19 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, false
 	}
 	task, cmd := m.openExec(row.pod.Namespace, row.pod.Name, row.pod.ContainerInfos, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// openSelectedForward resolves 'f' for the selected pod row (docs/design
+// README.md §304, §308: "on any object row") by pushing tasks/forwardpicker
+// (13a) — mirrors browse.openSelectedForward's contract.
+func (m Model) openSelectedForward() (tea.Model, tea.Cmd, bool) {
+	row, ok := m.selectedPod()
+	if !ok || m.openForward == nil {
+		return nil, nil, false
+	}
+	target := kube.ForwardTarget{Kind: kube.KindPod, Namespace: row.pod.Namespace, Name: row.pod.Name}
+	task, cmd := m.openForward(target, m.width, m.height)
 	return task, cmd, task != nil
 }
 

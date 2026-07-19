@@ -55,6 +55,9 @@ func (m Model) Keybar() tui.Keybar {
 			podGroup = append(podGroup, verbs.Logs.Hint())
 		}
 		podGroup = append(podGroup, verbs.Exec.Hint())
+		if m.openForward != nil {
+			podGroup = append(podGroup, verbs.Forward.Hint())
+		}
 		groups = append(groups, podGroup)
 	}
 	groups = append(groups, []tui.KeyHint{verbs.NodeShell.Hint()})
