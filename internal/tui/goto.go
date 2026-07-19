@@ -247,7 +247,7 @@ func gotoBrowseSelection(items []palette.Item, recentKinds []string, current kub
 func gotoAliasFooter() []palette.FooterSpan {
 	return []palette.FooterSpan{
 		{Text: "alias", Tone: palette.FooterKey},
-		{Text: " — typing an alias letter pins that kind to rank 1 · ↵ jumps"},
+		{Text: " — colored first letter · typing it pins that kind to rank 1 · ↵ jumps"},
 	}
 }
 

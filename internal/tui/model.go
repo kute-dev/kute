@@ -486,6 +486,15 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		}
 		m.palette.Browse = m.palette.Scope == palette.ScopeGoto && m.palette.Query == ""
 		m.refreshPalette()
+	case "tab":
+		// docs/design README.md §2b: "tab complete" fills the query in to the
+		// highlighted result's own label, so a fuzzy match can be completed
+		// then narrowed further rather than jumped to immediately.
+		if item, ok := m.palette.Selected(); ok {
+			m.palette.Query = item.Label
+			m.palette.Browse = false
+			m.refreshPalette()
+		}
 	case "r":
 		if m.palette.Scope == palette.ScopeContext {
 			return true, m, m.startContextProbe()
@@ -792,6 +801,8 @@ func (m *Model) openPalette(scope palette.Scope, prompt, hint string) tea.Cmd {
 		m.namespaceGen++
 		return m.loadNamespacePalette(m.namespaceGen)
 	case palette.ScopeContext:
+		m.palette.ColumnHeaders = contextColumnHeaders()
+		m.palette.NameColumnLabel = "CONTEXT"
 		m.palette.RecentHint = recentPickHint()
 		return m.startContextProbe()
 	}

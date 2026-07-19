@@ -628,6 +628,7 @@ func (m Model) tableBody(width, height int) string {
 			rows = append(rows, components.Row{
 				GroupHeader: m.groupHeaderLine(dr.namespace, dr.counts),
 				GroupStyle:  groupLineStyle(theme, rowKindHeader, selected),
+				GroupRight:  groupHeaderChips(theme, dr.counts, selected),
 			})
 			continue
 		case rowKindCollapsedSummary:
@@ -773,18 +774,37 @@ func (m Model) groupHeaderLine(namespace string, counts resources.HealthCounts) 
 	if name == "" {
 		name = "(none)"
 	}
-	label := "all running"
-	if counts.Fail+counts.Warn > 0 {
-		var parts []string
-		if counts.Fail > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts.Fail, m.desc.HealthLabel(resources.StatusFail)))
-		}
-		if counts.Warn > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts.Warn, m.desc.HealthLabel(resources.StatusWarn)))
-		}
-		label = strings.Join(parts, " · ")
+	line := fmt.Sprintf("%s %s · %d %s", tui.GlyphCollapse, name, counts.Total(), lowerDisplay(m.desc.Display))
+	if counts.Fail+counts.Warn == 0 {
+		// Nothing to flag on the right — an expanded, fully-healthy group
+		// (collapsedSummaryLine handles the default collapsed case) still
+		// says so inline, same as before this had right-aligned chips.
+		line += " · all running"
 	}
-	return fmt.Sprintf("%s %s · %d %s · %s", tui.GlyphCollapse, name, counts.Total(), lowerDisplay(m.desc.Display), label)
+	return line
+}
+
+// groupHeaderChips builds 6b's right-aligned trouble chips (docs/design
+// README.md §6b: "right-aligned trouble chips (◐2 ✕1)") — one per non-zero
+// class, each its own status color, replacing the inline "N crashloop · M
+// pending" text groupHeaderLine used to append. Empty when the group has
+// nothing to flag.
+func groupHeaderChips(theme tui.Theme, counts resources.HealthCounts, selected bool) []components.Cell {
+	bg := theme.BgChrome
+	if selected {
+		bg = theme.SelBg
+	}
+	var cells []components.Cell
+	add := func(class resources.StatusClass, n int) {
+		if n == 0 {
+			return
+		}
+		style := lipgloss.NewStyle().Foreground(glyphColor(theme, class)).Background(bg)
+		cells = append(cells, components.Cell{Text: fmt.Sprintf("%s%d", defaultGlyphFor(class), n), Style: style})
+	}
+	add(resources.StatusWarn, counts.Warn)
+	add(resources.StatusFail, counts.Fail)
+	return cells
 }
 
 // collapsedSummaryLine draws 6b's fully-healthy group's single line,
@@ -821,8 +841,13 @@ func groupLineStyle(theme tui.Theme, kind displayRowKind, selected bool) lipglos
 		fg = theme.TextFaint
 	}
 	s := lipgloss.NewStyle().Foreground(fg)
-	if selected {
+	switch {
+	case selected:
 		s = s.Background(theme.SelBg)
+	case kind == rowKindHeader:
+		// docs/design README.md §6b: "group header line (bg #0e0e15)" — a
+		// distinguishing fill the collapsed-summary/fold lines don't get.
+		s = s.Background(theme.BgChrome)
 	}
 	return s
 }

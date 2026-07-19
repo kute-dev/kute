@@ -254,8 +254,13 @@ type Styles struct {
 	FooterDetail                 lipgloss.Style // FooterDim spans (the footer's explanatory text), TextDim
 	FooterKey                    lipgloss.Style // FooterKey spans (key glyphs / "alias" / namespace), Accent
 	FooterEm                     lipgloss.Style // FooterEm spans (12b's jump-destination kind), Text
-	// ProdTag styles the 7a "PROD" tag, ProdText bold.
+	// ProdTag styles the 7a "PROD" tag's text, ProdText bold.
 	ProdTag lipgloss.Style
+	// ProdBorder styles the bracket glyphs wrapped around ProdTag's text
+	// (docs/design README.md §7a: "PROD tag (border #4a2a2a, …)") — a
+	// terminal-idiom stand-in for a literal bordered box, which would need
+	// multiple lines a single palette row doesn't have.
+	ProdBorder lipgloss.Style
 	// AllNS styles the 6a "all namespaces" row's label, Info blue (the
 	// mockup's #6aa8ef — distinct from the ALL-NS keybar pill's own token).
 	AllNS lipgloss.Style
@@ -547,7 +552,7 @@ func (m Model) renderColumnsResultLine(item Item, selected bool, styles Styles, 
 		b.WriteString(fillSpaces(fill, 1))
 	}
 	label := renderHighlighted(item.Label, item.Matches, onRow(styles.Match), base)
-	label += resultTag(item, onRow(styles.Detail), onRow(styles.ProdTag), fill)
+	label += resultTag(item, onRow(styles.Detail), onRow(styles.ProdTag), onRow(styles.ProdBorder), fill)
 	b.WriteString(padTo(label, nameWidth, fill))
 	for i, h := range m.ColumnHeaders {
 		b.WriteString(fillSpaces(fill, 2))
@@ -623,7 +628,7 @@ func (m Model) renderResultLine(item Item, selected bool, styles Styles, width i
 		base = styles.SelRow
 	}
 	label := renderHighlighted(item.Label, item.Matches, onRow(styles.Match), base)
-	label += resultTag(item, onRow(styles.Detail), onRow(styles.ProdTag), fill)
+	label += resultTag(item, onRow(styles.Detail), onRow(styles.ProdTag), onRow(styles.ProdBorder), fill)
 	if item.AliasMatch {
 		label += fillSpaces(fill, 2) + onRow(styles.AliasLabel).Render("alias match")
 	}
@@ -691,10 +696,11 @@ func resultDetail(detail string, style, fill lipgloss.Style) string {
 }
 
 // resultTag renders a row's Tag/ProdTag suffix — Tag (e.g. "current")
-// through Detail's shade, ProdTag through its own token so it reads as the
-// escalation cue it is (7a). Gaps render through fill so the row background
-// stays unbroken.
-func resultTag(item Item, tagStyle, prodStyle, fill lipgloss.Style) string {
+// through Detail's shade, ProdTag as a bracketed "[PROD]" chip (prodBorder
+// coloring the brackets, prodStyle the text) so it reads as the bordered
+// escalation cue the spec calls for. Gaps render through fill so the row
+// background stays unbroken.
+func resultTag(item Item, tagStyle, prodStyle, prodBorder, fill lipgloss.Style) string {
 	var b strings.Builder
 	if item.Tag != "" {
 		b.WriteString(fillSpaces(fill, 1))
@@ -702,7 +708,7 @@ func resultTag(item Item, tagStyle, prodStyle, fill lipgloss.Style) string {
 	}
 	if item.ProdTag {
 		b.WriteString(fillSpaces(fill, 1))
-		b.WriteString(prodStyle.Render("PROD"))
+		b.WriteString(prodBorder.Render("[") + prodStyle.Render("PROD") + prodBorder.Render("]"))
 	}
 	return b.String()
 }

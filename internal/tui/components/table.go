@@ -55,6 +55,14 @@ type Row struct {
 	GroupHeader string
 	GroupStyle  lipgloss.Style
 	RowStyle    lipgloss.Style
+	// GroupRight holds 6b's right-aligned trouble chips (e.g. "◐2 ✕1"),
+	// each its own toned Cell — unlike GroupHeader/GroupStyle's single plain
+	// run, these render as independently-styled segments (mirroring how
+	// Cells does for data rows) so a crashloop chip can render red while a
+	// pending chip renders yellow on the same line. Empty for group rows
+	// with nothing to flag (the fold/collapsed-summary lines, and a
+	// manually-expanded fully-healthy group).
+	GroupRight []Cell
 }
 
 // Table renders the inverted-layout resource table.
@@ -283,11 +291,39 @@ func (t Table) renderRowV2(row Row, selected bool, widths []int, width int) stri
 // does for selected data rows) so the background reads as one continuous
 // fill.
 func (t Table) renderGroupRowV2(row Row, selected bool, width int) string {
-	text := Pad("  "+row.GroupHeader, width-tableRightMargin) + strings.Repeat(" ", tableRightMargin)
-	if !selected {
-		return row.GroupStyle.Render(text)
+	innerWidth := width - tableRightMargin
+	rightWidth, right := renderGroupRight(row.GroupRight, row.GroupStyle)
+	leftBudget := max(innerWidth-rightWidth, 0)
+	gap := ""
+	if rightWidth > 0 {
+		leftBudget = max(leftBudget-1, 0) // 1-cell gap before the chips
+		gap = row.GroupStyle.Render(" ")
 	}
-	return t.SelBarStyle.Render(tableSelBar) + row.GroupStyle.Render(text[2:])
+	left := Pad("  "+row.GroupHeader, leftBudget)
+	trailing := row.GroupStyle.Render(strings.Repeat(" ", tableRightMargin))
+
+	if !selected {
+		return row.GroupStyle.Render(left) + gap + right + trailing
+	}
+	return t.SelBarStyle.Render(tableSelBar) + row.GroupStyle.Render(left[2:]) + gap + right + trailing
+}
+
+// renderGroupRight draws Row.GroupRight's chips (each independently toned),
+// separated by 1-cell gaps filled through the group line's own background —
+// returns the rendered string and its total display width so the caller can
+// budget the left text's Pad width around it.
+func renderGroupRight(cells []Cell, fill lipgloss.Style) (int, string) {
+	if len(cells) == 0 {
+		return 0, ""
+	}
+	parts := make([]string, len(cells))
+	width := 0
+	for i, c := range cells {
+		parts[i] = c.Style.Render(c.Text)
+		width += ansi.StringWidth(parts[i])
+	}
+	width += len(cells) - 1
+	return width, strings.Join(parts, fill.Render(" "))
 }
 
 // renderHeaderRuleV2 draws the ShowHeaderRule divider: a full-bleed rule

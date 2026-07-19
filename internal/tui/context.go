@@ -11,8 +11,20 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/components/palette"
 )
+
+// contextColumnHeaders builds 7a's NAMESPACE/STATUS column headers (docs/
+// design README.md §7a: "Columns: glyph · CONTEXT (current tagged) ·
+// NAMESPACE … · STATUS right-aligned") — CONTEXT itself is the palette's
+// flex NameColumnLabel column, mirroring 6a's NAMESPACE/HEALTH/CPU split.
+func contextColumnHeaders() []palette.ColumnHeader {
+	return []palette.ColumnHeader{
+		{Label: "NAMESPACE", Width: 14, Align: components.AlignLeft},
+		{Label: "STATUS", Width: 15, Align: components.AlignRight},
+	}
+}
 
 // This file wires real data into the 'c' context palette (mvp-plan.md Phase
 // 3, docs/design README.md §7a): kubeconfig contexts, each tagged with its
@@ -96,16 +108,19 @@ func contextItems(sess *Session, probes map[string]kube.ProbeResult) []palette.I
 	prevTarget, hasPrev := mostRecentOther(sess.State.RecentContexts, sess.Location.Context)
 	items := make([]palette.Item, 0, len(names))
 	for _, name := range names {
+		namespace := ""
+		if pc, ok := sess.State.PerContext[name]; ok {
+			namespace = pc.Namespace
+		}
 		item := palette.Item{
-			Label:     name,
-			Right:     probeStatus(probes[name]),
-			RightTone: probeTone(probes[name]),
+			Label: name,
+			Cols: []palette.Cell{
+				{Text: namespace},
+				{Text: probeStatus(probes[name]), Tone: probeTone(probes[name])},
+			},
 			ProdTag:   sess.Config.IsProd(name),
 			Data:      contextTarget{name: name},
 			RecentNum: recentNums[name],
-		}
-		if pc, ok := sess.State.PerContext[name]; ok && pc.Namespace != "" {
-			item.Detail = pc.Namespace
 		}
 		switch {
 		case name == sess.Location.Context:

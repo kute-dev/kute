@@ -74,7 +74,7 @@ func TestRootModelGBrowseRankedListHasChipsCountsAndFooter(t *testing.T) {
 	for _, want := range []string{
 		"Pods",        // kind row
 		"Deployments", // another aliased daily kind
-		"alias — typing an alias letter pins that kind to rank 1", // 12a's static footer
+		"alias — colored first letter · typing it pins that kind to rank 1", // 12a's static footer
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected %q in the 12a ranked list:\n%s", want, view)
@@ -129,8 +129,38 @@ func TestRootModelGThenTypeSwitchesToFuzzyResults(t *testing.T) {
 	if !strings.Contains(view, "api-1") {
 		t.Fatalf("expected the current kind's resource name in fuzzy results:\n%s", view)
 	}
-	if strings.Contains(view, "alias — typing an alias letter") {
+	if strings.Contains(view, "alias — colored first letter") {
 		t.Fatalf("expected the 12a footer to be gone once typing starts ('a' isn't an alias):\n%s", view)
+	}
+}
+
+// TestRootModelGThenTabCompletesToSelectedLabel covers 2b's advertised "tab
+// complete" key: pressing tab fills the query in to the highlighted result's
+// own label, so the input row itself gains a second, independent occurrence
+// of that label (the first comes from the still-matching result row).
+func TestRootModelGThenTabCompletesToSelectedLabel(t *testing.T) {
+	t.Parallel()
+	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {},
+	}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	for _, ch := range []string{"e", "p", "l"} {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: ch})
+	}
+	before := updated.(tui.Model).View().Content
+	beforeCount := strings.Count(before, "Deployments")
+
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	after := updated.(tui.Model).View().Content
+	afterCount := strings.Count(after, "Deployments")
+
+	if afterCount <= beforeCount {
+		t.Fatalf("expected tab to complete the query to the selected label (Deployments occurrences %d -> %d):\nbefore:\n%s\nafter:\n%s", beforeCount, afterCount, before, after)
 	}
 }
 

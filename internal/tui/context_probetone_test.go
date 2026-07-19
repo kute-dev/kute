@@ -54,9 +54,9 @@ func TestProbeToneMatchesReachability(t *testing.T) {
 }
 
 // TestContextItemsSetsRightTone covers the actual wiring (not just the pure
-// probeTone helper): each row's palette.Item.RightTone must come from its
-// own probe result, not the zero-value ToneDefault every row silently
-// carried before this fix.
+// probeTone helper): each row's STATUS column cell (palette.Item.Cols[1])
+// must come from its own probe result, not the zero-value ToneDefault every
+// row silently carried before this fix.
 func TestContextItemsSetsRightTone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	if err := os.WriteFile(path, []byte(probeToneTestKubeconfig), 0o600); err != nil {
@@ -75,11 +75,11 @@ func TestContextItemsSetsRightTone(t *testing.T) {
 	for _, it := range items {
 		byName[it.Label] = it
 	}
-	if got := byName["dev"].RightTone; got != palette.ToneOK {
-		t.Fatalf("dev: RightTone = %v, want ToneOK", got)
+	if got := byName["dev"].Cols[1].Tone; got != palette.ToneOK {
+		t.Fatalf("dev: STATUS tone = %v, want ToneOK", got)
 	}
-	if got := byName["prod"].RightTone; got != palette.ToneBad {
-		t.Fatalf("prod: RightTone = %v, want ToneBad", got)
+	if got := byName["prod"].Cols[1].Tone; got != palette.ToneBad {
+		t.Fatalf("prod: STATUS tone = %v, want ToneBad", got)
 	}
 }
 
