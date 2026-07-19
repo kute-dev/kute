@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -137,27 +138,34 @@ func projectPod(obj runtime.Object) Row {
 	}
 }
 
-func projectDeployment(obj runtime.Object) Row {
-	d, ok := obj.(*appsv1.Deployment)
-	if !ok {
-		return metaRow(obj)
-	}
-	ns, name, age := metaOf(obj)
-	readyLabel, readyStatus := readyRatio(d.Status.ReadyReplicas, int32ptr(d.Spec.Replicas))
-	rolloutText, rolloutStatus := deploymentRollout(d)
-	status := rolloutStatus
-	if readyStatus == StatusFail {
-		// Zero ready replicas is an outage even if the rollout's own
-		// conditions haven't caught up to say so yet (docs/design README.md
-		// §9a doesn't cover this edge case explicitly; treated the same way
-		// projectPod treats a still-scheduling pod as worse than "progressing").
-		status = StatusFail
-	}
-	return Row{
-		Namespace: ns,
-		Name:      name,
-		Cells:     []string{name, readyLabel, rolloutText, deploymentImage(d), shortAge(age)},
-		Status:    status,
+// projectDeployment returns 9a's Deployment projection. lister is nil-safe
+// (pre-connect fallback: IMAGE never shows the "new ← old" transition, same
+// as projectIngress's own nil-lister fallback) — BuildDiscoveredRegistry
+// swaps in a live one once a cluster is reachable, the same pattern
+// ingressDesc.Project already establishes.
+func projectDeployment(lister RawLister) func(obj runtime.Object) Row {
+	return func(obj runtime.Object) Row {
+		d, ok := obj.(*appsv1.Deployment)
+		if !ok {
+			return metaRow(obj)
+		}
+		ns, name, age := metaOf(obj)
+		readyLabel, readyStatus := readyRatio(d.Status.ReadyReplicas, int32ptr(d.Spec.Replicas))
+		rolloutText, rolloutStatus := deploymentRollout(d)
+		status := rolloutStatus
+		if readyStatus == StatusFail {
+			// Zero ready replicas is an outage even if the rollout's own
+			// conditions haven't caught up to say so yet (docs/design README.md
+			// §9a doesn't cover this edge case explicitly; treated the same way
+			// projectPod treats a still-scheduling pod as worse than "progressing").
+			status = StatusFail
+		}
+		return Row{
+			Namespace: ns,
+			Name:      name,
+			Cells:     []string{name, readyLabel, rolloutText, deploymentImage(lister, d, rolloutStatus), shortAge(age)},
+			Status:    status,
+		}
 	}
 }
 
@@ -200,13 +208,12 @@ func deploymentRollout(d *appsv1.Deployment) (string, StatusClass) {
 const rolloutArrow = "▸"
 
 // deploymentImage is the ROLLOUT column's IMAGE cell: the pod template's
-// first container image, "+N" appended for additional containers. The
-// mockup's "new ← old" mid-rollout transition needs the previous
-// ReplicaSet's image, which isn't reachable from the Deployment object
-// alone — a documented scope cut (browse's Row has no seam for a per-kind
-// extra ReplicaSet lookup today, the same class of gap Pods'/Nodes' CPU/MEM
-// placeholders already accept).
-func deploymentImage(d *appsv1.Deployment) string {
+// first container image, "+N" appended for additional containers, with the
+// previous ReplicaSet's image appended as "new ← old" while the rollout is
+// mid-transition (docs/design README.md §9a) — rolloutStatus gates the
+// extra ReplicaSet lookup to only the "progressing" case, since a
+// stable/degraded Deployment has no "old" side to show.
+func deploymentImage(lister RawLister, d *appsv1.Deployment, rolloutStatus StatusClass) string {
 	containers := d.Spec.Template.Spec.Containers
 	if len(containers) == 0 {
 		return "–"
@@ -215,7 +222,51 @@ func deploymentImage(d *appsv1.Deployment) string {
 	if len(containers) > 1 {
 		img += fmt.Sprintf(" +%d", len(containers)-1)
 	}
+	if rolloutStatus == StatusWarn {
+		if old := previousReplicaSetImage(lister, d, containers[0].Image); old != "" {
+			img += " ← " + old
+		}
+	}
 	return img
+}
+
+// previousReplicaSetImage finds a ReplicaSet owned by d that still has live
+// pods (Status.Replicas > 0) but whose own template image differs from the
+// Deployment's current one — the "old" side of a mid-rollout "new ← old"
+// transition. Returns "" when there's no such ReplicaSet (lister is nil, no
+// old ReplicaSet is still scaling down, or the lookup fails) rather than
+// guessing.
+func previousReplicaSetImage(lister RawLister, d *appsv1.Deployment, currentImage string) string {
+	if lister == nil {
+		return ""
+	}
+	objs, err := lister.ListRaw(context.Background(), kube.KindReplicaSet, d.Namespace)
+	if err != nil {
+		return ""
+	}
+	for _, obj := range objs {
+		rs, ok := obj.(*appsv1.ReplicaSet)
+		if !ok || rs.Status.Replicas == 0 || !ownedByDeployment(rs.OwnerReferences, d.Name) {
+			continue
+		}
+		containers := rs.Spec.Template.Spec.Containers
+		if len(containers) == 0 || containers[0].Image == currentImage {
+			continue
+		}
+		return containers[0].Image
+	}
+	return ""
+}
+
+// ownedByDeployment reports whether refs names a Deployment owner named
+// name — the ReplicaSet→Deployment link every rollout walks.
+func ownedByDeployment(refs []metav1.OwnerReference, name string) bool {
+	for _, ref := range refs {
+		if ref.Kind == "Deployment" && ref.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func projectDaemonSet(obj runtime.Object) Row {

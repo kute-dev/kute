@@ -297,7 +297,7 @@ func TestProjectDeploymentClassifiesRollout(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			row := projectDeployment(tc.deploy)
+			row := projectDeployment(nil)(tc.deploy)
 			if row.Status != tc.wantStatus {
 				t.Fatalf("Status = %s, want %s", row.Status, tc.wantStatus)
 			}
@@ -311,9 +311,57 @@ func TestProjectDeploymentClassifiesRollout(t *testing.T) {
 	}
 }
 
+// TestDeploymentImageShowsNewArrowOldDuringRollout pins 9a (docs/design
+// README.md:130: "IMAGE shows new ← old during transition"): while
+// progressing, the IMAGE cell must append the previous ReplicaSet's image
+// (still-live, owned by this Deployment, different image than the current
+// template) as "new ← old" — and must NOT do so for a stable Deployment,
+// even when a stale-but-still-live old ReplicaSet happens to exist.
+func TestDeploymentImageShowsNewArrowOldDuringRollout(t *testing.T) {
+	rollingDeploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web", Generation: 2},
+		Spec: appsv1.DeploymentSpec{Replicas: ptr32(3), Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Image: "api:2.0"}}},
+		}},
+		Status: appsv1.DeploymentStatus{
+			Replicas: 3, ReadyReplicas: 2, UpdatedReplicas: 1, AvailableReplicas: 2, ObservedGeneration: 2,
+		},
+	}
+	oldRS := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "api-abc123", Namespace: "web",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+		},
+		Spec:   appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Image: "api:1.0"}}}}},
+		Status: appsv1.ReplicaSetStatus{Replicas: 2},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindReplicaSet: {oldRS}}}
+
+	row := projectDeployment(lister)(rollingDeploy)
+	if row.Cells[3] != "api:2.0 ← api:1.0" {
+		t.Fatalf("Image cell = %q, want %q", row.Cells[3], "api:2.0 ← api:1.0")
+	}
+
+	stableDeploy := rollingDeploy.DeepCopy()
+	stableDeploy.Status = appsv1.DeploymentStatus{
+		Replicas: 3, ReadyReplicas: 3, UpdatedReplicas: 3, AvailableReplicas: 3, ObservedGeneration: 2,
+	}
+	row = projectDeployment(lister)(stableDeploy)
+	if row.Cells[3] != "api:2.0" {
+		t.Fatalf("stable Image cell = %q, want plain %q (no old-side lookup once stable)", row.Cells[3], "api:2.0")
+	}
+
+	// A nil lister (pre-connect) must never crash and must fall back to the
+	// plain image, same as projectIngress's own nil-lister fallback.
+	row = projectDeployment(nil)(rollingDeploy)
+	if row.Cells[3] != "api:2.0" {
+		t.Fatalf("nil-lister Image cell = %q, want plain %q", row.Cells[3], "api:2.0")
+	}
+}
+
 func TestDeploymentImageNoContainersIsPlaceholder(t *testing.T) {
 	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api"}}
-	row := projectDeployment(d)
+	row := projectDeployment(nil)(d)
 	if row.Cells[3] != "–" {
 		t.Fatalf("Image cell = %q, want placeholder", row.Cells[3])
 	}

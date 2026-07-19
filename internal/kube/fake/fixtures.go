@@ -71,7 +71,7 @@ func NewDemo() *Cluster {
 	)
 
 	c.Seed(kube.KindDeployment, demoMidRolloutDeployment("api", "default", age(30*24*time.Hour)))
-	c.Seed(kube.KindReplicaSet, demoReplicaSet("api-7d9f6c8", "default", "api", age(30*24*time.Hour)))
+	c.Seed(kube.KindReplicaSet, demoReplicaSet("api-7d9f6c8", "default", "api", "api:2.0", age(30*24*time.Hour)))
 	c.Seed(kube.KindStatefulSet, demoStatefulSet("worker", "default", age(14*time.Hour)))
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
@@ -169,7 +169,7 @@ func demoIngressNginxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 func demoProductionFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	prodAge := age(90 * 24 * time.Hour)
 	c.Seed(kube.KindDeployment, demoStableDeployment("web", "production", "web:4.2.0", 3, prodAge))
-	c.Seed(kube.KindReplicaSet, demoReplicaSet("web-7c9f8d", "production", "web", prodAge))
+	c.Seed(kube.KindReplicaSet, demoReplicaSet("web-7c9f8d", "production", "web", "web:4.2.0", prodAge))
 	c.Seed(kube.KindService, demoService("web", "production", map[string]string{"app": "web"}, prodAge))
 	c.Seed(kube.KindIngress, demoIngress("web", "production", "web", "web.prod.demo.local", prodAge))
 	webPodA := demoOwnedPod("web-7c9f8d-aaaaa", "production", age(9*24*time.Hour), "node-a", "ReplicaSet", "web-7c9f8d")
@@ -716,7 +716,7 @@ func demoMidRolloutDeployment(name, ns string, created metav1.Time) *appsv1.Depl
 	}
 }
 
-func demoReplicaSet(name, ns, deployment string, created metav1.Time) *appsv1.ReplicaSet {
+func demoReplicaSet(name, ns, deployment, image string, created metav1.Time) *appsv1.ReplicaSet {
 	replicas := int32(1)
 	return &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -728,7 +728,16 @@ func demoReplicaSet(name, ns, deployment string, created metav1.Time) *appsv1.Re
 			// mode needs it too for that rail to have anything to show.
 			Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 		},
-		Spec:   appsv1.ReplicaSetSpec{Replicas: &replicas},
+		Spec: appsv1.ReplicaSetSpec{
+			Replicas: &replicas,
+			// A real image, not an empty template — 9a's live "new ← old"
+			// rollout transition (resources.previousReplicaSetImage) needs
+			// this ReplicaSet to actually carry the deployment's previous
+			// image, the same way a real cluster's own ReplicaSets do.
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: deployment, Image: image}}},
+			},
+		},
 		Status: appsv1.ReplicaSetStatus{Replicas: 1, ReadyReplicas: 1},
 	}
 }

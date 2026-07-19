@@ -360,6 +360,14 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 		ingressDesc.Project = projectIngress(reader)
 		registry.Register(ingressDesc)
 	}
+	// Deployment stays in DefaultRegistry with a nil-safe Project (pre-connect
+	// fallback never shows the "new ← old" transition); once a live reader
+	// exists, swap in the closure that resolves the previous ReplicaSet's
+	// image — same pattern as Ingress just above.
+	if deployDesc, ok := registry.Descriptor(kube.KindDeployment); ok {
+		deployDesc.Project = projectDeployment(reader)
+		registry.Register(deployDesc)
+	}
 	for _, dk := range discovered {
 		if dk.Kind == string(kube.KindHTTPRoute) {
 			registry.Register(httpRouteDescriptor(dk))

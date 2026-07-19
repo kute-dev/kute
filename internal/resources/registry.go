@@ -39,7 +39,7 @@ func (r Registry) Register(d Descriptor) {
 func DefaultRegistry() Registry {
 	descriptors := []Descriptor{
 		{Kind: kube.KindPod, Group: GroupWorkloads, Display: "Pods", Icon: "◈", Columns: []string{"Name", "Ready", "Status", "Restarts", "CPU", "MEM", "Node", "Age"}, Describe: "running application instances", Project: projectPod, HealthLabel: podHealthLabel},
-		{Kind: kube.KindDeployment, Group: GroupWorkloads, Display: "Deployments", Icon: "◈", Columns: []string{"Name", "Ready", "Rollout", "Image", "Age"}, Describe: "declarative pod rollouts", Project: projectDeployment, HealthLabel: deploymentHealthLabel},
+		{Kind: kube.KindDeployment, Group: GroupWorkloads, Display: "Deployments", Icon: "◈", Columns: []string{"Name", "Ready", "Rollout", "Image", "Age"}, Describe: "declarative pod rollouts", Project: projectDeployment(nil), HealthLabel: deploymentHealthLabel},
 		{Kind: kube.KindDaemonSet, Group: GroupWorkloads, Display: "DaemonSets", Icon: "◈", Columns: []string{"Name", "Ready", "Available", "Age"}, Describe: "one pod per matching node", Project: projectDaemonSet},
 		{Kind: kube.KindStatefulSet, Group: GroupWorkloads, Display: "StatefulSets", Icon: "◈", Columns: []string{"Name", "Ready", "Age"}, Describe: "stable, ordered pod identities", Project: projectStatefulSet},
 		{Kind: kube.KindReplicaSet, Group: GroupWorkloads, Display: "ReplicaSets", Icon: "◈", Columns: []string{"Name", "Ready", "Replicas", "Age"}, Describe: "pod replica sets behind a deployment", Project: projectReplicaSet},
