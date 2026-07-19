@@ -11,6 +11,9 @@ import (
 // workloadKinds default-sort unhealthy-first (mvp-plan.md §Phase 1) — kinds
 // whose StatusClass reflects an operational health signal worth surfacing
 // first. Everything else keeps resources.List's stable namespace/name order.
+// Ingress (docs/design README.md §23a) joins these via its own backend
+// health signal (projectIngress), not a workload in the traditional sense
+// but the same "surface trouble first" reasoning applies.
 var workloadKinds = map[kube.ResourceKind]bool{
 	kube.KindPod:         true,
 	kube.KindDeployment:  true,
@@ -18,6 +21,7 @@ var workloadKinds = map[kube.ResourceKind]bool{
 	kube.KindStatefulSet: true,
 	kube.KindReplicaSet:  true,
 	kube.KindJob:         true,
+	kube.KindIngress:     true,
 }
 
 // healthRank orders StatusClass worst-first: failing and warning rows sort

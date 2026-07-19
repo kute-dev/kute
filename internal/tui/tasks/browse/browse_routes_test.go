@@ -17,6 +17,21 @@ func testIngressRow(name, ns string) *networkingv1.Ingress {
 	return &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 }
 
+// TestIngressSortsUnhealthyFirst pins 23a's explicit requirement: Ingress
+// rows sort unhealthy-first like every other workload kind, not the plain
+// alphabetical-by-name order Ingress previously fell back to (it was missing
+// from sort.go's workloadKinds set).
+func TestIngressSortsUnhealthyFirst(t *testing.T) {
+	rows := []resources.Row{
+		{Name: "aaa-healthy", Status: resources.StatusOK},
+		{Name: "zzz-broken", Status: resources.StatusFail},
+	}
+	sortForDisplay(kube.KindIngress, "default", rows)
+	if rows[0].Name != "zzz-broken" || rows[1].Name != "aaa-healthy" {
+		t.Fatalf("expected unhealthy-first order [zzz-broken, aaa-healthy], got %v", []string{rows[0].Name, rows[1].Name})
+	}
+}
+
 // TestEnterOnIngressRowOpensRouteTable exercises 23a: ↵ on an Ingress row
 // (which desc.Custom never covers — Ingress is a built-in kind) pushes
 // tasks/routetable via OpenRouteTable.
