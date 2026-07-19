@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://github.com/kute-dev/kute/discussions/categories/q-a
+    about: Ask usage questions or get help from maintainers and the community.
+  - name: General feedback
+    url: https://github.com/kute-dev/kute/discussions/categories/general
+    about: Share broad feedback, observations, and experience reports.
+  - name: Early-stage feature ideas
+    url: https://github.com/kute-dev/kute/discussions/categories/ideas
+    about: Start here for feature ideas that need discussion before becoming actionable work.

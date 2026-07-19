@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a confirmed bug in kute.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for reproducible bugs. For questions or troubleshooting help, start a Discussion instead: https://github.com/kute-dev/kute/discussions
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the incorrect behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Describe the behavior you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest sequence of steps that reproduces the bug.
+      placeholder: |
+        1. Run ...
+        2. Press ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include kute version, install method, OS, terminal, Kubernetes version, and whether this happens in demo mode.
+      placeholder: |
+        kute version:
+        install method:
+        OS:
+        terminal:
+        Kubernetes version:
+        demo mode:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant output, screenshots, or recordings if available.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add anything else that may help explain the bug.
+    validations:
+      required: false

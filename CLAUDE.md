@@ -32,6 +32,7 @@ Design spec: `docs/design/README.md` (source of truth for screens, layout, token
 ## Workflow
 - After UI changes, run the golden-file snapshot tests (both themes) and update intentionally-changed snapshots only.
 - New screens/verbs: update the command registry and kind registry first; views follow.
+- Commit messages: `type(scope): short imperative description`, lowercase, one focused line, no trailing period. Match the granularity of the change — e.g. `build(deps): bump go module dependencies, k8s.io to v0.36.2`, `ci(pages): pin workflow actions to commit SHA`. Avoid vague messages like "update deps" or "fix stuff"; name what actually changed.
 
 ## Commands
 

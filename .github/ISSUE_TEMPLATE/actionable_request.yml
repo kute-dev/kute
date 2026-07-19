@@ -1,0 +1,52 @@
+name: Actionable request
+description: Request a well-scoped change that is ready for issue tracking.
+title: "request: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for well-scoped, actionable requests. Early-stage feature ideas belong in Discussions first: https://github.com/kute-dev/kute/discussions/categories/ideas
+  - type: textarea
+    id: change
+    attributes:
+      label: What should change?
+      description: Describe the specific behavior, documentation, or workflow change you are requesting.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is this needed?
+      description: Explain the user problem or maintenance need this solves.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround
+      description: Describe any workaround you use today, or write "none".
+    validations:
+      required: false
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected result after the change.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: Note what is in scope and what should remain out of scope.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add links, examples, screenshots, or related prior discussion.
+    validations:
+      required: false
