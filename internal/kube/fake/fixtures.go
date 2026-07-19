@@ -47,6 +47,17 @@ func NewDemo() *Cluster {
 	apiPod := demoPod("api-7d9f6c8-abcde", "default", age(2*24*time.Hour), corev1.PodRunning, corev1.PodQOSGuaranteed, "node-a", true, 0, nil)
 	apiPod.Labels = map[string]string{"app": "api"}
 	apiPod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "api-7d9f6c8"}}
+	// A second, running sidecar container makes apiPod --demo's one
+	// reachable exercise of 10a's exec-container-picker screen — a
+	// single-container pod execs straight through instead, so without this
+	// the picker screen could only ever be driven by synthetic unit-test
+	// fixtures (CLAUDE.md: "the fake provider must stay feature-complete
+	// for tests/demo mode").
+	apiPod.Spec.Containers = append(apiPod.Spec.Containers, corev1.Container{Name: "metrics-sidecar", Image: "sidecar:0.9.1"})
+	apiPod.Status.ContainerStatuses = append(apiPod.Status.ContainerStatuses, corev1.ContainerStatus{
+		Name: "metrics-sidecar", Ready: true,
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: age(2 * 24 * time.Hour)}},
+	})
 
 	workerPod := demoCrashLoopPod("worker-0", "default", age(14*time.Hour), "node-a")
 	workerPod.Labels = map[string]string{"app": "worker"}

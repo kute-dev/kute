@@ -7,6 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
@@ -200,6 +201,9 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	if err != nil || len(pods) != 14 {
 		t.Fatalf("ListRaw(Pod) = %d, %v, want 14 fixture pods", len(pods), err)
 	}
+	if pod, ok := findPod(pods, "api-7d9f6c8-abcde"); !ok || len(pod.Spec.Containers) < 2 {
+		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)
+	}
 	deploys, _ := c.ListRaw(ctx, kube.KindDeployment, "")
 	if len(deploys) != 14 {
 		t.Fatalf("expected 14 deployment fixtures, got %d", len(deploys))
@@ -277,6 +281,17 @@ func TestPodAndNodeMetricsAreDeterministicNotNA(t *testing.T) {
 			t.Fatalf("expected real usage for node %q, got %+v", name, nm)
 		}
 	}
+}
+
+// findPod locates name among objs (runtime.Object values from ListRaw),
+// returning the underlying *corev1.Pod.
+func findPod(objs []runtime.Object, name string) (*corev1.Pod, bool) {
+	for _, obj := range objs {
+		if pod, ok := obj.(*corev1.Pod); ok && pod.Name == name {
+			return pod, true
+		}
+	}
+	return nil, false
 }
 
 // Compile-time interface satisfaction: the fake must actually implement
