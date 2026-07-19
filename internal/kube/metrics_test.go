@@ -19,8 +19,8 @@ func TestFormatCPU(t *testing.T) {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			q := resource.MustParse(input)
-			if got := formatCPU(q); got != want {
-				t.Fatalf("formatCPU(%s) = %s, want %s", input, got, want)
+			if got := FormatCPU(q); got != want {
+				t.Fatalf("FormatCPU(%s) = %s, want %s", input, got, want)
 			}
 		})
 	}
@@ -39,8 +39,8 @@ func TestFormatMemory(t *testing.T) {
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			q := resource.MustParse(input)
-			if got := formatMemory(q); got != want {
-				t.Fatalf("formatMemory(%s) = %s, want %s", input, got, want)
+			if got := FormatMemory(q); got != want {
+				t.Fatalf("FormatMemory(%s) = %s, want %s", input, got, want)
 			}
 		})
 	}
@@ -49,7 +49,7 @@ func TestFormatMemory(t *testing.T) {
 func TestPodMetricsCanRepresentAggregatedContainerUsage(t *testing.T) {
 	t.Parallel()
 
-	metrics := PodMetrics{CPU: formatCPU(resource.MustParse("819m")), MEM: formatMemory(resource.MustParse("6656Mi"))}
+	metrics := PodMetrics{CPU: FormatCPU(resource.MustParse("819m")), MEM: FormatMemory(resource.MustParse("6656Mi"))}
 	if metrics.CPU != "819m" {
 		t.Fatalf("CPU = %s, want 819m", metrics.CPU)
 	}

@@ -342,7 +342,7 @@ func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (
 			cpu.Add(*pm.Containers[j].Usage.Cpu())
 			mem.Add(*pm.Containers[j].Usage.Memory())
 		}
-		out[pm.Name] = PodMetrics{CPU: formatCPU(cpu), MEM: formatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
+		out[pm.Name] = PodMetrics{CPU: FormatCPU(cpu), MEM: FormatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
 	}
 	return out, nil
 }
@@ -364,7 +364,7 @@ func (c *Cluster) NodeMetrics(ctx context.Context) (map[string]NodeMetric, error
 		nm := list.Items[i]
 		cpu := nm.Usage.Cpu().DeepCopy()
 		mem := nm.Usage.Memory().DeepCopy()
-		out[nm.Name] = NodeMetric{CPU: formatCPU(cpu), MEM: formatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
+		out[nm.Name] = NodeMetric{CPU: FormatCPU(cpu), MEM: FormatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
 	}
 	return out, nil
 }

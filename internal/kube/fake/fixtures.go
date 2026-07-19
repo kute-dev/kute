@@ -621,8 +621,25 @@ func demoPod(name, ns string, created metav1.Time, phase corev1.PodPhase, qos co
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
 		Spec: corev1.PodSpec{
-			NodeName:   node,
-			Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}},
+			NodeName: node,
+			Containers: []corev1.Container{{
+				Name: "app", Image: "app:1.0",
+				// Every demo pod carries a request/limit pair so 2a/5a/6a's
+				// CPU/MEM bars have a real denominator in --demo mode
+				// (CLAUDE.md: "the fake provider must stay feature-complete
+				// for tests/demo mode") — PodMetricsByNamespace below
+				// synthesizes the matching usage numerator.
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+			}},
 		},
 		Status: corev1.PodStatus{
 			Phase:    phase,

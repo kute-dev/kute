@@ -10,6 +10,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"slices"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -375,6 +377,21 @@ func max32(v, floor int32) int32 {
 
 // --- pod metrics ---
 
+// demoUsageRatio derives a stable per-object usage ratio from name (FNV-1a
+// hash mod 96, offset by 0.10) — deterministic, not actually random, so the
+// same pod/node always renders the same bar/text across repeated Renders.
+// Spread over roughly [0.10, 1.05] so --demo mode can actually exercise the
+// Fill/Warn/Bad bar states (docs/design README.md §Design Tokens: Warn
+// ≥70%, Bad at/over limit) — previously every usage was the literal string
+// "n/a", so 6a's CPU-share column and the main table's CPU/MEM columns
+// could never be exercised in demo mode at all (CLAUDE.md: "the fake
+// provider must stay feature-complete for tests/demo mode").
+func demoUsageRatio(name string) float64 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return 0.10 + float64(h.Sum32()%96)/100
+}
+
 func (c *Cluster) PodMetricsByNamespace(_ context.Context, namespace string) (map[string]kube.PodMetrics, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -384,7 +401,26 @@ func (c *Cluster) PodMetricsByNamespace(_ context.Context, namespace string) (ma
 		if !ok || (namespace != "" && pod.Namespace != namespace) {
 			continue
 		}
-		out[pod.Name] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
+		if pod.Status.Phase != corev1.PodRunning {
+			// Real metrics-server has nothing to report for a pod that
+			// isn't running yet (or anymore) either.
+			out[pod.Name] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
+			continue
+		}
+		var cpuLimMilli, memLimBytes int64
+		for _, ctr := range pod.Spec.Containers {
+			cpuLimMilli += ctr.Resources.Limits.Cpu().MilliValue()
+			memLimBytes += ctr.Resources.Limits.Memory().Value()
+		}
+		ratio := demoUsageRatio(pod.Name)
+		cpuMilli := int64(float64(cpuLimMilli) * ratio)
+		memBytes := int64(float64(memLimBytes) * ratio)
+		out[pod.Name] = kube.PodMetrics{
+			CPU:      kube.FormatCPU(*resource.NewMilliQuantity(cpuMilli, resource.DecimalSI)),
+			MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
+			CPUMilli: cpuMilli,
+			MemBytes: memBytes,
+		}
 	}
 	return out, nil
 }
@@ -398,7 +434,15 @@ func (c *Cluster) NodeMetrics(_ context.Context) (map[string]kube.NodeMetric, er
 		if !ok {
 			continue
 		}
-		out[n.Name] = kube.NodeMetric{CPU: "n/a", MEM: "n/a"}
+		ratio := demoUsageRatio(n.Name)
+		cpuMilli := int64(float64(n.Status.Allocatable.Cpu().MilliValue()) * ratio)
+		memBytes := int64(float64(n.Status.Allocatable.Memory().Value()) * ratio)
+		out[n.Name] = kube.NodeMetric{
+			CPU:      kube.FormatCPU(*resource.NewMilliQuantity(cpuMilli, resource.DecimalSI)),
+			MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
+			CPUMilli: cpuMilli,
+			MemBytes: memBytes,
+		}
 	}
 	return out, nil
 }

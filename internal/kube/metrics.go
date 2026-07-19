@@ -24,7 +24,10 @@ type NodeMetric struct {
 	MemBytes int64
 }
 
-func formatCPU(q resource.Quantity) string {
+// FormatCPU renders q as the compact "45m"/"1.2"/"2" strings PodMetrics/
+// NodeMetric.CPU carry — exported so kube/fake can synthesize believable
+// demo-mode usage in the same format the real cluster (cluster.go) reports.
+func FormatCPU(q resource.Quantity) string {
 	milli := q.MilliValue()
 	if milli == 0 {
 		return "0m"
@@ -38,7 +41,9 @@ func formatCPU(q resource.Quantity) string {
 	return strconv.FormatFloat(float64(milli)/1000, 'f', 1, 64)
 }
 
-func formatMemory(q resource.Quantity) string {
+// FormatMemory renders q as the compact "128Mi"/"1.5Gi" strings PodMetrics/
+// NodeMetric.MEM carry — exported for the same reason as FormatCPU.
+func FormatMemory(q resource.Quantity) string {
 	bytes := q.Value()
 	if bytes < 1024 {
 		return strconv.FormatInt(bytes, 10) + "B"

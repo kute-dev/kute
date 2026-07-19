@@ -222,8 +222,12 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	}
 
 	// Every consumer seam must at least be callable without panicking.
-	if _, err := c.PodMetricsByNamespace(ctx, "default"); err != nil {
+	podMetrics, err := c.PodMetricsByNamespace(ctx, "default")
+	if err != nil {
 		t.Fatalf("PodMetricsByNamespace: %v", err)
+	}
+	if pm, ok := podMetrics["api-7d9f6c8-abcde"]; !ok || pm.CPU == "n/a" || pm.CPUMilli == 0 {
+		t.Fatalf("expected real (non-n/a) CPU usage for a Running pod, got %+v (ok=%v)", pm, ok)
 	}
 	if nm, err := c.NodeMetrics(ctx); err != nil || len(nm) != 4 {
 		t.Fatalf("NodeMetrics = %d, %v, want 4 fixture nodes", len(nm), err)
@@ -233,6 +237,45 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	}
 	if _, err := c.StreamPodLogs(ctx, kube.LogStreamRequest{Namespace: "default", PodName: "worker-0"}); err != nil {
 		t.Fatalf("StreamPodLogs: %v", err)
+	}
+}
+
+// TestPodAndNodeMetricsAreDeterministicNotNA pins the §6a/CLAUDE.md
+// feature-completeness fix: --demo's CPU/MEM columns used to be
+// unconditionally "n/a" for every pod and node, so those bars/columns could
+// never actually be exercised by driving --demo mode. Usage is now
+// synthesized from each object's own limits/allocatable, and must be the
+// same across repeated calls (a stable demo, not flickering random noise).
+func TestPodAndNodeMetricsAreDeterministicNotNA(t *testing.T) {
+	t.Parallel()
+	c := NewDemo()
+	ctx := context.Background()
+
+	first, err := c.PodMetricsByNamespace(ctx, "default")
+	if err != nil {
+		t.Fatalf("PodMetricsByNamespace: %v", err)
+	}
+	pm, ok := first["api-7d9f6c8-abcde"]
+	if !ok {
+		t.Fatal("expected api-7d9f6c8-abcde in the fixture set")
+	}
+	if pm.CPU == "n/a" || pm.MEM == "n/a" || pm.CPUMilli <= 0 || pm.MemBytes <= 0 {
+		t.Fatalf("expected real usage for a Running pod, got %+v", pm)
+	}
+
+	second, _ := c.PodMetricsByNamespace(ctx, "default")
+	if second["api-7d9f6c8-abcde"] != pm {
+		t.Fatalf("expected deterministic usage across calls, got %+v then %+v", pm, second["api-7d9f6c8-abcde"])
+	}
+
+	nodeMetrics, err := c.NodeMetrics(ctx)
+	if err != nil {
+		t.Fatalf("NodeMetrics: %v", err)
+	}
+	for name, nm := range nodeMetrics {
+		if nm.CPU == "n/a" || nm.MEM == "n/a" || nm.CPUMilli <= 0 || nm.MemBytes <= 0 {
+			t.Fatalf("expected real usage for node %q, got %+v", name, nm)
+		}
 	}
 }
 
