@@ -309,6 +309,11 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		// instead of the usual "<N> <kind>" count, since browsing needs no
 		// helm binary and the strip already names each status.
 		rightText = "from " + string(kube.HelmReleaseSecretType) + " secrets"
+	case m.kind == kube.KindCustomResourceDefinition:
+		// 14b: "28 definitions · 9 API groups · sorted by group" — the
+		// generic "<N> <kind>" wording never names the group count or the
+		// sort order this list is unique in guaranteeing.
+		rightText = fmt.Sprintf("%d definitions · %d API groups · sorted by group", len(m.rows), distinctCRDGroups(m.rows))
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
 	}
@@ -325,6 +330,16 @@ func distinctNamespaces(rows []resources.Row) int {
 	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
 		seen[r.Namespace] = struct{}{}
+	}
+	return len(seen)
+}
+
+// distinctCRDGroups counts the unique API groups represented in rows, for
+// 14b's health-strip "9 API groups" right side.
+func distinctCRDGroups(rows []resources.Row) int {
+	seen := make(map[string]struct{}, len(rows))
+	for _, r := range rows {
+		seen[crdGroupCell(r)] = struct{}{}
 	}
 	return len(seen)
 }

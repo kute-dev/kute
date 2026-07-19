@@ -247,6 +247,19 @@ func CRDDescriptor(counter InstanceCounter) Descriptor {
 		Describe:      "cluster extension types",
 		ClusterScoped: true,
 		Project:       projectCRD(counter),
+		HealthLabel:   crdHealthLabel,
+	}
+}
+
+// crdHealthLabel is 14b's own strip wording ("N established · M
+// installing") — the generic "N ok · M warn" DefaultHealthLabel falls back
+// to doesn't match a CRD's own Established-condition semantics.
+func crdHealthLabel(class StatusClass) string {
+	switch class {
+	case StatusOK:
+		return "established"
+	default:
+		return "installing"
 	}
 }
 

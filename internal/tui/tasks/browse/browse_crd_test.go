@@ -180,6 +180,50 @@ func TestCRDNoStatusSemanticsStripDropsCounts(t *testing.T) {
 	}
 }
 
+// installingCRDRow is a freshly-applied CRD the API hasn't started serving
+// yet (no Established condition at all) — 14b's ◐ "installing" state.
+func installingCRDRow(name, group string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "apiextensions.k8s.io/v1",
+		"kind":       "CustomResourceDefinition",
+		"metadata":   map[string]any{"name": name},
+		"spec": map[string]any{
+			"group":    group,
+			"names":    map[string]any{"kind": "Widget", "plural": "widgets"},
+			"scope":    "Namespaced",
+			"versions": []any{map[string]any{"name": "v1", "served": true, "storage": true}},
+		},
+	}}
+}
+
+// TestCRDsListStripShowsEstablishedInstallingAndGroupCount pins 14b (docs/
+// design README.md:208): the strip must read "N established · M installing"
+// (not the generic "N ok · M warn") and "N definitions · M API groups ·
+// sorted by group" (not "N customresourcedefinitions") on the right.
+func TestCRDsListStripShowsEstablishedInstallingAndGroupCount(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCustomResourceDefinition: {
+			certificateCRDRow(),                            // established, cert-manager.io
+			installingCRDRow("widgets.acme.io", "acme.io"), // installing, a different group
+		},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindCustomResourceDefinition
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	for _, want := range []string{"1 established", "1 installing", "2 definitions · 2 API groups · sorted by group"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected %q in the CRD list strip:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "customresourcedefinitions") {
+		t.Fatalf("expected the generic '<N> customresourcedefinitions' wording to be replaced:\n%s", view)
+	}
+}
+
 // TestCRDsListKeybarPillIsShortForm pins 14b: the keybar pill reads "CRDS",
 // not the full "CUSTOMRESOURCEDEFINITIONS" the generic
 // strings.ToUpper(desc.Display) path would otherwise produce.

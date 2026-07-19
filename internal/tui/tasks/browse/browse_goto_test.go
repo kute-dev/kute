@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -57,6 +58,37 @@ func TestGotoKindMsgSameKindIsNoop(t *testing.T) {
 
 	if m.state != tui.TaskStateReady || len(m.rows) != rowsBefore {
 		t.Fatalf("re-selecting the active kind should be a no-op, got state=%s rows=%d", m.state, len(m.rows))
+	}
+}
+
+// TestGotoKindMsgWithFilterAppliesQuery pins 23b's routetable→browse jump
+// (docs/design README.md:292: "↵ on a listener filters to attached
+// routes"): a GotoKindMsg with a non-empty Filter must switch kind and
+// apply that filter query — switchKind's own resetAndLoad would otherwise
+// clear it, which is right for a bare kind switch but wrong for this one.
+func TestGotoKindMsgWithFilterAppliesQuery(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:       {pod("default", "api-1")},
+		kube.KindConfigMap: {configMap("default", "app-config"), configMap("default", "other-config")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tui.GotoKindMsg{Kind: kube.KindConfigMap, Filter: "app-"})
+
+	if m.kind != kube.KindConfigMap {
+		t.Fatalf("kind = %s, want ConfigMap", m.kind)
+	}
+	if !m.filterActive || m.filterQuery != "app-" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want true/\"app-\"", m.filterActive, m.filterQuery)
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "app-config") {
+		t.Fatalf("expected the filtered-in row in view:\n%s", view)
+	}
+	if strings.Contains(view, "other-config") {
+		t.Fatalf("expected the filtered-out row absent from view:\n%s", view)
 	}
 }
 

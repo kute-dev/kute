@@ -35,7 +35,15 @@ func (m Model) Keybar() tui.Keybar {
 			}
 			groups = append(groups, hints)
 		case flavorIngress:
-			groups = append(groups, []tui.KeyHint{verbs.Open.Hint(), verbs.CopyRouteURL.Hint()})
+			hints := []tui.KeyHint{verbs.Open.Hint(), verbs.CopyRouteURL.Hint()}
+			if len(m.tlsFacts) > 0 {
+				if m.tlsFocused {
+					hints = append(hints, verbs.OpenTLSSecret.Hint())
+				} else {
+					hints = append(hints, verbs.FocusTLSStrip.Hint())
+				}
+			}
+			groups = append(groups, hints)
 		}
 	}
 	// §23a/§23b's "Y copy yaml · e events" group — acts on the viewed

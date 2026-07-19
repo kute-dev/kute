@@ -214,6 +214,14 @@ var (
 	// clipboard directly rather than opening 8a (same "reuse a local key"
 	// precedent as CopyRouteURL/CopyForwardURL).
 	CopyRouteYAML = Verb{ID: "copy-route-yaml", Key: "Y", Label: "copy yaml"}
+	// FocusTLSStrip is 23a's "tab" toggle onto the below-table TLS-secret
+	// strip, so ↵ there can jump to the referenced Secret (docs/design
+	// README.md §23a: "a strip above the keybar names each secret — ↵ there
+	// jumps to it").
+	FocusTLSStrip = Verb{ID: "focus-tls-strip", Key: "tab", Label: "tls secret"}
+	// OpenTLSSecret is 23a's "↵ jumps to it" once FocusTLSStrip has moved
+	// focus onto the TLS strip.
+	OpenTLSSecret = Verb{ID: "open-tls-secret", Key: "↵", Label: "open secret"}
 )
 
 // All is every registered verb, for the help overlay's fixed SCOPE/GLOBAL
@@ -224,7 +232,7 @@ var All = []Verb{
 	HelmValues, HelmHistory, Mark, MarkAll,
 	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
-	CopyRouteURL, OpenParentGateway, CopyRouteYAML,
+	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
 
 // ByID looks up a registered verb by its stable ID.

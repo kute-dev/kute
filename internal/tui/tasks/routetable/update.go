@@ -74,11 +74,30 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
+	case "tab":
+		if m.flavor == flavorIngress && len(m.tlsFacts) > 0 {
+			m.tlsFocused = !m.tlsFocused
+			m.tlsSelected = clamp(m.tlsSelected, 0, len(m.tlsFacts)-1)
+		}
 	case "up", "k":
+		if m.tlsFocused {
+			m.tlsSelected = clamp(m.tlsSelected-1, 0, len(m.tlsFacts)-1)
+			return m, nil
+		}
 		m.moveSelection(-1)
 	case "down", "j":
+		if m.tlsFocused {
+			m.tlsSelected = clamp(m.tlsSelected+1, 0, len(m.tlsFacts)-1)
+			return m, nil
+		}
 		m.moveSelection(1)
 	case "enter":
+		if m.tlsFocused {
+			if cmd, ok := m.openSelectedTLSSecret(); ok {
+				return m, cmd
+			}
+			return m, nil
+		}
 		if cmd, ok := m.openSelectedEnter(); ok {
 			return m, cmd
 		}
@@ -140,21 +159,43 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// selectedListenerRouteFilter computes the destination HTTPRoute list's
+// filter query for the currently selected Gateway listener (§23b: "↵ on a
+// listener filters to attached routes"): the listener's own hostname when it
+// has one, or this Gateway's own ATTACHED-cell text ("gw/<name>") for a
+// wildcard listener, which can't be told apart from another one on the same
+// Gateway by hostname alone. ok is false with no selected listener.
+func (m Model) selectedListenerRouteFilter() (string, bool) {
+	listener, ok := m.selectedListener()
+	if !ok {
+		return "", false
+	}
+	if listener.hostname != "" {
+		return listener.hostname, true
+	}
+	return "gw/" + m.name, true
+}
+
 // openSelectedEnter resolves '↵': for the Ingress/HTTPRoute flavors, jump to
-// the selected row's backend Service (docs/design README.md §23a/§23b);
-// for Gateway, jump to the HTTPRoute list (a documented simplification of
-// "↵ on a listener filters to attached routes" — see the approved plan's
-// scope cuts). Both go through the same BackMsg+GotoResourceMsg/GotoKindMsg
-// sequence poddetail/events already use to leave the current screen and ask
-// whatever pushed it to jump.
+// the selected row's backend Service (docs/design README.md §23a/§23b); for
+// Gateway, jump to the HTTPRoute list pre-filtered to the selected listener's
+// hostname (§23b: "↵ on a listener filters to attached routes") — or, for a
+// wildcard listener with no hostname of its own, to this Gateway's own
+// attached routes (its ATTACHED cell text, "gw/<name>") rather than every
+// HTTPRoute in the namespace, since a wildcard listener can't be told apart
+// from another one on the same Gateway by hostname alone. Both go through
+// the same BackMsg+GotoResourceMsg/GotoKindMsg sequence poddetail/events
+// already use to leave the current screen and ask whatever pushed it to
+// jump.
 func (m Model) openSelectedEnter() (tea.Cmd, bool) {
 	if m.flavor == flavorGateway {
-		if len(m.listeners) == 0 {
+		filter, ok := m.selectedListenerRouteFilter()
+		if !ok {
 			return nil, false
 		}
 		return tea.Sequence(
 			func() tea.Msg { return tui.BackMsg{} },
-			func() tea.Msg { return tui.GotoKindMsg{Kind: kube.KindHTTPRoute} },
+			func() tea.Msg { return tui.GotoKindMsg{Kind: kube.KindHTTPRoute, Filter: filter} },
 		), true
 	}
 	row, ok := m.selectedRouteRow()
@@ -179,6 +220,24 @@ func (m Model) openParentGateway() (tea.Cmd, bool) {
 	return tea.Sequence(
 		func() tea.Msg { return tui.BackMsg{} },
 		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindGateway, Namespace: ns, Name: name} },
+	), true
+}
+
+// openSelectedTLSSecret resolves '↵' on a focused TLS strip fact (§23a: "a
+// strip above the keybar names each secret — ↵ there jumps to it") — the
+// referenced Secret is in the same namespace as the viewed Ingress.
+func (m Model) openSelectedTLSSecret() (tea.Cmd, bool) {
+	if m.flavor != flavorIngress || m.tlsSelected < 0 || m.tlsSelected >= len(m.tlsFacts) {
+		return nil, false
+	}
+	name := m.tlsFacts[m.tlsSelected].secretName
+	if name == "" {
+		return nil, false
+	}
+	ns := m.namespace
+	return tea.Sequence(
+		func() tea.Msg { return tui.BackMsg{} },
+		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindSecret, Namespace: ns, Name: name} },
 	), true
 }
 

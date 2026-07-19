@@ -51,7 +51,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			task, cmd := m.openOverview(m.width, m.height)
 			return task, cmd
 		}
-		return m, m.switchKind(msg.Kind)
+		cmd := m.switchKind(msg.Kind)
+		if msg.Filter != "" {
+			// 23b: "↵ on a listener filters to attached routes" — switchKind
+			// (via resetAndLoad) already cleared any prior filter, which is
+			// right for a bare kind switch but not for this one, which
+			// arrives with its own destination filter already chosen.
+			m.filterActive = true
+			m.setFilter(msg.Filter)
+		}
+		return m, cmd
 	case tui.GotoResourceMsg:
 		return m, m.goToResource(msg)
 	case tui.SwitchNamespaceMsg:

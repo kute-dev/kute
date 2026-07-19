@@ -10,9 +10,14 @@ type WindowSizeMsg struct {
 // GotoKindMsg asks the active task to switch kind in place, keeping the
 // current namespace (the jump palette's kind-result Enter, mvp-plan.md
 // Phase 2). The root shell updates Session.Location.Kind on this message
-// (see model.go's Update) before forwarding it to the task.
+// (see model.go's Update) before forwarding it to the task. Filter, when
+// non-empty, is applied as the destination kind's live filter query after
+// the switch — 23b's "↵ on a listener filters to attached routes" (routetable
+// jumping into the HTTPRoute list) is the one caller that sets it; every
+// other GotoKindMsg site leaves it empty.
 type GotoKindMsg struct {
-	Kind kube.ResourceKind
+	Kind   kube.ResourceKind
+	Filter string
 }
 
 // GotoResourceMsg asks the active task to switch to Kind/Namespace (if not

@@ -268,7 +268,7 @@ func (m Model) ingressFooterLine(theme tui.Theme) string {
 	sep := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(" │ ")
 
 	parts := make([]string, 0, len(m.tlsFacts))
-	for _, f := range m.tlsFacts {
+	for i, f := range m.tlsFacts {
 		expiryStyle := dim
 		switch f.class {
 		case resources.StatusWarn:
@@ -276,7 +276,14 @@ func (m Model) ingressFooterLine(theme tui.Theme) string {
 		case resources.StatusFail:
 			expiryStyle = lipgloss.NewStyle().Foreground(theme.Bad)
 		}
-		parts = append(parts, dim.Render(f.secretName+" · ")+expiryStyle.Render(f.expiry))
+		secretStyle := dim
+		if m.tlsFocused && i == m.tlsSelected {
+			// verbs.FocusTLSStrip: the focused fact gets the standard
+			// selection treatment, so ↵'s target is never ambiguous.
+			secretStyle = secretStyle.Background(theme.SelBg)
+			expiryStyle = expiryStyle.Background(theme.SelBg)
+		}
+		parts = append(parts, secretStyle.Render(f.secretName+" · ")+expiryStyle.Render(f.expiry))
 	}
 	return label + "  " + strings.Join(parts, sep)
 }

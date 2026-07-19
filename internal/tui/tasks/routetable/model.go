@@ -126,6 +126,12 @@ type Model struct {
 	ingressClass     string
 	ingressHostCount int
 	tlsFacts         []tlsFact
+	// tlsFocused/tlsSelected are 23a's "tab" toggle onto the TLS strip
+	// (verbs.FocusTLSStrip) — up/down move tlsSelected instead of the main
+	// table's own selection while focused, and ↵ jumps to that fact's
+	// Secret (verbs.OpenTLSSecret) instead of the row's backend Service.
+	tlsFocused  bool
+	tlsSelected int
 
 	// Route rows shared by flavorIngress/flavorRoute.
 	rows []routeRow

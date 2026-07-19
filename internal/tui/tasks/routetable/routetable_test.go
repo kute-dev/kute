@@ -140,6 +140,60 @@ func TestLoadIngressTLSExpiry(t *testing.T) {
 	}
 }
 
+// TestTabTogglesTLSFocusAndArrowsMoveWithinIt pins 23a's "tab" toggle
+// (docs/design README.md:285: "a strip above the keybar names each secret —
+// ↵ there jumps to it"): 'tab' moves focus onto the TLS strip instead of the
+// main table, and up/down move the focused fact instead of the main table's
+// own selection while focused.
+func TestTabTogglesTLSFocusAndArrowsMoveWithinIt(t *testing.T) {
+	m := Model{flavor: flavorIngress, tlsFacts: []tlsFact{{secretName: "a"}, {secretName: "b"}}}
+	m.SetSize(120, 36)
+
+	if m.tlsFocused {
+		t.Fatal("expected the TLS strip to start unfocused")
+	}
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "tab"})
+	m = *updated.(*Model)
+	if !m.tlsFocused {
+		t.Fatal("expected 'tab' to focus the TLS strip")
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Text: "down"})
+	m = *updated.(*Model)
+	if m.tlsSelected != 1 {
+		t.Fatalf("tlsSelected = %d, want 1 (down moved within the TLS strip, not the main table)", m.tlsSelected)
+	}
+	if m.selected != 0 {
+		t.Fatalf("main table selected = %d, want unchanged at 0 while TLS-focused", m.selected)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Text: "tab"})
+	m = *updated.(*Model)
+	if m.tlsFocused {
+		t.Fatal("expected a second 'tab' to unfocus the TLS strip")
+	}
+}
+
+// TestOpenSelectedTLSSecretJumpsToReferencedSecret pins 23a's ↵ behavior
+// once the TLS strip has focus, mirroring TestOpenSelectedEnterJumpsToBackendService's
+// direct-Model style.
+func TestOpenSelectedTLSSecretJumpsToReferencedSecret(t *testing.T) {
+	m := Model{
+		flavor: flavorIngress, namespace: "default",
+		tlsFocused: true, tlsSelected: 0,
+		tlsFacts: []tlsFact{{secretName: "web-tls"}},
+	}
+	cmd, ok := m.openSelectedTLSSecret()
+	if !ok || cmd == nil {
+		t.Fatalf("expected a jump cmd for a focused TLS fact with a secret name")
+	}
+
+	m = Model{flavor: flavorIngress, tlsFocused: true, tlsSelected: 0, tlsFacts: nil}
+	if _, ok := m.openSelectedTLSSecret(); ok {
+		t.Fatal("expected no jump with no TLS facts")
+	}
+}
+
 func testHTTPRoute(name, parent, condStatus, message string, backends []map[string]any) *unstructured.Unstructured {
 	cond := map[string]any{"type": "Accepted", "status": condStatus}
 	if message != "" {
@@ -292,6 +346,31 @@ func TestOpenSelectedEnterJumpsToBackendService(t *testing.T) {
 	m = Model{flavor: flavorIngress, rows: nil}
 	if _, ok := m.openSelectedEnter(); ok {
 		t.Fatalf("expected no jump with no rows")
+	}
+}
+
+// TestSelectedListenerRouteFilterUsesHostnameOrFallsBackToGateway pins 23b
+// (docs/design README.md:292: "↵ on a listener filters to attached routes"):
+// a listener with its own hostname filters by that hostname; a wildcard
+// listener (no hostname) falls back to this Gateway's own ATTACHED-cell
+// text so it still narrows to this Gateway's routes rather than showing
+// every HTTPRoute in the namespace.
+func TestSelectedListenerRouteFilterUsesHostnameOrFallsBackToGateway(t *testing.T) {
+	m := Model{flavor: flavorGateway, name: "public", listeners: []listenerRow{{name: "https", hostname: "api.example.com"}}}
+	filter, ok := m.selectedListenerRouteFilter()
+	if !ok || filter != "api.example.com" {
+		t.Fatalf("filter = %q, ok=%v, want \"api.example.com\", true", filter, ok)
+	}
+
+	m = Model{flavor: flavorGateway, name: "public", listeners: []listenerRow{{name: "http", hostname: ""}}}
+	filter, ok = m.selectedListenerRouteFilter()
+	if !ok || filter != "gw/public" {
+		t.Fatalf("filter = %q, ok=%v, want \"gw/public\", true (wildcard listener fallback)", filter, ok)
+	}
+
+	m = Model{flavor: flavorGateway}
+	if _, ok := m.selectedListenerRouteFilter(); ok {
+		t.Fatal("expected no filter with no selected listener")
 	}
 }
 
