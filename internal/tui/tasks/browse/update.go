@@ -182,6 +182,9 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.podCountByNode = msg.podCountByNode
 	m.clusterPodTotal = msg.clusterPodTotal
 	m.fetchedAt = time.Now()
+	// Real data has landed — 15a's cached/dimmed loading view (if any) is
+	// superseded either way, whether this resolves to Ready or Empty below.
+	m.cachedView = false
 
 	if len(m.rows) == 0 {
 		if !m.listerSynced() {
@@ -206,6 +209,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.recomputeVisible()
 	m.state = tui.TaskStateReady
 	m.feedback = ""
+	m.cacheCurrentRows()
 	return m, nil
 }
 

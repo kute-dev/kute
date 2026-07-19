@@ -61,6 +61,67 @@ func TestGotoKindMsgSameKindIsNoop(t *testing.T) {
 	}
 }
 
+// TestRevisitingKindShowsCachedRowsDimmedInsteadOfSkeleton pins 15a (docs/
+// design README.md:232: "Revisiting a kind seen this session: cached rows
+// dimmed instead of skeletons"): switching back to a kind already loaded
+// once this session must render that kind's last-known rows (muted, the
+// same treatment 4a's offline table gets) immediately on the switch, before
+// the fresh reload's reply lands — not the skeleton-rows loading state a
+// never-before-seen kind gets.
+func TestRevisitingKindShowsCachedRowsDimmedInsteadOfSkeleton(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:       {pod("default", "api-1")},
+		kube.KindConfigMap: {configMap("default", "app-config")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()()) // Pods loaded once — now cached
+
+	m = step(t, m, tui.GotoKindMsg{Kind: kube.KindConfigMap}) // fully switch+load ConfigMaps too
+
+	// Switch back to Pods, but inspect state right after Update — before the
+	// fresh load() reply (queued as a Cmd, not yet run) lands.
+	updated, _ := m.Update(tui.GotoKindMsg{Kind: kube.KindPod})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading (a real reload is in flight)", m.state)
+	}
+	if !m.cachedView {
+		t.Fatal("expected cachedView=true for a kind already loaded this session")
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("expected cached rows to be seeded immediately, not left empty")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "api-1") {
+		t.Fatalf("expected the cached row's name rendered immediately:\n%s", view)
+	}
+}
+
+// TestFreshKindNeverSeenBeforeStillShowsSkeletonNotCache pins the converse
+// of the above: a kind that's never been loaded this session (no rowCache
+// hit) still gets 15a's plain skeleton-rows loading state.
+func TestFreshKindNeverSeenBeforeStillShowsSkeletonNotCache(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:       {pod("default", "api-1")},
+		kube.KindConfigMap: {configMap("default", "app-config")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()()) // Pods loaded — ConfigMaps never visited
+
+	updated, _ := m.Update(tui.GotoKindMsg{Kind: kube.KindConfigMap})
+	m = *updated.(*Model)
+
+	if m.cachedView {
+		t.Fatal("expected cachedView=false for a kind never loaded this session")
+	}
+	if len(m.rows) != 0 {
+		t.Fatalf("expected no seeded rows for a never-visited kind, got %d", len(m.rows))
+	}
+}
+
 // TestGotoKindMsgWithFilterAppliesQuery pins 23b's routetable→browse jump
 // (docs/design README.md:292: "↵ on a listener filters to attached
 // routes"): a GotoKindMsg with a non-empty Filter must switch kind and

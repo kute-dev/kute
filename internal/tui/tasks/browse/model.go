@@ -233,6 +233,19 @@ type Model struct {
 
 	rows      []resources.Row
 	fetchedAt time.Time
+	// rowCache holds the last successfully-loaded rows per kind+namespace
+	// seen this session (browseCacheKey), so revisiting one mid-session can
+	// show cached rows dimmed instead of the skeleton loader (docs/design
+	// README.md §15a: "revisiting a kind seen this session: cached rows
+	// dimmed instead of skeletons" — the same muted treatment 4a's stale
+	// grammar already gives an offline table). Never cleared by
+	// resetAndLoad — it outlives any single kind/namespace view on purpose.
+	rowCache map[browseCacheKey][]resources.Row
+	// cachedView is true while m.state is TaskStateLoading but m.rows holds
+	// a rowCache hit rather than fresh data — Body()/tableBody read it to
+	// render the muted cached snapshot instead of the skeleton, and it's
+	// cleared the moment a real rowsLoadedMsg lands (applyRowsLoaded).
+	cachedView bool
 	// nodeCount backs the health strip's "36 pods · 3 nodes" right side
 	// (Pods kind only; 0 = unknown, suffix omitted).
 	nodeCount int
@@ -671,6 +684,34 @@ func (m *Model) clearOrigin() {
 	m.originName = ""
 }
 
+// browseCacheKey identifies one kind+namespace view for rowCache — the same
+// two dimensions switchKind/switchNamespace mutate, and the same pairing
+// applyRowsLoaded's own stale-reply guard (msg.kind != m.kind) already keys
+// off implicitly.
+type browseCacheKey struct {
+	kind      kube.ResourceKind
+	namespace string
+}
+
+// cachedRowsFor returns rowCache's snapshot for kind/namespace, if any —
+// used by resetAndLoad to seed the 15a "cached rows dimmed" loading view.
+func (m Model) cachedRowsFor(kind kube.ResourceKind, namespace string) ([]resources.Row, bool) {
+	rows, ok := m.rowCache[browseCacheKey{kind, namespace}]
+	return rows, ok
+}
+
+// cacheCurrentRows snapshots m.rows into rowCache under the current
+// kind/namespace, called once a load succeeds (applyRowsLoaded) — a copy,
+// since m.rows is mutated in place by later sorts/marks.
+func (m *Model) cacheCurrentRows() {
+	if m.rowCache == nil {
+		m.rowCache = make(map[browseCacheKey][]resources.Row)
+	}
+	cp := make([]resources.Row, len(m.rows))
+	copy(cp, m.rows)
+	m.rowCache[browseCacheKey{m.kind, m.namespace}] = cp
+}
+
 // resetAndLoad puts the model back into the loading state for whatever
 // kind/namespace switchKind/switchNamespace just set, bumping both epochs
 // so any in-flight reload/metrics reply for the previous kind/namespace is
@@ -700,6 +741,18 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.pendingBulkDelete = nil
 	m.reloadEpoch++
 	m.metricsEpoch++
+
+	// 15a: "revisiting a kind seen this session: cached rows dimmed instead
+	// of skeletons" — seed the loading view from rowCache if this exact
+	// kind+namespace was ever successfully loaded before; the fresh load
+	// kicked off below still runs and replaces it once it lands
+	// (applyRowsLoaded clears cachedView).
+	m.cachedView = false
+	if cached, ok := m.cachedRowsFor(m.kind, m.namespace); ok && len(cached) > 0 {
+		m.rows = cached
+		m.cachedView = true
+		m.recomputeVisible()
+	}
 
 	if m.lister == nil {
 		m.state = tui.TaskStateError

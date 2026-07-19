@@ -457,6 +457,12 @@ func (m Model) Body(width, height int) string {
 	case tui.TaskStatePermissionDenied:
 		return m.permissionDeniedBody(width, height)
 	case tui.TaskStateLoading:
+		if m.cachedView && len(m.rows) > 0 {
+			// 15a: "revisiting a kind seen this session: cached rows dimmed
+			// instead of skeletons" — render the real table (muted) over the
+			// rowCache snapshot rather than the skeleton loader.
+			return m.tableBody(width, height)
+		}
 		return m.loadingBody(width, height)
 	default:
 		return components.CenterLines([]string{m.feedback}, width, height)
@@ -682,7 +688,7 @@ func (m Model) tableBody(width, height int) string {
 	theme := m.Theme()
 	cols := browseColumns(m.desc)
 	cpuMax, memMax := m.metricsMax()
-	muted := m.offline()
+	muted := m.offline() || m.cachedView
 	styles := [2]rowCellStyles{newRowCellStyles(theme, false, muted, false), newRowCellStyles(theme, true, muted, false)}
 	// marksOn/markedStyle back 20a's mark column and marked-row tint — the
 	// mark column only exists while something's marked (13d's zero-chrome
