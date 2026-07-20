@@ -134,8 +134,12 @@ var (
 		ID: "force-delete", Key: "ctrl-k", Label: "force delete",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindPod}, Mutating: true,
 	}
+	// RolloutRestart's key moved off 'R' (was 9a's original binding) to make
+	// room for 25a's SetResources, which the design doc spec'd as 'R' on the
+	// same Deployment row — resolved in favor of SetResources since it's the
+	// literal key the design doc names for 25a.
 	RolloutRestart = Verb{
-		ID: "rollout-restart", Key: "R", Label: "rollout restart",
+		ID: "rollout-restart", Key: "r", Label: "rollout restart",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
 	Cordon = Verb{
@@ -173,6 +177,14 @@ var (
 	// TierForEdit's own doc comment on this same constraint).
 	SetImage = Verb{
 		ID: "set-image", Key: "i", Label: "set image",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
+	}
+	// SetResources is 25a's 'R' on a Deployment/StatefulSet/DaemonSet row —
+	// same TierNone-nominal/TierForSetResources-resolves-the-real-tier shape
+	// as SetImage above (see SetImage's own doc comment for why TierNone here
+	// is nominal rather than final).
+	SetResources = Verb{
+		ID: "set-resources", Key: "R", Label: "resources",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
 	}
 )
@@ -240,7 +252,7 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
-	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage,
+	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
@@ -297,6 +309,18 @@ func TierForEdit(isProd bool) actions.Tier {
 // TierInline y/N Controller already renders for rollback/delete, not a
 // screen-local gate.
 func TierForSetImage(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForSetResources resolves SetResources's confirmation policy — the same
+// TierNone-outside-PROD/TierInline-in-PROD shape as TierForSetImage (docs/design
+// README.md §25a inherits 8b's PROD tiering the same way 24a does), routed
+// through actions.Controller/kube.Mutator like SetImage rather than a
+// screen-local gate.
+func TierForSetResources(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}

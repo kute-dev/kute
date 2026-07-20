@@ -432,13 +432,84 @@ func goldenSetImageModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// --- 25a: resources inline editor ---
+
+// goldenSetResourcesModel builds the exact scenario docs/design/
+// v.0.2.0.dc.html's 25a mockup illustrates: a single-container "worker"
+// Deployment whose live pod OOMKilled ~4m ago, cpu/mem request+limit
+// matching the mockup's own CURRENT values (250m/1, 512Mi/512Mi), and live
+// per-container usage that pins mem at its limit (Bad) while cpu stays
+// comfortably under (neutral/Warn depending on the row) — exercising every
+// bar-color state in one screenshot. The cursor is moved to the mem limit
+// row and nudged up by 64Mi four times (512Mi -> 768Mi) to also exercise the
+// edited-NEW-cell/will-run-line rendering, matching the mockup's own
+// "768Mi" edited example.
+func goldenSetResourcesModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "default", Generation: 1, CreationTimestamp: setImageAge(30 * 24 * time.Hour)},
+		Spec: appsv1.DeploymentSpec{Replicas: replicasPtr(4), Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{
+				{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.2", Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m"), corev1.ResourceMemory: resource.MustParse("512Mi")},
+					Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("512Mi")},
+				}},
+			}},
+		}},
+		Status: appsv1.DeploymentStatus{Replicas: 4, ReadyReplicas: 4, UpdatedReplicas: 4, AvailableReplicas: 4, ObservedGeneration: 1},
+	}
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "aim-worker-r43", Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "aim-worker"}},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "aim-worker-r43-x8z2p", Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: rs.Name}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:  "worker",
+				State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				LastTerminationState: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+					Reason: "OOMKilled", FinishedAt: setImageAge(4 * time.Minute),
+				}},
+			}},
+		},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {dep},
+		kube.KindReplicaSet: {rs},
+		kube.KindPod:        {pod},
+	}}
+	metrics := fakeMetrics{containerMetrics: map[string]map[string]kube.PodMetrics{
+		pod.Name: {"worker": {CPU: "182m", MEM: "512Mi", CPUMilli: 182, MemBytes: 512 * 1024 * 1024}},
+	}}
+	sess := newSession()
+	sess.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: sess, Lister: lister, Metrics: metrics, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	for range 4 {
+		m = step(t, m, tea.KeyPressMsg{Text: "+"})
+	}
+	return m
+}
+
 // goldenStates maps each fixture-name prefix to its model builder — shared
 // by the plain and (for the color-heaviest states) truecolor fixture maps
 // below.
 var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
-	"confirm-inline", "confirm-modal", "set-image",
+	"confirm-inline", "confirm-modal", "set-image", "set-resources",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -474,6 +545,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenConfirmModalModel(t, width, height)
 	case "set-image":
 		return goldenSetImageModel(t, width, height)
+	case "set-resources":
+		return goldenSetResourcesModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -524,7 +597,7 @@ func TestGoldenStateFixtures(t *testing.T) {
 // truecolor fixtures in this package.
 var truecolorStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks",
-	"confirm-inline", "confirm-modal", "set-image",
+	"confirm-inline", "confirm-modal", "set-image", "set-resources",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

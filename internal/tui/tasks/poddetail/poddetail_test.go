@@ -147,6 +147,9 @@ func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, 
 func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
 	return nil
 }
+func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
+	return nil
+}
 
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{

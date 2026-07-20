@@ -1,5 +1,6 @@
 // Deployment-specific browse machinery for 9a (docs/design README.md §9a):
-// the R rollout-restart verb and the ↵ "open this deployment's pods"
+// the r rollout-restart verb (moved off 'R' to make room for 25a's
+// SetResources on the same row) and the ↵ "open this deployment's pods"
 // shortcut. Kept in its own file, browse's per-concern split convention
 // (like nodes.go/sort.go/grouping.go/delete.go) rather than sprinkled
 // through model.go/view.go/update.go.
@@ -18,7 +19,7 @@ import (
 
 // beginRolloutRestart restarts row's rollout — TierNone (verbs.RolloutRestart),
 // so actions.Controller.Begin executes immediately with no confirmation
-// (docs/design README.md §9a: "R rollout restart (non-destructive, no
+// (docs/design README.md §9a: "r rollout restart (non-destructive, no
 // confirm)").
 func (m *Model) beginRolloutRestart(row resources.Row) tea.Cmd {
 	return m.actions.Begin(verbs.RolloutRestart.Tier, tui.TaskAction{

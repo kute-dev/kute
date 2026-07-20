@@ -248,6 +248,9 @@ func (c *Controller) execute() tea.Cmd {
 		case "set-image":
 			err = mutator.SetImage(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Container, action.Scope.Image)
+		case "set-resources":
+			err = mutator.SetResources(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Container, *action.Scope.Resources, false)
 		default:
 			err = fmt.Errorf("unsupported verb %q", action.Scope.Verb)
 		}

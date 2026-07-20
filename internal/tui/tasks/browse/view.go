@@ -444,6 +444,9 @@ func (m Model) Body(width, height int) string {
 	if m.pendingSetImage != nil {
 		return m.setImageBody(width, height)
 	}
+	if m.pendingSetResources != nil {
+		return m.setResourcesBody(width, height)
+	}
 	if m.pendingBulkDelete != nil && m.pendingBulkDelete.tier == actions.TierModal {
 		return m.bulkDeleteConfirmModal(width, height)
 	}

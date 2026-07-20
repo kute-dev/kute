@@ -47,6 +47,8 @@ type fakeMutator struct {
 	forceDeleted []string
 	scaled       []int32
 	setImages    []string // "namespace/name container=image"
+	setResources []string // "namespace/name container" of every SetResources call
+	dryRun       bool     // true if the most recent SetResources call was a dry-run
 	err          error
 }
 
@@ -95,6 +97,14 @@ func (f *fakeMutator) SetImage(_ context.Context, _ kube.ResourceKind, namespace
 		return f.err
 	}
 	f.setImages = append(f.setImages, namespace+"/"+name+" "+container+"="+image)
+	return nil
+}
+func (f *fakeMutator) SetResources(_ context.Context, _ kube.ResourceKind, namespace, name, container string, _ kube.ResourceEdits, dryRun bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.dryRun = dryRun
+	f.setResources = append(f.setResources, namespace+"/"+name+" "+container)
 	return nil
 }
 

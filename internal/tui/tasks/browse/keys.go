@@ -68,6 +68,18 @@ func (m Model) Keybar() tui.Keybar {
 			RightNote: "watch the rollout in 9a",
 		}
 	}
+	if m.pendingSetResources != nil {
+		hints := []tui.KeyHint{{Key: "↵", Label: "apply changed fields"}, {Key: "↑↓", Label: "field"}, {Key: "+/−", Label: "nudge (64Mi / 50m)"}}
+		if len(m.pendingSetResources.containers) > 1 {
+			hints = append(hints, tui.KeyHint{Key: tui.GlyphTab, Label: "container"})
+		}
+		hints = append(hints, tui.KeyHint{Key: "u", Label: "unset field"}, tui.KeyHint{Key: "esc", Label: "cancel"})
+		return tui.Keybar{
+			Pill:     tui.ModeBrowse,
+			PillText: "RESOURCES",
+			Groups:   [][]tui.KeyHint{hints},
+		}
+	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {
 			return tui.Keybar{
@@ -99,6 +111,10 @@ func (m Model) Keybar() tui.Keybar {
 					// 24a: the exact "will run: kubectl set image ..." line, same
 					// idiom as rollback/delete above.
 					note = setImageWillRunLine(pending.Scope)
+				case "set-resources":
+					// 25a: the exact "will run: kubectl set resources ..." line,
+					// same idiom as set-image above.
+					note = setResourcesWillRunLine(pending.Scope)
 				}
 			}
 			return tui.Keybar{
@@ -240,7 +256,7 @@ func (m Model) Keybar() tui.Keybar {
 	if m.kind == kube.KindDeployment {
 		deployGroup := []tui.KeyHint{verbs.Open.Hint()}
 		if m.mutator != nil {
-			deployGroup = append(deployGroup, verbs.RolloutRestart.Hint(), verbs.Scale.Hint(), verbs.SetImage.Hint())
+			deployGroup = append(deployGroup, verbs.RolloutRestart.Hint(), verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
 		}
 		if m.openForward != nil {
 			deployGroup = append(deployGroup, verbs.Forward.Hint())
@@ -248,10 +264,10 @@ func (m Model) Keybar() tui.Keybar {
 		groups = append(groups, deployGroup)
 	}
 	if m.kind == kube.KindStatefulSet && m.mutator != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Scale.Hint(), verbs.SetImage.Hint()})
+		groups = append(groups, []tui.KeyHint{verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint()})
 	}
 	if m.kind == kube.KindDaemonSet && m.mutator != nil {
-		groups = append(groups, []tui.KeyHint{verbs.SetImage.Hint()})
+		groups = append(groups, []tui.KeyHint{verbs.SetImage.Hint(), verbs.SetResources.Hint()})
 	}
 	if m.kind == kube.KindService && m.openForward != nil {
 		groups = append(groups, []tui.KeyHint{verbs.Forward.Hint()})
@@ -333,5 +349,5 @@ func singularDisplay(plural string) string {
 // browse's own key handling instead of treating them as global shortcuts.
 func (m Model) CapturingInput() bool {
 	return m.filterActive || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
-		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingBulkDelete != nil
+		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingBulkDelete != nil
 }

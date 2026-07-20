@@ -36,6 +36,12 @@ const reloadDebounce = 250 * time.Millisecond
 // mini-bars — satisfied by *kube.Cluster and *fake.Cluster.
 type MetricsReader interface {
 	PodMetricsByNamespace(ctx context.Context, namespace string) (map[string]kube.PodMetrics, error)
+	// ContainerMetricsByNamespace is 25a's per-container usage seam — like
+	// PodMetricsByNamespace but keyed by pod name then container name,
+	// since 25a's per-field USAGE bar needs the active container's own
+	// usage, not the whole pod's summed usage a container tab switch would
+	// otherwise show unchanged.
+	ContainerMetricsByNamespace(ctx context.Context, namespace string) (map[string]map[string]kube.PodMetrics, error)
 }
 
 // OpenLogsFunc pushes the log-stream screen for pod, mirroring the
@@ -220,6 +226,11 @@ type Model struct {
 	// there's a container/tag/history buffer to gather before there's an
 	// action to Begin.
 	pendingSetImage *setImageTarget
+	// pendingSetResources is non-nil while 25a's inline resources panel is
+	// showing (setresources.go) — a bespoke gate like pendingSetImage, since
+	// there's a per-field request/limit buffer to gather (plus a dry-run
+	// round-trip) before there's an action to Begin.
+	pendingSetResources *setResourcesTarget
 	// marks is 20a's marked set (bulk.go), keyed by markKey(namespace, name)
 	// so 6b's cross-namespace grouped view can't collide two same-named rows
 	// in different namespaces. nil/empty means no marks — every marks-aware

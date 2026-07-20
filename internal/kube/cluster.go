@@ -351,6 +351,36 @@ func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (
 	return out, nil
 }
 
+// ContainerMetricsByNamespace fetches all pod metrics in namespace in a
+// single List, like PodMetricsByNamespace, but keeps each container's own
+// usage separate instead of summing them — 25a's per-field USAGE bar needs
+// the active container's own number, not the whole pod's. Keyed by pod name
+// then container name.
+func (c *Cluster) ContainerMetricsByNamespace(ctx context.Context, namespace string) (map[string]map[string]PodMetrics, error) {
+	if c.metrics == nil {
+		return nil, fmt.Errorf("pod metrics client is not configured")
+	}
+	list, err := c.metrics.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]PodMetrics, len(list.Items))
+	for i := range list.Items {
+		pm := list.Items[i]
+		containers := make(map[string]PodMetrics, len(pm.Containers))
+		for _, ctr := range pm.Containers {
+			cpu := ctr.Usage.Cpu()
+			mem := ctr.Usage.Memory()
+			containers[ctr.Name] = PodMetrics{
+				CPU: FormatCPU(*cpu), MEM: FormatMemory(*mem),
+				CPUMilli: cpu.MilliValue(), MemBytes: mem.Value(),
+			}
+		}
+		out[pm.Name] = containers
+	}
+	return out, nil
+}
+
 // NodeMetrics fetches live CPU/MEM usage for every node in one List, keyed
 // by node name — the 11a nodes-list bars' numerator. A nil metrics client
 // (no metrics-server) reports the same "not configured" error

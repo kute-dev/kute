@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,15 @@ type Mutator interface {
 	// tag-first inline editor. Deployment, StatefulSet, and DaemonSet are the
 	// three kinds with a pod template browse exposes it on.
 	SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error
+	// SetResources patches container's resources.requests/limits on kind's
+	// pod template — 25a's editor. edits' non-nil fields are the changed
+	// ones ("only changed fields go into the command"); a pointer to "" is
+	// an explicit unset (the 'u' key), removing that key entirely rather
+	// than leaving it untouched. dryRun runs the same patch with the API
+	// server's DryRun option set, surfacing an admission rejection (a
+	// namespace LimitRange/ResourceQuota violation) without mutating
+	// anything — 25a's caller runs this once before the real patch.
+	SetResources(ctx context.Context, kind ResourceKind, namespace, name, container string, edits ResourceEdits, dryRun bool) error
 }
 
 // DeleteResource implements Mutator against the live clientset. It maps the kind
@@ -234,6 +244,153 @@ func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, na
 // copyable-command idiom as 10a/13a/17b/18a).
 func SetImageCommandString(kind ResourceKind, namespace, name, container, image string) string {
 	return fmt.Sprintf("kubectl set image %s/%s %s=%s -n %s", workloadResourceArg(kind), name, container, image, namespace)
+}
+
+// ResourceEdits is 25a's set of changed container resources.requests/limits
+// fields. nil = unchanged (omitted from the patch entirely); a pointer to
+// "" = an explicit unset (the 'u' key — patches that resource key to JSON
+// null, removing it rather than merely not mentioning it, since "no limit"
+// is a real and dangerous state the editor must be able to set
+// deliberately); a pointer to a quantity string ("250m", "512Mi") = the new
+// value.
+type ResourceEdits struct {
+	CPURequest *string
+	CPULimit   *string
+	MEMRequest *string
+	MEMLimit   *string
+}
+
+// anyUnset reports whether edits carries at least one explicit unset (a
+// non-nil pointer to "").
+func (e ResourceEdits) anyUnset() bool {
+	return isUnsetField(e.CPURequest) || isUnsetField(e.CPULimit) || isUnsetField(e.MEMRequest) || isUnsetField(e.MEMLimit)
+}
+
+func isUnsetField(p *string) bool {
+	return p != nil && *p == ""
+}
+
+// SetResources patches container's resources.requests/limits via the same
+// containers-by-name strategic-merge-patch idiom as SetImage/Scale — the
+// container list patches by its "name" merge key, so one patch shape covers
+// Deployment/StatefulSet/DaemonSet without a per-kind container index
+// lookup. Only fields edits sets are included in the patch; an explicit
+// unset serializes as JSON null under its resource key, which both
+// strategic-merge-patch and a plain JSON merge patch interpret as "remove
+// this key".
+//
+// LimitRange/ResourceQuota admission is real-API-server-only behavior — the
+// fake clientset's tracker performs no admission checks, so a dry-run
+// against kube/fake always succeeds regardless of the edited values; only
+// the client-side request>limit check (25a's own validation, before this is
+// ever called) is exercisable against the fake cluster.
+func (c *Cluster) SetResources(ctx context.Context, kind ResourceKind, namespace, name, container string, edits ResourceEdits, dryRun bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot set resources on %s: empty name", kind)
+	}
+	patch, ok := resourcesPatchJSON(container, edits)
+	if !ok {
+		return fmt.Errorf("cannot set resources on %s/%s: no changed fields", kind, name)
+	}
+	opts := metav1.PatchOptions{}
+	if dryRun {
+		opts.DryRun = []string{metav1.DryRunAll}
+	}
+	var err error
+	switch kind {
+	case KindDeployment:
+		_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), opts)
+	case KindStatefulSet:
+		_, err = c.clientset.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), opts)
+	case KindDaemonSet:
+		_, err = c.clientset.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), opts)
+	default:
+		err = fmt.Errorf("set resources is not supported for kind %s", kind)
+	}
+	return err
+}
+
+// resourcesPatchJSON builds the strategic-merge-patch document SetResources
+// applies (and SetResourcesCommandString's kubectl-patch fallback documents
+// verbatim) — shared so the "will run" line always names the literal patch
+// that executes. ok is false when edits carries no changed fields at all.
+func resourcesPatchJSON(container string, edits ResourceEdits) (patch string, ok bool) {
+	requests := resourceFieldsJSON(edits.CPURequest, edits.MEMRequest)
+	limits := resourceFieldsJSON(edits.CPULimit, edits.MEMLimit)
+	if requests == "" && limits == "" {
+		return "", false
+	}
+	var parts []string
+	if requests != "" {
+		parts = append(parts, `"requests":`+requests)
+	}
+	if limits != "" {
+		parts = append(parts, `"limits":`+limits)
+	}
+	resourcesObj := "{" + strings.Join(parts, ",") + "}"
+	return fmt.Sprintf(
+		`{"spec":{"template":{"spec":{"containers":[{"name":%q,"resources":%s}]}}}}`,
+		container, resourcesObj,
+	), true
+}
+
+// resourceFieldsJSON renders {"cpu":...,"memory":...} for a requests/limits
+// pair, omitting nil fields and rendering an explicit unset (a pointer to
+// "") as JSON null. Returns "" when both fields are nil.
+func resourceFieldsJSON(cpu, mem *string) string {
+	var parts []string
+	if cpu != nil {
+		parts = append(parts, `"cpu":`+quantityJSONLiteral(*cpu))
+	}
+	if mem != nil {
+		parts = append(parts, `"memory":`+quantityJSONLiteral(*mem))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "{" + strings.Join(parts, ",") + "}"
+}
+
+func quantityJSONLiteral(v string) string {
+	if v == "" {
+		return "null"
+	}
+	return strconv.Quote(v)
+}
+
+// SetResourcesCommandString renders the exact command SetResources runs —
+// 25a's "will run" documentation line. A plain set (no unsets) renders as
+// `kubectl set resources`, matching docs/design README.md §25a's own
+// example; an explicit unset falls back to the literal `kubectl patch`
+// invocation instead, since `kubectl set resources` has no clean field-
+// removal flag — the will-run line always names the command that actually
+// executes (27a/27b's same principle for their own patches).
+func SetResourcesCommandString(kind ResourceKind, namespace, name, container string, edits ResourceEdits) string {
+	if edits.anyUnset() {
+		patch, _ := resourcesPatchJSON(container, edits)
+		return fmt.Sprintf("kubectl patch %s/%s --type strategic -p '%s' -n %s", workloadResourceArg(kind), name, patch, namespace)
+	}
+	var reqParts, limParts []string
+	if edits.CPURequest != nil {
+		reqParts = append(reqParts, "cpu="+*edits.CPURequest)
+	}
+	if edits.MEMRequest != nil {
+		reqParts = append(reqParts, "memory="+*edits.MEMRequest)
+	}
+	if edits.CPULimit != nil {
+		limParts = append(limParts, "cpu="+*edits.CPULimit)
+	}
+	if edits.MEMLimit != nil {
+		limParts = append(limParts, "memory="+*edits.MEMLimit)
+	}
+	cmd := fmt.Sprintf("kubectl set resources %s/%s -c %s", workloadResourceArg(kind), name, container)
+	if len(limParts) > 0 {
+		cmd += " --limits=" + strings.Join(limParts, ",")
+	}
+	if len(reqParts) > 0 {
+		cmd += " --requests=" + strings.Join(reqParts, ",")
+	}
+	return cmd + " -n " + namespace
 }
 
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a

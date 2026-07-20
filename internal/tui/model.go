@@ -55,6 +55,11 @@ type TaskScope struct {
 	// Image is the target image ref for a "set-image" verb (24a). Empty for
 	// every other verb.
 	Image string
+	// Resources is the changed container resource fields for a
+	// "set-resources" verb (25a). Container names which container these
+	// apply to, reusing the same field "set-image" already populates. nil
+	// for every other verb.
+	Resources *kube.ResourceEdits
 }
 
 // TaskAction describes an operation available from a task screen.

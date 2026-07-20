@@ -189,6 +189,9 @@ func (f *fakeHelmMutator) Scale(context.Context, kube.ResourceKind, string, stri
 func (f *fakeHelmMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
 	return nil
 }
+func (f *fakeHelmMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
+	return nil
+}
 func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return nil

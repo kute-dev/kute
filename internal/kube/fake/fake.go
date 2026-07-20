@@ -259,6 +259,90 @@ func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace,
 	return fmt.Errorf("%s %q not found", kind, name)
 }
 
+// SetResources sets one named container's resources.requests/limits on
+// Deployment/StatefulSet/DaemonSet's pod template in place — 25a's editor
+// against the fake cluster. dryRun is accepted for interface parity but
+// otherwise ignored: the fake tracker performs no admission, so there's
+// nothing a dry-run would catch here that a real apply wouldn't (unlike a
+// real cluster, kube/fake never returns a LimitRange/ResourceQuota
+// rejection — see kube.Cluster.SetResources's doc comment).
+func (c *Cluster) SetResources(_ context.Context, kind kube.ResourceKind, namespace, name, container string, edits kube.ResourceEdits, _ bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kind] {
+		var containers []corev1.Container
+		switch o := obj.(type) {
+		case *appsv1.Deployment:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		case *appsv1.StatefulSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		case *appsv1.DaemonSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		default:
+			continue
+		}
+		for i := range containers {
+			if containers[i].Name != container {
+				continue
+			}
+			if err := applyResourceEdits(&containers[i], edits); err != nil {
+				return err
+			}
+			c.notify(kind)
+			return nil
+		}
+		return fmt.Errorf("container %q not found on %s %q", container, kind, name)
+	}
+	return fmt.Errorf("%s %q not found", kind, name)
+}
+
+// applyResourceEdits mutates ctr's Resources.Requests/Limits in place per
+// edits — a nil field is untouched, a pointer to "" removes that resource
+// key entirely (25a's explicit unset), otherwise it's parsed and set.
+func applyResourceEdits(ctr *corev1.Container, edits kube.ResourceEdits) error {
+	if err := applyResourceField(&ctr.Resources.Requests, corev1.ResourceCPU, edits.CPURequest); err != nil {
+		return err
+	}
+	if err := applyResourceField(&ctr.Resources.Requests, corev1.ResourceMemory, edits.MEMRequest); err != nil {
+		return err
+	}
+	if err := applyResourceField(&ctr.Resources.Limits, corev1.ResourceCPU, edits.CPULimit); err != nil {
+		return err
+	}
+	if err := applyResourceField(&ctr.Resources.Limits, corev1.ResourceMemory, edits.MEMLimit); err != nil {
+		return err
+	}
+	return nil
+}
+
+func applyResourceField(list *corev1.ResourceList, name corev1.ResourceName, edit *string) error {
+	if edit == nil {
+		return nil
+	}
+	if *edit == "" {
+		delete(*list, name)
+		return nil
+	}
+	q, err := resource.ParseQuantity(*edit)
+	if err != nil {
+		return fmt.Errorf("parse %s quantity %q: %w", name, *edit, err)
+	}
+	if *list == nil {
+		*list = corev1.ResourceList{}
+	}
+	(*list)[name] = q
+	return nil
+}
+
 // HelmRollback simulates `helm rollback` against the fake cluster's seeded
 // helm.sh/release.v1 Secrets: it decodes every revision of name, picks the
 // target (toRevision, or the previous revision when 0 — Helm's own
@@ -460,6 +544,47 @@ func (c *Cluster) PodMetricsByNamespace(_ context.Context, namespace string) (ma
 			CPUMilli: cpuMilli,
 			MemBytes: memBytes,
 		}
+	}
+	return out, nil
+}
+
+// ContainerMetricsByNamespace is the fake equivalent of
+// kube.Cluster.ContainerMetricsByNamespace — 25a's per-container usage seam.
+// Each container gets its own demoUsageRatio (keyed by pod+container name,
+// not just pod name, so sibling containers in the same pod render distinct
+// numbers rather than an identical bar) applied to that container's own
+// limits.
+func (c *Cluster) ContainerMetricsByNamespace(_ context.Context, namespace string) (map[string]map[string]kube.PodMetrics, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]map[string]kube.PodMetrics)
+	for _, obj := range c.objects[kube.KindPod] {
+		pod, ok := obj.(*corev1.Pod)
+		if !ok || (namespace != "" && pod.Namespace != namespace) {
+			continue
+		}
+		containers := make(map[string]kube.PodMetrics, len(pod.Spec.Containers))
+		if pod.Status.Phase != corev1.PodRunning {
+			for _, ctr := range pod.Spec.Containers {
+				containers[ctr.Name] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
+			}
+			out[pod.Name] = containers
+			continue
+		}
+		for _, ctr := range pod.Spec.Containers {
+			cpuLimMilli := ctr.Resources.Limits.Cpu().MilliValue()
+			memLimBytes := ctr.Resources.Limits.Memory().Value()
+			ratio := demoUsageRatio(pod.Name + "/" + ctr.Name)
+			cpuMilli := int64(float64(cpuLimMilli) * ratio)
+			memBytes := int64(float64(memLimBytes) * ratio)
+			containers[ctr.Name] = kube.PodMetrics{
+				CPU:      kube.FormatCPU(*resource.NewMilliQuantity(cpuMilli, resource.DecimalSI)),
+				MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
+				CPUMilli: cpuMilli,
+				MemBytes: memBytes,
+			}
+		}
+		out[pod.Name] = containers
 	}
 	return out, nil
 }

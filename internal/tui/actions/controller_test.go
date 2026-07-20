@@ -38,6 +38,9 @@ func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, 
 func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
 	return f.err
 }
+func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
+	return f.err
+}
 
 func deleteAction() tui.TaskAction {
 	return tui.TaskAction{

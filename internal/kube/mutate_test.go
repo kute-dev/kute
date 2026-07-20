@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -176,6 +177,138 @@ func TestSetImageCommandStringAcrossKinds(t *testing.T) {
 		if got := SetImageCommandString(tt.kind, "default", "api", "app", "app:2.0"); got != tt.want {
 			t.Errorf("SetImageCommandString(%s) = %q, want %q", tt.kind, got, tt.want)
 		}
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func TestSetResourcesPatchesRequestsAndLimits(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app", Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
+				Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
+			}},
+		}}}},
+	}
+	c, cs := newTestCluster(deploy)
+
+	edits := ResourceEdits{MEMLimit: strPtr("768Mi")}
+	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", edits, false); err != nil {
+		t.Fatalf("SetResources: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	res := got.Spec.Template.Spec.Containers[0].Resources
+	if q := res.Limits[corev1.ResourceMemory]; q.String() != "768Mi" {
+		t.Fatalf("mem limit = %s, want 768Mi", q.String())
+	}
+	if q := res.Requests[corev1.ResourceMemory]; q.String() != "512Mi" {
+		t.Fatalf("mem request = %s, want unchanged 512Mi", q.String())
+	}
+}
+
+func TestSetResourcesUnsetsField(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app", Resources: corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			}},
+		}}}},
+	}
+	c, cs := newTestCluster(deploy)
+
+	edits := ResourceEdits{CPULimit: strPtr("")}
+	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", edits, false); err != nil {
+		t.Fatalf("SetResources: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if _, ok := got.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU]; ok {
+		t.Fatalf("expected cpu limit removed, still present: %+v", got.Spec.Template.Spec.Containers[0].Resources.Limits)
+	}
+}
+
+func TestSetResourcesRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.SetResources(context.Background(), KindDeployment, "default", "", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, false); err == nil {
+		t.Fatalf("expected an error for an empty resource name")
+	}
+}
+
+// TestSetResourcesDryRunStillMutatesFakeClientset documents (rather than
+// prescribes) client-go's fake Clientset behavior: it has no admission
+// simulation, and it doesn't special-case metav1.PatchOptions.DryRun either
+// — a dry-run patch against it mutates the tracked object exactly like a
+// real one. kube.Cluster.SetResources's own dry-run therefore only proves
+// anything against a real API server; 25a's own client-side validation
+// (quantity parsing, request>limit) is what's actually exercised in tests.
+func TestSetResourcesDryRunStillMutatesFakeClientset(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app"},
+		}}}},
+	}
+	c, cs := newTestCluster(deploy)
+
+	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, true); err != nil {
+		t.Fatalf("SetResources(dryRun): %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if q := got.Spec.Template.Spec.Containers[0].Resources.Limits[corev1.ResourceMemory]; q.String() != "768Mi" {
+		t.Fatalf("fake clientset dry-run mutated = %s — if this ever changes, update kube/fake and 25a's commitSetResources accordingly", q.String())
+	}
+}
+
+func TestSetResourcesRejectsNoChangedFields(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
+	c, _ := newTestCluster(deploy)
+	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", ResourceEdits{}, false); err == nil {
+		t.Fatalf("expected an error when edits has no changed fields")
+	}
+}
+
+func TestSetResourcesCommandStringPlainSet(t *testing.T) {
+	t.Parallel()
+	got := SetResourcesCommandString(KindDeployment, "aim-stage", "aim-worker", "worker", ResourceEdits{MEMLimit: strPtr("768Mi")})
+	want := "kubectl set resources deploy/aim-worker -c worker --limits=memory=768Mi -n aim-stage"
+	if got != want {
+		t.Errorf("SetResourcesCommandString = %q, want %q", got, want)
+	}
+}
+
+func TestSetResourcesCommandStringMultipleFields(t *testing.T) {
+	t.Parallel()
+	got := SetResourcesCommandString(KindStatefulSet, "default", "db", "db", ResourceEdits{
+		CPURequest: strPtr("100m"), MEMRequest: strPtr("256Mi"), CPULimit: strPtr("500m"),
+	})
+	want := "kubectl set resources sts/db -c db --limits=cpu=500m --requests=cpu=100m,memory=256Mi -n default"
+	if got != want {
+		t.Errorf("SetResourcesCommandString = %q, want %q", got, want)
+	}
+}
+
+func TestSetResourcesCommandStringUnsetFallsBackToPatch(t *testing.T) {
+	t.Parallel()
+	got := SetResourcesCommandString(KindDaemonSet, "default", "agent", "agent", ResourceEdits{CPULimit: strPtr("")})
+	want := `kubectl patch ds/agent --type strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"agent","resources":{"limits":{"cpu":null}}}]}}}}' -n default`
+	if got != want {
+		t.Errorf("SetResourcesCommandString = %q, want %q", got, want)
 	}
 }
 

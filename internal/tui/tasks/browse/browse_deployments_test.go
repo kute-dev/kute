@@ -72,7 +72,8 @@ func TestRKeyRestartsRollout(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "R"})
+	// 'r' (lowercase) — 'R' now opens 25a's resources editor on the same row.
+	m = step(t, m, tea.KeyPressMsg{Text: "r"})
 	if m.actions.Active() {
 		t.Fatal("rollout-restart is TierNone and should execute immediately, not show a confirm")
 	}

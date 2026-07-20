@@ -128,7 +128,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 9a — Deployments list (exemplar for every non-pod kind)
 - **Not a new screen** — the pods skeleton (header · summary strip · table · keybar) with kind-specific columns: status glyph · NAME · READY · ROLLOUT · IMAGE · AGE. Unhealthy-first sort + `+ N stable` collapse carry over. Services, configmaps, etc. follow the same recipe.
 - ROLLOUT column: `stable` dim · `2m 14s ▸` yellow while progressing (IMAGE shows `new ← old` during transition) · `degraded` red.
-- Keys: `↵` = the deployment's pods (pods view with pre-applied filter, not a new view) · `R` rollout restart (non-destructive, no confirm) · `y` yaml · `g` goto. Keybar pill `DEPLOY`.
+- Keys: `↵` = the deployment's pods (pods view with pre-applied filter, not a new view) · `r` rollout restart (non-destructive, no confirm — moved off `R` in 0.2.0 to make room for 25a's resources editor on the same row) · `R` resources editor (25a) · `y` yaml · `g` goto. Keybar pill `DEPLOY`.
 
 ### 9b — Events view (`e`)
 - Summary strip: `▲ 4 warnings` (yellow) · `○ 31 normal` · right `last hour · deduped · warnings first`.
@@ -303,7 +303,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-u full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
 
 ### 25a — Resources — set limits next to live usage (`R` on a workload)
-- **⚠ Key conflict, unresolved:** `R` here collides with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. This needs a key reassignment for one of the two verbs before implementation — not resolved by this doc.
+- **Key conflict resolved (0.2.0):** `R` here collided with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. Resolved in favor of this screen — rollout-restart moved to `r`; `R` now opens the resources editor on Deployment/StatefulSet/DaemonSet rows.
 - The fix for the OOMKill diagnosed in 5a. Strip under the header: container tabs, `usage: p95 over the last 6h · from the metrics poll`, right-aligned failure callout (`✕ OOMKilled 4m ago at the current limit`).
 - Table: FIELD · CURRENT · NEW · P95 USAGE, rows for cpu/mem request and limit. Each field's usage renders as a mini bar sourced from the metrics poll — the mem-limit row shows the bar pinned at capacity with the OOMKill context, so the new value is a decision, not a guess. No metrics → USAGE column reads `metrics unavailable` dim, editor still works.
 - Typing replaces the selected field's value; `+/−` nudges by unit steps (64Mi / 50m). Values parse as k8s quantities — an invalid quantity underlines red inline and blocks `↵`, never a modal (same inline-error idiom as 17a).
@@ -376,7 +376,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Helm releases browse without the helm binary; rollback shells out with a `will run` line (18a).
 - Ingress/HTTPRoute `↵` opens a live routing table (23a/23b) — backends resolved from the watch, never a describe page; `p` on an HTTPRoute opens its parent Gateway.
 - `i` opens the set-image/tag editor on a workload row (24a); history comes from the watch cache (ReplicaSet revisions + cross-workload image sightings), never a registry call.
-- `R` on a workload row opens the resources editor (25a) — **currently conflicts with 9a's `R` rollout-restart on the same row; unresolved, needs a key reassignment before implementation.**
+- `R` on a workload row opens the resources editor (25a); 9a's rollout-restart moved to `r` to make room for it.
 - `m` opens the labels/annotations editor (26a) on any object, CRDs included; selector-linked labels carry an inline join warning before you can edit them.
 - ConfigMap/Secret `Data` views: `↵` edits a value in place (27a), `a` inserts a new key as a line-insert (27b); `ctrl-r` on a ConfigMap value chains the apply with a rollout-restart of every consumer.
 - `U` opens the what's-new/update panel from anywhere (28a/28b), also reachable as `:update`; kute checks once per 24h and never self-updates — it only prints the detected package manager's upgrade command.

@@ -209,11 +209,16 @@ func TestCapturingInputTracksFilterActive(t *testing.T) {
 }
 
 type fakeMetrics struct {
-	metrics map[string]kube.PodMetrics
+	metrics          map[string]kube.PodMetrics
+	containerMetrics map[string]map[string]kube.PodMetrics
 }
 
 func (f fakeMetrics) PodMetricsByNamespace(context.Context, string) (map[string]kube.PodMetrics, error) {
 	return f.metrics, nil
+}
+
+func (f fakeMetrics) ContainerMetricsByNamespace(context.Context, string) (map[string]map[string]kube.PodMetrics, error) {
+	return f.containerMetrics, nil
 }
 
 func TestPodMetricsRenderAsBars(t *testing.T) {

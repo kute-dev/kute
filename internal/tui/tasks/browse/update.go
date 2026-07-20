@@ -136,6 +136,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.execFeedback = ""
 		}
+	case dryRunSetResourcesMsg:
+		return m.handleDryRunSetResources(msg)
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -229,6 +231,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingSetImage != nil {
 		return m.updateSetImageKey(msg)
 	}
+	if m.pendingSetResources != nil {
+		return m.updateSetResourcesKey(msg)
+	}
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
@@ -272,10 +277,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "R":
-		if m.kind == kube.KindDeployment && m.mutator != nil {
-			if row, ok := m.selectedRow(); ok {
-				return m, m.beginRolloutRestart(row)
-			}
+		if resourceEditable(m.kind) && m.mutator != nil {
+			m.beginSetResources()
 		}
 		if m.kind == kube.KindHelmRelease && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
@@ -316,6 +319,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		switch {
+		case m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil:
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginRolloutRestart(row)
+			}
 		case m.kind == kube.KindForward && m.state == tui.TaskStateReady:
 			return m, m.restartSelectedForward()
 		case m.offline() && m.retrier != nil:
