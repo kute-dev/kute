@@ -29,14 +29,15 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The changelog is generated up front by scripts/release-notes.sh (git-cliff,
+# see cliff.toml) and passed in via `goreleaser release --release-notes`;
+# goreleaser's own changelog machinery is unused.
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
-      - "^chore:"
+  disable: true
+
+release:
+  extra_files:
+    - glob: ./.release/changelog.json
 
 homebrew_casks:
   - name: kute

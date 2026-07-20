@@ -33,7 +33,7 @@ Design spec: `docs/design/README.md` (source of truth for screens, layout, token
 ## Workflow
 - After UI changes, run the golden-file snapshot tests (both themes) and update intentionally-changed snapshots only.
 - New screens/verbs: update the command registry and kind registry first; views follow.
-- Commit messages: `type(scope): short imperative description`, lowercase, one focused line, no trailing period. Match the granularity of the change — e.g. `build(deps): bump go module dependencies, k8s.io to v0.36.2`, `ci(pages): pin workflow actions to commit SHA`. Avoid vague messages like "update deps" or "fix stuff"; name what actually changed.
+- Commit messages: `type(scope): short imperative description`, lowercase, one focused line, no trailing period. Match the granularity of the change — e.g. `build(deps): bump go module dependencies, k8s.io to v0.36.2`, `ci(pages): pin workflow actions to commit SHA`. Avoid vague messages like "update deps" or "fix stuff"; name what actually changed. `feat`/`fix`/`perf` subjects flow verbatim into the release changelog and 28b's what's-new panel (git-cliff, see `cliff.toml`), so write the description as the user-visible *effect*, not the implementation: `fix(tui): stop the 7b help overlay truncating every key-hint row` is a good subject; `fix(verbs): give the dead Mutating field a real reader` means nothing to a user and git-cliff can't fix prose, only filter it.
 
 ## Commands
 
