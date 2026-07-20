@@ -103,7 +103,7 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range All {
-		if v.Mutating && v.Tier == actions.TierNone && v.ID != "rollout-restart" && v.ID != "cordon" && v.ID != "scale" {
+		if v.Mutating && v.Tier == actions.TierNone && v.ID != "rollout-restart" && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" {
 			t.Errorf("%s is mutating with TierNone but isn't an allow-listed reversible verb", v.ID)
 		}
 	}
@@ -128,6 +128,17 @@ func TestTierForEdit(t *testing.T) {
 	}
 	if got := TierForEdit(true); got != actions.TierInline {
 		t.Errorf("TierForEdit(prod) = %v, want TierInline", got)
+	}
+}
+
+func TestTierForSetImage(t *testing.T) {
+	t.Parallel()
+
+	if got := TierForSetImage(false); got != actions.TierNone {
+		t.Errorf("TierForSetImage(non-prod) = %v, want TierNone", got)
+	}
+	if got := TierForSetImage(true); got != actions.TierInline {
+		t.Errorf("TierForSetImage(prod) = %v, want TierInline", got)
 	}
 }
 

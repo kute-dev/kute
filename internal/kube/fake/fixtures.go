@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -72,11 +75,28 @@ func NewDemo() *Cluster {
 	)
 
 	c.Seed(kube.KindDeployment, demoMidRolloutDeployment("api", "default", age(30*24*time.Hour)))
-	c.Seed(kube.KindReplicaSet, demoReplicaSet("api-7d9f6c8", "default", "api", "api:2.0", age(30*24*time.Hour)))
+	c.Seed(kube.KindReplicaSet,
+		demoReplicaSet("api-7d9f6c8", "default", "api", "api:2.0", age(30*24*time.Hour)),
+		// The new ReplicaSet the mid-rollout Deployment above is scaling up
+		// to — its own revision-2, current image, giving 24a's set-image
+		// history table a real "current" row alongside api-7d9f6c8's
+		// rollback-target row (docs/design README.md §24a: "TAG · SEEN ·
+		// FROM table lists this workload's own ReplicaSet revision
+		// history").
+		demoReplicaSetRevision("api-9f4e2a1", "default", "api", "api:2.1", 2, age(40*time.Minute)),
+	)
 	// 17b: "api" is HPA-managed, so its scale prompt exercises the "managed
 	// by hpa/<name>" yellow note live in --demo mode.
 	c.Seed(kube.KindHorizontalPodAutoscaler, demoHPA("api-hpa", "default", "Deployment", "api"))
-	c.Seed(kube.KindStatefulSet, demoStatefulSet("worker", "default", age(14*time.Hour)))
+	c.Seed(kube.KindStatefulSet, demoWorkerStatefulSet("worker", "default", age(14*time.Hour)))
+	c.Seed(kube.KindControllerRevision,
+		// 24a's set-image history table for StatefulSet/DaemonSet reads
+		// ControllerRevisions (apps/v1), the mechanism `kubectl rollout
+		// history statefulset` itself reads — "worker" carries two so
+		// --demo mode has a real rollback-target row, not just current.
+		demoControllerRevision("worker-6b8f7c9", "default", "StatefulSet", "worker", "worker", "worker:0.9.2", 1, age(9*24*time.Hour)),
+		demoControllerRevision("worker-7c9a1d2", "default", "StatefulSet", "worker", "worker", "worker:1.0.0", 2, age(14*time.Hour)),
+	)
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
 
@@ -192,6 +212,13 @@ func demoProductionFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	// (yellow) so the strip's <30d coloring has something to show.
 	c.Seed(kube.KindSecret, demoTLSSecret("web-tls", "production", time.Now().Add(20*24*time.Hour), prodAge))
 	c.Seed(kube.KindIngress, demoIngressWithTLS("web-secure", "production", "web", "web-missing", "secure.prod.demo.local", "web-tls", prodAge))
+
+	// api-canary runs a newer tag of the same "api" image "default"'s own
+	// api Deployment is on — 24a's set-image history table's "seen on other
+	// workloads" row (docs/design README.md §24a: "the same image tag seen
+	// on other workloads/namespaces ... the 'promote what prod runs' case")
+	// needs a real cross-namespace sighting to surface in --demo mode.
+	c.Seed(kube.KindDeployment, demoStableDeployment("api-canary", "production", "api:2.2", 1, age(40*time.Minute)))
 }
 
 // demoLoggingFixtures seeds a third add-on namespace shape: a DaemonSet
@@ -721,6 +748,14 @@ func demoMidRolloutDeployment(name, ns string, created metav1.Time) *appsv1.Depl
 }
 
 func demoReplicaSet(name, ns, deployment, image string, created metav1.Time) *appsv1.ReplicaSet {
+	return demoReplicaSetRevision(name, ns, deployment, image, 1, created)
+}
+
+// demoReplicaSetRevision is demoReplicaSet generalized to a caller-chosen
+// revision, so a Deployment fixture can seed more than one owned ReplicaSet
+// (e.g. "api"'s own revision-1/revision-2 pair — 24a's set-image history
+// table reads real revision history off exactly this shape).
+func demoReplicaSetRevision(name, ns, deployment, image string, revision int, created metav1.Time) *appsv1.ReplicaSet {
 	replicas := int32(1)
 	return &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -730,7 +765,7 @@ func demoReplicaSet(name, ns, deployment, image string, created metav1.Time) *ap
 			// stamps on every ReplicaSet it owns — tasks/timeline's 16b
 			// revision rail reads it (kube.TimelineFromRollouts), so demo
 			// mode needs it too for that rail to have anything to show.
-			Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
+			Annotations: map[string]string{"deployment.kubernetes.io/revision": fmt.Sprintf("%d", revision)},
 		},
 		Spec: appsv1.ReplicaSetSpec{
 			Replicas: &replicas,
@@ -772,6 +807,43 @@ func demoStatefulSetN(name, ns string, replicas int32, created metav1.Time) *app
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
 		Status:     appsv1.StatefulSetStatus{Replicas: replicas, ReadyReplicas: replicas},
+	}
+}
+
+// demoWorkerStatefulSet is "worker"'s own exemplar (like demoMidRolloutDeployment
+// is "api"'s) — a real container image, so 24a's set-image editor has
+// something to open on the one StatefulSet --demo mode ships.
+func demoWorkerStatefulSet(name, ns string, created metav1.Time) *appsv1.StatefulSet {
+	s := demoStatefulSetN(name, ns, 1, created)
+	s.Spec.Template = corev1.PodTemplateSpec{
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: name, Image: "worker:1.0.0"}}},
+	}
+	return s
+}
+
+// demoControllerRevision is a StatefulSet/DaemonSet ControllerRevision
+// fixture — the apps/v1 rollout-history mechanism those two controllers use
+// in place of a Deployment's owned ReplicaSets (24a's set-image history
+// table reads it the same way `kubectl rollout history` does). Data.Raw
+// mirrors the real patch shape controllerRevisionContainerImage (browse's
+// setimage.go) decodes.
+func demoControllerRevision(name, ns, ownerKind, owner, container, image string, revision int64, created metav1.Time) *appsv1.ControllerRevision {
+	data, _ := json.Marshal(map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"spec": map[string]any{
+					"containers": []map[string]any{{"name": container, "image": image}},
+				},
+			},
+		},
+	})
+	return &appsv1.ControllerRevision{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns, CreationTimestamp: created,
+			OwnerReferences: []metav1.OwnerReference{{Kind: ownerKind, Name: owner}},
+		},
+		Revision: revision,
+		Data:     runtime.RawExtension{Raw: data},
 	}
 }
 

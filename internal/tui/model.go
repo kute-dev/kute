@@ -49,6 +49,12 @@ type TaskScope struct {
 	// Replicas is the target replica count for a "scale" verb (17b). Unset
 	// (0) for every other verb.
 	Replicas int32
+	// Container is the target container name for a "set-image" verb (24a).
+	// Empty for every other verb.
+	Container string
+	// Image is the target image ref for a "set-image" verb (24a). Empty for
+	// every other verb.
+	Image string
 }
 
 // TaskAction describes an operation available from a task screen.

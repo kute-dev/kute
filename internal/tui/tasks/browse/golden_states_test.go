@@ -17,6 +17,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -404,13 +405,40 @@ func goldenMarksModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// --- 24a: set-image inline editor ---
+
+func goldenSetImageModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	dep := twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.2")
+	rsOldest := replicaSetRevision("default", "aim-worker-r41", "aim-worker", "registry.aim.dev/aim-worker:3.4.0", 41, 23*24*time.Hour)
+	rsOld := replicaSetRevision("default", "aim-worker-r42", "aim-worker", "registry.aim.dev/aim-worker:3.4.1", 42, 21*24*time.Hour)
+	rsCur := replicaSetRevision("default", "aim-worker-r43", "aim-worker", "registry.aim.dev/aim-worker:3.4.2", 43, 2*24*time.Hour)
+	sighting := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "aim-prod", CreationTimestamp: setImageAge(40 * time.Minute)},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.3"}}},
+		}},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {dep, sighting},
+		kube.KindReplicaSet: {rsOldest, rsOld, rsCur},
+	}}
+	sess := newSession()
+	sess.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	return m
+}
+
 // goldenStates maps each fixture-name prefix to its model builder — shared
 // by the plain and (for the color-heaviest states) truecolor fixture maps
 // below.
 var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
-	"confirm-inline", "confirm-modal",
+	"confirm-inline", "confirm-modal", "set-image",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -444,6 +472,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenConfirmInlineModel(t, width, height)
 	case "confirm-modal":
 		return goldenConfirmModalModel(t, width, height)
+	case "set-image":
+		return goldenSetImageModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -494,7 +524,7 @@ func TestGoldenStateFixtures(t *testing.T) {
 // truecolor fixtures in this package.
 var truecolorStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks",
-	"confirm-inline", "confirm-modal",
+	"confirm-inline", "confirm-modal", "set-image",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

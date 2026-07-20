@@ -5,12 +5,49 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
+
+func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindDeployment, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app", Image: "app:1.0"},
+			{Name: "sidecar", Image: "sidecar:1.0"},
+		}}}},
+	})
+
+	if err := c.SetImage(context.Background(), kube.KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
+		t.Fatalf("SetImage: %v", err)
+	}
+	objs, _ := c.ListRaw(context.Background(), kube.KindDeployment, "default")
+	deploy := objs[0].(*appsv1.Deployment)
+	if deploy.Spec.Template.Spec.Containers[0].Image != "app:2.0" {
+		t.Fatalf("app image = %q, want app:2.0", deploy.Spec.Template.Spec.Containers[0].Image)
+	}
+	if deploy.Spec.Template.Spec.Containers[1].Image != "sidecar:1.0" {
+		t.Fatalf("sidecar image = %q, want unchanged sidecar:1.0", deploy.Spec.Template.Spec.Containers[1].Image)
+	}
+}
+
+func TestSetImageRejectsUnknownContainer(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindDeployment, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}}}},
+	})
+	if err := c.SetImage(context.Background(), kube.KindDeployment, "default", "api", "missing", "app:2.0"); err == nil {
+		t.Fatalf("expected an error for an unknown container name")
+	}
+}
 
 func TestListRawFiltersByNamespace(t *testing.T) {
 	t.Parallel()
@@ -205,8 +242,8 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)
 	}
 	deploys, _ := c.ListRaw(ctx, kube.KindDeployment, "")
-	if len(deploys) != 14 {
-		t.Fatalf("expected 14 deployment fixtures, got %d", len(deploys))
+	if len(deploys) != 15 {
+		t.Fatalf("expected 15 deployment fixtures, got %d", len(deploys))
 	}
 	nodes, _ := c.ListRaw(ctx, kube.KindNode, "")
 	if len(nodes) != 4 {

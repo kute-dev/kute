@@ -46,6 +46,7 @@ type fakeMutator struct {
 	deleted      []string
 	forceDeleted []string
 	scaled       []int32
+	setImages    []string // "namespace/name container=image"
 	err          error
 }
 
@@ -87,6 +88,13 @@ func (f *fakeMutator) Scale(_ context.Context, _ kube.ResourceKind, _, _ string,
 		return f.err
 	}
 	f.scaled = append(f.scaled, replicas)
+	return nil
+}
+func (f *fakeMutator) SetImage(_ context.Context, _ kube.ResourceKind, namespace, name, container, image string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.setImages = append(f.setImages, namespace+"/"+name+" "+container+"="+image)
 	return nil
 }
 

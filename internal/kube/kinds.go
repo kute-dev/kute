@@ -70,6 +70,14 @@ const (
 	// above.
 	KindHorizontalPodAutoscaler ResourceKind = "HorizontalPodAutoscaler"
 
+	// KindControllerRevision (apps/v1) backs 24a's set-image history table
+	// for StatefulSet/DaemonSet — the same rollout-history mechanism
+	// `kubectl rollout history statefulset|daemonset` reads, since neither
+	// controller owns ReplicaSets the way Deployment does. A real
+	// informer-backed kind, never registered in resources.Registry (no
+	// browse list needed), same shape as the RBAC/HPA kinds above.
+	KindControllerRevision ResourceKind = "ControllerRevision"
+
 	// KindWhoCan is a synthetic kind, like KindForward: not a Kubernetes API
 	// type and never registered in resources.Registry (there is nothing to
 	// list — 22a is "a query, not a browser"). It exists purely so the goto

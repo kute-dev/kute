@@ -267,6 +267,8 @@ func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string
 		return listNamespaced(f.Apps().V1().StatefulSets().Lister().List, f.Apps().V1().StatefulSets().Lister().StatefulSets, namespace, sel)
 	case KindReplicaSet:
 		return listNamespaced(f.Apps().V1().ReplicaSets().Lister().List, f.Apps().V1().ReplicaSets().Lister().ReplicaSets, namespace, sel)
+	case KindControllerRevision:
+		return listNamespaced(f.Apps().V1().ControllerRevisions().Lister().List, f.Apps().V1().ControllerRevisions().Lister().ControllerRevisions, namespace, sel)
 	case KindJob:
 		return listNamespaced(f.Batch().V1().Jobs().Lister().List, f.Batch().V1().Jobs().Lister().Jobs, namespace, sel)
 	case KindCronJob:

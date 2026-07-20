@@ -210,6 +210,9 @@ func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error {
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
+func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+	return nil
+}
 
 // TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
 // (docs/design README.md §52, §301): objectdetail must show the OFFLINE

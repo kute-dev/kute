@@ -441,6 +441,9 @@ func padBetweenFill(left, right string, width int, fill lipgloss.Style) string {
 }
 
 func (m Model) Body(width, height int) string {
+	if m.pendingSetImage != nil {
+		return m.setImageBody(width, height)
+	}
 	if m.pendingBulkDelete != nil && m.pendingBulkDelete.tier == actions.TierModal {
 		return m.bulkDeleteConfirmModal(width, height)
 	}
@@ -745,90 +748,7 @@ func (m Model) tableBody(width, height int) string {
 		case isMarkedRow:
 			st = markedStyle
 		}
-		cells := resources.Cells(r, width, nil)
-		for i := range cells {
-			switch {
-			case i == 0: // status glyph column
-				if cells[i].Text == "" {
-					cells[i].Text = defaultGlyphFor(r.Status)
-				}
-				cells[i].Style = st.status[r.Status]
-				if m.desc.Custom && r.Status == resources.StatusNeutral {
-					// docs/design README.md §14a: a CRD instance with no
-					// Ready/Available condition at all — "never fake
-					// health" — renders TextFaint, not the generic Neutral/
-					// Info blue every other kind's Neutral class (Completed
-					// pods, cordoned nodes) uses.
-					cells[i].Style = st.customNeutral
-				}
-			case m.kind == kube.KindPod && cols[i].Title == "CPU":
-				cells[i] = m.metricCell(r.Name, true, cpuMax, st)
-			case m.kind == kube.KindPod && cols[i].Title == "MEM":
-				cells[i] = m.metricCell(r.Name, false, memMax, st)
-			case m.kind == kube.KindNode && cols[i].Title == "CPU":
-				cells[i] = m.nodeMetricCell(r.Name, true, st)
-			case m.kind == kube.KindNode && cols[i].Title == "MEM":
-				cells[i] = m.nodeMetricCell(r.Name, false, st)
-			case m.kind == kube.KindNode && cols[i].Title == "Pods":
-				cells[i] = components.Cell{Text: m.nodePodsCell(r.Name), Style: st.dim}
-			case m.kind == kube.KindNode && cols[i].Title == "Version":
-				text := cells[i].Text
-				if majorityVersion != "" && text != majorityVersion {
-					text += " " + tui.GlyphWarning
-				}
-				cells[i] = components.Cell{Text: text, Style: st.dim}
-			case cols[i].Title == "Name":
-				base := st.name
-				if r.Status == resources.StatusFail {
-					base = st.nameBad
-				}
-				text := highlightName(r.Name, fm.matches, st.match, base)
-				if r.NameSuffix != "" {
-					text += st.dim.Render(r.NameSuffix)
-				}
-				cells[i] = components.Cell{Text: text}
-			case cols[i].Title == "Ready":
-				cells[i].Style = st.ready
-			case m.kind == kube.KindNode && cols[i].Title == "Status":
-				// docs/design README.md §11a: "healthy state renders dim,
-				// not green" — the same carve-out 9a's ROLLOUT column
-				// already gets (rowKindHeader case above), extended to
-				// Nodes' own STATUS column: Ready dims, NotReady/other keep
-				// the usual status color.
-				cells[i].Style = st.dim
-				if r.Status != resources.StatusOK {
-					cells[i].Style = st.status[r.Status]
-				}
-			case cols[i].Title == "Status":
-				cells[i].Style = st.status[r.Status]
-			case cols[i].Title == "Rollout":
-				// docs/design README.md §9a: "stable dim" — unlike STATUS,
-				// the healthy rollout state renders dim rather than green;
-				// progressing/degraded keep their usual warn/bad coloring.
-				cells[i].Style = st.dim
-				if r.Status != resources.StatusOK {
-					cells[i].Style = st.status[r.Status]
-				}
-			case cols[i].Title == tui.GlyphRestarts:
-				cells[i].Style = st.restartsHot
-				if cells[i].Text == "0" {
-					cells[i].Style = st.restartsZero
-				}
-			default:
-				cells[i].Style = st.dim
-			}
-		}
-		if marksOn {
-			// 20a's leading mark cell: ▪ (purple) when marked, blank
-			// otherwise — st.dim already carries the right background
-			// (SelBg/MarkBg/none) for this row, so overriding just the
-			// foreground keeps the row's background one continuous fill.
-			markCell := components.Cell{Style: st.dim}
-			if isMarkedRow {
-				markCell = components.Cell{Text: tui.GlyphMarked, Style: st.dim.Foreground(theme.Accent)}
-			}
-			cells = append([]components.Cell{markCell}, cells...)
-		}
+		cells := m.rowCells(r, fm.matches, cols, width, st, theme, cpuMax, memMax, majorityVersion, marksOn, isMarkedRow)
 		// RowStyle carries st.dim's background (MarkBg for a marked row, none
 		// otherwise — Table's own SelRowStyle wins when selected regardless)
 		// into the leading marker slot and inter-column gaps, which per-cell
@@ -865,6 +785,103 @@ func (m Model) tableBody(width, height int) string {
 		RuleStyle:      lipgloss.NewStyle().Foreground(theme.TextGhost2),
 	}
 	return t.Render() + "\n" + t.FooterLine(width)
+}
+
+// rowCells builds one data row's per-column cells with 2a's per-column
+// styling — factored out of tableBody's loop above so setImageBody's frozen
+// context row (setimage_view.go) renders through the exact same styling as
+// the live table, with no pixel drift between the two. matches backs Name's
+// filter-highlight spans (nil outside an active filter — setImageBody's
+// caller never has one, since pendingSetImage can't open while filterActive).
+// marksOn/isMarkedRow false skips the leading mark column entirely
+// (setImageBody's one frozen row never renders it, 20a marks being
+// orthogonal to a single row's set-image edit).
+func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column, width int, st rowCellStyles, theme tui.Theme, cpuMax, memMax int64, majorityVersion string, marksOn, isMarkedRow bool) []components.Cell {
+	cells := resources.Cells(r, width, nil)
+	for i := range cells {
+		switch {
+		case i == 0: // status glyph column
+			if cells[i].Text == "" {
+				cells[i].Text = defaultGlyphFor(r.Status)
+			}
+			cells[i].Style = st.status[r.Status]
+			if m.desc.Custom && r.Status == resources.StatusNeutral {
+				// docs/design README.md §14a: a CRD instance with no
+				// Ready/Available condition at all — "never fake
+				// health" — renders TextFaint, not the generic Neutral/
+				// Info blue every other kind's Neutral class (Completed
+				// pods, cordoned nodes) uses.
+				cells[i].Style = st.customNeutral
+			}
+		case m.kind == kube.KindPod && cols[i].Title == "CPU":
+			cells[i] = m.metricCell(r.Name, true, cpuMax, st)
+		case m.kind == kube.KindPod && cols[i].Title == "MEM":
+			cells[i] = m.metricCell(r.Name, false, memMax, st)
+		case m.kind == kube.KindNode && cols[i].Title == "CPU":
+			cells[i] = m.nodeMetricCell(r.Name, true, st)
+		case m.kind == kube.KindNode && cols[i].Title == "MEM":
+			cells[i] = m.nodeMetricCell(r.Name, false, st)
+		case m.kind == kube.KindNode && cols[i].Title == "Pods":
+			cells[i] = components.Cell{Text: m.nodePodsCell(r.Name), Style: st.dim}
+		case m.kind == kube.KindNode && cols[i].Title == "Version":
+			text := cells[i].Text
+			if majorityVersion != "" && text != majorityVersion {
+				text += " " + tui.GlyphWarning
+			}
+			cells[i] = components.Cell{Text: text, Style: st.dim}
+		case cols[i].Title == "Name":
+			base := st.name
+			if r.Status == resources.StatusFail {
+				base = st.nameBad
+			}
+			text := highlightName(r.Name, matches, st.match, base)
+			if r.NameSuffix != "" {
+				text += st.dim.Render(r.NameSuffix)
+			}
+			cells[i] = components.Cell{Text: text}
+		case cols[i].Title == "Ready":
+			cells[i].Style = st.ready
+		case m.kind == kube.KindNode && cols[i].Title == "Status":
+			// docs/design README.md §11a: "healthy state renders dim,
+			// not green" — the same carve-out 9a's ROLLOUT column
+			// already gets (rowKindHeader case above), extended to
+			// Nodes' own STATUS column: Ready dims, NotReady/other keep
+			// the usual status color.
+			cells[i].Style = st.dim
+			if r.Status != resources.StatusOK {
+				cells[i].Style = st.status[r.Status]
+			}
+		case cols[i].Title == "Status":
+			cells[i].Style = st.status[r.Status]
+		case cols[i].Title == "Rollout":
+			// docs/design README.md §9a: "stable dim" — unlike STATUS,
+			// the healthy rollout state renders dim rather than green;
+			// progressing/degraded keep their usual warn/bad coloring.
+			cells[i].Style = st.dim
+			if r.Status != resources.StatusOK {
+				cells[i].Style = st.status[r.Status]
+			}
+		case cols[i].Title == tui.GlyphRestarts:
+			cells[i].Style = st.restartsHot
+			if cells[i].Text == "0" {
+				cells[i].Style = st.restartsZero
+			}
+		default:
+			cells[i].Style = st.dim
+		}
+	}
+	if marksOn {
+		// 20a's leading mark cell: ▪ (purple) when marked, blank
+		// otherwise — st.dim already carries the right background
+		// (SelBg/MarkBg/none) for this row, so overriding just the
+		// foreground keeps the row's background one continuous fill.
+		markCell := components.Cell{Style: st.dim}
+		if isMarkedRow {
+			markCell = components.Cell{Text: tui.GlyphMarked, Style: st.dim.Foreground(theme.Accent)}
+		}
+		cells = append([]components.Cell{markCell}, cells...)
+	}
+	return cells
 }
 
 // groupHeaderLine draws one 6b namespace group's ▾ heading (docs/design

@@ -220,6 +220,45 @@ func (c *Cluster) Scale(_ context.Context, kind kube.ResourceKind, namespace, na
 	return fmt.Errorf("%s %q not found", kind, name)
 }
 
+// SetImage sets one named container's image on Deployment/StatefulSet/
+// DaemonSet's pod template in place — 24a's tag-first inline editor against
+// the fake cluster.
+func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kind] {
+		var containers []corev1.Container
+		switch o := obj.(type) {
+		case *appsv1.Deployment:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		case *appsv1.StatefulSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		case *appsv1.DaemonSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.Template.Spec.Containers
+		default:
+			continue
+		}
+		for i := range containers {
+			if containers[i].Name == container {
+				containers[i].Image = image
+				c.notify(kind)
+				return nil
+			}
+		}
+		return fmt.Errorf("container %q not found on %s %q", container, kind, name)
+	}
+	return fmt.Errorf("%s %q not found", kind, name)
+}
+
 // HelmRollback simulates `helm rollback` against the fake cluster's seeded
 // helm.sh/release.v1 Secrets: it decodes every revision of name, picks the
 // target (toRevision, or the previous revision when 0 — Helm's own

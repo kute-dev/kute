@@ -41,6 +41,10 @@ type Mutator interface {
 	// prompt. Deployment and StatefulSet are the only kinds with a
 	// spec.replicas field browse exposes.
 	Scale(ctx context.Context, kind ResourceKind, namespace, name string, replicas int32) error
+	// SetImage patches container's image on kind's pod template — 24a's
+	// tag-first inline editor. Deployment, StatefulSet, and DaemonSet are the
+	// three kinds with a pod template browse exposes it on.
+	SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error
 }
 
 // DeleteResource implements Mutator against the live clientset. It maps the kind
@@ -196,7 +200,40 @@ func (c *Cluster) Scale(ctx context.Context, kind ResourceKind, namespace, name 
 // runs — 17b's "will run" documentation line (the same copyable-command
 // idiom as 10a/13a/18a).
 func ScaleCommandString(kind ResourceKind, namespace, name string, replicas int32) string {
-	return fmt.Sprintf("kubectl scale %s/%s --replicas=%d -n %s", scaleResourceArg(kind), name, replicas, namespace)
+	return fmt.Sprintf("kubectl scale %s/%s --replicas=%d -n %s", workloadResourceArg(kind), name, replicas, namespace)
+}
+
+// SetImage patches container's image on kind's pod template via the same
+// strategic-merge-patch idiom as Scale/Cordon — the container list patches
+// by its "name" merge key, so one patch shape covers Deployment/StatefulSet/
+// DaemonSet without a per-kind container index lookup.
+func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error {
+	if name == "" {
+		return fmt.Errorf("cannot set image on %s: empty name", kind)
+	}
+	patch := fmt.Sprintf(
+		`{"spec":{"template":{"spec":{"containers":[{"name":%q,"image":%q}]}}}}`,
+		container, image,
+	)
+	var err error
+	switch kind {
+	case KindDeployment:
+		_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	case KindStatefulSet:
+		_, err = c.clientset.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	case KindDaemonSet:
+		_, err = c.clientset.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	default:
+		err = fmt.Errorf("set image is not supported for kind %s", kind)
+	}
+	return err
+}
+
+// SetImageCommandString renders the exact `kubectl set image` invocation
+// SetImage runs — 24a's "will run" documentation line (the same
+// copyable-command idiom as 10a/13a/17b/18a).
+func SetImageCommandString(kind ResourceKind, namespace, name, container, image string) string {
+	return fmt.Sprintf("kubectl set image %s/%s %s=%s -n %s", workloadResourceArg(kind), name, container, image, namespace)
 }
 
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a
@@ -213,11 +250,18 @@ func DeleteCommandString(kind ResourceKind, namespace string, names []string) st
 	return cmd
 }
 
-func scaleResourceArg(kind ResourceKind) string {
-	if kind == KindStatefulSet {
+// workloadResourceArg renders kind as kubectl's short resource arg for a
+// "will run" line (ScaleCommandString/SetImageCommandString) — Deployment is
+// the default for any kind that isn't StatefulSet/DaemonSet.
+func workloadResourceArg(kind ResourceKind) string {
+	switch kind {
+	case KindStatefulSet:
 		return "sts"
+	case KindDaemonSet:
+		return "ds"
+	default:
+		return "deploy"
 	}
-	return "deploy"
 }
 
 func isDaemonSetOwnedPod(pod corev1.Pod) bool {

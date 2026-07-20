@@ -144,6 +144,9 @@ func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error {
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
+func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+	return nil
+}
 
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{

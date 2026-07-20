@@ -165,6 +165,16 @@ var (
 		ID: "scale", Key: "+/−", Label: "scale",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet}, Mutating: true,
 	}
+	// SetImage is 24a's 'i' on a Deployment/StatefulSet/DaemonSet row — like
+	// Scale, TierNone here is a nominal default: the real tier comes from
+	// TierForSetImage below (TierNone outside PROD, TierInline in PROD),
+	// since Controller.Begin needs a resolved actions.Tier and TierFor only
+	// escalates TierInline→TierModal, not TierNone→TierInline (mirrors
+	// TierForEdit's own doc comment on this same constraint).
+	SetImage = Verb{
+		ID: "set-image", Key: "i", Label: "set image",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
+	}
 )
 
 // Port-forward verbs (13a/13c, docs/design README.md). Forward pushes the
@@ -230,7 +240,7 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
-	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale,
+	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
@@ -273,6 +283,20 @@ func TierFor(v Verb, isProd bool) actions.Tier {
 // to TierInline (one y/N line, not the type-the-name modal — editing isn't
 // delete/drain-grade destructive) only in PROD contexts.
 func TierForEdit(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForSetImage resolves SetImage's confirmation policy — the same
+// TierNone-outside-PROD/TierInline-in-PROD shape as TierForEdit (docs/design
+// README.md §24a: "PROD contexts get the inline y/N on apply, per 8b's
+// tiering"), but SetImage — unlike Edit — does execute through
+// actions.Controller/kube.Mutator, so its PROD confirm is the ordinary
+// TierInline y/N Controller already renders for rollback/delete, not a
+// screen-local gate.
+func TierForSetImage(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}

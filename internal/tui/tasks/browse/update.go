@@ -226,6 +226,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingScale != nil {
 		return m.updateScaleKey(msg)
 	}
+	if m.pendingSetImage != nil {
+		return m.updateSetImageKey(msg)
+	}
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
@@ -295,6 +298,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.beginScale(1)
 	case "-":
 		m.beginScale(-1)
+	case "i":
+		m.beginSetImage()
 	case "a":
 		if !m.desc.ClusterScoped {
 			return m, m.switchNamespace("")

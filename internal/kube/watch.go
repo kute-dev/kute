@@ -21,6 +21,7 @@ func (c *Cluster) registerWatches() {
 		KindDaemonSet:               f.Apps().V1().DaemonSets().Informer(),
 		KindStatefulSet:             f.Apps().V1().StatefulSets().Informer(),
 		KindReplicaSet:              f.Apps().V1().ReplicaSets().Informer(),
+		KindControllerRevision:      f.Apps().V1().ControllerRevisions().Informer(),
 		KindJob:                     f.Batch().V1().Jobs().Informer(),
 		KindCronJob:                 f.Batch().V1().CronJobs().Informer(),
 		KindRole:                    f.Rbac().V1().Roles().Informer(),

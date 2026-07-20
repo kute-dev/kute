@@ -215,6 +215,11 @@ type Model struct {
 	// typed-ahead replica count gathered before there's an action to Begin,
 	// rather than actions.Controller's own y/N/type-name confirmation shapes.
 	pendingScale *scaleTarget
+	// pendingSetImage is non-nil while 24a's inline set-image/set-tag panel
+	// is showing (setimage.go) — a bespoke gate like pendingScale, since
+	// there's a container/tag/history buffer to gather before there's an
+	// action to Begin.
+	pendingSetImage *setImageTarget
 	// marks is 20a's marked set (bulk.go), keyed by markKey(namespace, name)
 	// so 6b's cross-namespace grouped view can't collide two same-named rows
 	// in different namespaces. nil/empty means no marks — every marks-aware
