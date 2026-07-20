@@ -1,0 +1,14 @@
+  kute │ Update               you run 0.2.0 · latest 0.2.1 · released 2d ago    
+────────────────────────────────────────────────────────────────────────────────
+  CHANGELOG · 0.2.1                                                             
+  fix     rollout watch could miss the final ready event on slow clusters       
+  fix     secret value zeroing on esc leaked one frame to the alt-screen bu…    
+  fix     node-shell debug pod leaked when the exec session errored mid-att…    
+          … 9 more · o opens release notes in browser                           
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ installed via  homebrew  detected from the binary path                   │  
+  │ $ brew install kute-dev/tap/kute y copies · runs in your shell, not here │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+────────────────────────────────────────────────────────────────────────────────
+   UPDATE  y copy command  o release notes ↗  x skip  esc back          ? help  

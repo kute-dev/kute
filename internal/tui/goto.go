@@ -28,6 +28,13 @@ const (
 	gotoSwitchKind gotoAction = iota
 	gotoOpenResource
 	gotoSwitchNamespace
+	// gotoOpenUpdatePanel is 28b's ":update" entry point (docs/design
+	// README.md §28b: "also reachable as :update") — ":" already opens this
+	// same goto palette (aliased with "g"), so rather than a separate
+	// colon-command parser, the fuzzy corpus gains one synthetic "update"
+	// item (gotoUpdateItem) whose Enter opens the panel instead of
+	// navigating.
+	gotoOpenUpdatePanel
 )
 
 type gotoTarget struct {
@@ -297,6 +304,7 @@ func gotoFuzzyItems(sess *Session, query string) []palette.Item {
 	corpus = append(corpus, gotoNamespaceItems(sess)...)
 	corpus = append(corpus, gotoWhoCanItem())
 	corpus = append(corpus, gotoOverviewItem())
+	corpus = append(corpus, gotoUpdateItem())
 
 	var pinned []palette.Item
 	if kind, ok := gotoAliasMatch(query); ok {
@@ -360,6 +368,19 @@ func gotoOverviewItem() palette.Item {
 		Label:  "overview",
 		Detail: "cluster · routing",
 		Data:   gotoTarget{action: gotoSwitchKind, kind: kube.KindOverview},
+	}
+}
+
+// gotoUpdateItem is 28b's synthetic ":update" goto result — like
+// gotoWhoCanItem/gotoOverviewItem, it has nothing to list (28b is a static
+// panel, not a resource kind), so it's appended to the fuzzy corpus
+// directly rather than coming from gotoKindItems' Registry walk: always
+// present, uncounted, never part of 12a's ranked daily-kinds list.
+func gotoUpdateItem() palette.Item {
+	return palette.Item{
+		Label:  "update",
+		Detail: "what's new · upgrade",
+		Data:   gotoTarget{action: gotoOpenUpdatePanel},
 	}
 }
 
@@ -543,6 +564,8 @@ func gotoDispatch(sess *Session, item palette.Item) tea.Cmd {
 		pushRecentNamespace(sess, target.namespace)
 		ns := target.namespace
 		return func() tea.Msg { return SwitchNamespaceMsg{Namespace: ns} }
+	case gotoOpenUpdatePanel:
+		return func() tea.Msg { return OpenUpdatePanelMsg{} }
 	}
 	return nil
 }

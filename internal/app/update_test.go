@@ -1,0 +1,149 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/kute-dev/kute/internal/config"
+	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/update"
+)
+
+func TestSessionVersionFallsBackToPlaceholder(t *testing.T) {
+	t.Parallel()
+	if got := sessionVersion(""); got != tui.Version {
+		t.Fatalf("sessionVersion(\"\") = %q, want tui.Version placeholder", got)
+	}
+	if got := sessionVersion("dev"); got != tui.Version {
+		t.Fatalf("sessionVersion(\"dev\") = %q, want tui.Version placeholder", got)
+	}
+}
+
+func TestSessionVersionUsesRealBuildVersion(t *testing.T) {
+	t.Parallel()
+	if got := sessionVersion("0.2.0"); got != "0.2.0" {
+		t.Fatalf("sessionVersion(\"0.2.0\") = %q, want 0.2.0", got)
+	}
+}
+
+type fakeChecker struct {
+	release   update.Release
+	changelog []update.ChangelogEntry
+	err       error
+	calls     int
+}
+
+func (f *fakeChecker) Latest(context.Context) (update.Release, error) {
+	f.calls++
+	if f.err != nil {
+		return update.Release{}, f.err
+	}
+	return f.release, nil
+}
+
+func (f *fakeChecker) Changelog(context.Context, update.Release) ([]update.ChangelogEntry, error) {
+	return f.changelog, nil
+}
+
+func testAppSession() *tui.Session {
+	return &tui.Session{
+		Theme:   tui.Dark(),
+		Styles:  tui.NewStyles(tui.Dark()),
+		Version: "0.2.0",
+		State:   state.State{PerContext: map[string]state.PerContext{}},
+	}
+}
+
+func TestUpdateCheckCmdNilWhenDisabled(t *testing.T) {
+	t.Parallel()
+	disabled := false
+	sess := testAppSession()
+	sess.Config = config.Config{Update: config.UpdateConfig{Check: &disabled}}
+	checker := &fakeChecker{}
+
+	if cmd := updateCheckCmd(sess, checker, false); cmd != nil {
+		t.Fatal("expected nil Cmd when update.check is disabled")
+	}
+	// Disabled must win even for a forced ('r') recheck.
+	if cmd := updateCheckCmd(sess, checker, true); cmd != nil {
+		t.Fatal("expected nil Cmd for a forced recheck when update.check is disabled")
+	}
+}
+
+func TestUpdateCheckCmdNilWhenCacheFresh(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	sess.State.UpdateCheck.LastChecked = time.Now().Add(-time.Hour)
+	checker := &fakeChecker{}
+
+	if cmd := updateCheckCmd(sess, checker, false); cmd != nil {
+		t.Fatal("expected nil Cmd within the 24h cache window")
+	}
+}
+
+func TestUpdateCheckCmdForcedBypassesCache(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	sess.State.UpdateCheck.LastChecked = time.Now().Add(-time.Hour)
+	checker := &fakeChecker{release: update.Release{Version: "0.2.1"}}
+
+	cmd := updateCheckCmd(sess, checker, true)
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd for a forced recheck even within the cache window")
+	}
+	msg, ok := cmd().(tui.UpdateCheckedMsg)
+	if !ok || msg.LatestVersion != "0.2.1" || checker.calls != 1 {
+		t.Fatalf("cmd() = %+v (calls=%d), want a resolved 0.2.1 check", msg, checker.calls)
+	}
+}
+
+func TestUpdateCheckCmdRunsWhenCacheStale(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	sess.State.UpdateCheck.LastChecked = time.Now().Add(-25 * time.Hour)
+	checker := &fakeChecker{release: update.Release{Version: "0.2.1"}}
+
+	cmd := updateCheckCmd(sess, checker, false)
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd once the cache is stale")
+	}
+}
+
+func TestUpdateCheckCmdRunsWhenNeverChecked(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	checker := &fakeChecker{release: update.Release{Version: "0.2.1"}}
+
+	cmd := updateCheckCmd(sess, checker, false)
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd when LastChecked is zero (never checked)")
+	}
+}
+
+func TestUpdateCheckCmdErrYieldsErrMsg(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	checker := &fakeChecker{err: errors.New("offline")}
+
+	cmd := updateCheckCmd(sess, checker, false)
+	msg, ok := cmd().(tui.UpdateCheckedMsg)
+	if !ok || msg.Err == nil {
+		t.Fatalf("cmd() = %+v, want UpdateCheckedMsg with Err set", msg)
+	}
+}
+
+func TestBuildUpdateFactoryProducesAWorkingTask(t *testing.T) {
+	t.Parallel()
+	sess := testAppSession()
+	task := buildUpdateFactory(sess, &fakeChecker{})()
+	if task == nil {
+		t.Fatal("expected a non-nil Task")
+	}
+	task.SetSize(120, 36)
+	if task.Init() != nil {
+		t.Fatal("expected tasks/update's Init to be a no-op (no I/O of its own)")
+	}
+}

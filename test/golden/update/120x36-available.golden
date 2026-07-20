@@ -1,0 +1,36 @@
+  kute │ Update                                                       you run 0.2.0 · latest 0.2.1 · released 2d ago    
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  CHANGELOG · 0.2.1                                                                                                     
+  fix     rollout watch could miss the final ready event on slow clusters                                               
+  fix     secret value zeroing on esc leaked one frame to the alt-screen buffer                                         
+  new     resources editor accepts binary suffixes (Gi/Mi) case-insensitively                                           
+  perf    namespace palette CPU-share column no longer refetches per keystroke                                          
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ installed via  homebrew  detected from the binary path                                 kute never updates itself │  
+  │ $ brew install kute-dev/tap/kute                                         y copies · runs in your shell, not here │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   UPDATE  y copy command  o release notes ↗  x skip  esc back                                                  ? help  

@@ -1,0 +1,212 @@
+package update
+
+import (
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/update"
+)
+
+var errBoom = errors.New("boom")
+
+func testSession() *tui.Session {
+	return &tui.Session{Theme: tui.Dark(), Styles: tui.NewStyles(tui.Dark()), Version: "0.2.0"}
+}
+
+// noopOpenBrowser is every test's default Config.OpenBrowser: New defaults
+// to the real update.OpenBrowser (an OS process spawn against a real URL)
+// when Config leaves it nil, so any test model that might press 'o' — now
+// or after a future edit — must inject this instead, never the real thing.
+func noopOpenBrowser(string) error { return nil }
+
+func availableModel() Model {
+	sess := testSession()
+	sess.Update = &tui.UpdateInfo{
+		Latest: update.Release{Version: "0.2.1", PublishedAt: time.Now().Add(-48 * time.Hour), HTMLURL: "https://github.com/kute-dev/kute/releases/tag/v0.2.1"},
+		Changelog: []update.ChangelogEntry{
+			{Type: "fix", Text: "rollout watch could miss the final ready event on slow clusters"},
+			{Type: "new", Text: "resources editor accepts binary suffixes (Gi/Mi) case-insensitively"},
+		},
+		Install: update.InstallInfo{Manager: "homebrew", Command: "brew install kute-dev/tap/kute"},
+	}
+	m := New(Config{Session: sess, OpenBrowser: noopOpenBrowser})
+	m.SetSize(120, 36)
+	return m
+}
+
+func emptyModel() Model {
+	sess := testSession()
+	sess.Update = &tui.UpdateInfo{Latest: update.Release{Version: "0.2.0"}}
+	sess.State.UpdateCheck.LastChecked = time.Now().Add(-3 * time.Hour)
+	m := New(Config{Session: sess, OpenBrowser: noopOpenBrowser})
+	m.SetSize(120, 36)
+	return m
+}
+
+func loadingModel() Model {
+	m := New(Config{Session: testSession(), OpenBrowser: noopOpenBrowser})
+	m.SetSize(120, 36)
+	return m
+}
+
+func TestStateDerivation(t *testing.T) {
+	if got := availableModel().state(); got != tui.TaskStateReady {
+		t.Fatalf("availableModel state = %v, want Ready", got)
+	}
+	if got := emptyModel().state(); got != tui.TaskStateEmpty {
+		t.Fatalf("emptyModel state = %v, want Empty", got)
+	}
+	if got := loadingModel().state(); got != tui.TaskStateLoading {
+		t.Fatalf("loadingModel state = %v, want Loading", got)
+	}
+}
+
+func TestEscSendsBackMsg(t *testing.T) {
+	m := availableModel()
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if cmd == nil {
+		t.Fatal("expected a Cmd for esc")
+	}
+	if _, ok := cmd().(tui.BackMsg); !ok {
+		t.Fatalf("expected tui.BackMsg, got %T", cmd())
+	}
+}
+
+func TestYCopiesInstallCommand(t *testing.T) {
+	m := availableModel()
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "y"})
+	if cmd == nil {
+		t.Fatal("expected a Cmd (tea.SetClipboard) from 'y'")
+	}
+	m2 := updated.(Model)
+	if !strings.Contains(m2.feedback, "copied") {
+		t.Fatalf("feedback = %q, want it to mention copied", m2.feedback)
+	}
+}
+
+func TestYNoopInEmptyState(t *testing.T) {
+	m := emptyModel()
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "y"})
+	if cmd != nil {
+		t.Fatal("expected no Cmd for 'y' with no update available")
+	}
+}
+
+func TestXMarksSeenAndSetsFeedback(t *testing.T) {
+	m := availableModel()
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "x"})
+	m2 := updated.(Model)
+	if !m2.session.State.UpdateSeen("0.2.1") {
+		t.Fatal("expected 0.2.1 marked seen after 'x'")
+	}
+	if !strings.Contains(m2.feedback, "0.2.1") || !strings.Contains(m2.feedback, "skipped") {
+		t.Fatalf("feedback = %q", m2.feedback)
+	}
+}
+
+// TestOOpensBrowserAndSetsFeedback pins 'o' calling Config.OpenBrowser with
+// the release's HTMLURL — never the real update.OpenBrowser (which would
+// spawn a real OS "open a URL" process against a real GitHub URL; a
+// previous version of this test did exactly that, popping a real browser
+// tab on every `go test` run).
+func TestOOpensBrowserAndSetsFeedback(t *testing.T) {
+	var gotURL string
+	sess := testSession()
+	sess.Update = &tui.UpdateInfo{Latest: update.Release{Version: "0.2.1", HTMLURL: "https://github.com/kute-dev/kute/releases/tag/v0.2.1"}}
+	m := New(Config{Session: sess, OpenBrowser: func(url string) error { gotURL = url; return nil }})
+	m.SetSize(120, 36)
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "o"})
+	if cmd == nil {
+		t.Fatal("expected a Cmd from 'o'")
+	}
+	// Drive the Cmd's result back through Update, same as the real runtime
+	// would.
+	updated, _ = updated.(Model).Update(cmd())
+	m2 := updated.(Model)
+
+	if gotURL != "https://github.com/kute-dev/kute/releases/tag/v0.2.1" {
+		t.Fatalf("OpenBrowser called with %q, want the release's HTMLURL", gotURL)
+	}
+	if m2.feedback != "opened in browser" {
+		t.Fatalf("feedback = %q, want \"opened in browser\"", m2.feedback)
+	}
+}
+
+// TestOSetsFeedbackOnOpenBrowserError pins the failure path — a browser
+// that couldn't be launched (no xdg-open, headless box, …) surfaces a
+// message instead of silently doing nothing.
+func TestOSetsFeedbackOnOpenBrowserError(t *testing.T) {
+	sess := testSession()
+	sess.Update = &tui.UpdateInfo{Latest: update.Release{Version: "0.2.1", HTMLURL: "https://github.com/kute-dev/kute/releases/tag/v0.2.1"}}
+	m := New(Config{Session: sess, OpenBrowser: func(string) error { return errBoom }})
+	m.SetSize(120, 36)
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "o"})
+	updated, _ = updated.(Model).Update(cmd())
+	m2 := updated.(Model)
+	if m2.feedback != "couldn't open a browser" {
+		t.Fatalf("feedback = %q, want the failure note", m2.feedback)
+	}
+}
+
+func TestROnlyRechecksInEmptyState(t *testing.T) {
+	calls := 0
+	sess := testSession()
+	sess.Update = &tui.UpdateInfo{Latest: update.Release{Version: "0.2.0"}}
+	m := New(Config{Session: sess, OpenBrowser: noopOpenBrowser, Recheck: func() tea.Cmd { calls++; return func() tea.Msg { return tui.UpdateCheckedMsg{} } }})
+	m.SetSize(120, 36)
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd == nil || calls != 1 {
+		t.Fatalf("expected 'r' to call Recheck in the empty state, calls=%d", calls)
+	}
+	m2 := updated.(Model)
+	if !m2.checking {
+		t.Fatal("expected checking=true after 'r'")
+	}
+
+	// UpdateCheckedMsg clears checking regardless of outcome.
+	updated, _ = m2.Update(tui.UpdateCheckedMsg{})
+	m3 := updated.(Model)
+	if m3.checking {
+		t.Fatal("expected checking cleared after UpdateCheckedMsg")
+	}
+}
+
+func TestRNoopInReadyState(t *testing.T) {
+	calls := 0
+	m := availableModel()
+	m.recheck = func() tea.Cmd { calls++; return nil }
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd != nil || calls != 0 {
+		t.Fatal("expected 'r' to be a no-op while an update is available (ready state)")
+	}
+}
+
+func TestKeybarGroupsAreStateConditional(t *testing.T) {
+	ready := availableModel().Keybar()
+	if !containsKey(ready.Groups, "y") || !containsKey(ready.Groups, "x") || containsKey(ready.Groups, "r") {
+		t.Fatalf("ready keybar groups = %+v", ready.Groups)
+	}
+	empty := emptyModel().Keybar()
+	if !containsKey(empty.Groups, "r") || containsKey(empty.Groups, "y") {
+		t.Fatalf("empty keybar groups = %+v", empty.Groups)
+	}
+}
+
+func containsKey(groups [][]tui.KeyHint, key string) bool {
+	for _, g := range groups {
+		for _, h := range g {
+			if h.Key == key {
+				return true
+			}
+		}
+	}
+	return false
+}

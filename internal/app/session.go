@@ -32,6 +32,7 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 		Config:     userConfig,
 		Theme:      theme,
 		Styles:     tui.NewStyles(theme),
+		Version:    sessionVersion(cfg.Version),
 		HelpScope:  helpScopeKeys(),
 		HelpGlobal: helpGlobalKeys(),
 	}
@@ -98,6 +99,7 @@ func helpGlobalKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		{Key: "↑↓ jk", Label: "move"},
 		{Key: "esc", Label: "back"},
+		{Key: "U", Label: "what's new"},
 		verbs.Help.Hint(),
 		{Key: "q", Label: "quit"},
 	}

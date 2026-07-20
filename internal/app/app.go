@@ -165,6 +165,7 @@ type seams interface {
 // is active.
 func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	sess, cluster, buildErr := BuildSession(cfg)
+	checker := buildChecker(cfg)
 
 	switch {
 	case cluster != nil:
@@ -172,7 +173,8 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
 		sess.Metrics = cluster
 		model := tui.NewWithSession(buildBrowseTask(cfg, sess, cluster), sess).
-			WithRootFactories(buildSetupFactory(cfg, sess, cluster), buildBrowseFactory(cfg, sess, cluster))
+			WithRootFactories(buildSetupFactory(cfg, sess, cluster), buildBrowseFactory(cfg, sess, cluster)).
+			WithUpdatePanel(buildUpdateFactory(sess, checker))
 		return model, cluster, nil
 
 	case cfg.Demo:
@@ -216,7 +218,8 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			Forwards:         sess.Forwards,
 			Retrier:          demoCluster,
 		})
-		return tui.NewWithSession(&b, sess), nil, demoCluster
+		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
+		return model, nil, demoCluster
 
 	default:
 		// No reachable cluster and not --demo: root at tasks/setup's 10b
@@ -230,7 +233,8 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			KubeconfigPath: kubeconfigPathOrEmpty(),
 			Reconnect:      func(path string) tea.Cmd { return attemptReconnect(cfg, sess, path) },
 		})
-		return tui.NewWithSession(&s, sess), nil, nil
+		model := tui.NewWithSession(&s, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
+		return model, nil, nil
 	}
 }
 
@@ -834,6 +838,17 @@ func RunWithConfig(cfg Config) error {
 	}
 	if sess := model.Session(); sess != nil && sess.Forwards != nil {
 		go watchForwardManager(ctx, sess.Forwards, program)
+	}
+	if sess := model.Session(); sess != nil {
+		if cmd := updateCheckCmd(sess, buildChecker(cfg), false); cmd != nil {
+			// Same "result arrives outside any tea.Cmd the root can await
+			// synchronously" shape as the CRDsDiscoveredMsg goroutine just
+			// above — updateCheckCmd's own tea.Cmd already does the
+			// network round trip off-thread, so calling it directly here
+			// (rather than threading it through Model.Init) doesn't block
+			// program startup.
+			go func() { program.Send(cmd()) }()
+		}
 	}
 
 	_, err := program.Run()

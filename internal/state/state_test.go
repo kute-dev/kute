@@ -75,6 +75,54 @@ func TestLoadDropsOldTopLevelRecentNamespaces(t *testing.T) {
 	}
 }
 
+// TestLoadMigratesV1FileToV2 pins the version-2 schema bump (State.UpdateCheck,
+// 28a/28b): an old v1 file with no updateCheck key loads cleanly at v2 with
+// UpdateCheck at its zero value.
+func TestLoadMigratesV1FileToV2(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "state.json")
+	v1 := `{"version": 1, "recentKinds": ["Pod"]}`
+	if err := os.WriteFile(path, []byte(v1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := loadFrom(path)
+	if got.Version != CurrentVersion {
+		t.Fatalf("Version = %d, want %d", got.Version, CurrentVersion)
+	}
+	if len(got.RecentKinds) != 1 || got.RecentKinds[0] != "Pod" {
+		t.Fatalf("RecentKinds = %v, want migrated data preserved", got.RecentKinds)
+	}
+	if !got.UpdateCheck.LastChecked.IsZero() || got.UpdateCheck.LatestVersion != "" || len(got.UpdateCheck.SeenVersions) != 0 {
+		t.Fatalf("UpdateCheck = %+v, want zero value from a v1 file", got.UpdateCheck)
+	}
+}
+
+func TestMarkUpdateSeenIsIdempotent(t *testing.T) {
+	t.Parallel()
+	var s State
+	s.MarkUpdateSeen("0.2.1")
+	s.MarkUpdateSeen("0.2.1")
+	s.MarkUpdateSeen("0.2.2")
+	if len(s.UpdateCheck.SeenVersions) != 2 {
+		t.Fatalf("SeenVersions = %v, want exactly 2 (dedup)", s.UpdateCheck.SeenVersions)
+	}
+	if !s.UpdateSeen("0.2.1") || !s.UpdateSeen("0.2.2") {
+		t.Fatalf("UpdateSeen false for a marked version, SeenVersions = %v", s.UpdateCheck.SeenVersions)
+	}
+	if s.UpdateSeen("0.3.0") {
+		t.Fatal("UpdateSeen true for a version never marked")
+	}
+}
+
+func TestMarkUpdateSeenIgnoresEmpty(t *testing.T) {
+	t.Parallel()
+	var s State
+	s.MarkUpdateSeen("")
+	if len(s.UpdateCheck.SeenVersions) != 0 {
+		t.Fatalf("SeenVersions = %v, want unchanged for an empty version", s.UpdateCheck.SeenVersions)
+	}
+}
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "nested", "state.json")

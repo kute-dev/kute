@@ -123,7 +123,7 @@ func (m Model) Keybar() tui.Keybar {
 			Pill:       pill,
 			PillText:   pillText,
 			Groups:     [][]tui.KeyHint{{verbs.Goto.Hint(), verbs.Context.Hint(), verbs.WhoCan.Hint(), {Key: "y", Label: "copy error"}, verbs.Retry.Hint()}},
-			RightHints: []tui.KeyHint{verbs.Help.Hint()},
+			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 		}
 	}
 
@@ -132,7 +132,7 @@ func (m Model) Keybar() tui.Keybar {
 			Pill:       pill,
 			PillText:   pillText,
 			RightNote:  fmt.Sprintf("0 %s · watching — new %s appear live", lowerDisplay(m.desc.Display), lowerDisplay(m.desc.Display)),
-			RightHints: []tui.KeyHint{verbs.Help.Hint()},
+			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 		}
 	}
 
@@ -145,7 +145,7 @@ func (m Model) Keybar() tui.Keybar {
 			PillText:   pillText,
 			Groups:     [][]tui.KeyHint{{verbs.Goto.Hint(), verbs.Namespace.Hint(), verbs.Context.Hint()}},
 			RightNote:  "row actions enable when data lands",
-			RightHints: []tui.KeyHint{verbs.Help.Hint()},
+			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 		}
 	}
 
@@ -291,7 +291,7 @@ func (m Model) Keybar() tui.Keybar {
 		PillText:   pillText,
 		Groups:     groups,
 		RightNote:  m.execFeedback,
-		RightHints: []tui.KeyHint{verbs.Help.Hint()},
+		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}
 }
 

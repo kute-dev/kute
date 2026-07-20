@@ -25,6 +25,17 @@ type Config struct {
 	// verb ('s' on a node) hands to kubectl debug — for clusters that can't
 	// pull from Docker Hub. Empty falls back to kube.DefaultNodeShellImage.
 	NodeShellImage string `yaml:"nodeShellImage,omitempty"`
+	// Update holds 28a/28b's update-check toggle — relevant behind
+	// egress-flagging proxies (docs/design README.md §28a).
+	Update UpdateConfig `yaml:"update,omitempty"`
+}
+
+// UpdateConfig is Config's "update:" block.
+type UpdateConfig struct {
+	// Check disables the ambient release-feed GET entirely when explicitly
+	// set to false. A nil pointer (the key absent from the file) means
+	// enabled — see UpdateCheckEnabled.
+	Check *bool `yaml:"check,omitempty"`
 }
 
 // Path returns ~/.config/kute/config.yaml.
@@ -53,6 +64,12 @@ func loadFrom(path string) Config {
 		return Config{}
 	}
 	return c
+}
+
+// UpdateCheckEnabled reports whether the ambient release-feed check (28a)
+// should run at all — true unless update.check is explicitly set to false.
+func (c Config) UpdateCheckEnabled() bool {
+	return c.Update.Check == nil || *c.Update.Check
 }
 
 // IsProd reports whether contextName is listed under prodContexts.

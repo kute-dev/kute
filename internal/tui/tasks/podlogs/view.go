@@ -49,7 +49,7 @@ func (m Model) Header() tui.HeaderState {
 		conn = tui.ConnBadge{Text: "⏸ paused", Style: dim}
 	}
 
-	return tui.HeaderState{Crumbs: crumbs, ForwardChip: tui.BuildForwardChip(theme, m.session.ForwardSummary()), Conn: conn}
+	return tui.HeaderState{Crumbs: crumbs, UpdateChip: tui.BuildUpdateChip(theme, m.session), ForwardChip: tui.BuildForwardChip(theme, m.session.ForwardSummary()), Conn: conn}
 }
 
 // Strips is the toolbar (docs/design README.md §5b): container + since +

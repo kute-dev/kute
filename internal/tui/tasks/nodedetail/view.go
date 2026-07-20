@@ -62,6 +62,7 @@ func (m Model) Header() tui.HeaderState {
 
 	return tui.HeaderState{
 		Crumbs:      crumbs,
+		UpdateChip:  tui.BuildUpdateChip(theme, m.session),
 		ForwardChip: tui.BuildForwardChip(theme, m.session.ForwardSummary()),
 		Conn:        tui.LiveConnBadge(theme, m.conn, tui.GlyphRunning+" connected"),
 	}

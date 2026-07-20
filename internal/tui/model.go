@@ -149,6 +149,14 @@ type Model struct {
 	showingSetup   bool
 	buildSetup     func(kube.ConnState) Task
 	buildBrowse    func() Task
+
+	// buildUpdate builds 28b's what's-new panel (WithUpdatePanel) — set
+	// independently of buildSetup/buildBrowse above: unlike 4c/10b's
+	// factories (WithRootFactories, only armed for a real, not-yet-
+	// reachable cluster), 28b's "U from anywhere" must work in real, demo,
+	// and no-cluster/setup mode alike, so app.NewModel's three branches all
+	// call WithUpdatePanel regardless of which of those they're building.
+	buildUpdate func() Task
 }
 
 // New creates a root TUI model for the provided task, with no Session (no
@@ -174,6 +182,14 @@ func (m Model) WithRootFactories(buildSetup func(kube.ConnState) Task, buildBrow
 	m.buildSetup = buildSetup
 	m.buildBrowse = buildBrowse
 	m.neverConnected = buildSetup != nil && m.session != nil && m.session.Cluster != nil
+	return m
+}
+
+// WithUpdatePanel installs the 28b task factory 'U'/':update' push through
+// (build's doc comment on Model.buildUpdate explains why this is a separate
+// setter from WithRootFactories).
+func (m Model) WithUpdatePanel(build func() Task) Model {
+	m.buildUpdate = build
 	return m
 }
 
@@ -328,6 +344,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
 		}
 		return m, nil
+	case UpdateCheckedMsg:
+		// Also forwarded to the task below (unchanged msg): tasks/update
+		// (28b) needs it too, to clear its own "checking…" state after 'r'
+		// — same reasoning as kube.ConnStateMsg's forward, just below.
+		if msg.Err == nil && m.session != nil {
+			info := msg.Info
+			m.session.Update = &info
+			m.session.State.UpdateCheck.LastChecked = msg.CheckedAt
+			m.session.State.UpdateCheck.LatestVersion = msg.LatestVersion
+		}
+	case OpenUpdatePanelMsg:
+		return m, m.openUpdatePanel()
 	case contextProbeMsg:
 		// A stale gen (a since-superseded probe run) still drains its own
 		// channel to completion — see contextProbeMsg's doc comment — but
@@ -419,6 +447,8 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		return true, m, m.openPalette(palette.ScopeNamespace, "ns ›", "")
 	case "c":
 		return true, m, m.openPalette(palette.ScopeContext, "ctx ›", "")
+	case "U":
+		return true, m, m.openUpdatePanel()
 	case "?":
 		m.helpOpen = true
 		m.mode = ModeHelp
@@ -454,12 +484,18 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		switch scope {
 		case palette.ScopeGoto:
 			cmd = gotoDispatch(m.session, item)
-			if cmd != nil && len(m.stack) > 0 {
+			target, isTarget := item.Data.(gotoTarget)
+			opensUpdate := isTarget && target.action == gotoOpenUpdatePanel
+			if cmd != nil && len(m.stack) > 0 && !opensUpdate {
 				// The goto palette can be opened from any Screen, not just
 				// the root browse task (e.g. poddetail) — but only browse
 				// handles GotoKindMsg/GotoResourceMsg. Unwind the stack back
 				// to the root task first, or the message lands on a screen
 				// that ignores it and the jump silently does nothing.
+				// ":update" is the one exception (opensUpdate): its
+				// OpenUpdatePanelMsg pushes onto whatever's already active
+				// (openUpdatePanel), so esc naturally returns to wherever
+				// the palette was opened from, not all the way to root.
 				m.task = m.stack[0]
 				m.stack = nil
 			}
@@ -674,6 +710,30 @@ func (m *Model) startContextProbe() tea.Cmd {
 	m.probeGen++
 	m.refreshContextPalette()
 	return probeContextsCmd(m.probeGen, contextNames())
+}
+
+// openUpdatePanel pushes the current task and swaps in 28b (buildUpdate) —
+// shared by the 'U' shortcut (handleShellKey) and the goto palette's
+// synthetic ":update" item (OpenUpdatePanelMsg). Marks the chip's version
+// seen right away: opening the panel at all counts as "seen" for 28a's
+// ambient chip (docs/design README.md §28b), whether or not the user goes
+// on to press 'x' inside it. A no-op (nil Cmd) when no factory was
+// installed (WithUpdatePanel never called — shouldn't happen once
+// app.NewModel wires it, but every branch guards the same way buildSetup/
+// buildBrowse already do).
+func (m *Model) openUpdatePanel() tea.Cmd {
+	if m.buildUpdate == nil {
+		return nil
+	}
+	if m.session != nil {
+		if v, ok := m.session.UpdateChip(); ok {
+			m.session.State.MarkUpdateSeen(v)
+		}
+	}
+	m.stack = append(m.stack, m.task)
+	m.task = m.buildUpdate()
+	m.resizeTask()
+	return m.task.Init()
 }
 
 // movePalette routes an up/down press to the palette's linear list.

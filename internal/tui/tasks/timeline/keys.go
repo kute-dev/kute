@@ -28,6 +28,6 @@ func (m Model) Keybar() tui.Keybar {
 			{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
 			{{Key: "t", Label: "time window"}, verbs.Filter.Hint()},
 		},
-		RightHints: []tui.KeyHint{verbs.Help.Hint()},
+		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}
 }

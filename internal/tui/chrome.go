@@ -71,6 +71,11 @@ func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnB
 type HeaderState struct {
 	Crumbs   []Crumb
 	SyncNote string // e.g. "sync 2s"
+	// UpdateChip is 28a's ambient "update available" indicator — empty
+	// (zero value) renders nothing at all, same "zero chrome when inert"
+	// contract as ForwardChip. Built via BuildUpdateChip. Renders left of
+	// ForwardChip/Conn, matching the mockup's "↑ 0.2.1" then "● connected".
+	UpdateChip ConnBadge
 	// ForwardChip is 13d's ambient port-forward indicator — empty (zero
 	// value) renders nothing at all, so a screen with no active forwards
 	// leaves the header untouched (docs/design README.md §13d: "zero
@@ -303,6 +308,9 @@ func renderHeaderV2(h HeaderState, theme Theme, width int) []string {
 	var right string
 	if h.SyncNote != "" {
 		right = dim.Render(h.SyncNote) + "  "
+	}
+	if h.UpdateChip.Text != "" {
+		right += h.UpdateChip.Style.Render(h.UpdateChip.Text) + "  "
 	}
 	if h.ForwardChip.Text != "" {
 		right += h.ForwardChip.Style.Render(h.ForwardChip.Text) + "  "

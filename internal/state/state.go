@@ -10,11 +10,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"time"
 )
 
 // CurrentVersion is the schema version stamped on every save. Bump it and
 // extend migrate whenever the schema changes.
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 // MaxRecent caps every Recent* list, most-recent-first. 11, not some
 // rounder number: 6a/7a's numbered recent-pick (tui.recentNumbers) excludes
@@ -56,6 +58,21 @@ type State struct {
 	RecentKinds    []string              `json:"recentKinds,omitempty"`
 	RecentContexts []string              `json:"recentContexts,omitempty"`
 	PerContext     map[string]PerContext `json:"perContext,omitempty"`
+	// UpdateCheck is 28a/28b's cached release-feed check (docs/design
+	// README.md's State Management section: "cached in the state dir,
+	// drives the 28a chip and 28b's per-version dismissal") — schema v2.
+	UpdateCheck UpdateCheckState `json:"updateCheck,omitzero"`
+}
+
+// UpdateCheckState is the persisted trio 28a's ambient chip needs even in a
+// session that never re-checks (28a's own 24h-cadence check runs at most
+// once per launch) — everything richer (release notes, changelog entries)
+// is refetched on demand and never written here, per that section's
+// "cached in the state dir" being scoped to exactly these three fields.
+type UpdateCheckState struct {
+	LastChecked   time.Time `json:"lastChecked,omitzero"`
+	LatestVersion string    `json:"latestVersion,omitempty"`
+	SeenVersions  []string  `json:"seenVersions,omitempty"`
 }
 
 // Path returns the state file location: $XDG_STATE_HOME/kute/state.json,
@@ -122,12 +139,29 @@ func capRecent(items []string) []string {
 	return items
 }
 
-// migrate upgrades s to CurrentVersion. Schema v1 is the only version so
-// far; this is the hook the next schema bump extends (add a case per old
-// version, never delete the ability to read one further back than needed).
+// migrate upgrades s to CurrentVersion. v1 -> v2 (UpdateCheck, 28a/28b) adds
+// no field that needs a data transform — JSON decoding a v1 file already
+// leaves UpdateCheck at its zero value — so, like every bump so far, this
+// is just the version stamp; the hook is here for the next bump that
+// actually needs to transform something.
 func migrate(s State) State {
 	s.Version = CurrentVersion
 	return s
+}
+
+// MarkUpdateSeen records version as seen (opening 28b for it, or 'x'
+// skipping it there) — idempotent, so the ambient chip (28a) never re-nags
+// for a version already seen, per docs/design README.md §28a.
+func (s *State) MarkUpdateSeen(version string) {
+	if version == "" || slices.Contains(s.UpdateCheck.SeenVersions, version) {
+		return
+	}
+	s.UpdateCheck.SeenVersions = append(s.UpdateCheck.SeenVersions, version)
+}
+
+// UpdateSeen reports whether version has already been marked seen.
+func (s State) UpdateSeen(version string) bool {
+	return slices.Contains(s.UpdateCheck.SeenVersions, version)
 }
 
 // Save atomically writes s to Path() (temp file + rename, so a crash mid

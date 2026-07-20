@@ -24,6 +24,6 @@ func (m Model) Keybar() tui.Keybar {
 		Pill:       tui.ModeBrowse,
 		PillText:   "OVERVIEW",
 		Groups:     groups,
-		RightHints: []tui.KeyHint{verbs.Help.Hint()},
+		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}
 }

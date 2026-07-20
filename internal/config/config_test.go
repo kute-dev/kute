@@ -54,6 +54,37 @@ func TestLoadParsesTheme(t *testing.T) {
 	}
 }
 
+func TestUpdateCheckEnabledDefaultsTrue(t *testing.T) {
+	t.Parallel()
+	if !(Config{}).UpdateCheckEnabled() {
+		t.Fatalf("UpdateCheckEnabled must default to true when update.check is absent")
+	}
+}
+
+func TestUpdateCheckEnabledParsesFalse(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("update:\n  check: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := loadFrom(path)
+	if got.UpdateCheckEnabled() {
+		t.Fatalf("expected update.check: false to disable the check")
+	}
+}
+
+func TestUpdateCheckEnabledParsesExplicitTrue(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("update:\n  check: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := loadFrom(path)
+	if !got.UpdateCheckEnabled() {
+		t.Fatalf("expected update.check: true to keep the check enabled")
+	}
+}
+
 func TestIsProdNameHeuristicNotApplied(t *testing.T) {
 	t.Parallel()
 	// A context literally named "prod-looking-but-not-listed" must not be

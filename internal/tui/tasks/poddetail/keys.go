@@ -91,7 +91,7 @@ func (m Model) Keybar() tui.Keybar {
 		PillText:   pillText,
 		Groups:     groups,
 		RightNote:  rightNote,
-		RightHints: []tui.KeyHint{verbs.Help.Hint()},
+		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}
 }
 

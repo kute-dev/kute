@@ -69,6 +69,16 @@ type Session struct {
 	// forwards survive one (docs/design README.md §13d: "global across
 	// context switches"). Nil when no cluster is reachable.
 	Forwards *kube.ForwardManager
+	// Version is kute's own running build version ("0.2.0", no leading
+	// "v") — set once at the composition root from the ldflags-injected
+	// build version (main.go), the "you run X" side of every 28a/28b
+	// comparison.
+	Version string
+	// Update is 28a/28b's ambient check result for this process — nil until
+	// the startup check resolves (or forever, if update.check is disabled).
+	// See UpdateInfo's doc comment for why this is richer than, and
+	// separate from, the State.UpdateCheck trio that actually persists.
+	Update *UpdateInfo
 	// HelpScope and HelpGlobal are the 7b help overlay's two fixed columns,
 	// pre-built at the composition root (internal/app.BuildSession) from the
 	// verbs registry: tui itself can't import verbs (verbs depends on tui,

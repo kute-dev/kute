@@ -16,6 +16,7 @@ var (
 
 func main() {
 	cfg := app.DefaultConfig()
+	cfg.Version = version
 	flag.BoolVar(&cfg.Demo, "demo", false, "run against an in-memory fake cluster instead of a real one")
 	flag.StringVar(&cfg.Theme, "theme", "", "override theme selection: dark|light (default: auto-detect)")
 	showVersion := flag.Bool("version", false, "print version information and exit")
