@@ -1,0 +1,36 @@
+browse                                                                                                                  
+                                                                                                                        
+                   ╭────────────────────────────────────────────────────────────────────────────────╮                   
+                   │ › d▎                                                   jump anywhere · default │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │▎Deployments  alias match                                                     0 │                   
+                   │ DaemonSets  kind · Workloads                                                 0 │                   
+                   │ Pods  kind · Workloads                                                       0 │                   
+                   │ Nodes  kind · Cluster                                                        0 │                   
+                   │ update  what's new · upgrade                                                   │                   
+                   │ CustomResourceDefinitions  kind · Cluster                                    0 │                   
+                   │ Forwards  kind · Cluster                                                     0 │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │ ↵ jumps to Deployments in default — namespace and filter carry over            │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │ ↵ jump  ↑↓ alt+jk move  type to keep narrowing                       esc close │                   
+                   ╰────────────────────────────────────────────────────────────────────────────────╯                   
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+   GOTO                                                              jump to any kind, resource, namespace, or context  

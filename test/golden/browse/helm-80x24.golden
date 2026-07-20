@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › nva-stage › Helm Releases (g to jump)  ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed                               
+────────────────────────────────────────────────────────────────────────────────
+     RELEASE    CHART                   APP VER      REV  STATUS               …
+────────────────────────────────────────────────────────────────────────────────
+▎ ✕  broken-a…  mychart 1.0.0           2.1.0          2  failed · hook t…   ...
+  ◐  nva-gate…  kube-prometheus-stack…  0.73.0         2  pending-upgrade    ...
+  ●  postgres…  postgresql 12.1.9       15.4.0         3  deployed           ...
+  ●  redis      redis 18.1.5            7.2.4          2  deployed           ...
+  1–4 of 4                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   HELM  g goto  / filter  space mark │ ↵ open │ n namespace  c context  a al...

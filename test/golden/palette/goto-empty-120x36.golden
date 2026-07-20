@@ -1,0 +1,36 @@
+browse                                                                                                                  
+                                                                                                                        
+                   ╭────────────────────────────────────────────────────────────────────────────────╮                   
+                   │ › ▎                                                    jump anywhere · default │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │▎Pods  kind · Workloads                                                       2 │                   
+                   │ Deployments  kind · Workloads                                                0 │                   
+                   │ Services  kind · Networking                                                  0 │                   
+                   │ Ingresses  kind · Networking                                                 0 │                   
+                   │ Nodes  kind · Cluster                                                        0 │                   
+                   │ ConfigMaps  kind · Config                                                    0 │                   
+                   │ Events  kind · Observability                                                 0 │                   
+                   │ DaemonSets  kind · Workloads                                                 0 │                   
+                   │ StatefulSets  kind · Workloads                                               0 │                   
+                   │ ReplicaSets  kind · Workloads                                                0 │                   
+                   │ Jobs  kind · Workloads                                                       0 │                   
+                   │ CronJobs  kind · Workloads                                                   0 │                   
+                   │ + 6 more kinds · type to narrow                                                │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │ alias — colored first letter · typing it pins that kind to rank 1 · ↵ jumps    │                   
+                   │────────────────────────────────────────────────────────────────────────────────│                   
+                   │ type to narrow  ↑↓ alt+jk move  ↵ jump                               esc close │                   
+                   ╰────────────────────────────────────────────────────────────────────────────────╯                   
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+   GOTO                                                              jump to any kind, resource, namespace, or context  

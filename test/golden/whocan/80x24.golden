@@ -1,0 +1,24 @@
+  kute │ test-cluster › Who Can                                    ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  who can list secrets in nva-stage                                 2 subjects  
+  same as: kubectl auth can-i list secrets -n nva-stage                         
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+      SUBJECT            KIND             VIA                            SCOPE  
+▎ ✕   dev-readonly (yo…  User             role/viewer grants get, …          –  
+  ●   sre-admins         Group            clusterrole/admin (aggre…    cluster  
+  ●   bob                User             role/secret-reader ← rol…  namespace  
+  1–3 of 3                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   WHO CAN  esc back │ v verb  k resource  n namespace                  ? help  

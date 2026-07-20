@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › default › Pods (g to jump)                                                     ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                   READY  STATUS            ↺     CPU           MEM           NODE        AGE  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                   no pods in default                                                   
+                          the namespace exists and you can read it — there's just nothing here                          
+                                                                                                                        
+                                       n switch namespace — nva-stage has 2 pods                                        
+                                         a all namespaces — 2 pods cluster-wide                                         
+                               g other kinds — this namespace has 2 configmaps, 1 secret                                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   PODS                                                              0 pods · watching — new pods appear live   ? help  

@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › nva-stage › Helm Releases (g to jump)                                          ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed                                      from helm.sh/release.v1 secrets  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     RELEASE                                    CHART                   APP VER      REV  STATUS               UPDATED  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ✕  broken-app                                 mychart 1.0.0           2.1.0          2  failed · hook t…           –  
+  ◐  nva-gateway                                kube-prometheus-stack…  0.73.0         2  pending-upgrade            –  
+  ●  postgresql                                 postgresql 12.1.9       15.4.0         3  deployed                   –  
+  ●  redis                                      redis 18.1.5            7.2.4          2  deployed                   –  
+  1–4 of 4                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   HELM  g goto  / filter  space mark │ ↵ open │ n namespace  c context  a all namespaces                       ? help  

@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › nva-stage › Events                                                      ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▲ 2 warnings   ○ 4 normal                                                           last hour · deduped · warnings first
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ▲ BackOff                                                                                                     ×41   2m
+    Pod/nva-worker-9k2ss  Back-off restarting failed container worker in pod nva-worker-9k2ss_nva-stage(a1b2c3)         
+  ▲ FailedScheduling                                                                                             ×3   8m
+    Pod/cache-0  0/5 nodes are available: 5 Insufficient cpu.                                                           
+  ▸ normal · 4 events — Pulled · Created · Started · Scheduled                                                          
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   EVENTS  esc back  ↵ open │ w warnings only  t time window  / filter │ tab expand/collapse normal             ? help  

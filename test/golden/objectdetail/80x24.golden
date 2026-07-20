@@ -1,0 +1,24 @@
+  kute │ nva-staging › nva-stage › Certificates › api-tls   ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────
+api-tls  ✕ Not Ready  cert-manager.io/v1                         watching · live
+                                                                                
+READY    SECRET            ISSUER              OWNER                            
+False    api-tls-secret    letsencrypt-prod    ClusterIssuer/letsencrypt-prod ↗ 
+                                                                                
+CONDITIONS                                                                      
+✕  Ready             False     Issuing certificate as Secret does not exist  2m 
+●  Issuing           True      Issuing certificate as Secret does not exist  2m 
+                                                                                
+EVENTS · newest first                                                           
+Normal    Issuing           2m      Issuing certificate as Secret does not …    
+Normal    Generated         2m      Stored new private key in temporary Sec…    
+Normal    Requested         3m      Created new CertificateRequest resource…    
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   DETAIL  esc back │ j/k next/prev │ y yaml  e events │ ctrl-d delete  ? help  

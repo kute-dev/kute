@@ -1,0 +1,24 @@
+  kute │ ⇄ forward › nva-worker-9k2ss                              ● connected  
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+       ╭────────────────────────────────────────────────────────────────╮       
+       │                                                                │       
+       │  ⇄ forward › nva-worker-9k2ss       pod · nva-stage · 2 ports  │       
+       │                                                                │       
+       │  ▸ ● 80/http  container web                   localhost:8080   │       
+       │    ● 9090/metrics  container worker           localhost:9090   │       
+       │                                                                │       
+       │  will run  kubectl port-forward pod/nva-worker-9k2ss 8080:80…  │       
+       │                                                                │       
+       ╰────────────────────────────────────────────────────────────────╯       
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   FORWARD  ↵ start  0-9 type local port  ↑↓ port                   esc cancel  

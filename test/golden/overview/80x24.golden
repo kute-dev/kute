@@ -1,0 +1,24 @@
+  kute │ test-cluster › Cluster Overview  cluster-scoped    ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────
+  ✕ 2 failing   ◐ 2 pending         v1.30.2 · 5 nodes · 11 pods · 4 namespaces  
+────────────────────────────────────────────────────────────────────────────────
+CAPACITY                                  TROUBLE                               
+cpu  ▌▌▌▌░░░░░░░░ 6000m / 20000m            ✕   worker-1    nva-prod    CrashLo…
+mem  ▌▌▌▌▌░░░░░░░ 28.5Gi / 80.0Gi           ◐   web-2       nva-stage   Pending…
+pods ▌░░░░░░░░░░░ 11 / 550                                                      
+                                          RECENT CHANGES                        
+NODES                                       14:32  ⇅   Deploymen…  revision 4 ·…
+▎ ✕   node-d              NotReady          14:18  ⇅   Deploymen…  revision 2 ·…
+  ◐   node-c              MemPressure                                           
++ 3 ready                                                                       
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   OVERVIEW  esc back │ ↹ next panel  ↵ open │ t timeline  e events     ? help  

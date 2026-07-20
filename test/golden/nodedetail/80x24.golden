@@ -1,0 +1,24 @@
+  kute │ test-cluster › Nodes › worker-01                    ● connected · 8ms  
+────────────────────────────────────────────────────────────────────────────────
+CONDITIONS                                ALLOCATED / ALLOCATABLE               
+Ready true                                cpu  ▌▌▌▌▌▌▌░░░░░ 2200m / 4000m       
+MemoryPressure true — kubelet has insuf…  mem  ▌▌▌▌▌▌▌▌▌▌▌▌ 7.4Gi / 8.0Gi       
+DiskPressure false                        pods ▌░░░░░░░░░░░ 3 / 110             
+PIDPressure false                                                               
+                                          TAINTS                                
+                                          node.kubernetes.io/memory-pressure:No…
+                                                                                
+     NAME                               NAMESPACE     MEM       CPU        AGE  
+▎ ●  nva-worker-9k2ss                   nva-stage     3.6Gi     410m        3h  
+  ✕  cache-redis-6f8c2                  nva-stage     2.1Gi     180m       42m  
+  ●  sidecar-envoy-x4b2q                istio-system  512Mi     35m         6h  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   NODE  esc back │ / filter │ ↵ open  l logs  x exec  f forward │ s node she...

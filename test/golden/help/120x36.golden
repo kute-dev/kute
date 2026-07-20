@@ -1,0 +1,36 @@
+api-7d9f6c8-abcde   Running                                                                                             
+worker-0            CrashLoopBackOff                                                                                    
+cache-0      ╭────────────────────────────────────────────────────────────────────────────────────────────╮             
+             │ ? help  keys for PODS view · globals below                                                 │             
+             │────────────────────────────────────────────────────────────────────────────────────────────│             
+             │ PODS VIEW                      SCOPE                          GLOBAL                       │             
+             │ ↵ open                         g goto                         ↑↓ jk move                   │             
+             │ l logs                         n namespace                    esc back                     │             
+             │ e exec                         c context                      U what's new                 │             
+             │ ctrl-d delete                  a all namespaces               ? help                       │             
+             │ y yaml                         ↵ toggles last                 q quit                       │             
+             │────────────────────────────────────────────────────────────────────────────────────────────│             
+             │                                                                                  esc close │             
+             ╰────────────────────────────────────────────────────────────────────────────────────────────╯             
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+   HELP                                                                                                                 

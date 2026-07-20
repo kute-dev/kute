@@ -1,0 +1,36 @@
+  kute │ test-cluster › production › HTTPRoute/web-route                                             ● connected · 8ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  web.demo.local · 1 rules   ✓ gw/public › https · accepted                    backends resolved from the watch · live  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     MATCH                                              WEIGHT  BACKEND                                      ENDPOINTS  
+▎ ●  / prefix                                              90%  web:80                                         1 ready  
+  ◐  └ same match                                          10%  web-canary:80                                  0 ready  
+  parent  gw/public · listener HTTPS:443 · secret/gw-tls expires in 199d                                                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   ROUTES  esc back │ ↵ open  p parent gateway │ Y copy yaml  e events                                                  

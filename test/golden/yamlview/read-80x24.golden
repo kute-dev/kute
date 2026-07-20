@@ -1,0 +1,24 @@
+  kute │ test-cluster › nva-worker › YAML   ● live · updates as object changes  
+────────────────────────────────────────────────────────────────────────────────
+Deployment nva-worker                           2 folded   resourceVersion 48213
+────────────────────────────────────────────────────────────────────────────────
+  2 kind: Deployment                                                            
+  3 metadata:                                                                   
+      ▸ managedFields (3 lines folded)                                          
+  4   name: nva-worker                                                          
+  5   namespace: nva-stage                                                      
+  6   labels:                                                                   
+  7     app: nva-worker                                                         
+  8     tier: backend                                                           
+  9 spec:                                                                       
+ 10   replicas: 4                                                               
+ 11   selector:                                                                 
+ 12     matchLabels:                                                            
+ 13       app: nva-worker                                                       
+ 14   template:                                                                 
+ 15     spec:                                                                   
+ 16       containers:                                                           
+ 17       - name: worker                                                        
+ 18         image: "nva/worker:1.42.0"                                          
+────────────────────────────────────────────────────────────────────────────────
+   YAML  esc back │ ↑↓ jk │ tab fold/unfold  f unfold all │ / search  Y copy    

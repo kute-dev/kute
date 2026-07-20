@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › Nodes  cluster-scoped (g to jump)      ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  ● 2 ready   ✕ 1 not ready   ◈ 1 cordoned                    4 nodes · 0 pods  
+────────────────────────────────────────────────────────────────────────────────
+     NAME    STATUS            PODS       CPU           MEM           VERSION  …
+────────────────────────────────────────────────────────────────────────────────
+▎ ●  node-a  Ready             0/110           – –           – –      v1.30.1...
+  ●  node-b  Ready             0/110           – –           – –      v1.30.1...
+  ✕  node-c  NotReady          0/110           – –           – –      v1.30.1...
+  ◈  node-d  cordoned          0/110           – –           – –      v1.30.1...
+  1–4 of 4                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   NODES  g goto  / filter  space mark  E edit │ s node shell │ n namespace  ...

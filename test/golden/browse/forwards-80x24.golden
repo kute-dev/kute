@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › Forwards  ∗ all namespaces (g to jump) ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  ● 1 active   ◐ 1 reconnecting                                                 
+────────────────────────────────────────────────────────────────────────────────
+     LOCAL             TARGET     NAMESPACE    UPTIME                  TRAFFIC  
+────────────────────────────────────────────────────────────────────────────────
+▎ ◌  localhost:5432    service/…  nva-prod     2h         retry 2 · next in 4s  
+  ●  localhost:8080    pod/nva-…  nva-stage    41m                    idle 12m  
+  1–2 of 2                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   FORWARDS  g goto  / filter  space mark │ x stop  r restart  y copy url │ n...

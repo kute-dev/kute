@@ -1,0 +1,24 @@
+  kute │ test-cluster › nva-stage › Ingress/web              ● connected · 8ms  
+────────────────────────────────────────────────────────────────────────────────
+  nginx · 1 hosts · 3 routes   ● 2 healthy   ✕ 1 broken                         
+────────────────────────────────────────────────────────────────────────────────
+     HOST + PATH                  TLS        BACKEND                 ENDPOINTS  
+▎ ●  nva.example.com /api         ● 19d      api:8080                  1 ready  
+  ✕  nva.example.com /legacy      ● 19d      old-svc:80                      —  
+  ◐  nva.example.com /beta        ● 19d      beta-svc:8080             0 ready  
+  tls  nva-tls · expires in 19d                                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   ROUTES  esc back │ ↵ open  y copy url  tab tls secret │ Y copy yaml  e events

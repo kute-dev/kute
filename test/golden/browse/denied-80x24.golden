@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › nva-stage › Secrets (g to jump)        ● connected  
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+                                                                                
+         ╭────────────────────────────────────────────────────────────╮         
+         │                                                            │         
+         │  403 Forbidden  secrets · list                             │         
+         │  secrets is forbidden: User "dev-readonly" cannot list     │         
+         │  resource "secrets" in namespace "nva-stage"               │         
+         │                                                            │         
+         │  g jump to another kind — everything else still works      │         
+         │  c switch context — another context may grant access       │         
+         │  w who-can — see who does have access                      │         
+         │  y copy error — paste to your cluster admin                │         
+         │  r retry                                                   │         
+         │                                                            │         
+         ╰────────────────────────────────────────────────────────────╯         
+                                                                                
+                                                                                
+                                                                                
+    last successful list: never · RBAC errors are not retried automatically     
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   SECRETS  g goto  c context  w who-can  y copy error  r retry         ? help  

@@ -1,0 +1,24 @@
+browse                                                                          
+                                                                                
+            ╭─────────────────────────────────────────────────────╮             
+            │ ctx › type to filter contexts▎ /tmp/kute-golden-co… │             
+            │─────────────────────────────────────────────────────│             
+            │ CONTEXT             NAMESPACE       STATUS          │             
+            │─────────────────────────────────────────────────────│             
+            │ dev current                              ◌ probing… │             
+            │▎prod-eks previous…                       ◌ probing… │             
+            │1stage-eks                                ◌ probing… │             
+            │─────────────────────────────────────────────────────│             
+            │ RECENT  stage-eks  │  1-9 recent · ↵ toggles last   │             
+            │─────────────────────────────────────────────────────│             
+            │ ↵ switch  ↑↓ move  1-9 recent  r re-probe  ctrl+p m…│             
+            ╰─────────────────────────────────────────────────────╯             
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

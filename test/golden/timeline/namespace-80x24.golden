@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › default › Timeline · all time          ● connected  
+────────────────────────────────────────────────────────────────────────────────
+⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                 all time · merged feed
+────────────────────────────────────────────────────────────────────────────────
+  14:28:30  ▲  Pod/api-gateway-9x2…  BackOff · back-off restarting failed conta…
+  14:27:00  ↺  Pod/api-gateway-9x2…  Restarted · app · OOMKilled · exit 137     
+  14:24:00  ⇅  Deployment/api-gate…  Rollout · revision 5 · api-gateway:2.3.1   
+  14:19:00  ▲  Pod/worker-77f9c-ab…  FailedScheduling · 0/3 nodes are available…
+  14:12:00  ↺  Pod/worker-77f9c-ab…  Restarted · app · OOMKilled · exit 137     
+  14:06:00  ○  Pod/api-gateway-9x2…  Pulled · Successfully pulled image "api-ga…
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   TIMELINE  esc back  ↵ open │ t time window  / filter                 ? help  

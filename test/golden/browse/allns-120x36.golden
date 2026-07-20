@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › ∗ all namespaces › Pods (g to jump)                                            ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ● 2 running   ✕ 1 crashloop                                                                    3 pods · 2 namespaces  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                   READY  STATUS            ↺     CPU           MEM           NODE        AGE  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ▾ nva-stage · 2 pods                                                                                              ✕1  
+▎ ✕  worker-0                               1/1    CrashLoopBackOff  0          – –           – –      –            0s  
+  + 1 running · ↹ expand                                                                                                
+  ▸ nva-prod · 1 pods · all running                                                                                     
+  1–4 of 4                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   ALL NS  g goto  / filter  space mark  E edit │ x exec │ n namespace  c context  a all namespaces  N jump into name...

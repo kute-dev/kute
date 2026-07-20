@@ -178,10 +178,10 @@ func TestEnterOpensSelectedBindingYAML(t *testing.T) {
 }
 
 // TestRendersInBothThemes is the CLAUDE.md "both themes always" smoke check
-// every screen owes — no golden fixtures for whocan (following events/
-// routetable/nodedetail's own precedent: golden suites are reserved for
-// browse/poddetail/podlogs), just a render that doesn't panic and produces
-// real content under both palettes.
+// every screen owes, independent of golden_test.go's own dark/light
+// truecolor fixtures — just a render that doesn't panic and produces real
+// content under both palettes, exercised against a different fixture shape
+// than the golden suite's.
 func TestRendersInBothThemes(t *testing.T) {
 	rbac := &fakeRBAC{result: kube.WhoCanResult{
 		Subjects:           []kube.WhoCanSubject{{Name: "bob", Kind: "User", Via: "role/secret-reader ← rolebinding/secret-readers"}},
