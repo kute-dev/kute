@@ -391,15 +391,8 @@ Status glyphs: `●` running · `◐` pending · `✕` failed/crashloop · `○`
 
 Typography: single monospace face (mock uses JetBrains Mono; the terminal's font applies). Weight via bold only. Uppercase + letterspacing for section labels/column headers.
 
-## Architecture notes (future-proofing — let these shape the plan)
-1. **Kind registry, not hardcoded views.** Each resource kind is a data entry: columns, status derivation, verbs, detail layout. Pods/deployments/nodes are registry entries rendered by one list/detail skeleton; CRD support later = a new entry, not a new screen.
-2. **Actions as a command table.** Every verb (delete, cordon, drain, exec, rollout restart…) is one struct: key, label, destructiveness tier, applicable kinds/modes. The keybar, help overlay (7b), and confirm policy (8b) all render from this table so they can never drift apart; user-remappable keys come free.
-3. **Cluster layer behind an interface.** A `ClusterProvider` interface with a fake in-memory implementation: testable UI without a cluster, a demo mode, and record/replay of watch streams for debugging.
-4. **Version persisted state.** The recents/perContext file carries a schema version from day one.
-5. **Pure rendering.** View = f(model, theme, size); no I/O or clock reads in render paths. Enables golden-file snapshot tests per screen — the regression net for 20+ screens.
-6. **Terminal capability degradation.** Defined fallbacks: 256-color palette mapping (via termenv), ASCII substitutes for exotic glyphs (`◈ ⧗ ▐ ◌`), and a minimum-terminal-size guard screen.
-
-A starter `CLAUDE.md` with the enforceable invariants ships in this folder — copy it to the repo root.
+## Architecture notes
+The enforceable rules distilled from this design (kind registry not hardcoded views, actions as a command table, cluster access behind an interface, versioned persisted state, pure rendering, terminal capability degradation) live in `CLAUDE.md`'s Invariants and Conventions sections — that file is the one to keep in sync, not this list.
 
 ## Mapping HTML → terminal
 - 1 row of table/list = 1 terminal line. Strips, keybar, header = 1 line each.

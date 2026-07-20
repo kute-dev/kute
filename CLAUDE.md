@@ -28,6 +28,7 @@ Design spec: `docs/design/README.md` (source of truth for screens, layout, token
 - Status glyphs, key vocabulary, and mode-pill hues per the design README — don't invent alternatives.
 - `j/k` ≡ `↑↓` everywhere; `esc` always walks back exactly one level.
 - Watch-based updates, not polling (metrics poll on the sync interval only).
+- Terminal capability degradation: 256-color palette mapping (via termenv) and ASCII substitutes for exotic glyphs (`◈ ⧗ ▐ ◌`) are the decided fallback path; a minimum-terminal-size guard screen is decided but not yet built.
 
 ## Workflow
 - After UI changes, run the golden-file snapshot tests (both themes) and update intentionally-changed snapshots only.
