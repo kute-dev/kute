@@ -143,14 +143,15 @@ func (m Model) unreachableBody(width, height int) string {
 	bad := lipgloss.NewStyle().Foreground(theme.Bad)
 	title := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
-	// docs/design README.md §4c: "raw error in a red-tinted box (bg #16121a,
-	// border #3a2a30, …)" — matching the 10b LOOKED IN box's own bordered
-	// treatment (lookedInBox), which this previously lacked.
+	// docs/design README.md §4c calls for a red-tinted box (bg #16121a,
+	// border #3a2a30, …), matching the 10b LOOKED IN box's own bordered
+	// treatment (lookedInBox). Deliberate deviation: the fill reads as a
+	// stray dark patch against the terminal's own background, so this
+	// renders on the default background instead — border and text color
+	// stay per spec.
 	errStyle := lipgloss.NewStyle().Foreground(theme.BadMuted).
-		Background(theme.ErrCardBg).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ErrCardBorder).
-		BorderBackground(theme.ErrCardBg).
 		Padding(0, 1).Width(bw - 4)
 
 	ctx := m.clusterName
@@ -207,29 +208,45 @@ func (m Model) switchContextLines(theme tui.Theme, bw int) []string {
 		return []string{label, lipgloss.NewStyle().Foreground(theme.TextGhost).Render("  (no other contexts configured)")}
 	}
 
-	name := lipgloss.NewStyle().Foreground(theme.TextSecondary)
-	dim := lipgloss.NewStyle().Foreground(theme.TextGhost)
-	good := lipgloss.NewStyle().Foreground(theme.Good)
-	bad := lipgloss.NewStyle().Foreground(theme.Bad)
-	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	// innerWidth is the box's own text column: Width(bw-4) minus its
+	// Padding(0, 1) (1ch either side) — the width a selected row's
+	// background must fully cover to read as a highlighted row rather
+	// than just its text.
+	innerWidth := bw - 6
 
 	lines := make([]string, 0, len(rows))
 	for i, row := range rows {
 		glyph, status, tone := switchRowStatus(row, m.probes[row.name])
-		style := lipgloss.NewStyle()
+		fg := lipgloss.NewStyle()
 		switch tone {
 		case switchToneGood:
-			style = good
+			fg = lipgloss.NewStyle().Foreground(theme.Good)
 		case switchToneBad:
-			style = bad
+			fg = lipgloss.NewStyle().Foreground(theme.Bad)
 		case switchToneWarn:
-			style = warn
+			fg = lipgloss.NewStyle().Foreground(theme.Warn)
 		}
-		line := style.Render(glyph) + " " + name.Render(row.name) + " " + dim.Render("("+status+")")
+		name := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+		dim := lipgloss.NewStyle().Foreground(theme.TextGhost)
+		fill := lipgloss.NewStyle()
 		if i == m.switchSel {
-			line = lipgloss.NewStyle().Background(theme.SelBg).Render(line)
+			// Background must be set on every span (and the trailing
+			// fill), not wrapped around the pre-rendered line: each
+			// span's own ANSI reset would otherwise clear a background
+			// applied only around the outside, leaving gaps between
+			// tokens unhighlighted (docs/design README.md §4c — the
+			// selected row highlights edge to edge, not just its text).
+			fg = fg.Background(theme.SelBg)
+			name = name.Background(theme.SelBg)
+			dim = dim.Background(theme.SelBg)
+			fill = fill.Background(theme.SelBg)
 		}
-		lines = append(lines, "  "+line)
+		text := "  " + glyph + " " + row.name + " (" + status + ")"
+		line := fill.Render("  ") + fg.Render(glyph) + fill.Render(" ") + name.Render(row.name) + fill.Render(" ") + dim.Render("("+status+")")
+		if pad := innerWidth - lipgloss.Width(text); pad > 0 {
+			line += fill.Render(strings.Repeat(" ", pad))
+		}
+		lines = append(lines, line)
 	}
 
 	box := lipgloss.NewStyle().
