@@ -49,6 +49,17 @@ homebrew_casks:
     homepage: "https://github.com/kute-dev/kute"
     description: "A TUI Kubernetes console, built with Bubble Tea and Lip Gloss."
     license: "Apache-2.0"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "#{staged_path}/kute"]
+          end
+    caveats: |
+      kute is open-source software and is not currently signed with an
+      Apple Developer ID. The Homebrew installation removes the macOS
+      quarantine attribute from the installed binary.
     repository:
       owner: kute-dev
       name: homebrew-tap
