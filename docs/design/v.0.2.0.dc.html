@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">0.2.0</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">Update notice — kute tells you a new version exists without ever nagging</h1>
+  </div>
+  <p style="margin: 0 0 24px 92px; font-size: 12px; color: #676780;">checked once per day against the releases feed, cached, silent offline · never self-updates — prints your package manager's command · one keypress to see what changed</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 28A ══════════════════ -->
+    <div id="28a" data-screen-label="28a Update chip in the status bar" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">28a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Ambient chip — one dim glyph in the top bar, zero interruption</span>
+        <span style="font-size: 12px; color: #676780;">appears after the daily check · U opens <a href="#28b">28b</a></span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Deployments</span>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 14px;">
+            <span style="color: #e8c74a;">↑ 0.2.1</span>
+            <span style="color: #34d17b;">● connected · 12ms</span>
+          </span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>ROLLOUT</span><span>IMAGE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #9a9ab2;">4/4</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-worker:3.4.1</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-gateway</span><span style="color: #9a9ab2;">3/3</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-gateway:2.1.0</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px 8px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-scheduler</span><span style="color: #9a9ab2;">1/1</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-scheduler:1.9.4</span><span style="color: #676780; text-align: right;">34d</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOYMENTS</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">pods</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">set image</span></span>
+          <span><span style="color: #a78bfa;">R</span> <span style="color: #676780;">resources</span></span>
+          <span><span style="color: #a78bfa;">e</span> <span style="color: #676780;">edit yaml</span></span>
+          <span style="margin-left: auto;"><span style="color: #e8c74a;">U</span> <span style="color: #676780;">0.2.1 available — what's new</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The chip is the whole notification.</span> `↑ 0.2.1` sits left of the connection dot — same yellow as other "worth knowing, not urgent" facts, no banner, no flash, nothing steals focus mid-incident. The keybar's right slot names the key while the chip is live.</li>
+          <li><span style="color: #e9e2ff;">Check hygiene:</span> one GET against the releases feed per 24h, result cached in the state dir; offline or airgapped → no chip, no error, no retry storm. `update.check: false` in config kills it entirely — some clusters live behind proxies that flag any egress.</li>
+          <li>The chip is per-version: once you've opened <a href="#28b">28b</a> for 0.2.1 (or hit `x` on it there), it stays hidden until 0.2.2 exists. It never re-nags for a version you've seen.</li>
+          <li>Pre-releases never surface unless you run one — a nightly build offers only newer nightlies.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 28B ══════════════════ -->
+    <div id="28b" data-screen-label="28b What's-new panel with upgrade command" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">28b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">What's new — changelog plus the exact upgrade command, never a self-update</span>
+        <span style="font-size: 12px; color: #676780;">U from anywhere · also :update</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Update</span>
+          <span style="margin-left: auto; color: #676780;">you run <span style="color: #d8d8e8;">0.2.0</span> · latest <span style="color: #e8c74a;">0.2.1</span> · released 2d ago</span>
+        </div>
+
+        <div style="padding: 4px 14px 2px; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">CHANGELOG · 0.2.1</div>
+        <div style="display: grid; grid-template-columns: 20px 80px minmax(0,1fr); gap: 0 12px; padding: 4px 14px;">
+          <span></span><span style="color: #ef6a6a;">fix</span><span style="color: #d8d8e8;">rollout watch could miss the final ready event on slow clusters</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 80px minmax(0,1fr); gap: 0 12px; padding: 4px 14px;">
+          <span></span><span style="color: #ef6a6a;">fix</span><span style="color: #d8d8e8;">secret value zeroing on esc leaked one frame to the alt-screen buffer</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 80px minmax(0,1fr); gap: 0 12px; padding: 4px 14px;">
+          <span></span><span style="color: #34d17b;">new</span><span style="color: #d8d8e8;">resources editor accepts binary suffixes (Gi/Mi) case-insensitively</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 80px minmax(0,1fr); gap: 0 12px; padding: 4px 14px 8px;">
+          <span></span><span style="color: #55556e;">…</span><span style="color: #55556e;">4 more · o opens release notes in browser</span>
+        </div>
+
+        <div style="margin: 4px 14px 10px; background: #101018; border: 1px solid #3b3b58; border-radius: 6px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 14px; padding: 6px 12px; background: #12101d; border-bottom: 1px solid #1c1c2c;">
+            <span style="color: #55556e;">installed via</span>
+            <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">homebrew</span>
+            <span style="color: #676780;">detected from the binary path</span>
+            <span style="margin-left: auto; color: #55556e;">kute never updates itself</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 7px 12px;">
+            <span style="color: #a78bfa;">$</span>
+            <span style="color: #f0f0fa; font-weight: 700;">brew upgrade kute</span>
+            <span style="margin-left: auto; color: #55556e;">y copies · runs in your shell, not here</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">UPDATE</span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">copy command</span></span>
+          <span><span style="color: #a78bfa;">o</span> <span style="color: #676780;">release notes ↗</span></span>
+          <span><span style="color: #a78bfa;">x</span> <span style="color: #676780;">skip 0.2.1 — hide the chip</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">back</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The changelog is the argument for upgrading</span> — top entries inline (fixes first, red/green tagged), full notes one `o` away. You decide in-panel whether 0.2.1 matters to you.</li>
+          <li><span style="color: #e9e2ff;">Never self-update.</span> kute detects how it was installed (brew cellar path, apt, go install, plain binary) and prints that manager's exact command — same idiom as every will-run line in the app. A tool that mutates clusters must not also mutate itself mid-session; plain binary installs get the release URL instead.</li>
+          <li>`x` skips this version: chip gone until the next release. Opening the panel at all also counts as "seen" for the ambient chip in <a href="#28a">28a</a>.</li>
+          <li>Empty state (`:update` while current): <span style="color: #34d17b;">0.2.0 is the latest</span> with the last-checked timestamp and `r` to re-check now — the only place a manual check exists.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">0.2.0</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">The mutation release — change the four everyday things without opening the YAML buffer</h1>
+  </div>
+  <p style="margin: 0 0 24px 92px; font-size: 12px; color: #676780;">set image / tag · resources · labels &amp; annotations · configmap/secret data · all reversible-tier: inline prompts, never modals · every apply prints its kubectl · YAML edit (<a href="#17a">17a</a>) stays the escape hatch</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 24A ══════════════════ -->
+    <div id="24a" data-screen-label="24a Set image / set tag" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Set image — tag-first prompt, history from the watch</span>
+        <span style="font-size: 12px; color: #676780;">press i on a workload row · same inline tier as scale (<a href="#17b">17b</a>)</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Deployments</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>ROLLOUT</span><span>IMAGE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #9a9ab2;">4/4</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-worker:3.4.1</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-gateway</span><span style="color: #9a9ab2;">3/3</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-gateway:2.1.0</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+
+        <div style="margin: 10px 14px; background: #101018; border: 1px solid #3b3b58; border-radius: 6px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 14px; padding: 6px 12px; background: #12101d; border-bottom: 1px solid #1c1c2c;">
+            <span style="color: #55556e;">container</span>
+            <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">worker</span>
+            <span style="color: #676780;">metrics-sidecar</span>
+            <span style="margin-left: auto; color: #55556e;">↹ switch container</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid #1c1c2c;">
+            <span style="color: #a78bfa;">image ›</span>
+            <span><span style="color: #676780;">registry.aim.dev/aim-worker:</span><span style="color: #f0f0fa; font-weight: 700;">3.4.2</span><span style="color: #a78bfa;">▎</span></span>
+            <span style="margin-left: auto; color: #55556e;">editing tag · ctrl-u edit full ref</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 90px 110px minmax(0,1fr); gap: 0 12px; padding: 4px 12px; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">
+            <span></span><span>TAG</span><span>SEEN</span><span>FROM</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 90px 110px minmax(0,1fr); gap: 0 12px; padding: 3px 12px; background: #1d1633; border-left: 2px solid #a78bfa;">
+            <span style="color: #a78bfa;">›</span><span style="color: #f0f0fa;">3.4.2</span><span style="color: #676780;">40m ago</span><span style="color: #676780;">deploy/aim-worker · aim-prod</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 90px 110px minmax(0,1fr); gap: 0 12px; padding: 3px 12px; border-left: 2px solid transparent;">
+            <span></span><span style="color: #9a9ab2;">3.4.1</span><span style="color: #676780;">21d · current</span><span style="color: #676780;">rev 42 · this deployment</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 20px 90px 110px minmax(0,1fr); gap: 0 12px; padding: 3px 12px 6px; border-left: 2px solid transparent;">
+            <span></span><span style="color: #9a9ab2;">3.4.0</span><span style="color: #676780;">23d · rev 41</span><span style="color: #676780;">rollout history · rollback target</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #9a9ab2;">kubectl set image deploy/aim-worker worker=registry.aim.dev/aim-worker:3.4.2 -n aim-stage</span>
+          <span style="margin-left: auto; color: #e8c74a;">applying rolls out 4 pods</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">SET IMAGE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">apply</span></span>
+          <span><span style="color: #a78bfa;">↑↓</span> <span style="color: #676780;">pick from history</span></span>
+          <span><span style="color: #a78bfa;">↹</span> <span style="color: #676780;">container</span></span>
+          <span><span style="color: #a78bfa;">ctrl-u</span> <span style="color: #676780;">full ref</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+          <span style="margin-left: auto; color: #676780;">watch the rollout in <a href="#9a">9a</a></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Tag-first editing.</span> The prompt opens pre-filled with the current ref, cursor on the tag, repo part dim — the 95% case is "bump the tag". `ctrl-u` unlocks the whole ref for the rename case. One verb, two depths — no separate "set tag" screen.</li>
+          <li><span style="color: #e9e2ff;">History comes from the watch cache, never a registry call.</span> Candidate tags are what the cluster has actually run: this deployment's ReplicaSet history (rollback targets, labelled with their revision) plus the same image seen on other workloads/namespaces — `3.4.2 · seen 40m ago · aim-prod` is the "promote what prod runs" case. No magic, no network surprises.</li>
+          <li>Re-entering the current tag keeps the yellow strip honest: it flips to <span style="color: #e8c74a;">same image — apply is a no-op; use rollout restart</span> and `↵` does nothing.</li>
+          <li>Multi-container workloads cycle with `↹`; the will-run line always names the container explicitly. PROD contexts get the inline y/N on apply, per the <a href="#8b">8b</a> tiering.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 25A ══════════════════ -->
+    <div id="25a" data-screen-label="25a Adjust resources (requests/limits)" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Resources — set limits next to live usage</span>
+        <span style="font-size: 12px; color: #676780;">press R on a workload · the fix for the OOMKill you diagnosed in <a href="#5a">5a</a></span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">deploy/aim-worker</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Resources</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #9a9ab2;">container <span style="color: #c4b5fd; font-weight: 700;">worker</span> · <span style="color: #676780;">metrics-sidecar</span></span>
+          <span style="color: #55556e;">usage: p95 over the last 6h · from the metrics poll</span>
+          <span style="margin-left: auto; color: #ef6a6a;">✕ OOMKilled 4m ago at the current limit</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px 120px 110px 130px minmax(0,1fr); gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>FIELD</span><span>CURRENT</span><span>NEW</span><span>P95 USAGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 120px 110px 130px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">cpu request</span><span style="color: #676780;">250m</span><span style="color: #676780;">250m</span><span style="color: #676780;">▮▮▮▮▯▯▯▯▯▯ 182m</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 120px 110px 130px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">cpu limit</span><span style="color: #676780;">1</span><span style="color: #676780;">1</span><span style="color: #676780;">▮▮▯▯▯▯▯▯▯▯ 182m · no throttling</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 120px 110px 130px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">mem request</span><span style="color: #676780;">512Mi</span><span style="color: #676780;">512Mi</span><span style="color: #e8c74a;">▮▮▮▮▮▮▮▮▮▯ 498Mi</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 120px 110px 130px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #a78bfa;">›</span><span style="color: #f0f0fa;">mem limit</span><span style="color: #676780;">512Mi</span><span><span style="color: #f0f0fa; font-weight: 700;">768Mi</span><span style="color: #a78bfa;">▎</span></span><span style="color: #ef6a6a;">▮▮▮▮▮▮▮▮▮▮ 512Mi · hit the limit — OOMKill</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #9a9ab2;">kubectl set resources deploy/aim-worker -c worker --limits=memory=768Mi -n aim-stage</span>
+          <span style="margin-left: auto; color: #e8c74a;">applying rolls out 4 pods</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">RESOURCES</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">apply changed fields</span></span>
+          <span><span style="color: #a78bfa;">↑↓</span> <span style="color: #676780;">field</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">nudge (64Mi / 50m)</span></span>
+          <span><span style="color: #a78bfa;">↹</span> <span style="color: #676780;">container</span></span>
+          <span><span style="color: #a78bfa;">u</span> <span style="color: #676780;">unset field</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The number you're changing sits next to the number that broke.</span> Each field renders its p95 usage bar from the metrics poll — mem limit shows the bar pinned at 100% with the OOMKill callout, so 768Mi is a decision, not a guess. No metrics available → the USAGE column reads `metrics unavailable` in dim and the editor still works.</li>
+          <li>Typing replaces the value; `+/−` nudges by sane unit steps (64Mi, 50m). Values parse as k8s quantities — a bad quantity underlines red inline and blocks ↵, never a modal.</li>
+          <li>`u` unsets a field (removes the key) — explicit, because "no limit" is a real and dangerous state; the NEW cell then renders `— none` in yellow.</li>
+          <li>Only changed fields go into the command. Request &gt; limit validates inline before apply. Namespace LimitRange/ResourceQuota violations surface as the server's verbatim message on the dry-run, same idiom as <a href="#17a">17a</a>.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 26A ══════════════════ -->
+    <div id="26a" data-screen-label="26a Labels and annotations editor" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">26a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Labels &amp; annotations — edit with the joins visible</span>
+        <span style="font-size: 12px; color: #676780;">press m (meta) on any object · works on every kind, CRDs included</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">deploy/aim-worker</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Meta</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="padding: 4px 14px 2px; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">LABELS · 4</div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #676780;">app=</span><span style="color: #d8d8e8;">aim-worker</span><span style="color: #e8c74a; text-align: right;">⚠ selector · svc/aim-worker</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #a78bfa;">›</span><span style="color: #676780;">env=</span><span><span style="color: #55556e;">was stage · </span><span style="color: #f0f0fa; font-weight: 700;">staging</span><span style="color: #a78bfa;">▎</span></span><span style="color: #676780; text-align: right;">editing value</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #676780;">team=</span><span style="color: #d8d8e8;">platform</span><span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #676780;">app.kubernetes.io/managed-by=</span><span style="color: #d8d8e8;">Helm</span><span style="color: #55556e; text-align: right;">helm-owned · edits survive until next upgrade</span>
+        </div>
+
+        <div style="padding: 8px 14px 2px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-top: 1px solid #1c1c2c; margin-top: 4px;">ANNOTATIONS · 3</div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #676780;">kute.dev/owner=</span><span style="color: #d8d8e8;">platform-oncall</span><span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #676780;">deployment.kubernetes.io/revision=</span><span style="color: #d8d8e8;">42</span><span style="color: #55556e; text-align: right;">controller-managed · read-only</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 220px minmax(0,1fr) 220px; gap: 0 12px; padding: 4px 14px 8px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #44445c;">+ a add label · A add annotation</span><span></span><span></span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #9a9ab2;">kubectl label deploy/aim-worker env=staging --overwrite -n aim-stage</span>
+          <span style="margin-left: auto; color: #676780;">metadata only — no rollout</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">META</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">apply</span></span>
+          <span><span style="color: #a78bfa;">a/A</span> <span style="color: #676780;">add label / annotation</span></span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">remove key · y/N</span></span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">copy key=value</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">back</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Joins render before you touch anything.</span> A label that a Service selector matches carries a yellow ⚠ — editing it opens with <span style="color: #e8c74a;">changing this detaches 4 pods from svc/aim-worker</span> above the keybar and the inline y/N. Deployment selector labels are immutable server-side; kute says so up front instead of letting the apply bounce.</li>
+          <li>Controller-managed annotations (revision, kubectl.kubernetes.io/*) render read-only in dim. Helm-owned metadata gets an honest note — editable, but the next `helm upgrade` may revert it.</li>
+          <li>Add flows are one row, not a form: `a` opens `key=` with completion from keys used elsewhere in the namespace; `↹` jumps to the value. Remove is `ctrl-d` + inline y/N — it's reversible, so no modal, per <a href="#8b">8b</a>.</li>
+          <li>Everything compiles to `kubectl label` / `kubectl annotate` with `--overwrite` only when overwriting — the will-run line is exact, per verb.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 27A ══════════════════ -->
+    <div id="27a" data-screen-label="27a ConfigMap value edit" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">27a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">ConfigMap — fix a value where the consumers are visible</span>
+        <span style="font-size: 12px; color: #676780;">↵ on a key edits its value · value-edit, not a YAML session</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">cm/aim-config</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Data</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #9a9ab2;">5 keys</span>
+          <span style="color: #55556e;">consumed by</span>
+          <span style="color: #a78bfa;">deploy/aim-worker ↗ <span style="color: #676780;">env</span></span>
+          <span style="color: #a78bfa;">deploy/aim-gateway ↗ <span style="color: #676780;">volume</span></span>
+          <span style="margin-left: auto; color: #e8c74a;">pods don't reload configmaps on their own</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>KEY</span><span>VALUE</span><span style="text-align: right;">SIZE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">API_BASE_URL</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">https://api.aim.dev</span><span style="color: #676780; text-align: right;">19 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #a78bfa;">›</span><span style="color: #f0f0fa;">LOG_LEVEL</span><span><span style="color: #55556e;">was info · </span><span style="color: #f0f0fa; font-weight: 700;">debug</span><span style="color: #a78bfa;">▎</span></span><span style="color: #676780; text-align: right;">5 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">WORKER_CONCURRENCY</span><span style="color: #676780;">8</span><span style="color: #676780; text-align: right;">1 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">config.yaml</span><span style="color: #44445c;">▸ 48 lines · e opens the buffer editor</span><span style="color: #676780; text-align: right;">1.2 KiB</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px 8px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #44445c;">+ a add key</span><span></span><span></span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #9a9ab2;">kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">EDIT VALUE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">apply</span></span>
+          <span><span style="color: #a78bfa;">ctrl-r</span> <span style="color: #676780;">apply + rollout restart consumers</span></span>
+          <span><span style="color: #a78bfa;">e</span> <span style="color: #676780;">buffer editor (multi-line)</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">discard</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Two shapes of edit, two depths.</span> A short value edits in the row — `was info ·` stays visible while you type. A multi-line key (`config.yaml`) opens the <a href="#17a">17a</a> buffer editor scoped to just that value, with the same dry-run-first apply. Both are value-edits: the key exists, only `data.<key>` changes.</li>
+          <li><span style="color: #e9e2ff;">The consumers strip is the point.</span> Applying a configmap change fixes nothing until pods re-read it — the strip names every workload that mounts or envs this map (from the watch), and `ctrl-r` chains the apply with `kubectl rollout restart` for each, both commands printed. Plain `↵` applies without restarting; kute never restarts on its own.</li>
+          <li>Conflict handling matches <a href="#17a">17a</a>: the patch carries the observed resourceVersion; if the map changed underneath, the banner offers diff / rebase / discard.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 27B ══════════════════ -->
+    <div id="27b" data-screen-label="27b Secret add key (line-insert)" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">27b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Secret — add a key as a line-insert, masked end to end</span>
+        <span style="font-size: 12px; color: #676780;">press a in the data view · decode semantics from <a href="#21a">21a</a> apply</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">secret/aim-secrets</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Data</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #9a9ab2;">Opaque · 3 keys → 4</span>
+          <span style="margin-left: auto; color: #55556e;">values decode in memory only · re-masked on exit</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>KEY</span><span>VALUE</span><span style="text-align: right;">SIZE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">DATABASE_URL</span><span style="color: #44445c;">••••••••••••••••</span><span style="color: #676780; text-align: right;">64 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">API_TOKEN</span><span style="color: #44445c;">••••••••••••••••</span><span style="color: #676780; text-align: right;">40 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span></span><span style="color: #d8d8e8;">SMTP_USER</span><span style="color: #44445c;">••••••••••••••••</span><span style="color: #676780; text-align: right;">18 B</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px 200px minmax(0,1fr) 90px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">+</span><span><span style="color: #f0f0fa; font-weight: 700;">SMTP_PASSWORD</span></span><span><span style="color: #f0f0fa;">hunter2-staging</span><span style="color: #a78bfa;">▎</span> <span style="color: #55556e;">· visible while typing · x re-mask</span></span><span style="color: #676780; text-align: right;">new</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #9a9ab2;">kubectl patch secret/aim-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n aim-stage</span>
+          <span style="margin-left: auto; color: #55556e;">value masked here · sent verbatim</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">ADD KEY</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">apply</span></span>
+          <span><span style="color: #a78bfa;">x</span> <span style="color: #676780;">re-mask input</span></span>
+          <span><span style="color: #a78bfa;">ctrl-v</span> <span style="color: #676780;">paste (never echoed to scrollback)</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">discard</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Line-insert is its own gesture.</span> `a` appends a highlighted `+` row: type the key, `↹` to the value, `↵` applies. Fixing an existing key is the <a href="#27a">27a</a> value-edit — same surface, existing keys decode with `x` per the <a href="#21a">21a</a> rules. Adding never shows the neighbors' values.</li>
+          <li><span style="color: #e9e2ff;">The will-run line masks the value</span> — copyable documentation must not leak the secret into scrollback or a shared screen. The real patch uses `stringData`, so kute does the base64, not you.</li>
+          <li>Plaintext exists only in process memory: `x` re-masks the input, `esc` zeroes the buffer, nothing is logged or persisted. PROD contexts add the inline y/N; deleting a key keeps the y/N too — it's recoverable only if you have the old value somewhere else, and the prompt says exactly that.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2100},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}"></script>
+</body>
+</html>

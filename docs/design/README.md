@@ -1,12 +1,12 @@
 # Handoff: kute — Inverted Main-Screen Design
 
 ## Overview
-A kute Kubernetes TUI: the full-width resource table is the only resting state, and navigation appears on demand via a jump palette (`g`). This replaces the previous persistent 3-pane (groups › kinds › resources) layout. The package covers the full decided surface: main table, jump palette (fuzzy + alias chips), error/disconnected states, pod detail, log view, namespace + context switching, help overlay, YAML view, destructive-action confirm, deployments + events, exec picker, first-run/empty states, nodes (list + detail), port-forwarding (picker + forwards manager + header chip), CRD support (discovered kinds, CRDs list, generic detail), loading states, incident timeline, YAML edit, scale, Helm releases, cluster overview, bulk operations (marked sets), secret decode, RBAC who-can, and ingress/Gateway-API routing tables.
+A kute Kubernetes TUI: the full-width resource table is the only resting state, and navigation appears on demand via a jump palette (`g`). This replaces the previous persistent 3-pane (groups › kinds › resources) layout. The package covers the full decided surface: main table, jump palette (fuzzy + alias chips), error/disconnected states, pod detail, log view, namespace + context switching, help overlay, YAML view, destructive-action confirm, deployments + events, exec picker, first-run/empty states, nodes (list + detail), port-forwarding (picker + forwards manager + header chip), CRD support (discovered kinds, CRDs list, generic detail), loading states, incident timeline, YAML edit, scale, Helm releases, cluster overview, bulk operations (marked sets), secret decode, RBAC who-can, and ingress/Gateway-API routing tables, plus the 0.2.0 addendum: inline mutation editors (image/tag, resources, labels/annotations, configmap/secret data) and update notifications.
 
 ## About the Design Files
 The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is a **design reference created in HTML** — a mockup showing intended look and behavior, not production code. It is the curated spec: one canonical mock per screen, organized in 17 numbered sections, no competing alternatives. The task is to **recreate these designs in the kute Go codebase** using Bubble Tea + Lip Gloss idioms. HTML px values are design-proportions; map them to terminal cells (see "Mapping HTML → terminal" below).
 
-**Every screen in the file is decided — implement all of them.** Anchor ids (each has a visible badge): `#2a` `#12a` `#12b` `#6a` `#6b` `#7a` `#7b` `#5a` `#5b` `#9a` `#9b` `#11a` `#11b` `#8a` `#8b` `#10a` `#13a` `#13c` `#13d` `#14a` `#14b` `#14c` `#14d` `#4a` `#4b` `#4c` `#10b` `#10c` `#15a` `#16a` `#16b` `#17a` `#17b` `#18a` `#19a` `#20a` `#21a` `#22a` `#23a` `#23b`. Numbering is historical (exploration turns), not an order — follow the 12 section headers in the file. Rejected alternatives (a plain 2b/3a taxonomy palette without alias chips; a 13b inline forward grammar) were removed from this file — 12a/12b supersede the palette-on-open state, 13a supersedes the forward entry flow.
+**Every screen in the file is decided — implement all of them.** Anchor ids (each has a visible badge): `#2a` `#12a` `#12b` `#6a` `#6b` `#7a` `#7b` `#5a` `#5b` `#9a` `#9b` `#11a` `#11b` `#8a` `#8b` `#10a` `#13a` `#13c` `#13d` `#14a` `#14b` `#14c` `#14d` `#4a` `#4b` `#4c` `#10b` `#10c` `#15a` `#16a` `#16b` `#17a` `#17b` `#18a` `#19a` `#20a` `#21a` `#22a` `#23a` `#23b`. Numbering is historical (exploration turns), not an order — follow the 12 section headers in the file. Rejected alternatives (a plain 2b/3a taxonomy palette without alias chips; a 13b inline forward grammar) were removed from this file — 12a/12b supersede the palette-on-open state, 13a supersedes the forward entry flow. 0.2.0 adds `#24a` `#25a` `#26a` `#27a` `#27b` `#28a` `#28b`, sourced from `v.0.2.0.dc.html`.
 
 ## Fidelity
 **High-fidelity** for color, hierarchy, alignment, copy tone, and interaction model — recreate faithfully. Exact pixel sizes are approximations of a character grid; use the terminal's monospace metrics.
@@ -292,6 +292,66 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Gateway `↵` mirrors it: listeners as rows (protocol:port · hostname · TLS + expiry · `12 routes attached`); `↵` on a listener filters to attached routes.
 - GRPCRoute/TCPRoute reuse the table with fewer columns; all kinds arrive via `g` discovery like any CRD.
 
+*(0.2.0 addendum — inline mutation editors, sourced from `v.0.2.0.dc.html`)*
+
+### 24a — Set image / set tag (`i` on a workload row)
+- Same inline tier as scale (17b) — no modal. Panel opens under the row (bg `#101018`, border `#3b3b58`); container tabs across the top (`↹` switches container, sidecars labeled dim).
+- **Tag-first editing:** the `image ›` field pre-fills the current ref with the cursor on the tag, repo prefix dim — the 95% case is "bump the tag." `ctrl-u` unlocks the full ref for the rename case. One verb, two depths, no separate "set tag" screen.
+- **History from the watch cache, never a registry call:** a TAG · SEEN · FROM table lists this workload's own ReplicaSet revision history (rollback targets, labeled by revision) plus the same image tag seen on other workloads/namespaces (`3.4.2 · seen 40m ago · aim-prod` — the "promote what prod runs" case).
+- Re-entering the current tag flips the strip to `same image — apply is a no-op; use rollout restart` and `↵` does nothing.
+- `will run` line: `kubectl set image deploy/aim-worker worker=registry.aim.dev/aim-worker:3.4.2 -n aim-stage`, right-aligned `applying rolls out 4 pods`. Multi-container workloads cycle with `↹`; the will-run line always names the container.
+- Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-u full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
+
+### 25a — Resources — set limits next to live usage (`R` on a workload)
+- **⚠ Key conflict, unresolved:** `R` here collides with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. This needs a key reassignment for one of the two verbs before implementation — not resolved by this doc.
+- The fix for the OOMKill diagnosed in 5a. Strip under the header: container tabs, `usage: p95 over the last 6h · from the metrics poll`, right-aligned failure callout (`✕ OOMKilled 4m ago at the current limit`).
+- Table: FIELD · CURRENT · NEW · P95 USAGE, rows for cpu/mem request and limit. Each field's usage renders as a mini bar sourced from the metrics poll — the mem-limit row shows the bar pinned at capacity with the OOMKill context, so the new value is a decision, not a guess. No metrics → USAGE column reads `metrics unavailable` dim, editor still works.
+- Typing replaces the selected field's value; `+/−` nudges by unit steps (64Mi / 50m). Values parse as k8s quantities — an invalid quantity underlines red inline and blocks `↵`, never a modal (same inline-error idiom as 17a).
+- `u` unsets a field (explicit removal, since "no limit" is a real and dangerous state) — the NEW cell then renders `— none` in yellow.
+- Validation: request > limit blocks inline before apply; namespace LimitRange/ResourceQuota violations surface as the server's verbatim dry-run message, same idiom as 17a. Only changed fields go into the command.
+- `will run` line: `kubectl set resources deploy/aim-worker -c worker --limits=memory=768Mi -n aim-stage`.
+- Keys: `↵ apply changed fields · ↑↓ field · +/− nudge (64Mi / 50m) · ↹ container · u unset field · esc cancel`. Keybar pill `RESOURCES`.
+
+### 26a — Labels & annotations editor (`m` on any object, CRDs included)
+- Two grids, LABELS · N then ANNOTATIONS · N, same key=/value/right-note column shape.
+- **Joins render before you touch anything:** a label a Service selector matches carries an inline yellow `⚠ selector · svc/aim-worker`; editing that key opens with `changing this detaches 4 pods from svc/aim-worker` above the keybar and requires the inline y/N even though metadata edits are otherwise reversible. Deployment selector labels are immutable server-side — kute says so up front instead of letting the apply bounce off the API server.
+- Controller-managed annotations (`deployment.kubernetes.io/revision`, `kubectl.kubernetes.io/*`) render read-only dim. Helm-owned metadata stays editable but carries a note that the next `helm upgrade` may revert it.
+- Add is one row, not a form: `a` add label / `A` add annotation opens `key=` with completion from keys already used elsewhere in the namespace, `↹` jumps to the value.
+- Remove: `ctrl-d` on a key + inline y/N (reversible, no type-the-name modal — per 8b's tiering).
+- `will run` line, exact per verb: `kubectl label deploy/aim-worker env=staging --overwrite -n aim-stage` (`--overwrite` only appears when overwriting) / `kubectl annotate` equivalent.
+- Keys: `↵ apply · a/A add label / annotation · ctrl-d remove key · y/N · y copy key=value · esc back`. Keybar pill `META`.
+
+### 27a — ConfigMap value edit (`↵` on a key, inside a ConfigMap's Data view)
+- A value-edit, not a YAML session. Strip under the header names every consumer from the watch (`deploy/aim-worker ↗ env`, `deploy/aim-gateway ↗ volume`), right-aligned `pods don't reload configmaps on their own`.
+- Table: KEY · VALUE · SIZE. Short values edit in place (prior value stays visible as `was info ·` while typing). Multi-line keys show a folded summary (`▸ 48 lines · e opens the buffer editor`) — `e` opens the 17a buffer editor scoped to just that value, same dry-run-first apply.
+- Two apply depths from the same row: `↵` applies without restarting anything (kute never restarts consumers on its own); `ctrl-r` chains the apply with `kubectl rollout restart` for every consuming workload and prints every command it runs.
+- Conflict handling matches 17a: the patch carries the observed resourceVersion; a concurrent change surfaces the diff/rebase/discard banner.
+- `will run` line: `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`.
+- Keys: `↵ apply · ctrl-r apply + rollout restart consumers · e buffer editor (multi-line) · esc discard`. Keybar pill `EDIT VALUE`. `a` add key uses the same line-insert gesture as 27b.
+
+### 27b — Secret add key (`a` in the Data view, line-insert)
+- Decode/reveal semantics inherited from 21a. Strip: `Opaque · 3 keys → 4`, right `values decode in memory only · re-masked on exit`. Existing rows stay masked (`••••••••••••••••`) — adding a key never reveals its neighbors.
+- `a` appends a highlighted `+` row: type the key name, `↹` to the value, which is visible while typing (with an inline `x re-mask` hint) and shows size as `new`.
+- The `will run` line itself masks the value (`"SMTP_PASSWORD":"••••••"`) — copyable documentation must never leak the secret into scrollback or a shared screen. The real patch sends the value via `stringData`; kute does the base64, not the user.
+- Plaintext exists only in process memory: `x` re-masks the input row, `esc` zeroes the buffer, nothing is logged or persisted. `ctrl-v` paste is never echoed to scrollback.
+- Fixing an *existing* key is the 27a value-edit flow on the same surface — adding is a distinct gesture from editing and never shows neighboring values.
+- PROD contexts add the inline y/N on apply; removing a key keeps the y/N too (recoverable only if the old value exists elsewhere — the prompt says so).
+- Keys: `↵ apply · x re-mask input · ctrl-v paste (never echoed) · esc discard`. Keybar pill `ADD KEY`.
+
+### 28a — Update chip (ambient, status bar)
+- Zero chrome when no update is pending (13d's rule). With one available, a quiet chip renders left of the connection dot: `↑ 0.2.1` in yellow — same "worth knowing, not urgent" hue as other passive facts; no banner, no flash, nothing steals focus mid-incident. The keybar's right slot names the key while live: `U 0.2.1 available — what's new`.
+- **Check hygiene:** one GET against the releases feed per 24h, cached in the state dir; offline/airgapped → silently no chip, no retry storm. `update.check: false` in config disables it entirely (relevant behind egress-flagging proxies).
+- Per-version dismissal: opening 28b for a version (or `x` skip there) hides the chip until the *next* release — it never re-nags for a version already seen. Pre-releases only surface if you're already running one.
+- `U` opens 28b from anywhere.
+
+### 28b — What's-new panel (`U` from anywhere, also `:update`)
+- The changelog plus the exact upgrade command — kute never self-updates. Header: `you run 0.2.0 · latest 0.2.1 · released 2d ago`.
+- CHANGELOG list: type tag (`fix` red / `new` green) + one-line verbatim description; truncates to `… 4 more · o opens release notes in browser`.
+- Install-command box: `installed via` + detected package-manager chip (e.g. `homebrew`, "detected from the binary path"), right note `kute never updates itself`; below, the literal command (`$ brew upgrade kute`) with `y copies · runs in your shell, not here`.
+- kute detects its own install method (brew cellar path, apt, go install, plain binary) and prints that manager's exact command — same "will run" idiom used everywhere else in the app. Plain-binary installs get the release URL instead of a command. A tool that mutates clusters must not also mutate itself mid-session.
+- Empty state (opening `:update` while already current): `0.2.0 is the latest` in green + last-checked timestamp + `r` to re-check now — the only place a manual check exists.
+- Keys: `y copy command · o release notes ↗ · x skip 0.2.1 — hide the chip · esc back`. Keybar pill `UPDATE`.
+
 ## Interactions & Behavior (system-wide)
 - **One palette shell, three scopes:** `g` (anything) · `n` (namespaces) · `c` (contexts). Opening any of them pre-selects the most recently visited *other* entry of that scope (alt-tab semantics, like editor Ctrl-Tab), so `↵` with no typing toggles straight back to it — same two keystrokes the old double-tap used, now visible through the palette. All share the same fuzzy input, selection treatment, and keybar footer.
 - `g` opens the jump palette anywhere. Empty query = alias letters + ranked daily kinds (12a); typing = fuzzy results across kinds/resources/namespaces/contexts (2b/12b). `esc` closes; `↵` jumps.
@@ -315,6 +375,11 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `w` on a 403 card opens who-can pre-filled (22a); also reachable as a registry kind via `g`.
 - Helm releases browse without the helm binary; rollback shells out with a `will run` line (18a).
 - Ingress/HTTPRoute `↵` opens a live routing table (23a/23b) — backends resolved from the watch, never a describe page; `p` on an HTTPRoute opens its parent Gateway.
+- `i` opens the set-image/tag editor on a workload row (24a); history comes from the watch cache (ReplicaSet revisions + cross-workload image sightings), never a registry call.
+- `R` on a workload row opens the resources editor (25a) — **currently conflicts with 9a's `R` rollout-restart on the same row; unresolved, needs a key reassignment before implementation.**
+- `m` opens the labels/annotations editor (26a) on any object, CRDs included; selector-linked labels carry an inline join warning before you can edit them.
+- ConfigMap/Secret `Data` views: `↵` edits a value in place (27a), `a` inserts a new key as a line-insert (27b); `ctrl-r` on a ConfigMap value chains the apply with a rollout-restart of every consumer.
+- `U` opens the what's-new/update panel from anywhere (28a/28b), also reachable as `:update`; kute checks once per 24h and never self-updates — it only prints the detected package manager's upgrade command.
 
 ## State Management (suggested Bubble Tea model shape)
 - `mode`: `browse | filter | goto | detail | logs | offline | error | noCluster` — drives keybar contents + mode pill.
@@ -332,6 +397,8 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `whoCan`: current query {verb, resource, namespace} + resolved subject rows (from cached bindings/roles).
 - `editBuffer`: YAML edit state {baseResourceVersion, text, dirty, dryRunResult|conflict} — exists only in edit mode.
 - `timeline`: merged feed window (events + restarts + rollout revisions) per scope.
+- `imageHistory`: per-workload tag history derived from the watch (ReplicaSet revisions + cross-namespace image sightings) — feeds 24a, no network calls of its own.
+- `updateCheck`: {lastChecked, latestVersion, seenVersions} — cached in the state dir, drives the 28a chip and 28b's per-version dismissal; absent/inert when `update.check: false`.
 - Watch streams update the table in place; metrics poll on the `sync` interval shown in the header.
 
 ## Design Tokens — semantic, two themes
@@ -405,5 +472,6 @@ The enforceable rules distilled from this design (kind registry not hardcoded vi
 None — all glyphs are Unicode text; no images or icons.
 
 ## Files
-- `Kute Spec.dc.html` — the curated spec: 12 sections, one canonical mock per screen, with design-rationale notes under each. All screens are decided. Toggle the notes via the showNotes tweak when viewing.
-- `support.js` — runtime for opening the HTML mockup in a browser (keep next to the HTML file).
+- `Kute Spec.dc.html` — the 0.1.0 curated spec: 12 sections, one canonical mock per screen (2a–23b), with design-rationale notes under each. Toggle the notes via the showNotes tweak when viewing.
+- `v.0.2.0.dc.html` — the 0.2.0 addendum: 2 sections (update notifications; inline mutation editors), covering 24a–28b. Same showNotes toggle; no separate README — folded into this one.
+- `support.js` — runtime for opening either HTML mockup in a browser (keep next to the HTML files).
