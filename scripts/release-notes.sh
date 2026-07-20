@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# release-notes.sh — generate the two 28a/28b changelog artifacts for a tag, via
-# git-cliff (see cliff.toml), for the release workflow to hand to goreleaser.
+# release-notes.sh — generate 28b's changelog.json for a tag, via git-cliff (see
+# cliff.toml), for the release workflow to hand to goreleaser as an extra_file.
+# The GitHub release body itself uses goreleaser's own native changelog.
 #
 # Usage: scripts/release-notes.sh <tag>
 #
 # Writes:
-#   .release/notes.md       — pretty GitHub release body (goreleaser --release-notes)
 #   .release/changelog.json — [{type, text}], type in new|fix|perf (goreleaser release.extra_files)
 #
 # Must run with HEAD checked out at <tag> and full history/tags available
@@ -24,9 +24,6 @@ CONFIG="${REPO_ROOT}/cliff.toml"
 OUT_DIR="${REPO_ROOT}/.release"
 
 mkdir -p "$OUT_DIR"
-
-log "Generating release notes for ${TAG}"
-git-cliff --config "$CONFIG" --current --strip header --output "${OUT_DIR}/notes.md"
 
 log "Generating changelog.json for ${TAG}"
 git-cliff --config "$CONFIG" --current --context | jq '
