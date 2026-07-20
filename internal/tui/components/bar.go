@@ -57,13 +57,14 @@ func miniBar(used, denom int64, width int, styles BarStyles, badAt float64) stri
 		filled = 0
 	}
 
-	// docs/design README.md §11a: "Bars are block glyphs (▐▌▌░░░)" — the
-	// half-block fill glyph and light-shade track glyph, not a solid/hollow
-	// square (this component's other consumers — 2a's relative pod bar, 5a's
-	// CPU/MEM bars — share this same glyph pair).
-	bar := fillStyleFor(ratio, badAt, styles).Render(strings.Repeat("▌", filled))
+	// docs/design/v.0.2.0.dc.html's 25a mockup renders its own P95 USAGE bars
+	// with ▮ (filled) / ▯ (track) — the solid/hollow square pair, not the
+	// half-block glyphs §11a's older prose describes (this component's other
+	// consumers — 2a's relative pod bar, 5a's CPU/MEM bars — share this same
+	// glyph pair).
+	bar := fillStyleFor(ratio, badAt, styles).Render(strings.Repeat("▮", filled))
 	if empty := width - filled; empty > 0 {
-		bar += styles.Track.Render(strings.Repeat("░", empty))
+		bar += styles.Track.Render(strings.Repeat("▯", empty))
 	}
 	return bar
 }

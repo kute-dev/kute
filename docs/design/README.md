@@ -155,7 +155,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 11a — Nodes list (cluster-scoped)
 - Namespace segment **drops out of the breadcrumb** (`… cluster › Nodes` + small `cluster-scoped` tag). Summary strip: `● 3 ready · ◐ 1 pressure · ◈ 1 cordoned` + right `5 nodes · 125 pods · cluster cpu 46% · mem 71%`.
-- Columns: glyph · NAME (control-plane role tagged inline) · STATUS (`Ready` dim, `MemPressure` yellow, `cordoned` blue `◈`) · PODS `62/110` · CPU bar+pct · MEM bar+pct · VERSION · AGE. Bars are block glyphs (`▐▌▌░░░`), colored yellow only when hot (mem 91%). Version skew flagged with a quiet yellow `▲`.
+- Columns: glyph · NAME (control-plane role tagged inline) · STATUS (`Ready` dim, `MemPressure` yellow, `cordoned` blue `◈`) · PODS `62/110` · CPU bar+pct · MEM bar+pct · VERSION · AGE. Bars are block glyphs (`▮▮▮▮▯▯`), colored yellow only when hot (mem 91%). Version skew flagged with a quiet yellow `▲`.
 - Keys: `↵` node detail · `C` cordon/uncordon (reversible, no confirm) · `D` drain (evicts workloads → routes through the 8b confirm, showing how many pods will be evicted) · `y` yaml. Keybar pill `NODES`.
 
 ### 11b — Node detail (↵ from nodes list)

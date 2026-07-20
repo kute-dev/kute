@@ -15,8 +15,8 @@ CONTAINERS                                                │
      NAME        IMAGE         STATE                 RE…  │                     
   ◐  worker      nva/worker:…  Waiting · CrashLoop…    …  │                     
   ●  metrics-s…  nva/sidecar…  Running                 …  │                     
-CPU ▌░░░░░░░░░░░░░░░ 4m / 500m                            │                     
-MEM ▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌▌ 246Mi / 256Mi                        │                     
+CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m                            │                     
+MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                        │                     
                                                           │                     
 EVENTS · newest first                                     │                     
 Warning   BackOff           1m      Back-off restar…      │                     
