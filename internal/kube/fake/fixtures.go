@@ -796,12 +796,6 @@ func demoHPA(name, ns, targetKind, targetName string) *autoscalingv2.HorizontalP
 	}
 }
 
-// demoStatefulSet is the 1-replica case of demoStatefulSetN — kept as its
-// own name since "worker"'s call site predates the general form.
-func demoStatefulSet(name, ns string, created metav1.Time) *appsv1.StatefulSet {
-	return demoStatefulSetN(name, ns, 1, created)
-}
-
 func demoStatefulSetN(name, ns string, replicas int32, created metav1.Time) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
