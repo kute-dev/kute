@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/state"
 )
 
 // TestAllNamespacesHotkeySyncsSessionLocation confirms 'a' (browse's
@@ -56,6 +57,44 @@ func TestOpenDeploymentPodsSyncsSessionLocationKind(t *testing.T) {
 	}
 	if session.Location.Kind != kube.KindPod {
 		t.Fatalf("expected Session.Location.Kind synced to Pods, got %s", session.Location.Kind)
+	}
+}
+
+// TestOpenNamespacePodsSyncsSessionLocation confirms '↵' on a Namespaces row
+// (openSelectedNamespacePods) makes the row's namespace the active one —
+// the same effect selecting it in the "n" namespace palette has — and
+// switches kind to Pods in the same step, mirroring
+// TestOpenDeploymentPodsSyncsSessionLocationKind's Session.Location
+// coverage for the namespace+kind combination.
+func TestOpenNamespacePodsSyncsSessionLocation(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNamespace: {namespace("default"), namespace("prod")},
+		kube.KindPod:       {pod("prod", "api-abc123")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindNamespace
+	session.State.PerContext = map[string]state.PerContext{}
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "down"}) // "default" -> "prod"
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+
+	if m.kind != kube.KindPod {
+		t.Fatalf("expected browse's own kind to be Pods, got %s", m.kind)
+	}
+	if m.namespace != "prod" {
+		t.Fatalf("expected browse's own namespace to be prod, got %q", m.namespace)
+	}
+	if session.Location.Kind != kube.KindPod {
+		t.Fatalf("expected Session.Location.Kind synced to Pods, got %s", session.Location.Kind)
+	}
+	if session.Location.Namespace != "prod" {
+		t.Fatalf("expected Session.Location.Namespace synced to prod, got %q", session.Location.Namespace)
+	}
+	if got := session.State.PerContext[session.Location.Context].RecentNamespaces; len(got) == 0 || got[0] != "prod" {
+		t.Fatalf("expected prod recorded as the most recent namespace, got %v", got)
 	}
 }
 

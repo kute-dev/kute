@@ -448,6 +448,9 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 	if task, cmd, ok := m.openSelectedSecretData(); ok {
 		return task, cmd, true
 	}
+	if cmd, ok := m.openSelectedNamespacePods(); ok {
+		return m, cmd, true
+	}
 	if m.kind == kube.KindDeployment {
 		if row, ok := m.selectedRow(); ok {
 			return m, m.openDeploymentPods(row), true
