@@ -300,13 +300,15 @@ type Model struct {
 	// 'v'/'h'/'R' need the chart/values/revision fields it doesn't.
 	helmReleases map[string]kube.HelmRelease
 
-	// nodeMetrics/nodeCapacity/podCountByNode/clusterPodTotal back 11a's
-	// Nodes columns and health-strip right side (Node kind only) — see
-	// nodes.go's loadNodeExtras and nodeMetricCell/nodePodsCell.
+	// nodeMetrics/nodeCapacity/podCountByNode/clusterPodTotal/nodePodHealth
+	// back 11a's Nodes columns and health-strip right side (Node kind only)
+	// — see nodes.go's loadNodeExtras and
+	// nodeMetricCell/nodePodsCell/nodeHealthCell.
 	nodeMetrics     map[string]kube.NodeMetric
 	nodeCapacity    map[string]nodeCapacity
 	podCountByNode  map[string]int
 	clusterPodTotal int
+	nodePodHealth   map[string]resources.HealthCounts
 
 	visible []filterMatch // rows after the filter, before 6b's fold/collapse
 	// expandedGroups tracks which 6b namespace groups the user has manually
@@ -379,6 +381,7 @@ type rowsLoadedMsg struct {
 	nodeCapacity    map[string]nodeCapacity
 	podCountByNode  map[string]int
 	clusterPodTotal int
+	nodePodHealth   map[string]resources.HealthCounts
 	err             error
 }
 
@@ -551,6 +554,7 @@ func (m Model) load() tea.Cmd {
 	ns := m.countNamespace()
 	kind := m.kind
 	timeout := m.timeout
+	podDesc, _ := m.session.Registry.Descriptor(kube.KindPod)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -563,6 +567,7 @@ func (m Model) load() tea.Cmd {
 		nodeCount := 0
 		var nodeCap map[string]nodeCapacity
 		var podCountByNode map[string]int
+		var nodePodHealth map[string]resources.HealthCounts
 		clusterPodTotal := 0
 		switch kind {
 		case kube.KindPod:
@@ -573,13 +578,14 @@ func (m Model) load() tea.Cmd {
 				nodeCount = n
 			}
 		case kube.KindNode:
-			nodeCap, podCountByNode, clusterPodTotal = loadNodeExtras(ctx, lister)
+			nodeCap, podCountByNode, clusterPodTotal, nodePodHealth = loadNodeExtras(ctx, lister, podDesc.Project)
 		case kube.KindHelmRelease:
 			helmReleases = helmReleasesByName(ctx, lister, ns)
 		}
 		return rowsLoadedMsg{
 			kind: kind, rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
+			nodePodHealth: nodePodHealth,
 		}
 	}
 }
@@ -765,6 +771,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.nodeCapacity = nil
 	m.podCountByNode = nil
 	m.clusterPodTotal = 0
+	m.nodePodHealth = nil
 	// 20a: "marks are per-view and drop on kind/namespace switch."
 	m.marks = nil
 	m.pendingBulkDelete = nil

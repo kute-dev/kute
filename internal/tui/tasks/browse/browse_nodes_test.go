@@ -187,6 +187,43 @@ func TestNodeColumnsRenderStatusPodsAndVersion(t *testing.T) {
 	}
 }
 
+// TestNodeHealthColumnTalliesScheduledPods pins 11a's HEALTH column: a
+// per-node glyph tally of that node's own pods (OK/Warn/Fail order, zero
+// classes skipped), independent of the unrelated node-b's own pods — the
+// same classification projectPod already uses for the Pods list itself, so
+// a node's HEALTH tally always agrees with what the Pods list would show
+// filtered to that node.
+func TestNodeHealthColumnTalliesScheduledPods(t *testing.T) {
+	crashing := crashPod("default", "crashing")
+	crashing.Spec.NodeName = "node-a"
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {nodeObj("node-a", true, false), nodeObj("node-b", true, false)},
+		kube.KindPod: {
+			schedPod("default", "healthy", "node-a"),
+			crashing,
+			schedPod("default", "other", "node-b"),
+		},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindNode
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "HEALTH") {
+		t.Fatalf("node view missing HEALTH column header:\n%s", view)
+	}
+	nodeA := m.nodePodHealth["node-a"]
+	if nodeA.OK != 1 || nodeA.Fail != 1 {
+		t.Fatalf("node-a health = %+v, want OK:1 Fail:1", nodeA)
+	}
+	nodeB := m.nodePodHealth["node-b"]
+	if nodeB.OK != 1 || nodeB.Fail != 0 {
+		t.Fatalf("node-b health = %+v, want OK:1 Fail:0", nodeB)
+	}
+}
+
 // TestNodeStatusReadyRendersDimNotGreen pins 11a: STATUS "Ready" renders
 // TextDim, matching the ROLLOUT column's own "healthy state renders dim,
 // not green" carve-out — NotReady still gets the usual Bad/red status color.

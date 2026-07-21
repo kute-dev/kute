@@ -197,6 +197,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.nodeCapacity = msg.nodeCapacity
 	m.podCountByNode = msg.podCountByNode
 	m.clusterPodTotal = msg.clusterPodTotal
+	m.nodePodHealth = msg.nodePodHealth
 	m.fetchedAt = time.Now()
 	// Real data has landed — 15a's cached/dimmed loading view (if any) is
 	// superseded either way, whether this resolves to Ready or Empty below.

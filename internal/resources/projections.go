@@ -603,14 +603,14 @@ func projectNode(obj runtime.Object) Row {
 		nameSuffix = " (" + role + ")"
 	}
 
-	// PODS/CPU/MEM are placeholders: live pod counts and usage aren't on the
-	// object alone (PODS needs a cluster-wide pod scan, CPU/MEM a metrics
-	// poll) — browse fills them in from its own node-scoped maps, the same
-	// pattern Pod's CPU/MEM placeholders use (resources.Cells' metrics
-	// param).
+	// HEALTH/PODS/CPU/MEM are placeholders: live pod health/counts and usage
+	// aren't on the object alone (they need a cluster-wide pod scan, or a
+	// metrics poll) — browse fills them in from its own node-scoped maps,
+	// the same pattern Pod's CPU/MEM placeholders use (resources.Cells'
+	// metrics param).
 	return Row{
 		Name:       name,
-		Cells:      []string{name, statusText, "–", "–", "–", n.Status.NodeInfo.KubeletVersion, shortAge(age)},
+		Cells:      []string{name, statusText, "–", "–", "–", "–", n.Status.NodeInfo.KubeletVersion, shortAge(age)},
 		Status:     class,
 		Glyph:      glyph,
 		GlyphClass: class,

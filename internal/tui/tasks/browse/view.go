@@ -827,6 +827,8 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			cells[i] = m.nodeMetricCell(r.Name, true, st)
 		case m.kind == kube.KindNode && cols[i].Title == "MEM":
 			cells[i] = m.nodeMetricCell(r.Name, false, st)
+		case m.kind == kube.KindNode && cols[i].Title == "Health":
+			cells[i] = m.nodeHealthCell(r.Name, st)
 		case m.kind == kube.KindNode && cols[i].Title == "Pods":
 			cells[i] = components.Cell{Text: m.nodePodsCell(r.Name), Style: st.dim}
 		case m.kind == kube.KindNode && cols[i].Title == "Version":

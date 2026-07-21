@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -69,9 +70,13 @@ func (m Model) loadNodeMetrics(epoch int) tea.Cmd {
 
 // loadNodeExtras re-lists raw Node/Pod objects for data resources.Row can't
 // carry: each node's Allocatable capacity, how many non-terminal pods are
-// currently scheduled on it (kubectl describe node's convention), and the
-// cluster-wide non-terminal pod total for the health strip's right side.
-func loadNodeExtras(ctx context.Context, lister resources.RawLister) (map[string]nodeCapacity, map[string]int, int) {
+// currently scheduled on it (kubectl describe node's convention), the
+// cluster-wide non-terminal pod total for the health strip's right side, and
+// each node's pod-health tally for the HEALTH column (nodeHealthCell) —
+// projectPod classifies each pod the same way the Pods list itself does, so
+// a node's tally always agrees with what browse would show if you jumped
+// into that node's pods.
+func loadNodeExtras(ctx context.Context, lister resources.RawLister, projectPod func(runtime.Object) resources.Row) (map[string]nodeCapacity, map[string]int, int, map[string]resources.HealthCounts) {
 	capacity := map[string]nodeCapacity{}
 	if objs, err := lister.ListRaw(ctx, kube.KindNode, ""); err == nil {
 		for _, obj := range objs {
@@ -94,6 +99,7 @@ func loadNodeExtras(ctx context.Context, lister resources.RawLister) (map[string
 	}
 
 	podCount := map[string]int{}
+	podHealth := map[string]resources.HealthCounts{}
 	total := 0
 	if objs, err := lister.ListRaw(ctx, kube.KindPod, ""); err == nil {
 		for _, obj := range objs {
@@ -103,9 +109,23 @@ func loadNodeExtras(ctx context.Context, lister resources.RawLister) (map[string
 			}
 			podCount[p.Spec.NodeName]++
 			total++
+			if projectPod != nil {
+				h := podHealth[p.Spec.NodeName]
+				switch projectPod(obj).Status {
+				case resources.StatusOK:
+					h.OK++
+				case resources.StatusWarn:
+					h.Warn++
+				case resources.StatusFail:
+					h.Fail++
+				default:
+					h.Neutral++
+				}
+				podHealth[p.Spec.NodeName] = h
+			}
 		}
 	}
-	return capacity, podCount, total
+	return capacity, podCount, total, podHealth
 }
 
 func nodeTerminalPod(p *corev1.Pod) bool {
@@ -153,6 +173,40 @@ func (m Model) nodePodsCell(name string) string {
 		return fmt.Sprintf("%d", m.podCountByNode[name])
 	}
 	return fmt.Sprintf("%d/%d", m.podCountByNode[name], cap.pods)
+}
+
+// nodeHealthCell renders the HEALTH column: a compact per-status glyph tally
+// of the pods scheduled on this node (OK/Warn/Fail/Neutral order, zero
+// classes skipped) — the same glyphs/order/coloring as the namespace
+// palette's own HEALTH column and the 2a health strip, scaled down to one
+// node's pods instead of a whole namespace or cluster. A ghost dash for a
+// node carrying no non-terminal pods.
+func (m Model) nodeHealthCell(name string, st rowCellStyles) components.Cell {
+	h := m.nodePodHealth[name]
+	segments := []struct {
+		class resources.StatusClass
+		n     int
+	}{
+		{resources.StatusOK, h.OK},
+		{resources.StatusWarn, h.Warn},
+		{resources.StatusFail, h.Fail},
+		{resources.StatusNeutral, h.Neutral},
+	}
+	var parts []string
+	for _, seg := range segments {
+		if seg.n == 0 {
+			continue
+		}
+		parts = append(parts, st.status[seg.class].Render(fmt.Sprintf("%s%d", defaultGlyphFor(seg.class), seg.n)))
+	}
+	if len(parts) == 0 {
+		return components.Cell{Text: "–", Style: st.dim}
+	}
+	text := parts[0]
+	for _, p := range parts[1:] {
+		text += st.dim.Render(" ") + p
+	}
+	return components.Cell{Text: text}
 }
 
 // nodeVersionColumn finds Version's position within a Node row's Cells, so

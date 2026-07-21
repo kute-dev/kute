@@ -67,6 +67,7 @@ const MetricColumnWidth = 12
 var fixedWidths = map[string]int{
 	"Ready":    5,
 	"Status":   16,
+	"Health":   13, // "●12 ◐1 ✕1" — matches the namespace palette's HEALTH width
 	"Restarts": 4,
 	"Node":     9,
 	"Age":      4,
