@@ -445,6 +445,9 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 	if task, cmd, ok := m.openSelectedRouteTable(); ok {
 		return task, cmd, true
 	}
+	if task, cmd, ok := m.openSelectedSecretData(); ok {
+		return task, cmd, true
+	}
 	if m.kind == kube.KindDeployment {
 		if row, ok := m.selectedRow(); ok {
 			return m, m.openDeploymentPods(row), true
@@ -622,6 +625,22 @@ func (m Model) openSelectedPodDetail() (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	task, cmd := m.openPodDetail(pod, siblings, index, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// openSelectedSecretData pushes 27b for the selected Secret row's Data view.
+// ok is false when the hook isn't wired, the current kind isn't Secret, or
+// nothing's selected — so ↵ falls through to whatever the rest of
+// openSelectedEnter's chain (or ultimately nothing) resolves to.
+func (m Model) openSelectedSecretData() (tea.Model, tea.Cmd, bool) {
+	if m.openSecretData == nil || m.kind != kube.KindSecret {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	task, cmd := m.openSecretData(row.Namespace, row.Name, m.width, m.height)
 	return task, cmd, task != nil
 }
 

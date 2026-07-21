@@ -42,15 +42,16 @@ func nodeObj(name string, ready bool, cordoned bool) *corev1.Node {
 // fakeMutator is a minimal kube.Mutator test double recording delete/
 // cordon/drain calls, for browse's 8b/11a ctrl-d/C/D key tests.
 type fakeMutator struct {
-	cordoned     map[string]bool
-	drained      []string
-	deleted      []string
-	forceDeleted []string
-	scaled       []int32
-	setImages    []string // "namespace/name container=image"
-	setResources []string // "namespace/name container" of every SetResources call
-	dryRun       bool     // true if the most recent SetResources call was a dry-run
-	metaPatches  []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
+	cordoned          map[string]bool
+	drained           []string
+	deleted           []string
+	forceDeleted      []string
+	scaled            []int32
+	setImages         []string // "namespace/name container=image"
+	setResources      []string // "namespace/name container" of every SetResources call
+	dryRun            bool     // true if the most recent SetResources call was a dry-run
+	metaPatches       []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
+	secretDataPatches []string // "namespace/name key=value" or "...key-" for a removal
 	// metaObjs, when set (browse_meta_test.go's newMetaModel wires it to the
 	// same store the model's fakeLister reads from), makes PatchMeta also
 	// mutate the matching object's labels/annotations in place — so a
@@ -153,6 +154,17 @@ func (f *fakeMutator) PatchMeta(_ context.Context, kind kube.ResourceKind, names
 		}
 		break
 	}
+	return nil
+}
+func (f *fakeMutator) PatchSecretData(_ context.Context, namespace, name, key, value string, remove bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	entry := key + "=" + value
+	if remove {
+		entry = key + "-"
+	}
+	f.secretDataPatches = append(f.secretDataPatches, namespace+"/"+name+" "+entry)
 	return nil
 }
 

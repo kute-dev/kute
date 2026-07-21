@@ -81,6 +81,13 @@ type TaskScope struct {
 	// fields rather than needing the (by-then-closed) originating panel.
 	MetaJoinService  string
 	MetaJoinPodCount int
+	// SecretKey/SecretValue/SecretRemove are a "secret-data" verb's (27b)
+	// target Secret data-key edit. SecretRemove true is a ctrl-d key
+	// removal (SecretValue is "" in that case). Empty/false for every other
+	// verb.
+	SecretKey    string
+	SecretValue  string
+	SecretRemove bool
 }
 
 // TaskAction describes an operation available from a task screen.

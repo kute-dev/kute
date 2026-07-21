@@ -408,6 +408,88 @@ func TestPatchMetaUnsupportedKindReturnsError(t *testing.T) {
 	}
 }
 
+func TestSecretDataCommandStringMasksValueAndRendersRemoval(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		key    string
+		remove bool
+		want   string
+	}{
+		{
+			name: "add masks the value",
+			key:  "SMTP_PASSWORD",
+			want: `kubectl patch secret/aim-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n aim-stage`,
+		},
+		{
+			name:   "removal renders the null literal, no mask needed",
+			key:    "SMTP_PASSWORD",
+			remove: true,
+			want:   `kubectl patch secret/aim-secrets --type merge -p '{"data":{"SMTP_PASSWORD":null}}' -n aim-stage`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := SecretDataCommandString("aim-stage", "aim-secrets", tt.key, tt.remove)
+			if got != tt.want {
+				t.Errorf("SecretDataCommandString = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPatchSecretDataSetsAndRemovesKeys pins the patch shape PatchSecretData
+// sends, not the real apiserver's stringData→data folding: the fake
+// clientset's tracker applies a merge patch as a raw structural JSON merge,
+// with no admission/REST-strategy pass to speak of, so a patched
+// .stringData key lands in got.StringData here rather than got.Data — the
+// same class of gap SetResources' own dry-run test already documents (the
+// fake clientset performs no admission). Only a real cluster does the
+// actual base64-encode-and-merge-into-.data kute relies on in practice.
+func TestPatchSecretDataSetsAndRemovesKeys(t *testing.T) {
+	t.Parallel()
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "aim-secrets", Namespace: "default"},
+		Data:       map[string][]byte{"DATABASE_URL": []byte("postgres://old")},
+	}
+	c, cs := newTestCluster(secret)
+	ctx := context.Background()
+
+	if err := c.PatchSecretData(ctx, "default", "aim-secrets", "SMTP_PASSWORD", "hunter2-staging", false); err != nil {
+		t.Fatalf("PatchSecretData add: %v", err)
+	}
+	got, err := cs.CoreV1().Secrets("default").Get(ctx, "aim-secrets", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.StringData["SMTP_PASSWORD"] != "hunter2-staging" {
+		t.Errorf("stringData[SMTP_PASSWORD] = %q, want hunter2-staging", got.StringData["SMTP_PASSWORD"])
+	}
+	if string(got.Data["DATABASE_URL"]) != "postgres://old" {
+		t.Errorf("existing key data[DATABASE_URL] = %q, want unchanged", got.Data["DATABASE_URL"])
+	}
+
+	if err := c.PatchSecretData(ctx, "default", "aim-secrets", "DATABASE_URL", "", true); err != nil {
+		t.Fatalf("PatchSecretData remove: %v", err)
+	}
+	got, err = cs.CoreV1().Secrets("default").Get(ctx, "aim-secrets", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if _, ok := got.Data["DATABASE_URL"]; ok {
+		t.Errorf("expected DATABASE_URL removed, got %+v", got.Data)
+	}
+}
+
+func TestPatchSecretDataRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.PatchSecretData(context.Background(), "default", "", "k", "v", false); err == nil {
+		t.Fatal("expected an error for an empty secret name")
+	}
+}
+
 func TestScaleCommandStringAcrossKinds(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

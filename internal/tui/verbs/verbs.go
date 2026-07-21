@@ -198,6 +198,25 @@ var (
 		ID: "meta", Key: "m", Label: "labels/annotations",
 		Tier: actions.TierNone, Mutating: true,
 	}
+	// AddSecretKey is 27b's 'a' line-insert add on a Secret's Data view —
+	// same TierNone-nominal/TierForAddSecretKey-resolves-the-real-tier shape
+	// as SetImage/SetResources above (docs/design README.md §27b: "PROD
+	// contexts add the inline y/N on apply"), routed through
+	// actions.Controller/kube.Mutator.
+	AddSecretKey = Verb{
+		ID: "add-secret-key", Key: "a", Label: "add key",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindSecret}, Mutating: true,
+	}
+	// RemoveSecretKey is 27b's ctrl-d removal of an existing Data-view key —
+	// always TierInline regardless of PROD, the same "removal always
+	// confirms inline, never the type-the-name modal" shape 26a's Meta
+	// removal uses (docs/design README.md §27b: "removing a key keeps the
+	// y/N too" — recoverable only if the old value exists elsewhere, so the
+	// prompt says so, not destructive enough for 8b's modal tier).
+	RemoveSecretKey = Verb{
+		ID: "remove-secret-key", Key: "ctrl-d", Label: "remove key",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindSecret}, Mutating: true,
+	}
 )
 
 // Port-forward verbs (13a/13c, docs/design README.md). Forward pushes the
@@ -264,6 +283,7 @@ var All = []Verb{
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
 	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources, Meta,
+	AddSecretKey, RemoveSecretKey,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
@@ -332,6 +352,18 @@ func TierForSetImage(isProd bool) actions.Tier {
 // through actions.Controller/kube.Mutator like SetImage rather than a
 // screen-local gate.
 func TierForSetResources(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForAddSecretKey resolves AddSecretKey's confirmation policy — the same
+// TierNone-outside-PROD/TierInline-in-PROD shape as TierForSetImage/
+// TierForSetResources (docs/design README.md §27b: "PROD contexts add the
+// inline y/N on apply"), routed through actions.Controller/kube.Mutator like
+// those two rather than a screen-local gate.
+func TierForAddSecretKey(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}

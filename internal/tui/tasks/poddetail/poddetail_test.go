@@ -153,6 +153,9 @@ func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, s
 func (f *fakeMutator) PatchMeta(context.Context, kube.ResourceKind, string, string, bool, string, string, bool) error {
 	return nil
 }
+func (f *fakeMutator) PatchSecretData(context.Context, string, string, string, string, bool) error {
+	return nil
+}
 
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{

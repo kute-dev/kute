@@ -11,10 +11,11 @@ import (
 )
 
 type fakeMutator struct {
-	deleted      []string
-	forceDeleted []string
-	metaPatches  []string
-	err          error
+	deleted           []string
+	forceDeleted      []string
+	metaPatches       []string
+	secretDataPatches []string
+	err               error
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, kind kube.ResourceKind, ns, name string) error {
@@ -52,6 +53,15 @@ func (f *fakeMutator) PatchMeta(_ context.Context, kind kube.ResourceKind, ns, n
 		entry = key + "-"
 	}
 	f.metaPatches = append(f.metaPatches, string(kind)+"/"+ns+"/"+name+" "+field+" "+entry)
+	return f.err
+}
+
+func (f *fakeMutator) PatchSecretData(_ context.Context, namespace, name, key, value string, remove bool) error {
+	entry := key + "=" + value
+	if remove {
+		entry = key + "-"
+	}
+	f.secretDataPatches = append(f.secretDataPatches, namespace+"/"+name+" "+entry)
 	return f.err
 }
 
@@ -229,6 +239,30 @@ func TestExecuteDispatchesSetMetaToPatchMeta(t *testing.T) {
 	}
 	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "Deployment/default/aim-worker labels env=staging" {
 		t.Fatalf("metaPatches = %v, want one Deployment/default/aim-worker labels env=staging patch", mut.metaPatches)
+	}
+}
+
+func TestExecuteDispatchesSecretDataToPatchSecretData(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID:    "add-secret-key-default/aim-secrets/SMTP_PASSWORD",
+		Label: "Add key SMTP_PASSWORD to aim-secrets?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindSecret), ResourceName: "aim-secrets", Namespace: "default",
+			Verb: "secret-data", IsMutating: true,
+			SecretKey: "SMTP_PASSWORD", SecretValue: "hunter2-staging",
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected a TierNone secret-data action to return an execution command")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.secretDataPatches) != 1 || mut.secretDataPatches[0] != "default/aim-secrets SMTP_PASSWORD=hunter2-staging" {
+		t.Fatalf("secretDataPatches = %v, want one default/aim-secrets SMTP_PASSWORD=hunter2-staging patch", mut.secretDataPatches)
 	}
 }
 

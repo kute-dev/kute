@@ -1,0 +1,24 @@
+  kute │ test-cluster › aim-stage › secret/aim-secrets › Data                   
+────────────────────────────────────────────────────────────────────────────────
+  Opaque · 3 keys             values decode in memory only · re-masked on exit  
+────────────────────────────────────────────────────────────────────────────────
+  KEY                   VALUE                                             SIZE  
+› API_TOKEN             ••••••••••••••••                                  38 B  
+  DATABASE_URL          ••••••••••••••••                                  46 B  
+  SMTP_USER             ••••••••••••••••                                  16 B  
++ a add key                                                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   DATA  esc back  ↑↓ move │ ↵ edit  a add key  ctrl-d remove key       ? help  

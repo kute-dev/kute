@@ -63,6 +63,12 @@ type Mutator interface {
 	// existed). Works on every kind including discovered CRDs: kinds outside
 	// the typed clientset switch fall back to the dynamic client by GVR.
 	PatchMeta(ctx context.Context, kind ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error
+	// PatchSecretData sets or removes a single key in a Secret's data — 27b's
+	// add-key editor. remove=true deletes the key (a JSON-merge-patch null
+	// under .data, the same null-removes-a-key idiom PatchMeta uses);
+	// otherwise sets key=value via .stringData, so the API server does the
+	// base64 encoding, not the caller.
+	PatchSecretData(ctx context.Context, namespace, name, key, value string, remove bool) error
 }
 
 // DeleteResource implements Mutator against the live clientset. It maps the kind
@@ -514,6 +520,47 @@ func metaResourceArg(kind ResourceKind) string {
 	default:
 		return strings.ToLower(string(kind))
 	}
+}
+
+// PatchSecretData implements Mutator against the live clientset — a JSON
+// merge patch (RFC 7386) targeting .stringData to add/edit (the server
+// base64-encodes it and merges the result into .data) or .data with a null
+// value to remove (.stringData is write-only and never itself holds a
+// delete signal). Secret has no dynamic-client CRD fallback to speak of —
+// it's always a typed core/v1 kind.
+func (c *Cluster) PatchSecretData(ctx context.Context, namespace, name, key, value string, remove bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot patch secret: empty name")
+	}
+	patch := []byte(secretDataPatchJSON(key, value, remove))
+	_, err := c.clientset.CoreV1().Secrets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+// secretDataPatchJSON builds the JSON merge patch body PatchSecretData
+// sends — mirrors metaPatchJSON's null-removes-a-key shape, targeting
+// .stringData to set (the server encodes/merges it into .data) or .data
+// directly to remove (the only field a merge patch can null out — a
+// Secret's stored representation never carries .stringData back).
+func secretDataPatchJSON(key, value string, remove bool) string {
+	if remove {
+		return fmt.Sprintf(`{"data":{%q:null}}`, key)
+	}
+	return fmt.Sprintf(`{"stringData":{%q:%q}}`, key, value)
+}
+
+// SecretDataCommandString renders the exact `kubectl patch` invocation
+// PatchSecretData runs — 27b's "will run" documentation line. The value
+// itself is always masked as a fixed six-dot placeholder, never the real
+// secret text (docs/design README.md §27b: "copyable documentation must not
+// leak the secret into scrollback or a shared screen") — a removal's null
+// literal carries no secret material, so it renders verbatim.
+func SecretDataCommandString(namespace, name, key string, remove bool) string {
+	arg := "secret/" + name
+	if remove {
+		return fmt.Sprintf("kubectl patch %s --type merge -p '{\"data\":{%q:null}}' -n %s", arg, key, namespace)
+	}
+	return fmt.Sprintf("kubectl patch %s --type merge -p '{\"stringData\":{%q:\"••••••\"}}' -n %s", arg, key, namespace)
 }
 
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a

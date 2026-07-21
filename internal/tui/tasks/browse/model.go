@@ -131,6 +131,10 @@ type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Mo
 // release's decoded values.
 type OpenHelmValuesFunc func(release kube.HelmRelease, width, height int) (tea.Model, tea.Cmd)
 
+// OpenSecretDataFunc pushes tasks/secretdata (27b) for a Secret row's Data
+// view.
+type OpenSecretDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenOverviewFunc pushes tasks/overview (19a) — the `g "ov"` goto entry
 // (kube.KindOverview, handled by switchKind's carve-out below, the same
 // shape as OpenWhoCanFunc's KindWhoCan carve-out since there's nothing to
@@ -159,6 +163,7 @@ type Config struct {
 	OpenWhoCan       OpenWhoCanFunc
 	OpenHelmHistory  OpenHelmHistoryFunc
 	OpenHelmValues   OpenHelmValuesFunc
+	OpenSecretData   OpenSecretDataFunc
 	OpenOverview     OpenOverviewFunc
 	// Forwards is the app-wide port-forward registry (13c's stop/restart/
 	// stop-all verbs act on it directly, unlike OpenForward's picker push) —
@@ -194,6 +199,7 @@ type Model struct {
 	openWhoCan       OpenWhoCanFunc
 	openHelmHistory  OpenHelmHistoryFunc
 	openHelmValues   OpenHelmValuesFunc
+	openSecretData   OpenSecretDataFunc
 	openOverview     OpenOverviewFunc
 	forwards         *kube.ForwardManager
 	retrier          ConnRetrier
@@ -458,6 +464,7 @@ func New(cfg Config) Model {
 		openWhoCan:       cfg.OpenWhoCan,
 		openHelmHistory:  cfg.OpenHelmHistory,
 		openHelmValues:   cfg.OpenHelmValues,
+		openSecretData:   cfg.OpenSecretData,
 		openOverview:     cfg.OpenOverview,
 		forwards:         cfg.Forwards,
 		retrier:          cfg.Retrier,

@@ -346,6 +346,30 @@ func (c *Cluster) PatchMeta(_ context.Context, kind kube.ResourceKind, namespace
 	return fmt.Errorf("%s %q not found", kind, name)
 }
 
+// PatchSecretData sets or removes a single key in a Secret's .Data map in
+// place — 27b's add-key editor against the fake cluster.
+func (c *Cluster) PatchSecretData(_ context.Context, namespace, name, key, value string, remove bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindSecret] {
+		s, ok := obj.(*corev1.Secret)
+		if !ok || s.Name != name || s.Namespace != namespace {
+			continue
+		}
+		if remove {
+			delete(s.Data, key)
+		} else {
+			if s.Data == nil {
+				s.Data = map[string][]byte{}
+			}
+			s.Data[key] = []byte(value)
+		}
+		c.notify(kube.KindSecret)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindSecret, name)
+}
+
 // applyResourceEdits mutates ctr's Resources.Requests/Limits in place per
 // edits — a nil field is untouched, a pointer to "" removes that resource
 // key entirely (25a's explicit unset), otherwise it's parsed and set.

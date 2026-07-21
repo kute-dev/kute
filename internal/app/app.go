@@ -29,6 +29,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/poddetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/podlogs"
 	"github.com/kute-dev/kute/internal/tui/tasks/routetable"
+	"github.com/kute-dev/kute/internal/tui/tasks/secretdata"
 	"github.com/kute-dev/kute/internal/tui/tasks/setup"
 	"github.com/kute-dev/kute/internal/tui/tasks/timeline"
 	"github.com/kute-dev/kute/internal/tui/tasks/whocan"
@@ -214,6 +215,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			OpenWhoCan:       openWhoCanFunc(sess, demoCluster),
 			OpenHelmHistory:  openHelmHistoryFunc(sess, demoCluster),
 			OpenHelmValues:   openHelmValuesFunc(sess),
+			OpenSecretData:   openSecretDataFunc(sess, demoCluster),
 			OpenOverview:     openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
 			Forwards:         sess.Forwards,
 			Retrier:          demoCluster,
@@ -272,6 +274,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenWhoCan:       openWhoCanFunc(sess, cluster),
 		OpenHelmHistory:  openHelmHistoryFunc(sess, cluster),
 		OpenHelmValues:   openHelmValuesFunc(sess),
+		OpenSecretData:   openSecretDataFunc(sess, cluster),
 		OpenOverview:     openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
 		Forwards:         sess.Forwards,
 		Retrier:          cluster,
@@ -586,6 +589,23 @@ func openHelmHistoryFunc(sess *tui.Session, active seams) browse.OpenHelmHistory
 		})
 		hh.SetSize(width, height)
 		return &hh, hh.Init()
+	}
+}
+
+// openSecretDataFunc pushes tasks/secretdata (27b) for a Secret row — active
+// alone satisfies the RawLister/Mutator seams it needs (ListRaw for the
+// Secret itself, kube.Mutator.PatchSecretData for add/remove).
+func openSecretDataFunc(sess *tui.Session, active seams) browse.OpenSecretDataFunc {
+	return func(namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+		sd := secretdata.New(secretdata.Config{
+			Session:   sess,
+			Lister:    active,
+			Mutator:   active,
+			Namespace: namespace,
+			Name:      name,
+		})
+		sd.SetSize(width, height)
+		return &sd, sd.Init()
 	}
 }
 

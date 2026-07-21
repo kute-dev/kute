@@ -255,6 +255,9 @@ func (c *Controller) execute() tea.Cmd {
 			err = mutator.PatchMeta(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName,
 				action.Scope.MetaIsAnnotation, action.Scope.MetaKey, action.Scope.MetaValue, action.Scope.MetaRemove)
+		case "secret-data":
+			err = mutator.PatchSecretData(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.SecretKey, action.Scope.SecretValue, action.Scope.SecretRemove)
 		default:
 			err = fmt.Errorf("unsupported verb %q", action.Scope.Verb)
 		}
