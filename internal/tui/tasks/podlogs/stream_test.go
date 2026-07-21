@@ -7,11 +7,41 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
+
+// fakeRestartLister answers ListRaw with a single pod carrying one
+// container's live restart count — letting tests simulate an actual
+// container restart happening mid-stream (or not happening at all).
+type fakeRestartLister struct {
+	podName   string
+	container string
+	restarts  int32
+}
+
+func (f *fakeRestartLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
+	if kind != kube.KindPod {
+		return nil, nil
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: f.podName},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: f.container}}},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         f.container,
+				RestartCount: f.restarts,
+			}},
+		},
+	}
+	return []runtime.Object{pod}, nil
+}
 
 // fakeStreamer replays connects[N] on the Nth call for a given container —
 // letting tests simulate a container ending its stream and podlogs
@@ -87,6 +117,84 @@ func TestStreamContainerEmitsLinesThenReconnectsWithBoundary(t *testing.T) {
 	}
 	if streamer.requests[1].TailLines != 0 || streamer.requests[1].SinceSeconds != 0 {
 		t.Fatalf("reconnect request should not replay history: %+v", streamer.requests[1])
+	}
+}
+
+// TestStreamContainerWaitsForActualRestartBeforeReconnecting is a regression
+// test for the "kute constantly repeats a log line, k9s shows it once"
+// symptom: a container that ends its stream naturally without actually
+// restarting (e.g. CrashLoopBackOff's real backoff is far longer than
+// reconnectDelay) must not be reconnected to — that just replays the same
+// terminated instance's full log again. With a lister available,
+// streamContainer must wait for the container's live restart count to
+// actually move before opening a new connection.
+func TestStreamContainerWaitsForActualRestartBeforeReconnecting(t *testing.T) {
+	t.Parallel()
+
+	streamer := &fakeStreamer{connects: map[string][]string{
+		"app": {"first\n", "second\n"},
+	}}
+	model := testModel()
+	model.streamer = streamer
+	model.lister = &fakeRestartLister{podName: "api", container: "app", restarts: 3}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(700*time.Millisecond, cancel) // let one reconnectDelay tick pass with no restart
+
+	var entries []LogEntry
+	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
+		entries = append(entries, e)
+		return true
+	})
+	if err != nil {
+		t.Fatalf("streamContainer error = %v", err)
+	}
+	if len(entries) != 1 || entries[0].Message != "first" {
+		t.Fatalf("entries = %+v, want only the first connect's line while restart count is unchanged", entries)
+	}
+	if len(streamer.requests) != 1 {
+		t.Fatalf("requests = %+v, want exactly one connect attempt while restart count is unchanged", streamer.requests)
+	}
+}
+
+// TestStreamContainerReconnectsAfterActualRestartDetected confirms the other
+// half: once the container's live restart count actually moves, streamContainer
+// still reconnects and synthesizes a boundary entry carrying the new count.
+func TestStreamContainerReconnectsAfterActualRestartDetected(t *testing.T) {
+	t.Parallel()
+
+	streamer := &fakeStreamer{connects: map[string][]string{
+		"app": {"first\n", "second\n"},
+	}}
+	lister := &fakeRestartLister{podName: "api", container: "app", restarts: 3}
+	model := testModel()
+	model.streamer = streamer
+	model.lister = lister
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var entries []LogEntry
+	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
+		entries = append(entries, e)
+		if e.Message == "first" {
+			lister.restarts = 4 // the real restart happens now
+		}
+		if len(entries) == 3 { // first, boundary, second
+			cancel()
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		t.Fatalf("streamContainer error = %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if !entries[1].Boundary || !strings.Contains(entries[1].Message, "restart 4") {
+		t.Fatalf("boundary entry = %+v, want restart count from the live restart", entries[1])
+	}
+	if entries[2].Message != "second" {
+		t.Fatalf("post-reconnect entry = %+v", entries[2])
 	}
 }
 

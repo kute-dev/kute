@@ -133,6 +133,7 @@ func (m Model) runStream(ctx context.Context, streamID int, ch chan<- tea.Msg) {
 // is no "since" continuity with what came before.
 func (m Model) streamContainer(ctx context.Context, container string, emit func(LogEntry) bool) error {
 	first := true
+	lastRestarts, tracking := m.containerRestartCount(ctx, container)
 	for {
 		req := kube.LogStreamRequest{
 			Namespace:  m.pod.Namespace,
@@ -150,7 +151,11 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 		}
 
 		if !first {
-			if !emit(m.boundaryEntry(ctx, container)) {
+			restarts := lastRestarts
+			if !tracking {
+				restarts = m.currentRestartCount(ctx)
+			}
+			if !emit(m.boundaryEntry(container, restarts)) {
 				_ = reader.Close()
 				return nil
 			}
@@ -185,12 +190,76 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 			return nil
 		}
 
+		if tracking {
+			// A stream that ends naturally usually means the container
+			// restarted — but not always: a container the kubelet still
+			// reports as the same (not-yet-restarted) instance answers a
+			// reconnect with its full log again (Follow just replays to EOF
+			// and closes, since nothing new is coming from a dead process).
+			// CrashLoopBackOff's actual restart delay is typically far longer
+			// than reconnectDelay, so blindly reconnecting every 500ms
+			// replayed the same lines on a tight loop — the "logs repeat
+			// constantly" symptom. Wait for the live restart count to
+			// actually move before reconnecting.
+			count, ok := m.waitForContainerRestart(ctx, container, lastRestarts)
+			if !ok {
+				return nil
+			}
+			lastRestarts = count
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(reconnectDelay):
 		}
 	}
+}
+
+// waitForContainerRestart polls container's live restart count (via lister)
+// every reconnectDelay until it exceeds last — a genuine restart — or ctx is
+// cancelled. Returns the new count and true, or 0 and false on cancellation.
+func (m Model) waitForContainerRestart(ctx context.Context, container string, last int32) (int32, bool) {
+	for {
+		select {
+		case <-ctx.Done():
+			return 0, false
+		case <-time.After(reconnectDelay):
+		}
+		if count, ok := m.containerRestartCount(ctx, container); ok && count > last {
+			return count, true
+		}
+	}
+}
+
+// containerRestartCount reads container's own live restart count via
+// lister — distinct from currentRestartCount's pod-level sum across every
+// container, since only this container's own count tells us whether *it*
+// has actually restarted. ok is false whenever that can't be determined (no
+// lister, list failure, pod/container not found) — callers fall back to the
+// blind reconnect-after-delay behavior in that case.
+func (m Model) containerRestartCount(ctx context.Context, container string) (int32, bool) {
+	if m.lister == nil {
+		return 0, false
+	}
+	objs, err := m.lister.ListRaw(ctx, kube.KindPod, m.pod.Namespace)
+	if err != nil {
+		return 0, false
+	}
+	for _, obj := range objs {
+		p, ok := obj.(*corev1.Pod)
+		if !ok || p.Name != m.pod.Name {
+			continue
+		}
+		for _, ci := range kube.PodFromObject(p).ContainerInfos {
+			if ci.Name == container {
+				return ci.Restarts, true
+			}
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 // unretrievableLogsPrefix is the kubelet containerLogs handler's own error
@@ -204,15 +273,15 @@ func isUnretrievableLogsLine(msg string) bool {
 	return strings.HasPrefix(strings.TrimSpace(msg), unretrievableLogsPrefix)
 }
 
-// boundaryEntry synthesizes a restart marker, with the pod's current
-// restart count refreshed via lister when available (falls back to the
-// count captured when the screen opened).
-func (m Model) boundaryEntry(ctx context.Context, container string) LogEntry {
+// boundaryEntry synthesizes a restart marker carrying restarts, the live
+// count the caller already resolved (containerRestartCount when tracking,
+// else currentRestartCount's pod-level fallback).
+func (m Model) boundaryEntry(container string, restarts int32) LogEntry {
 	return LogEntry{
 		Container: container,
 		Boundary:  true,
 		Timestamp: time.Now().Format("15:04:05"),
-		Message:   fmt.Sprintf("container restarted · restart %d", m.currentRestartCount(ctx)),
+		Message:   fmt.Sprintf("container restarted · restart %d", restarts),
 	}
 }
 
