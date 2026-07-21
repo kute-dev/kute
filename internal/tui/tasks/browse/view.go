@@ -447,6 +447,9 @@ func (m Model) Body(width, height int) string {
 	if m.pendingSetResources != nil {
 		return m.setResourcesBody(width, height)
 	}
+	if m.pendingMeta != nil {
+		return m.setMetaBody(width, height)
+	}
 	if m.pendingBulkDelete != nil && m.pendingBulkDelete.tier == actions.TierModal {
 		return m.bulkDeleteConfirmModal(width, height)
 	}

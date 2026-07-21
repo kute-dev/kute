@@ -192,6 +192,9 @@ func (f *fakeHelmMutator) SetImage(context.Context, kube.ResourceKind, string, s
 func (f *fakeHelmMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
 	return nil
 }
+func (f *fakeHelmMutator) PatchMeta(context.Context, kube.ResourceKind, string, string, bool, string, string, bool) error {
+	return nil
+}
 func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return nil

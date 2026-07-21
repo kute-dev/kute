@@ -251,6 +251,10 @@ func (c *Controller) execute() tea.Cmd {
 		case "set-resources":
 			err = mutator.SetResources(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Container, *action.Scope.Resources, false)
+		case "set-meta":
+			err = mutator.PatchMeta(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName,
+				action.Scope.MetaIsAnnotation, action.Scope.MetaKey, action.Scope.MetaValue, action.Scope.MetaRemove)
 		default:
 			err = fmt.Errorf("unsupported verb %q", action.Scope.Verb)
 		}

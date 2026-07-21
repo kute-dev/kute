@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,7 +50,15 @@ type fakeMutator struct {
 	setImages    []string // "namespace/name container=image"
 	setResources []string // "namespace/name container" of every SetResources call
 	dryRun       bool     // true if the most recent SetResources call was a dry-run
-	err          error
+	metaPatches  []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
+	// metaObjs, when set (browse_meta_test.go's newMetaModel wires it to the
+	// same store the model's fakeLister reads from), makes PatchMeta also
+	// mutate the matching object's labels/annotations in place — so a
+	// post-apply refresh (26a's own "confirm → execute → refresh" contract)
+	// sees the real change instead of re-reading stale, unpatched data. Left
+	// nil everywhere else, where PatchMeta stays a pure recorder.
+	metaObjs map[kube.ResourceKind][]runtime.Object
+	err      error
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, _ kube.ResourceKind, _ string, name string) error {
@@ -105,6 +114,45 @@ func (f *fakeMutator) SetResources(_ context.Context, _ kube.ResourceKind, names
 	}
 	f.dryRun = dryRun
 	f.setResources = append(f.setResources, namespace+"/"+name+" "+container)
+	return nil
+}
+func (f *fakeMutator) PatchMeta(_ context.Context, kind kube.ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	field := "labels"
+	if isAnnotation {
+		field = "annotations"
+	}
+	entry := key + "=" + value
+	if remove {
+		entry = key + "-"
+	}
+	f.metaPatches = append(f.metaPatches, namespace+"/"+name+" "+field+" "+entry)
+	for _, obj := range f.metaObjs[kind] {
+		acc, err := apimeta.Accessor(obj)
+		if err != nil || acc.GetNamespace() != namespace || acc.GetName() != name {
+			continue
+		}
+		values := acc.GetLabels()
+		if isAnnotation {
+			values = acc.GetAnnotations()
+		}
+		if remove {
+			delete(values, key)
+		} else {
+			if values == nil {
+				values = map[string]string{}
+			}
+			values[key] = value
+		}
+		if isAnnotation {
+			acc.SetAnnotations(values)
+		} else {
+			acc.SetLabels(values)
+		}
+		break
+	}
 	return nil
 }
 

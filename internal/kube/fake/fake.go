@@ -305,6 +305,47 @@ func (c *Cluster) SetResources(_ context.Context, kind kube.ResourceKind, namesp
 	return fmt.Errorf("%s %q not found", kind, name)
 }
 
+// PatchMeta sets or removes a single label/annotation key in place — 26a's
+// editor against the fake cluster. Unlike the real Cluster.PatchMeta (which
+// must pick a typed client per kind, or fall back to the dynamic client, to
+// issue a wire patch) this mutates the already-materialized object directly,
+// so apimeta.Accessor's generic GetLabels/SetLabels(orAnnotations) covers
+// every kind — including a discovered CRD's *unstructured.Unstructured —
+// with no per-kind switch at all.
+func (c *Cluster) PatchMeta(_ context.Context, kind kube.ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kind] {
+		acc, err := apimeta.Accessor(obj)
+		if err != nil {
+			continue
+		}
+		if acc.GetName() != name || (namespace != "" && acc.GetNamespace() != namespace) {
+			continue
+		}
+		m := acc.GetLabels()
+		if isAnnotation {
+			m = acc.GetAnnotations()
+		}
+		if remove {
+			delete(m, key)
+		} else {
+			if m == nil {
+				m = map[string]string{}
+			}
+			m[key] = value
+		}
+		if isAnnotation {
+			acc.SetAnnotations(m)
+		} else {
+			acc.SetLabels(m)
+		}
+		c.notify(kind)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kind, name)
+}
+
 // applyResourceEdits mutates ctr's Resources.Requests/Limits in place per
 // edits — a nil field is untouched, a pointer to "" removes that resource
 // key entirely (25a's explicit unset), otherwise it's parsed and set.

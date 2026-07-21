@@ -465,6 +465,9 @@ func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, strin
 func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
 	return nil
 }
+func (f *fakeMutator) PatchMeta(context.Context, kube.ResourceKind, string, string, bool, string, string, bool) error {
+	return nil
+}
 func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	f.drained = append(f.drained, node)
 	return 1, nil

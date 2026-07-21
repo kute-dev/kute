@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › aim-stage › Deployments (g to jump)                                            ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ✕ 1 degraded                                                                                           1 deployments  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                                  READY  ROLLOUT               IMAGE                      AGE  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ✕  aim-worker                                            0/4    progressing ▸         registry.aim.dev/aim-wo…    0s  
+                                                                                                                        
+  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
+  │ LABELS · 4                                                                                                       │  
+  │ › app=                                was aim-worker · aim-worker2                        confirm to apply · y/N │  
+  │   app.kubernetes.io/managed-by=       Helm                                        helm-owned · edits survive un… │  
+  │   env=                                stage                                                                      │  
+  │   team=                               platform                                                                   │  
+  │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
+  │ ANNOTATIONS · 2                                                                                                  │  
+  │   deployment.kubernetes.io/revision=  42                                          controller-managed · read-only │  
+  │   kute.dev/owner=                     platform-oncall                                                            │  
+  │ + a add to focused grid · tab switch grid                                                                        │  
+  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  will run detaches 4 pods from svc/aim-worker · kubectl label deploy/aim-worker app=aim-worker2 --overwrite -n aim-sta…
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   CONFIRM  y confirm  n cancel                                                    detaches 4 pods from svc/aim-worker  

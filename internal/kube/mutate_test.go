@@ -312,6 +312,102 @@ func TestSetResourcesCommandStringUnsetFallsBackToPatch(t *testing.T) {
 	}
 }
 
+func TestMetaCommandStringSetOverwriteAndRemove(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name              string
+		isAnnotation      bool
+		key, value        string
+		remove, overwrite bool
+		want              string
+	}{
+		{
+			name: "overwrite existing label", key: "env", value: "staging", overwrite: true,
+			want: "kubectl label deploy/aim-worker env=staging --overwrite -n aim-stage",
+		},
+		{
+			name: "new label, no overwrite flag", key: "tier", value: "gold",
+			want: "kubectl label deploy/aim-worker tier=gold -n aim-stage",
+		},
+		{
+			name: "annotation set", isAnnotation: true, key: "kute.dev/owner", value: "platform-oncall", overwrite: true,
+			want: "kubectl annotate deploy/aim-worker kute.dev/owner=platform-oncall --overwrite -n aim-stage",
+		},
+		{
+			name: "label removal ignores overwrite", key: "team", remove: true, overwrite: true,
+			want: "kubectl label deploy/aim-worker team- -n aim-stage",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := MetaCommandString(KindDeployment, "aim-stage", "aim-worker", tt.isAnnotation, tt.key, tt.value, tt.remove, tt.overwrite)
+			if got != tt.want {
+				t.Errorf("MetaCommandString = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMetaCommandStringOmitsNamespaceForClusterScopedKind(t *testing.T) {
+	t.Parallel()
+	got := MetaCommandString(KindNode, "", "node-a", false, "env", "prod", false, false)
+	want := "kubectl label node/node-a env=prod"
+	if got != want {
+		t.Errorf("MetaCommandString = %q, want %q", got, want)
+	}
+}
+
+func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name: "aim-worker", Namespace: "default", Labels: map[string]string{"env": "stage"},
+	}}
+	c, cs := newTestCluster(deploy)
+	ctx := context.Background()
+
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", false, "env", "staging", false); err != nil {
+		t.Fatalf("PatchMeta set: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Labels["env"] != "staging" {
+		t.Errorf("labels[env] = %q, want staging", got.Labels["env"])
+	}
+
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", true, "kute.dev/owner", "platform-oncall", false); err != nil {
+		t.Fatalf("PatchMeta annotate: %v", err)
+	}
+	got, err = cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Annotations["kute.dev/owner"] != "platform-oncall" {
+		t.Errorf("annotations[kute.dev/owner] = %q, want platform-oncall", got.Annotations["kute.dev/owner"])
+	}
+
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", false, "env", "", true); err != nil {
+		t.Fatalf("PatchMeta remove: %v", err)
+	}
+	got, err = cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if _, ok := got.Labels["env"]; ok {
+		t.Errorf("expected env label removed, got %+v", got.Labels)
+	}
+}
+
+func TestPatchMetaUnsupportedKindReturnsError(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", false, "k", "v", false); err == nil {
+		t.Fatal("expected an error for a kind with no typed client and no discovered dynamic GVR")
+	}
+}
+
 func TestScaleCommandStringAcrossKinds(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

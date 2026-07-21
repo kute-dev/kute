@@ -503,13 +503,103 @@ func goldenSetResourcesModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// --- 26a: labels/annotations inline editor ---
+
+// goldenMetaModel builds the exact scenario docs/design/v.0.2.0.dc.html's
+// 26a mockup illustrates: a "deploy/aim-worker" Deployment in "aim-stage"
+// whose labels/annotations match the mockup's own rows (app=aim-worker
+// carrying the Service-selector join warning, env=stage, team=platform,
+// app.kubernetes.io/managed-by=Helm carrying the Helm-owned note; annotations
+// kute.dev/owner=platform-oncall and deployment.kubernetes.io/revision=42
+// read-only), a svc/aim-worker Service whose selector matches app=aim-worker,
+// and 4 Pods that Service currently selects (the mockup's "detaches 4 pods"
+// figure). The cursor is moved to the env= row (rows sort alphabetically:
+// app, app.kubernetes.io/managed-by, env, team) and "ing" is typed onto the
+// prefilled "stage" buffer, landing on "staging" — matching the mockup's own
+// mid-edit screenshot ("was stage · staging▎") without needing to clear the
+// buffer first.
+func goldenMetaModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "aim-worker", Namespace: "aim-stage",
+			Labels: map[string]string{
+				"app":                          "aim-worker",
+				"env":                          "stage",
+				"team":                         "platform",
+				"app.kubernetes.io/managed-by": "Helm",
+			},
+			Annotations: map[string]string{
+				"kute.dev/owner":                    "platform-oncall",
+				"deployment.kubernetes.io/revision": "42",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{Replicas: replicasPtr(4), Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.2"}}},
+		}},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "aim-stage"},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "aim-worker"}},
+	}
+	pods := make([]runtime.Object, 0, 4)
+	for i := range 4 {
+		pods = append(pods, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "aim-worker-" + string(rune('a'+i)), Namespace: "aim-stage",
+				Labels: map[string]string{"app": "aim-worker"},
+			},
+		})
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {dep},
+		kube.KindService:    {svc},
+		kube.KindPod:        pods,
+	}}
+	sess := newSession()
+	sess.Location.Kind = kube.KindDeployment
+	sess.Location.Namespace = "aim-stage"
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	m = step(t, m, tea.KeyPressMsg{Text: "m"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})     // navigation -> editing mode on env=
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyBackspace}) // "stage" -> "stag"
+	for _, r := range "ing" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	return m
+}
+
+// goldenMetaConfirmModel drives goldenMetaModel's own scenario one step
+// further: the app= row (the Service-selector-joined one) gets edited, and
+// ↵ opens the TierInline confirm — pinning the "the panel stays open under
+// the inline y/N instead of closing to the generic table+confirm view" fix
+// (meta.go's own doc comment) at the pixel level: the row shows its
+// about-to-apply value with a "confirm to apply · y/N" note, and the keybar
+// carries the join-detach warning + will-run line, all with the panel still
+// framing it.
+func goldenMetaConfirmModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	m := goldenMetaModel(t, width, height)
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"})  // back out of the in-progress env= edit
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp}) // up to app= (labels sort: app, app.kubernetes.io/managed-by, env, team)
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = step(t, m, tea.KeyPressMsg{Text: "2"}) // "aim-worker" -> "aim-worker2"
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	return m
+}
+
 // goldenStates maps each fixture-name prefix to its model builder — shared
 // by the plain and (for the color-heaviest states) truecolor fixture maps
 // below.
 var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
-	"confirm-inline", "confirm-modal", "set-image", "set-resources",
+	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -547,6 +637,10 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenSetImageModel(t, width, height)
 	case "set-resources":
 		return goldenSetResourcesModel(t, width, height)
+	case "meta":
+		return goldenMetaModel(t, width, height)
+	case "meta-confirm":
+		return goldenMetaConfirmModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -597,7 +691,7 @@ func TestGoldenStateFixtures(t *testing.T) {
 // truecolor fixtures in this package.
 var truecolorStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks",
-	"confirm-inline", "confirm-modal", "set-image", "set-resources",
+	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

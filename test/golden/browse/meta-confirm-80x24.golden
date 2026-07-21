@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › aim-stage › Deployments (g to jump)    ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  ✕ 1 degraded                                                   1 deployments  
+────────────────────────────────────────────────────────────────────────────────
+     NAME          READY  ROLLOUT               IMAGE                      AGE  
+────────────────────────────────────────────────────────────────────────────────
+▎ ✕  aim-worker    0/4    progressing ▸         registry.aim.dev/aim-wo…    0s  
+                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮  
+  │ LABELS · 4                                                               │  
+  │ › app=                   was aim-worker · aim-wor…  confirm to apply · … │  
+  │   app.kubernetes.io/mana…Helm                       helm-owned · edits … │  
+  │   env=                   stage                                           │  
+  │   team=                  platform                                        │  
+  │──────────────────────────────────────────────────────────────────────────│  
+  │ ANNOTATIONS · 2                                                          │  
+  │   deployment.kubernetes.…42                         controller-managed … │  
+  │   kute.dev/owner=        platform-oncall                                 │  
+  │ + a add to focused grid · tab switch grid                                │  
+  ╰──────────────────────────────────────────────────────────────────────────╯  
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────
+   CONFIRM  y confirm  n cancel            detaches 4 pods from svc/aim-worker  

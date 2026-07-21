@@ -108,6 +108,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.load()
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
+		if isMetaActionID(msg.ActionID) && m.pendingMeta != nil {
+			// 26a never closes the panel on a commit's own account, success
+			// or failure (docs/design README.md §26a: "confirm → execute →
+			// refresh → show result → remain on screen") — handleMetaResult
+			// either refreshes the grid from the real object + shows an
+			// inline "updated ..."/"removed ..." message, or restores the
+			// pre-commit interaction state with the server's error, and only
+			// esc/back (updateMetaKey's own "esc" case) ever closes it.
+			cmd := m.handleMetaResult(msg)
+			if msg.Err == nil {
+				return m, tea.Batch(cmd, m.load())
+			}
+			return m, cmd
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
@@ -234,6 +248,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingSetResources != nil {
 		return m.updateSetResourcesKey(msg)
 	}
+	if m.pendingMeta != nil {
+		return m.updateMetaKey(msg)
+	}
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
@@ -303,6 +320,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.beginScale(-1)
 	case "i":
 		m.beginSetImage()
+	case "m":
+		if metaEditable(m.kind) && m.mutator != nil {
+			m.beginMeta()
+		}
 	case "a":
 		if !m.desc.ClusterScoped {
 			return m, m.switchNamespace("")
@@ -460,9 +481,28 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		return m, m.actions.Confirm()
 	case "n", "esc":
+		if m.pendingMeta != nil {
+			// The panel stayed open under this confirm (meta.go's doc
+			// comment) with the row's edit already applied to its buffer —
+			// cancelling must revert that buffer, the same "esc backs out
+			// without keeping the typed change" contract editing mode's own
+			// esc already has. A no-op for a pending removal, whose buffer
+			// never diverged from current in the first place.
+			if r := m.pendingMeta.selectedRow(); r != nil {
+				r.setBuffer(r.current)
+			}
+		}
 		m.actions.Cancel()
 	}
 	return m, nil
+}
+
+// isMetaActionID reports whether id names a 26a set-meta/remove-meta action
+// (meta.go's commitMeta/commitMetaRemove ID scheme) — used by the
+// actions.ResultMsg handler above to route a failed patch's error message
+// through execFeedback.
+func isMetaActionID(id string) bool {
+	return strings.HasPrefix(id, "set-meta-") || strings.HasPrefix(id, "remove-meta-")
 }
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes

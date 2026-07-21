@@ -12,6 +12,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 )
 
 // Mutator is the write seam to the cluster: every mutating verb (delete,
@@ -55,6 +56,13 @@ type Mutator interface {
 	// namespace LimitRange/ResourceQuota violation) without mutating
 	// anything — 25a's caller runs this once before the real patch.
 	SetResources(ctx context.Context, kind ResourceKind, namespace, name, container string, edits ResourceEdits, dryRun bool) error
+	// PatchMeta sets or removes a single label or annotation key on
+	// kind/namespace/name — 26a's editor. remove=true deletes the key
+	// (kubectl label/annotate's "key-" syntax, patched as a JSON-merge-patch
+	// null); otherwise sets key=value ("--overwrite" when the key already
+	// existed). Works on every kind including discovered CRDs: kinds outside
+	// the typed clientset switch fall back to the dynamic client by GVR.
+	PatchMeta(ctx context.Context, kind ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error
 }
 
 // DeleteResource implements Mutator against the live clientset. It maps the kind
@@ -391,6 +399,121 @@ func SetResourcesCommandString(kind ResourceKind, namespace, name, container str
 		cmd += " --requests=" + strings.Join(reqParts, ",")
 	}
 	return cmd + " -n " + namespace
+}
+
+// PatchMeta implements Mutator against the live clientset. It mirrors
+// deleteResource's per-kind switch (same kind list — the typed clients this
+// app talks to), but falls back to the dynamic client by discovered GVR for
+// any kind outside that switch, which is what actually makes this work on
+// CRDs (deleteResource has no such fallback today; that gap is pre-existing
+// and out of scope here).
+func (c *Cluster) PatchMeta(ctx context.Context, kind ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot patch %s: empty name", kind)
+	}
+	patch := []byte(metaPatchJSON(isAnnotation, key, value, remove))
+	cs := c.clientset
+	var err error
+	switch kind {
+	case KindPod:
+		_, err = cs.CoreV1().Pods(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindService:
+		_, err = cs.CoreV1().Services(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindIngress:
+		_, err = cs.NetworkingV1().Ingresses(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindConfigMap:
+		_, err = cs.CoreV1().ConfigMaps(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindSecret:
+		_, err = cs.CoreV1().Secrets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindPersistentVolumeClaim:
+		_, err = cs.CoreV1().PersistentVolumeClaims(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindEvent:
+		_, err = cs.CoreV1().Events(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindDeployment:
+		_, err = cs.AppsV1().Deployments(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindDaemonSet:
+		_, err = cs.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindStatefulSet:
+		_, err = cs.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindReplicaSet:
+		_, err = cs.AppsV1().ReplicaSets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindJob:
+		_, err = cs.BatchV1().Jobs(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindCronJob:
+		_, err = cs.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindNamespace:
+		_, err = cs.CoreV1().Namespaces().Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	case KindNode:
+		_, err = cs.CoreV1().Nodes().Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	default:
+		dk, ok := c.getDynKind(kind)
+		if !ok {
+			return fmt.Errorf("labels/annotations are not supported for kind %s", kind)
+		}
+		res := c.dynClient.Resource(dk.gvr)
+		var ri dynamic.ResourceInterface = res
+		if dk.namespaced && namespace != "" {
+			ri = res.Namespace(namespace)
+		}
+		_, err = ri.Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	}
+	return err
+}
+
+// metaPatchJSON builds the JSON merge patch (RFC 7386) body PatchMeta sends:
+// a null value under the target key removes it (both the typed clientset's
+// and the dynamic client's Patch accept types.MergePatchType identically, so
+// one body shape covers every kind).
+func metaPatchJSON(isAnnotation bool, key, value string, remove bool) string {
+	field := "labels"
+	if isAnnotation {
+		field = "annotations"
+	}
+	kv := fmt.Sprintf("%q:%q", key, value)
+	if remove {
+		kv = fmt.Sprintf("%q:null", key)
+	}
+	return fmt.Sprintf(`{"metadata":{"%s":{%s}}}`, field, kv)
+}
+
+// MetaCommandString renders the exact `kubectl label`/`kubectl annotate`
+// invocation PatchMeta runs — 26a's "will run" documentation line.
+// `--overwrite` only appears when overwrite is true (an existing key being
+// changed, not a brand-new one); a removal renders kubectl's `key-` suffix
+// instead. `-n namespace` is omitted for a cluster-scoped kind (namespace
+// == "").
+func MetaCommandString(kind ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove, overwrite bool) string {
+	verb := "label"
+	if isAnnotation {
+		verb = "annotate"
+	}
+	arg := metaResourceArg(kind) + "/" + name
+	cmd := fmt.Sprintf("kubectl %s %s %s-", verb, arg, key)
+	if !remove {
+		cmd = fmt.Sprintf("kubectl %s %s %s=%s", verb, arg, key, value)
+		if overwrite {
+			cmd += " --overwrite"
+		}
+	}
+	if namespace != "" {
+		cmd += " -n " + namespace
+	}
+	return cmd
+}
+
+// metaResourceArg renders kind as kubectl's resource arg for
+// MetaCommandString — the same short forms workloadResourceArg already gives
+// Deployment/StatefulSet/DaemonSet (matching docs/design README.md §26a's own
+// `deploy/aim-worker` example), falling back to the lowercased kind name for
+// every other kind (DeleteCommandString's own convention for arbitrary
+// kinds, CRDs included).
+func metaResourceArg(kind ResourceKind) string {
+	switch kind {
+	case KindDeployment, KindStatefulSet, KindDaemonSet:
+		return workloadResourceArg(kind)
+	default:
+		return strings.ToLower(string(kind))
+	}
 }
 
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a

@@ -24,4 +24,8 @@ const (
 	// GlyphMarked is 20a's bulk-operations mark glyph (`▪`), rendered in the
 	// table's leading mark column and the health strip's "▪ N marked" segment.
 	GlyphMarked = "▪"
+	// GlyphSelectorJoin is 26a's inline "a Service selector matches this
+	// label" warning glyph (`⚠`), rendered ahead of the joined label row's
+	// "selector · svc/x" note.
+	GlyphSelectorJoin = "⚠"
 )

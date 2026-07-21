@@ -13,6 +13,7 @@ import (
 type fakeMutator struct {
 	deleted      []string
 	forceDeleted []string
+	metaPatches  []string
 	err          error
 }
 
@@ -39,6 +40,18 @@ func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, strin
 	return f.err
 }
 func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
+	return f.err
+}
+func (f *fakeMutator) PatchMeta(_ context.Context, kind kube.ResourceKind, ns, name string, isAnnotation bool, key, value string, remove bool) error {
+	field := "labels"
+	if isAnnotation {
+		field = "annotations"
+	}
+	entry := key + "=" + value
+	if remove {
+		entry = key + "-"
+	}
+	f.metaPatches = append(f.metaPatches, string(kind)+"/"+ns+"/"+name+" "+field+" "+entry)
 	return f.err
 }
 
@@ -192,6 +205,30 @@ func TestBeginTierNoneExecutesImmediately(t *testing.T) {
 	}
 	if len(mut.deleted) != 1 {
 		t.Fatalf("expected the mutator called once, got %v", mut.deleted)
+	}
+}
+
+func TestExecuteDispatchesSetMetaToPatchMeta(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID:    "set-meta-default/aim-worker/env",
+		Label: "Set label env on aim-worker?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindDeployment), ResourceName: "aim-worker", Namespace: "default",
+			Verb: "set-meta", IsMutating: true,
+			MetaKey: "env", MetaValue: "staging", MetaOverwrite: true,
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected a TierNone set-meta action to return an execution command")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "Deployment/default/aim-worker labels env=staging" {
+		t.Fatalf("metaPatches = %v, want one Deployment/default/aim-worker labels env=staging patch", mut.metaPatches)
 	}
 }
 

@@ -187,6 +187,17 @@ var (
 		ID: "set-resources", Key: "R", Label: "resources",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
 	}
+	// Meta is 26a's 'm' on any row, any kind (CRDs included) — the
+	// labels/annotations editor. Tier here is nominal (TierNone), like
+	// Scale/SetImage/SetResources: the real per-edit tier is resolved in
+	// browse's own meta.go, not through TierFor's PROD escalation, since
+	// 26a's own escalation is join-driven (editing a Service-selector-
+	// matched label, or any key removal) rather than PROD-driven — see
+	// meta.go's commitMeta/commitMetaRemove.
+	Meta = Verb{
+		ID: "meta", Key: "m", Label: "labels/annotations",
+		Tier: actions.TierNone, Mutating: true,
+	}
 )
 
 // Port-forward verbs (13a/13c, docs/design README.md). Forward pushes the
@@ -252,7 +263,7 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
-	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources,
+	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources, Meta,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }

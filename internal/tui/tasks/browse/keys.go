@@ -80,6 +80,39 @@ func (m Model) Keybar() tui.Keybar {
 			Groups:   [][]tui.KeyHint{hints},
 		}
 	}
+	if m.pendingMeta != nil && !m.actions.Active() {
+		// While a TierInline confirm is showing (a joined-label edit or any
+		// removal), m.actions.Active() wins instead — the panel-local META
+		// keybar below only ever renders in navigation/editing/adding, never
+		// stacked under the confirm's own y/N (see the actions.Active()
+		// branch's "set-meta" case further down, and this file's doc comment
+		// on meta.go: the panel itself stays open underneath either way).
+		t := m.pendingMeta
+		var hints []tui.KeyHint
+		switch {
+		case t.adding != metaAddNone:
+			// Editing mode (add sub-flow): every printable character inserts
+			// literally, so these are the only reserved keys.
+			hints = []tui.KeyHint{
+				{Key: "↵", Label: "apply"}, {Key: tui.GlyphTab, Label: "key ↔ value"}, {Key: "esc", Label: "cancel"},
+			}
+		case t.editing:
+			// Editing mode: same reasoning — typing a value must never be
+			// shadowed by a shortcut.
+			hints = []tui.KeyHint{{Key: "↵", Label: "save"}, {Key: "esc", Label: "cancel"}}
+		default:
+			// Navigation mode never accepts typed text, so single-letter
+			// shortcuts here (a, y) can't shadow a value the way they could
+			// if typing edited the row directly.
+			hints = []tui.KeyHint{
+				{Key: "↑↓", Label: "row"}, {Key: tui.GlyphTab, Label: "switch grid"},
+				{Key: "↵", Label: "edit"}, {Key: "a/insert", Label: "add"},
+				{Key: "ctrl-d", Label: "remove key · y/N"}, {Key: "y", Label: "copy key=value"},
+				{Key: "esc", Label: "back"},
+			}
+		}
+		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}
+	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {
 			return tui.Keybar{
@@ -115,6 +148,22 @@ func (m Model) Keybar() tui.Keybar {
 					// 25a: the exact "will run: kubectl set resources ..." line,
 					// same idiom as set-image above.
 					note = setResourcesWillRunLine(pending.Scope)
+				case "set-meta":
+					// 26a: the panel itself stays open under this confirm
+					// (meta.go's own doc comment) and already renders the full
+					// "will run: kubectl label/annotate ..." line plus the
+					// Service-selector join warning in its own will-run strip —
+					// duplicating that whole line here regularly overruns the
+					// keybar's width and gets silently dropped entirely
+					// (insetChromeLine's "not enough room" behavior), so this
+					// note stays to the short, keybar-safe join warning alone
+					// (never shown for a plain removal, which carries no join
+					// text of its own).
+					note = metaWillRunLine(pending.Scope)
+					if pending.Scope.MetaJoinService != "" {
+						note = fmt.Sprintf("detaches %d pods from svc/%s",
+							pending.Scope.MetaJoinPodCount, pending.Scope.MetaJoinService)
+					}
 				}
 			}
 			return tui.Keybar{
@@ -301,6 +350,12 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, fwdGroup)
 	}
+	if m.mutator != nil && metaEditable(m.kind) {
+		// 26a: 'm' works on any row, any kind (CRDs included) — not
+		// kind-gated the way SetImage/SetResources are, since every real
+		// object has metadata.labels/annotations.
+		groups = append(groups, []tui.KeyHint{verbs.Meta.Hint()})
+	}
 	if m.mutator != nil && m.kind != kube.KindForward && m.kind != kube.KindHelmRelease {
 		// 18a: delete/uninstall is deliberately out of scope for Helm
 		// Releases, the same "no install/upgrade-from-repo" carve-out —
@@ -349,5 +404,6 @@ func singularDisplay(plural string) string {
 // browse's own key handling instead of treating them as global shortcuts.
 func (m Model) CapturingInput() bool {
 	return m.filterActive || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
-		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingBulkDelete != nil
+		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
+		m.pendingBulkDelete != nil
 }

@@ -60,6 +60,27 @@ type TaskScope struct {
 	// apply to, reusing the same field "set-image" already populates. nil
 	// for every other verb.
 	Resources *kube.ResourceEdits
+	// MetaKey/MetaValue/MetaIsAnnotation/MetaRemove are a "set-meta" verb's
+	// (26a) target label/annotation edit. MetaRemove true is a ctrl-d key
+	// removal (MetaValue is "" in that case). Empty/false for every other
+	// verb.
+	MetaKey          string
+	MetaValue        string
+	MetaIsAnnotation bool
+	MetaRemove       bool
+	// MetaOverwrite is whether the key already existed before this edit —
+	// the sole difference in the rendered "will run" command
+	// (`--overwrite` vs. a brand-new key). Meaningless when MetaRemove.
+	MetaOverwrite bool
+	// MetaJoinService/MetaJoinPodCount are set only when a "set-meta" edit
+	// (never a removal) targets a label a Service selector currently
+	// matches — non-empty MetaJoinService is what escalates that edit's
+	// tier to TierInline and lets Keybar() render "changing this detaches N
+	// pods from svc/X" straight off this already-resolved Scope, the same
+	// way setResourcesWillRunLine/setImageWillRunLine read their own Scope
+	// fields rather than needing the (by-then-closed) originating panel.
+	MetaJoinService  string
+	MetaJoinPodCount int
 }
 
 // TaskAction describes an operation available from a task screen.

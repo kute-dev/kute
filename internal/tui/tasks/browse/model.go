@@ -231,6 +231,11 @@ type Model struct {
 	// there's a per-field request/limit buffer to gather (plus a dry-run
 	// round-trip) before there's an action to Begin.
 	pendingSetResources *setResourcesTarget
+	// pendingMeta is non-nil while 26a's inline labels/annotations panel is
+	// showing (meta.go) — a bespoke gate like pendingSetImage/
+	// pendingSetResources, since there's a per-row value buffer (or, while
+	// adding, a key+value pair) to gather before there's an action to Begin.
+	pendingMeta *metaTarget
 	// marks is 20a's marked set (bulk.go), keyed by markKey(namespace, name)
 	// so 6b's cross-namespace grouped view can't collide two same-named rows
 	// in different namespaces. nil/empty means no marks — every marks-aware
