@@ -87,6 +87,43 @@ func podWaitingReason(statuses []corev1.ContainerStatus) string {
 	return ""
 }
 
+// podInitReason mirrors kubectl/k9s: while a pod is Pending, an init
+// container still running (or one that failed) explains the wait far better
+// than the bare phase, so walk them in order and synthesize the same
+// "Init:..." reason kubectl shows — the first init container that hasn't
+// reported Completed wins.
+func podInitReason(p *corev1.Pod) (string, bool) {
+	for i, cs := range p.Status.InitContainerStatuses {
+		switch {
+		case cs.State.Terminated != nil && cs.State.Terminated.Reason == "Completed":
+			continue
+		case cs.State.Terminated != nil:
+			reason := cs.State.Terminated.Reason
+			if reason == "" {
+				reason = fmt.Sprintf("ExitCode:%d", cs.State.Terminated.ExitCode)
+			}
+			return "Init:" + reason, true
+		case cs.State.Waiting != nil && cs.State.Waiting.Reason != "" && cs.State.Waiting.Reason != "PodInitializing":
+			return "Init:" + cs.State.Waiting.Reason, true
+		default:
+			return fmt.Sprintf("Init:%d/%d", i, len(p.Status.InitContainerStatuses)), true
+		}
+	}
+	return "", false
+}
+
+// podTerminatedReason returns the first non-empty Terminated reason across a
+// pod's container statuses (e.g. "OOMKilled", "Error"), for explaining a
+// Failed phase beyond the bare word "Failed".
+func podTerminatedReason(statuses []corev1.ContainerStatus) string {
+	for _, cs := range statuses {
+		if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
+			return cs.State.Terminated.Reason
+		}
+	}
+	return ""
+}
+
 // podReadyConditionFalse reports whether the pod's own top-level Ready
 // condition is explicitly False. This can diverge from a simple tally of
 // containerStatuses[].Ready (e.g. a readiness-gate check failing, or the
@@ -135,8 +172,18 @@ func projectPod(obj runtime.Object) Row {
 		glyph, class, status = "○", StatusNeutral, "Completed"
 	case p.Status.Phase == corev1.PodFailed:
 		glyph, class = "✕", StatusFail
+		if p.Status.Reason != "" {
+			status = p.Status.Reason // e.g. "Evicted"
+		} else if reason := podTerminatedReason(p.Status.ContainerStatuses); reason != "" {
+			status = reason // e.g. "OOMKilled", "Error"
+		}
 	case p.Status.Phase == corev1.PodPending:
 		glyph, class = "◐", StatusWarn
+		if reason, ok := podInitReason(p); ok {
+			status = reason // e.g. "Init:0/2", "Init:CrashLoopBackOff"
+		} else if reason := podWaitingReason(p.Status.ContainerStatuses); reason != "" {
+			status = reason // e.g. "ContainerCreating", "ImagePullBackOff"
+		}
 	case strings.Contains(podWaitingReason(p.Status.ContainerStatuses), "CrashLoop"):
 		glyph, class, status = "✕", StatusFail, podWaitingReason(p.Status.ContainerStatuses)
 	case total > 0 && ready >= total && podReadyConditionFalse(p):

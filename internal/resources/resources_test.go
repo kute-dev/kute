@@ -188,6 +188,90 @@ func TestProjectPodShowsTerminatingWhileDeleting(t *testing.T) {
 	}
 }
 
+func TestProjectPodPendingShowsWaitingReason(t *testing.T) {
+	// A Pending phase alone is what k9s calls "ContainerCreating" once the
+	// kubelet has actually started pulling/creating the container — kute
+	// must surface that (and other waiting reasons) instead of the bare
+	// phase, or every not-yet-running pod looks identical.
+	cases := []struct {
+		name       string
+		reason     string
+		wantStatus string
+	}{
+		{"container creating", "ContainerCreating", "ContainerCreating"},
+		{"image pull backoff", "ImagePullBackOff", "ImagePullBackOff"},
+		{"err image pull", "ErrImagePull", "ErrImagePull"},
+		{"create container config error", "CreateContainerConfigError", "CreateContainerConfigError"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "a"}}},
+				Status: corev1.PodStatus{
+					Phase:             corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: tc.reason}}}},
+				},
+			}
+			row := projectPod(pod)
+			if row.Cells[2] != tc.wantStatus {
+				t.Fatalf("expected STATUS cell %q, got %q", tc.wantStatus, row.Cells[2])
+			}
+			if row.Status != StatusWarn || row.Glyph != "◐" {
+				t.Fatalf("pending pod should stay StatusWarn/◐, got %s/%s", row.Status, row.Glyph)
+			}
+		})
+	}
+}
+
+func TestProjectPodPendingShowsInitContainerProgress(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "a"}}, InitContainers: []corev1.Container{{Name: "init-a"}, {Name: "init-b"}}},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodPending,
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}}},
+				{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "PodInitializing"}}},
+			},
+		},
+	}
+	row := projectPod(pod)
+	if row.Cells[2] != "Init:1/2" {
+		t.Fatalf("expected STATUS cell %q, got %q", "Init:1/2", row.Cells[2])
+	}
+}
+
+func TestProjectPodFailedShowsTerminatedReason(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "a"}}},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodFailed,
+			ContainerStatuses: []corev1.ContainerStatus{{State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled"}}}},
+		},
+	}
+	row := projectPod(pod)
+	if row.Cells[2] != "OOMKilled" {
+		t.Fatalf("expected STATUS cell %q, got %q", "OOMKilled", row.Cells[2])
+	}
+	if row.Status != StatusFail || row.Glyph != "✕" {
+		t.Fatalf("failed pod should be StatusFail/✕, got %s/%s", row.Status, row.Glyph)
+	}
+}
+
+func TestProjectPodFailedShowsPodReasonOverContainerReason(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "a"}}},
+		Status:     corev1.PodStatus{Phase: corev1.PodFailed, Reason: "Evicted"},
+	}
+	row := projectPod(pod)
+	if row.Cells[2] != "Evicted" {
+		t.Fatalf("expected STATUS cell %q, got %q", "Evicted", row.Cells[2])
+	}
+}
+
 func TestProjectIngressBackends(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	ing := &networkingv1.Ingress{
