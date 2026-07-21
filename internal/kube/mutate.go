@@ -577,6 +577,14 @@ func DeleteCommandString(kind ResourceKind, namespace string, names []string) st
 	return cmd
 }
 
+// ForceDeleteCommandString renders the exact `kubectl delete ... --grace-period=0
+// --force` invocation the non-prod inline confirm's force-delete sub-state
+// (ctrl-k) runs, DeleteCommandString plus the two flags DeleteResourceForced
+// actually passes to the API.
+func ForceDeleteCommandString(kind ResourceKind, namespace, name string) string {
+	return DeleteCommandString(kind, namespace, []string{name}) + " --grace-period=0 --force"
+}
+
 // workloadResourceArg renders kind as kubectl's short resource arg for a
 // "will run" line (ScaleCommandString/SetImageCommandString) — Deployment is
 // the default for any kind that isn't StatefulSet/DaemonSet.

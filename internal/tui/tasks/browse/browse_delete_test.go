@@ -175,3 +175,94 @@ func TestCtrlKEscalatesToForceDelete(t *testing.T) {
 		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
 	}
 }
+
+// TestCtrlKArmsForceDeleteInsideInlineConfirm covers the non-prod path:
+// ctrl-k stages force-delete inside the same inline y/N confirm rather than
+// jumping to the PROD type-the-name modal — a bare ctrl-k must run nothing,
+// the keybar must flip to the destructive FORCE DELETE treatment with the
+// exact --grace-period=0 --force command synced on the right, and only a
+// second "y" actually executes DeleteResourceForced.
+func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "kubectl delete pod api-0") || strings.Contains(kb.RightNote, "--force") {
+		t.Fatalf("expected the plain delete will-run line before arming, got %q", kb.RightNote)
+	}
+	found := false
+	for _, h := range kb.Groups[0] {
+		if h.Key == "ctrl-k" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a discoverable ctrl-k hint in the inline confirm's Groups, got %+v", kb.Groups)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	if m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected force-delete to stay staged at TierInline, not jump to the PROD modal, got %v", m.actions.Tier())
+	}
+	if !m.actions.ForceArmed() {
+		t.Fatal("expected ctrl+k to arm force-delete")
+	}
+	if len(mut.forceDeleted) != 0 || len(mut.deleted) != 0 {
+		t.Fatalf("expected ctrl+k alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	}
+	kb = m.Keybar()
+	if kb.PillText != "FORCE DELETE" {
+		t.Fatalf("expected the FORCE DELETE pill once armed, got %q", kb.PillText)
+	}
+	if kb.RightNote != "kubectl delete pod api-0 -n default --grace-period=0 --force" {
+		t.Fatalf("expected the synced force-delete will-run line, got %q", kb.RightNote)
+	}
+
+	// "n" while armed backs out to the plain prompt instead of cancelling.
+	m = step(t, m, tea.KeyPressMsg{Text: "n"})
+	if !m.actions.Active() || m.actions.ForceArmed() {
+		t.Fatalf("expected n to disarm back to the plain prompt, not cancel: active=%v armed=%v", m.actions.Active(), m.actions.ForceArmed())
+	}
+	kb = m.Keybar()
+	if kb.PillText != "CONFIRM" {
+		t.Fatalf("expected the plain CONFIRM pill after disarming, got %q", kb.PillText)
+	}
+
+	// Re-arm and confirm for real.
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "api-0" {
+		t.Fatalf("forceDeleted = %v, want [api-0]", mut.forceDeleted)
+	}
+	if len(mut.deleted) != 0 {
+		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
+	}
+}
+
+// TestEscArmedForceDeleteCancelsOutright confirms esc still ends the whole
+// confirm even while force-armed, unlike n's disarm-only behavior.
+func TestEscArmedForceDeleteCancelsOutright(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
+	if m.actions.Active() {
+		t.Fatal("expected esc to cancel the confirm outright, even while force-armed")
+	}
+	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected nothing to execute after esc, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	}
+}

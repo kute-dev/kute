@@ -1,6 +1,7 @@
 package poddetail
 
 import (
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
@@ -19,10 +20,30 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.actions.Active() {
 		if m.actions.Tier() == actions.TierInline {
+			if m.actions.ForceArmed() {
+				// force-delete staged inside this same inline confirm
+				// (ctrl-k, actions.Controller.ArmForceDelete) rather than the
+				// PROD type-the-name modal — browse's own delete confirm
+				// mirrors this exact treatment.
+				note := ""
+				if pending := m.actions.Pending(); pending != nil {
+					note = kube.ForceDeleteCommandString(kube.ResourceKind(pending.Scope.ResourceKind), pending.Scope.Namespace, pending.Scope.ResourceName)
+				}
+				return tui.Keybar{
+					Pill:      tui.ModeConfirm,
+					PillText:  "FORCE DELETE",
+					Groups:    [][]tui.KeyHint{{{Key: "y", Label: "force delete"}, {Key: "n", Label: "back"}}},
+					RightNote: note,
+				}
+			}
+			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}
+			if pending := m.actions.Pending(); pending != nil && pending.Scope.Verb == "delete" && pending.Scope.ResourceKind == string(kube.KindPod) {
+				hints = append(hints, verbs.ForceDelete.Hint())
+			}
 			return tui.Keybar{
 				Pill:      tui.ModeConfirm,
 				PillText:  "CONFIRM",
-				Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}},
+				Groups:    [][]tui.KeyHint{hints},
 				RightNote: m.actions.Prompt(),
 			}
 		}

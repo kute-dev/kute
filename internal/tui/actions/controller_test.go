@@ -391,3 +391,111 @@ func TestEscalateNoOpsForDrain(t *testing.T) {
 		t.Fatalf("expected Escalate to no-op for a drain, got verb %q", c.Pending().Scope.Verb)
 	}
 }
+
+// TestArmForceDeleteStagesWithoutExecuting covers the non-prod inline
+// counterpart to Escalate: ctrl-k on a TierInline Pod delete must not run
+// anything by itself — DeleteResourceForced only fires once "y" (Confirm)
+// follows, same as a plain delete needs "y" after ctrl-d.
+func TestArmForceDeleteStagesWithoutExecuting(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	c.Begin(TierInline, deleteAction())
+	c.ArmForceDelete()
+	if !c.ForceArmed() {
+		t.Fatal("expected ForceArmed() = true after ArmForceDelete")
+	}
+	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected ArmForceDelete alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	}
+	// The pending verb itself stays "delete" until Confirm actually runs —
+	// only the staged flag flips, so a stray read of Pending() mid-arm
+	// doesn't see a verb that hasn't executed yet.
+	if c.Pending().Scope.Verb != "delete" {
+		t.Fatalf("expected the pending verb to stay \"delete\" while armed, got %q", c.Pending().Scope.Verb)
+	}
+
+	cmd := c.Confirm()
+	if cmd == nil {
+		t.Fatal("expected Confirm to return a command once armed")
+	}
+	cmd()
+	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "Pod/prod/api" {
+		t.Fatalf("forceDeleted = %v, want [Pod/prod/api]", mut.forceDeleted)
+	}
+	if len(mut.deleted) != 0 {
+		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
+	}
+}
+
+// TestDisarmForceDeleteBacksOutWithoutCancelling covers "n" while armed:
+// it must return to the plain delete prompt (still Active/TierInline, still
+// the same pending target), not cancel the confirm outright.
+func TestDisarmForceDeleteBacksOutWithoutCancelling(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	c.Begin(TierInline, deleteAction())
+	c.ArmForceDelete()
+	c.DisarmForceDelete()
+	if c.ForceArmed() {
+		t.Fatal("expected ForceArmed() = false after DisarmForceDelete")
+	}
+	if !c.Active() || c.Pending() == nil {
+		t.Fatal("expected DisarmForceDelete to leave the confirm active, not cancel it")
+	}
+
+	cmd := c.Confirm()
+	if cmd == nil {
+		t.Fatal("expected Confirm to still work after disarming")
+	}
+	cmd()
+	if len(mut.deleted) != 1 || mut.deleted[0] != "Pod/prod/api" {
+		t.Fatalf("deleted = %v, want [Pod/prod/api] (the plain delete, not force)", mut.deleted)
+	}
+	if len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected no force-delete after disarming, got %v", mut.forceDeleted)
+	}
+}
+
+// TestCancelClearsForceArmed covers esc while armed: the whole confirm ends,
+// forceArmed doesn't leak into the next Begin.
+func TestCancelClearsForceArmed(t *testing.T) {
+	c := New(&fakeMutator{})
+	c.Begin(TierInline, deleteAction())
+	c.ArmForceDelete()
+	c.Cancel()
+	if c.ForceArmed() {
+		t.Fatal("expected Cancel to clear ForceArmed")
+	}
+	if c.Active() {
+		t.Fatal("expected Cancel to end the confirm entirely, even while armed")
+	}
+}
+
+// TestArmForceDeleteNoOpsAtTierModal: the PROD path keeps using Escalate,
+// not this — ArmForceDelete must stay inert there so the two mechanisms
+// never fight over the same pending action.
+func TestArmForceDeleteNoOpsAtTierModal(t *testing.T) {
+	c := New(&fakeMutator{})
+	c.Begin(TierModal, deleteAction())
+	c.ArmForceDelete()
+	if c.ForceArmed() {
+		t.Fatal("expected ArmForceDelete to no-op at TierModal")
+	}
+	if c.Pending().Scope.Verb != "delete" {
+		t.Fatalf("expected the pending verb untouched, got %q", c.Pending().Scope.Verb)
+	}
+}
+
+// TestArmForceDeleteNoOpsForNonPodDelete mirrors Escalate's own kind gate —
+// force-delete is Pod-only (verbs.ForceDelete.Kinds).
+func TestArmForceDeleteNoOpsForNonPodDelete(t *testing.T) {
+	c := New(&fakeMutator{})
+	c.Begin(TierInline, tui.TaskAction{
+		ID: "delete-deploy", Label: "delete deployment api",
+		Scope: tui.TaskScope{ResourceKind: "Deployment", ResourceName: "api", Namespace: "prod", Verb: "delete", IsMutating: true},
+	})
+	c.ArmForceDelete()
+	if c.ForceArmed() {
+		t.Fatal("expected ArmForceDelete to no-op for a non-Pod delete")
+	}
+}

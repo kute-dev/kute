@@ -380,6 +380,54 @@ func TestDeleteConfirmExecuteAndCancel(t *testing.T) {
 	_ = confirmed
 }
 
+// TestCtrlKArmsForceDeleteInsideInlineConfirm covers the non-prod path from
+// poddetail: ctrl-k stages force-delete inside the same inline y/N confirm
+// (not the PROD modal) — a bare ctrl-k runs nothing, "n" backs out to the
+// plain prompt instead of cancelling, and a second "y" after re-arming
+// executes DeleteResourceForced.
+func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {runningPod("api-0", "default", "node-a")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut, Namespace: "default", Name: "api-0"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	if m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected force-delete to stay staged at TierInline, got %v", m.actions.Tier())
+	}
+	if !m.actions.ForceArmed() {
+		t.Fatal("expected ctrl+k to arm force-delete")
+	}
+	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected ctrl+k alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	}
+	kb := m.Keybar()
+	if kb.PillText != "FORCE DELETE" {
+		t.Fatalf("expected the FORCE DELETE pill once armed, got %q", kb.PillText)
+	}
+	if !strings.Contains(kb.RightNote, "--grace-period=0 --force") {
+		t.Fatalf("expected the synced force-delete will-run line, got %q", kb.RightNote)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "n"})
+	if !m.actions.Active() || m.actions.ForceArmed() {
+		t.Fatalf("expected n to disarm back to the plain prompt, not cancel: active=%v armed=%v", m.actions.Active(), m.actions.ForceArmed())
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "api-0" {
+		t.Fatalf("forceDeleted = %v, want [api-0]", mut.forceDeleted)
+	}
+	if len(mut.deleted) != 0 {
+		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
+	}
+}
+
 // TestDeleteInProdRequiresTypedName exercises 8b's PROD escalation
 // end-to-end from poddetail: ctrl-d opens the type-the-name modal (not the
 // inline y/N prompt), enter no-ops until the pod's name is typed in full,

@@ -39,8 +39,15 @@ type Controller struct {
 	// (mvp-plan.md §8b: "type the name to confirm") — unused for
 	// TierNone/TierInline.
 	typedName string
-	state     tui.TaskState
-	message   string
+	// forceArmed stages a pending TierInline Pod "delete" for force-delete
+	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
+	// escalation: staged rather than immediate, so a second "y" is still
+	// required to actually execute and "n" backs out of just this
+	// sub-state (DisarmForceDelete) rather than cancelling the whole
+	// confirm. Confirm reads it to switch the verb that actually executes.
+	forceArmed bool
+	state      tui.TaskState
+	message    string
 	// offline mirrors the screen's kube.ConnState.Offline() (docs/design
 	// README.md §4a: "mutating actions disabled" while OFFLINE) — set via
 	// SetOffline from each screen's ConnStateMsg handler, checked in Begin
@@ -110,6 +117,7 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 	c.pending = &action
 	c.tier = tier
 	c.typedName = ""
+	c.forceArmed = false
 	c.message = ""
 	if tier == TierNone {
 		return c.execute()
@@ -130,6 +138,10 @@ func (c *Controller) Confirm() tea.Cmd {
 	}
 	if c.tier == TierModal && requiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
 		return nil
+	}
+	if c.forceArmed {
+		c.pending.Scope.Verb = "force-delete"
+		c.pending.Label = "Force delete " + c.pending.Scope.ResourceName + "?"
 	}
 	return c.execute()
 }
@@ -153,6 +165,7 @@ func (c *Controller) Cancel() {
 	c.pending = nil
 	c.tier = TierNone
 	c.typedName = ""
+	c.forceArmed = false
 	c.state = tui.TaskStateCancelled
 	c.message = "Cancelled " + label + "."
 }
@@ -180,6 +193,9 @@ func (c *Controller) Backspace() {
 // mvp-plan.md §8b's "harder chord for force delete") — a no-op for any
 // other pending verb/kind. The typed-name progress is kept: it's still
 // matching the same resource name regardless of which delete variant runs.
+// This is the PROD type-the-name modal's own escalation path (TierModal);
+// ArmForceDelete/DisarmForceDelete below is the separate, staged
+// counterpart for the non-prod inline confirm.
 func (c *Controller) Escalate() {
 	if c.pending == nil || c.pending.Scope.ResourceKind != string(kube.KindPod) || c.pending.Scope.Verb != "delete" {
 		return
@@ -188,11 +204,39 @@ func (c *Controller) Escalate() {
 	c.pending.Label = "Force delete " + c.pending.Scope.ResourceName + "?"
 }
 
+// ArmForceDelete stages a pending TierInline Pod "delete" confirm for
+// force-delete (ctrl-k) — a no-op for any other tier/verb/kind. Unlike
+// Escalate, this doesn't touch the pending verb yet: "y" (Confirm) still
+// has to follow before DeleteResourceForced actually runs, and "n"
+// (DisarmForceDelete) backs out to the plain delete prompt instead of
+// cancelling the whole confirm.
+func (c *Controller) ArmForceDelete() {
+	if c.state != tui.TaskStateConfirming || c.pending == nil || c.tier != TierInline {
+		return
+	}
+	if c.pending.Scope.ResourceKind != string(kube.KindPod) || c.pending.Scope.Verb != "delete" {
+		return
+	}
+	c.forceArmed = true
+}
+
+// DisarmForceDelete backs a force-armed inline delete confirm out of the
+// force sub-state, back to the plain delete prompt — a no-op unless armed.
+func (c *Controller) DisarmForceDelete() {
+	c.forceArmed = false
+}
+
+// ForceArmed reports whether the pending inline delete confirm is staged
+// for force-delete — screens use it to swap the keybar into the
+// destructive treatment (pill text, hints, will-run line).
+func (c Controller) ForceArmed() bool { return c.forceArmed }
+
 // HandleResult applies an execution outcome, transitioning to success or error.
 func (c *Controller) HandleResult(msg ResultMsg) {
 	c.pending = nil
 	c.tier = TierNone
 	c.typedName = ""
+	c.forceArmed = false
 	if msg.Err != nil {
 		c.state = tui.TaskStateError
 		verb := "run"

@@ -46,6 +46,15 @@ func deleteWillRunLine(scope tui.TaskScope) string {
 	return kube.DeleteCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, []string{scope.ResourceName})
 }
 
+// forceDeleteWillRunLine is deleteWillRunLine's counterpart for the inline
+// confirm's force-delete sub-state (ctrl-k, actions.Controller.ForceArmed) —
+// the same command plus the --grace-period=0 --force flags
+// DeleteResourceForced actually passes to the API, so the operator sees
+// exactly what the next "y" runs.
+func forceDeleteWillRunLine(scope tui.TaskScope) string {
+	return kube.ForceDeleteCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+}
+
 // beginDelete confirms deleting row — inline y/N in non-prod contexts, the
 // full type-the-name modal in PROD (verbs.TierFor). Owner is only known for
 // the Pod kind (via m.pods, the fuller kube.Pod projection Row doesn't

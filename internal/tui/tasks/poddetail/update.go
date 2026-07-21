@@ -170,7 +170,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // updateConfirmKey routes keys while a confirmation is showing: TierModal
 // (the type-the-name PROD modal) gets its own key handling — typing,
 // backspace, ctrl-k force-delete escalation, enter-when-matched — while
-// TierInline/TierNone stay the simple y/n/esc prompt (mvp-plan.md §8b).
+// TierInline/TierNone stay the simple y/n/esc prompt (mvp-plan.md §8b), plus
+// ctrl-k on the inline delete confirm: rather than jumping to the PROD
+// modal, it stages force-delete right inside this same prompt
+// (ArmForceDelete) — "y" then runs DeleteResourceForced, "n" backs out of
+// just the force sub-state (DisarmForceDelete), "esc" still cancels
+// outright.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.actions.Tier() == actions.TierModal {
 		return m.updateModalConfirmKey(msg)
@@ -178,7 +183,15 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "n", "esc":
+	case "ctrl+k":
+		m.actions.ArmForceDelete()
+	case "n":
+		if m.actions.ForceArmed() {
+			m.actions.DisarmForceDelete()
+			return m, nil
+		}
+		m.actions.Cancel()
+	case "esc":
 		m.actions.Cancel()
 	}
 	return m, nil

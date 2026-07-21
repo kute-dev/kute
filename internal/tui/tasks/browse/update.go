@@ -477,8 +477,13 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 // modal) gets its own key handling; every other confirming case — TierNone/
 // TierInline, and Drain's TierModal (nodes.go's beginDrain, still Phase 9's
 // plain ConfirmCard, deliberately not upgraded — see mvp-tasks.md's Phase
-// 5/8b exit notes) — stays the simple y/n/esc prompt. Everything else is
-// swallowed so movement/filter can't act underneath.
+// 5/8b exit notes) — stays the simple y/n/esc prompt, plus ctrl-k on a
+// pending inline Pod delete: rather than jumping to the PROD type-the-name
+// modal, ctrl-k stages force-delete right inside this same inline confirm
+// (ArmForceDelete) — "y" then runs DeleteResourceForced, "n" backs out of
+// just the force sub-state (DisarmForceDelete) instead of cancelling
+// outright, and "esc" still cancels the whole confirm either way. Everything
+// else is swallowed so movement/filter can't act underneath.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if pending := m.actions.Pending(); m.actions.Tier() == actions.TierModal && pending != nil && isDeleteVerb(pending.Scope.Verb) {
 		return m.updateModalConfirmKey(msg)
@@ -486,21 +491,37 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "n", "esc":
-		if m.pendingMeta != nil {
-			// The panel stayed open under this confirm (meta.go's doc
-			// comment) with the row's edit already applied to its buffer —
-			// cancelling must revert that buffer, the same "esc backs out
-			// without keeping the typed change" contract editing mode's own
-			// esc already has. A no-op for a pending removal, whose buffer
-			// never diverged from current in the first place.
-			if r := m.pendingMeta.selectedRow(); r != nil {
-				r.setBuffer(r.current)
-			}
+	case "ctrl+k":
+		m.actions.ArmForceDelete()
+	case "n":
+		if m.actions.ForceArmed() {
+			m.actions.DisarmForceDelete()
+			return m, nil
 		}
-		m.actions.Cancel()
+		m.cancelInlineConfirm()
+	case "esc":
+		m.cancelInlineConfirm()
 	}
 	return m, nil
+}
+
+// cancelInlineConfirm is updateConfirmKey's shared "actually cancel" path —
+// esc always takes it; n only when the confirm isn't mid force-delete
+// escalation (that case backs out to the plain delete prompt instead, see
+// updateConfirmKey's own doc comment).
+func (m *Model) cancelInlineConfirm() {
+	if m.pendingMeta != nil {
+		// The panel stayed open under this confirm (meta.go's doc comment)
+		// with the row's edit already applied to its buffer — cancelling
+		// must revert that buffer, the same "esc backs out without keeping
+		// the typed change" contract editing mode's own esc already has. A
+		// no-op for a pending removal, whose buffer never diverged from
+		// current in the first place.
+		if r := m.pendingMeta.selectedRow(); r != nil {
+			r.setBuffer(r.current)
+		}
+	}
+	m.actions.Cancel()
 }
 
 // isMetaActionID reports whether id names a 26a set-meta/remove-meta action

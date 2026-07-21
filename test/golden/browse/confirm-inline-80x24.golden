@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   CONFIRM  y confirm  n cancel          kubectl delete pod api-0 -n nva-stage  
+   CONFIRM  y confirm  n cancel  ctrl-k force delete                            
