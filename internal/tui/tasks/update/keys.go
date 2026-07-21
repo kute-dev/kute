@@ -28,6 +28,10 @@ func (m Model) Keybar() tui.Keybar {
 			{Key: "esc", Label: "back"},
 		}}
 	case tui.TaskStateEmpty:
+		if m.checkDisabled() {
+			kb.Groups = [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+			break
+		}
 		kb.Groups = [][]tui.KeyHint{{
 			{Key: "r", Label: "re-check now"},
 			{Key: "esc", Label: "back"},

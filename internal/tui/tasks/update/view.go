@@ -59,7 +59,14 @@ func (m Model) headerRight(theme tui.Theme) string {
 			dim.Render(" · latest ") + latestStyle.Render(release.Version) +
 			dim.Render(" · released "+ageString(release.PublishedAt, m.now()))
 	default: // empty
-		return dim.Render("you run ") + cur.Render(m.currentVersion()) + dim.Render(" · up to date")
+		switch {
+		case m.checkDisabled():
+			return dim.Render("you run ") + cur.Render(m.currentVersion()) + dim.Render(" · update checks disabled")
+		case m.checkErr() != nil:
+			return dim.Render("you run ") + cur.Render(m.currentVersion()) + dim.Render(" · couldn't check for updates")
+		default:
+			return dim.Render("you run ") + cur.Render(m.currentVersion()) + dim.Render(" · up to date")
+		}
 	}
 }
 
@@ -78,8 +85,17 @@ func (m Model) Body(width, height int) string {
 }
 
 // renderEmpty is 28b's empty state: "<current> is the latest" in green plus
-// the last-checked timestamp (docs/design README.md §28b).
+// the last-checked timestamp (docs/design README.md §28b) — or one of two
+// cases the spec doesn't otherwise name, checked first: update.check
+// disabled in config, or the most recent check (Init's own bypass fetch, or
+// a prior 'r') resolved with an error.
 func (m Model) renderEmpty(theme tui.Theme, width, height int) string {
+	switch {
+	case m.checkDisabled():
+		return m.renderCheckDisabled(theme, width, height)
+	case m.checkErr() != nil:
+		return m.renderCheckFailed(theme, width, height)
+	}
 	good := lipgloss.NewStyle().Foreground(theme.Good)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
@@ -87,6 +103,31 @@ func (m Model) renderEmpty(theme tui.Theme, width, height int) string {
 	if checked := m.lastChecked(); !checked.IsZero() {
 		lines = append(lines, dim.Render("checked "+ageString(checked, m.now())))
 	}
+	return components.CenterLines(lines, width, height)
+}
+
+// renderCheckFailed covers a check (ambient, Init's own bypass fetch, or a
+// prior 'r') that resolved with an error — offline, airgapped, GitHub
+// unreachable/rate-limited. 28a's chip silently swallows this (docs/design
+// README.md §28a: "no chip, no retry storm"), but a panel the user opened
+// by hand can't just sit on "checking for updates…" forever with no way
+// out, so it surfaces the failure and the same 'r' retry the up-to-date
+// empty state offers.
+func (m Model) renderCheckFailed(theme tui.Theme, width, height int) string {
+	bad := lipgloss.NewStyle().Foreground(theme.Bad)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+
+	lines := []string{bad.Render("couldn't check for updates — offline?")}
+	lines = append(lines, dim.Render("r to retry"))
+	return components.CenterLines(lines, width, height)
+}
+
+// renderCheckDisabled covers update.check: false — no 'r' hint here (unlike
+// renderCheckFailed): retrying would just hit the same disabled guard
+// updateCheckCmd itself already applies, so there's nothing to invite.
+func (m Model) renderCheckDisabled(theme tui.Theme, width, height int) string {
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	lines := []string{dim.Render("update checks are disabled")}
 	return components.CenterLines(lines, width, height)
 }
 

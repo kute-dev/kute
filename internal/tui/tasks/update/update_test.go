@@ -54,6 +54,29 @@ func loadingModel() Model {
 	return m
 }
 
+// checkFailedModel is a check that has already resolved, but with an error
+// — ok=false on info() forever, indistinguishable from "still loading"
+// unless Session.UpdateCheckErr is consulted.
+func checkFailedModel() Model {
+	sess := testSession()
+	sess.UpdateCheckErr = errBoom
+	m := New(Config{Session: sess, OpenBrowser: noopOpenBrowser})
+	m.SetSize(120, 36)
+	return m
+}
+
+// disabledModel has update.check: false in config — Session.Update and
+// UpdateCheckErr both stay nil forever (updateCheckCmd itself never even
+// tries), the third way info() can be permanently empty.
+func disabledModel() Model {
+	sess := testSession()
+	disabled := false
+	sess.Config.Update.Check = &disabled
+	m := New(Config{Session: sess, OpenBrowser: noopOpenBrowser})
+	m.SetSize(120, 36)
+	return m
+}
+
 func TestStateDerivation(t *testing.T) {
 	if got := availableModel().state(); got != tui.TaskStateReady {
 		t.Fatalf("availableModel state = %v, want Ready", got)
@@ -63,6 +86,114 @@ func TestStateDerivation(t *testing.T) {
 	}
 	if got := loadingModel().state(); got != tui.TaskStateLoading {
 		t.Fatalf("loadingModel state = %v, want Loading", got)
+	}
+	// A resolved-but-failed check must not be stuck in Loading forever —
+	// Empty is what makes 'r' retry reachable (updateKey only fires Recheck
+	// in the Empty state).
+	if got := checkFailedModel().state(); got != tui.TaskStateEmpty {
+		t.Fatalf("checkFailedModel state = %v, want Empty", got)
+	}
+	// Disabled must not read as Loading either — nothing is ever going to
+	// resolve it.
+	if got := disabledModel().state(); got != tui.TaskStateEmpty {
+		t.Fatalf("disabledModel state = %v, want Empty", got)
+	}
+}
+
+// TestInitFetchesWhenNothingResolvedYet pins the actual reported bug: the
+// app-level 24h cache (keyed off the *persisted* Session.State.UpdateCheck.
+// LastChecked, which survives process restarts) makes updateCheckCmd skip
+// the ambient check outright on most launches — Session.Update never gets
+// populated this process at all, not just "not yet". Before Init bypassed
+// that cache, opening the panel in this state rendered "checking for
+// updates…" forever: state() had no signal to tell "genuinely in flight"
+// from "nothing is ever going to happen here".
+func TestInitFetchesWhenNothingResolvedYet(t *testing.T) {
+	calls := 0
+	m := loadingModel()
+	m.recheck = func() tea.Cmd { calls++; return func() tea.Msg { return tui.UpdateCheckedMsg{} } }
+
+	cmd := m.Init()
+	if cmd == nil || calls != 1 {
+		t.Fatalf("expected Init to call Recheck when info is unresolved, calls=%d", calls)
+	}
+}
+
+// TestInitNoopWhenInfoAlreadyResolved covers both terminal info() outcomes
+// (an available update, and a genuinely-current one) — Init must not
+// re-fetch once a real result already exists in memory.
+func TestInitNoopWhenInfoAlreadyResolved(t *testing.T) {
+	calls := 0
+	fakeRecheck := func() tea.Cmd { calls++; return nil }
+
+	for name, m := range map[string]Model{"available": availableModel(), "empty": emptyModel()} {
+		m.recheck = fakeRecheck
+		if cmd := m.Init(); cmd != nil {
+			t.Errorf("%s: expected Init to no-op once info is resolved", name)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("expected Recheck never called, calls=%d", calls)
+	}
+}
+
+// TestInitNoopWhenCheckAlreadyFailed guards against a refetch loop: once a
+// check has resolved with an error this session, Init must leave it to 'r'
+// rather than silently retrying every time the panel is reopened.
+func TestInitNoopWhenCheckAlreadyFailed(t *testing.T) {
+	calls := 0
+	m := checkFailedModel()
+	m.recheck = func() tea.Cmd { calls++; return nil }
+	if cmd := m.Init(); cmd != nil || calls != 0 {
+		t.Fatalf("expected Init to no-op after a prior failed check, calls=%d", calls)
+	}
+}
+
+// TestInitNoopWhenDisabled guards the other hazard: Init must not fire a
+// Cmd that updateCheckCmd would just discard as nil (update.check: false)
+// — state() would then read a bare "checking" flag Init never gets to set
+// with no Cmd ever resolving it.
+func TestInitNoopWhenDisabled(t *testing.T) {
+	calls := 0
+	m := disabledModel()
+	m.recheck = func() tea.Cmd { calls++; return nil }
+	if cmd := m.Init(); cmd != nil || calls != 0 {
+		t.Fatalf("expected Init to no-op when checks are disabled, calls=%d", calls)
+	}
+}
+
+// TestRNoopWhenDisabled is the same hazard TestInitNoopWhenDisabled guards,
+// via the other entry point: 'r' must not set checking=true off a Cmd that
+// never resolves.
+func TestRNoopWhenDisabled(t *testing.T) {
+	calls := 0
+	m := disabledModel()
+	m.recheck = func() tea.Cmd { calls++; return nil }
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd != nil || calls != 0 {
+		t.Fatal("expected 'r' to be a no-op when checks are disabled")
+	}
+	if updated.(Model).checking {
+		t.Fatal("expected checking to stay false when 'r' no-ops")
+	}
+}
+
+// TestRRechecksAfterFailedAmbientCheck pins the actual fix: opening 28b
+// after the ambient check already failed must still let 'r' retry — before
+// Session.UpdateCheckErr existed, info() never resolved, state() never left
+// Loading, and 'r' (gated on the Empty state) could never fire.
+func TestRRechecksAfterFailedAmbientCheck(t *testing.T) {
+	calls := 0
+	m := checkFailedModel()
+	m.recheck = func() tea.Cmd { calls++; return func() tea.Msg { return tui.UpdateCheckedMsg{} } }
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "r"})
+	if cmd == nil || calls != 1 {
+		t.Fatalf("expected 'r' to call Recheck after a failed ambient check, calls=%d", calls)
+	}
+	m2 := updated.(Model)
+	if !m2.checking {
+		t.Fatal("expected checking=true after 'r'")
 	}
 }
 
@@ -197,6 +328,10 @@ func TestKeybarGroupsAreStateConditional(t *testing.T) {
 	empty := emptyModel().Keybar()
 	if !containsKey(empty.Groups, "r") || containsKey(empty.Groups, "y") {
 		t.Fatalf("empty keybar groups = %+v", empty.Groups)
+	}
+	disabled := disabledModel().Keybar()
+	if containsKey(disabled.Groups, "r") {
+		t.Fatalf("disabled keybar groups = %+v, want no 'r' hint (retrying would just no-op)", disabled.Groups)
 	}
 }
 

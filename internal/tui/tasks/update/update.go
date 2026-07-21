@@ -65,7 +65,7 @@ func (m Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.feedback = release.Version + " skipped"
 		}
 	case "r":
-		if m.state() == tui.TaskStateEmpty && m.recheck != nil {
+		if m.state() == tui.TaskStateEmpty && !m.checkDisabled() && m.recheck != nil {
 			m.checking = true
 			m.feedback = "checking…"
 			return m, m.recheck()

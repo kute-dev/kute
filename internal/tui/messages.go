@@ -102,12 +102,15 @@ type TaskActionMsg struct {
 // reconnect, if that's ever wired).
 // UpdateCheckedMsg carries 28a/28b's ambient (or 'r'-forced) release-feed
 // check's result. Err non-nil means the check failed (offline, airgapped,
-// GitHub unreachable) — the root shell does nothing with it beyond that:
-// no chip, no retry, no error surfaced anywhere (docs/design README.md
-// §28a: "offline/airgapped → silently no chip, no retry storm"). LatestVersion/
-// CheckedAt are what get folded into Session.State.UpdateCheck (persisted
-// at exit, like every other State field); Info populates Session.Update
-// in-memory for 28b to render.
+// GitHub unreachable) — 28a's ambient chip does nothing with it beyond
+// recording it on Session.UpdateCheckErr: no chip, no retry storm (docs/
+// design README.md §28a: "offline/airgapped → silently no chip, no retry
+// storm"). 28b's manually-opened panel does read UpdateCheckErr, though —
+// see its doc comment for why "still loading" and "checked, but failed"
+// need to stay distinguishable. LatestVersion/CheckedAt are what get folded
+// into Session.State.UpdateCheck (persisted at exit, like every other State
+// field) on success only; Info populates Session.Update in-memory for 28b
+// to render.
 type UpdateCheckedMsg struct {
 	Info          UpdateInfo
 	LatestVersion string

@@ -135,15 +135,30 @@ func TestUpdateCheckCmdErrYieldsErrMsg(t *testing.T) {
 	}
 }
 
+// TestBuildUpdateFactoryProducesAWorkingTask pins the fix for the panel
+// hanging on "checking for updates…" forever: a fresh session (nothing
+// resolved yet — the common case, since updateCheckCmd's own 24h cache
+// means the ambient check is skipped outright on most launches) must have
+// tasks/update's Init fetch once via Recheck, bypassing that cache exactly
+// like 'r' does — see tasks/update's package doc comment.
 func TestBuildUpdateFactoryProducesAWorkingTask(t *testing.T) {
 	t.Parallel()
 	sess := testAppSession()
-	task := buildUpdateFactory(sess, &fakeChecker{})()
+	checker := &fakeChecker{release: update.Release{Version: "0.2.1"}}
+	task := buildUpdateFactory(sess, checker)()
 	if task == nil {
 		t.Fatal("expected a non-nil Task")
 	}
 	task.SetSize(120, 36)
-	if task.Init() != nil {
-		t.Fatal("expected tasks/update's Init to be a no-op (no I/O of its own)")
+
+	cmd := task.Init()
+	if cmd == nil {
+		t.Fatal("expected tasks/update's Init to fetch once when nothing has resolved yet")
+	}
+	if _, ok := cmd().(tui.UpdateCheckedMsg); !ok {
+		t.Fatal("expected Init's Cmd to resolve to an UpdateCheckedMsg")
+	}
+	if checker.calls != 1 {
+		t.Fatalf("expected exactly one Latest() call, got %d", checker.calls)
 	}
 }

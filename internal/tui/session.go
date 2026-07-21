@@ -79,6 +79,15 @@ type Session struct {
 	// See UpdateInfo's doc comment for why this is richer than, and
 	// separate from, the State.UpdateCheck trio that actually persists.
 	Update *UpdateInfo
+	// UpdateCheckErr is the most recently resolved check's error (ambient or
+	// 'r'-forced) — nil on success, and also nil until any check has
+	// resolved at all. Update alone can't distinguish "still loading" from
+	// "checked, but the release feed was unreachable": both leave Update
+	// nil forever, which used to strand 28b on "checking for updates…" with
+	// no escape hatch (28a's own ambient chip stays silent on error by
+	// design, but the manually-opened panel still needs a way out). Cleared
+	// back to nil by a later successful check.
+	UpdateCheckErr error
 	// HelpScope and HelpGlobal are the 7b help overlay's two fixed columns,
 	// pre-built at the composition root (internal/app.BuildSession) from the
 	// verbs registry: tui itself can't import verbs (verbs depends on tui,

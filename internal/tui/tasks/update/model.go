@@ -3,13 +3,20 @@
 // shell's 'U' key or the goto palette's synthetic ":update" item from
 // anywhere in the app.
 //
-// Unlike most task packages, this one does no I/O of its own: it renders
-// straight from *tui.Session.Update, populated once by the app-level
-// ambient release-feed check (one GET per 24h, per docs/design README.md
-// §28a's "check hygiene") — opening the panel never triggers its own
-// fetch. Recheck (Config.Recheck) is the only escape hatch, wired to 'r' in
-// the empty state, which is "the only place a manual check exists" per
-// §28b.
+// It renders straight from *tui.Session.Update, populated once by the
+// app-level ambient release-feed check (one GET per 24h, per docs/design
+// README.md §28a's "check hygiene"). That 24h throttle lives entirely in
+// app.updateCheckCmd and is keyed off the *persisted*
+// Session.State.UpdateCheck.LastChecked, so on most launches (any second-
+// or-later one within a day) the ambient check is skipped outright —
+// Session.Update stays nil for the whole process, not just "for now".
+// Init bypasses that throttle exactly once per open, the same "force" path
+// 'r' uses (Config.Recheck), whenever there's nothing in memory yet to
+// render — otherwise the panel would render "checking for updates…"
+// forever with no check ever actually running to resolve it. Recheck is
+// still the only *manual* escape hatch, wired to 'r' in the empty state
+// ("the only place a manual check exists" per §28b) — Init's own fetch is
+// silent, same UI as if the ambient check just hadn't finished yet.
 package update
 
 import (
@@ -84,7 +91,23 @@ func New(cfg Config) Model {
 
 func (m Model) now() time.Time { return m.nowAt }
 
-func (m Model) Init() tea.Cmd { return nil }
+// Init fires exactly one bypass-the-24h-cache check (the same Recheck 'r'
+// uses) when the panel opens with nothing resolved yet this session — see
+// the package doc comment for why that's necessary, not just belt-and-
+// suspenders. A no-op (nil Cmd) once info/checkErr already hold a result,
+// when update.check is disabled (checkDisabled), or when Config.Recheck
+// itself was never wired — all three are exactly the states state() also
+// treats as "nothing further to wait for", so this never fires a check
+// state() would then still report as stuck loading.
+func (m Model) Init() tea.Cmd {
+	if _, ok := m.info(); ok {
+		return nil
+	}
+	if m.checkErr() != nil || m.checkDisabled() || m.recheck == nil {
+		return nil
+	}
+	return m.recheck()
+}
 
 func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)
@@ -121,14 +144,40 @@ func (m Model) available() (update.Release, bool) {
 	return info.Latest, true
 }
 
-// state is this screen's TaskState: loading while checking or before any
-// check has resolved, ready when an update is available, empty when
-// current (a resolved check with nothing newer).
+// checkErr is the most recently resolved check's error (nil on success, and
+// nil before any check has resolved) — see Session.UpdateCheckErr's doc
+// comment for why this can't just be inferred from info() returning false.
+func (m Model) checkErr() error {
+	if m.session == nil {
+		return nil
+	}
+	return m.session.UpdateCheckErr
+}
+
+// checkDisabled reports whether update.check is turned off in config
+// (docs/design README.md §28a) — Init must not fire a check that
+// updateCheckCmd would just discard anyway, and 'r' must not either (a
+// discarded Cmd is nil, so setting m.checking=true first would strand the
+// panel exactly like the bug this file exists to avoid).
+func (m Model) checkDisabled() bool {
+	return m.session == nil || !m.session.Config.UpdateCheckEnabled()
+}
+
+// state is this screen's TaskState: loading while a check (ambient, Init's
+// own bypass fetch, or an 'r'-forced one) is genuinely in flight, ready
+// when an update is available, empty otherwise — current (a resolved check
+// with nothing newer), the most recent check failed, or checks are
+// disabled. All three empty cases share one property Loading doesn't:
+// nothing is going to change on its own, so 'r' (where it applies) is the
+// only way out.
 func (m Model) state() tui.TaskState {
 	if m.checking {
 		return tui.TaskStateLoading
 	}
 	if _, ok := m.info(); !ok {
+		if m.checkErr() != nil || m.checkDisabled() {
+			return tui.TaskStateEmpty
+		}
 		return tui.TaskStateLoading
 	}
 	if _, ok := m.available(); ok {

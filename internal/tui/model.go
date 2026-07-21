@@ -387,11 +387,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Also forwarded to the task below (unchanged msg): tasks/update
 		// (28b) needs it too, to clear its own "checking…" state after 'r'
 		// — same reasoning as kube.ConnStateMsg's forward, just below.
-		if msg.Err == nil && m.session != nil {
-			info := msg.Info
-			m.session.Update = &info
-			m.session.State.UpdateCheck.LastChecked = msg.CheckedAt
-			m.session.State.UpdateCheck.LatestVersion = msg.LatestVersion
+		if m.session != nil {
+			m.session.UpdateCheckErr = msg.Err
+			if msg.Err == nil {
+				info := msg.Info
+				m.session.Update = &info
+				m.session.State.UpdateCheck.LastChecked = msg.CheckedAt
+				m.session.State.UpdateCheck.LatestVersion = msg.LatestVersion
+			}
 		}
 	case OpenUpdatePanelMsg:
 		return m, m.openUpdatePanel()
