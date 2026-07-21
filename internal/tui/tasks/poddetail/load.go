@@ -107,6 +107,8 @@ func findPod(objs []runtime.Object, name string) *corev1.Pod {
 // nodedetail.podGlyph documents for working off kube.Pod.
 func statusClass(p kube.Pod) (glyph, class, text string) {
 	switch {
+	case p.Deleting:
+		return "◌", "warn", "Terminating"
 	case p.Status == string(corev1.PodSucceeded):
 		return "○", "neutral", "Completed"
 	case p.Status == string(corev1.PodFailed):

@@ -475,3 +475,13 @@ func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	f.drained = append(f.drained, node)
 	return 1, nil
 }
+
+func TestPodGlyphShowsTerminatingOverStalePhase(t *testing.T) {
+	// A deleted pod keeps its last real phase ("Running") until the kubelet
+	// finishes tearing it down — Deleting must win regardless of Status.
+	pod := kube.Pod{Status: string(corev1.PodRunning), Deleting: true}
+	glyph, bad := podGlyph(pod)
+	if glyph != "◌" || bad {
+		t.Fatalf("deleting pod should show ◌/not-bad, got %s/%v", glyph, bad)
+	}
+}

@@ -9,12 +9,17 @@ import (
 )
 
 type Pod struct {
-	Context     string
-	Namespace   string
-	Name        string
-	Ready       string
-	Status      string
-	Reason      string
+	Context   string
+	Namespace string
+	Name      string
+	Ready     string
+	Status    string
+	Reason    string
+	// Deleting is true once the API server has recorded a delete
+	// (metadata.deletionTimestamp set) but the kubelet hasn't torn the pod
+	// down yet — Status/Reason still carry their last real phase during this
+	// window, so callers must check this first to show "Terminating".
+	Deleting    bool
 	Restarts    int32
 	Age         string
 	AgeDuration time.Duration
@@ -130,6 +135,7 @@ func PodFromObject(pod *corev1.Pod) Pod {
 		Ready:       formatReady(ready, int32(len(pod.Spec.Containers))),
 		Status:      string(pod.Status.Phase),
 		Reason:      reason,
+		Deleting:    pod.DeletionTimestamp != nil,
 		Restarts:    restarts,
 		Age:         age.String(),
 		AgeDuration: age,

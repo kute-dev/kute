@@ -116,6 +116,8 @@ func nodeDetailTerminalPod(p *corev1.Pod) bool {
 // nodedetail works from kube.Pod (PodFromObject), not a runtime.Object.
 func podGlyph(p kube.Pod) (glyph string, bad bool) {
 	switch {
+	case p.Deleting:
+		return "◌", false
 	case strings.Contains(p.Reason, "CrashLoop"):
 		return "✕", true
 	case p.Status == string(corev1.PodFailed):

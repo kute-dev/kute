@@ -164,6 +164,30 @@ func TestProjectPodHonorsFalseReadyConditionOverContainerReady(t *testing.T) {
 	}
 }
 
+func TestProjectPodShowsTerminatingWhileDeleting(t *testing.T) {
+	// The API leaves phase at its last real value (often still "Running")
+	// after a delete is issued — deletionTimestamp is the only signal a
+	// terminating pod carries, and kute must derive "Terminating" from it
+	// itself rather than echoing the stale phase back.
+	now := metav1.Now()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "redis", Namespace: "harbor-internal", DeletionTimestamp: &now},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "redis"}}},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			Conditions:        []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}},
+		},
+	}
+	row := projectPod(pod)
+	if row.Cells[2] != "Terminating" {
+		t.Fatalf("expected STATUS cell %q, got %q", "Terminating", row.Cells[2])
+	}
+	if row.Status != StatusWarn || row.Glyph != "◌" {
+		t.Fatalf("terminating pod should be StatusWarn/◌, got %s/%s", row.Status, row.Glyph)
+	}
+}
+
 func TestProjectIngressBackends(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	ing := &networkingv1.Ingress{

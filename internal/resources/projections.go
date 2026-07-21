@@ -124,6 +124,13 @@ func projectPod(obj runtime.Object) Row {
 	var glyph string
 	var class StatusClass
 	switch {
+	case p.DeletionTimestamp != nil:
+		// The API never sets a "Terminating" phase — kubectl/k9s synthesize it
+		// from a non-nil deletionTimestamp, and the phase (often still
+		// "Running") lags behind until the kubelet actually tears the pod
+		// down. Must be checked before the phase/ready cases below or a
+		// terminating pod misreports its old status until it disappears.
+		glyph, class, status = "◌", StatusWarn, "Terminating"
 	case p.Status.Phase == corev1.PodSucceeded:
 		glyph, class, status = "○", StatusNeutral, "Completed"
 	case p.Status.Phase == corev1.PodFailed:

@@ -539,6 +539,16 @@ func TestOpenForwardHandoff(t *testing.T) {
 	}
 }
 
+func TestStatusClassShowsTerminatingOverStalePhase(t *testing.T) {
+	// A deleted pod keeps its last real phase ("Running") until the kubelet
+	// finishes tearing it down — Deleting must win regardless of Status.
+	pod := kube.Pod{Status: string(corev1.PodRunning), Deleting: true}
+	glyph, class, text := statusClass(pod)
+	if glyph != "◌" || class != "warn" || text != "Terminating" {
+		t.Fatalf("deleting pod should show ◌/warn/Terminating, got %s/%s/%s", glyph, class, text)
+	}
+}
+
 type sentinelTask struct{}
 
 func (sentinelTask) Init() tea.Cmd                       { return nil }
