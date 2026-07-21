@@ -431,8 +431,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // does — see updateFilterKey's "enter" case): node/pod detail, the
 // Ingress/Gateway-API routing table (23a/23b — checked ahead of the generic
 // Custom-kind branch below since HTTPRoute/GRPCRoute/TCPRoute/Gateway are
-// themselves Custom), a Deployment's own pods, a CRD's instance list, or a
-// generic Custom kind's object detail, in that priority order. ok is false
+// themselves Custom), a Deployment's own pods, a StatefulSet's own pods, a
+// DaemonSet's own pods, a CRD's instance list, or a generic Custom kind's
+// object detail, in that priority order. ok is false
 // when the current kind/selection has no enter destination (e.g. Services,
 // Forwards), so the caller leaves the key unhandled.
 func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
@@ -454,6 +455,16 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 	if m.kind == kube.KindDeployment {
 		if row, ok := m.selectedRow(); ok {
 			return m, m.openDeploymentPods(row), true
+		}
+	}
+	if m.kind == kube.KindStatefulSet {
+		if row, ok := m.selectedRow(); ok {
+			return m, m.openStatefulSetPods(row), true
+		}
+	}
+	if m.kind == kube.KindDaemonSet {
+		if row, ok := m.selectedRow(); ok {
+			return m, m.openDaemonSetPods(row), true
 		}
 	}
 	if m.kind == kube.KindHelmRelease {

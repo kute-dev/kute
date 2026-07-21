@@ -30,6 +30,16 @@ func statefulSetObj(ns, name string, replicas, ready int32) *appsv1.StatefulSet 
 	}
 }
 
+func daemonSetObj(ns, name string, desired, ready int32) *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: desired,
+			NumberReady:            ready,
+		},
+	}
+}
+
 func newDeploymentModel(t *testing.T, mut *fakeMutator, replicas int32) Model {
 	t.Helper()
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{

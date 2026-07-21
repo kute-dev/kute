@@ -1,9 +1,11 @@
 // Deployment-specific browse machinery for 9a (docs/design README.md §9a):
 // the r rollout-restart verb (moved off 'R' to make room for 25a's
 // SetResources on the same row) and the ↵ "open this deployment's pods"
-// shortcut. Kept in its own file, browse's per-concern split convention
-// (like nodes.go/sort.go/grouping.go/delete.go) rather than sprinkled
-// through model.go/view.go/update.go.
+// shortcut, plus StatefulSet's and DaemonSet's own ↵ "open this
+// workload's pods" (same recipe, no rollout-restart verb — neither
+// StatefulSets nor DaemonSets have one). Kept in its own file, browse's
+// per-concern split convention (like nodes.go/sort.go/grouping.go/
+// delete.go) rather than sprinkled through model.go/view.go/update.go.
 package browse
 
 import (
@@ -54,9 +56,33 @@ func (m *Model) openDeploymentPods(row resources.Row) tea.Cmd {
 	return cmd
 }
 
-// backToOrigin reverses openDeploymentPods/openReleaseObjects: switches back
-// to the origin kind and selects the row esc came from, via the same
-// pendingSelect mechanism goToResource uses for a cross-kind jump.
+// openStatefulSetPods is openDeploymentPods's StatefulSet twin: same "filter
+// Pods by the owning row's name" recipe, since StatefulSet pod names also
+// start with the owning StatefulSet's name (<statefulset>-0, <statefulset>-1,
+// ...), so the existing fuzzy filter reads as an owner match here too.
+func (m *Model) openStatefulSetPods(row resources.Row) tea.Cmd {
+	cmd := m.switchKind(kube.KindPod)
+	m.setFilter(row.Name)
+	m.originKind, m.originName = kube.KindStatefulSet, row.Name
+	return cmd
+}
+
+// openDaemonSetPods is openDeploymentPods's DaemonSet twin: same "filter
+// Pods by the owning row's name" recipe — a DaemonSet's own pods are named
+// <daemonset>-<hash> (assigned directly by the DaemonSet controller, no
+// intermediate ReplicaSet), so they also start with the owning DaemonSet's
+// name.
+func (m *Model) openDaemonSetPods(row resources.Row) tea.Cmd {
+	cmd := m.switchKind(kube.KindPod)
+	m.setFilter(row.Name)
+	m.originKind, m.originName = kube.KindDaemonSet, row.Name
+	return cmd
+}
+
+// backToOrigin reverses openDeploymentPods/openStatefulSetPods/
+// openDaemonSetPods/openReleaseObjects: switches back to the origin kind and
+// selects the row esc came from, via the same pendingSelect mechanism
+// goToResource uses for a cross-kind jump.
 func (m *Model) backToOrigin() tea.Cmd {
 	m.pendingSelect = m.originName
 	return m.switchKind(m.originKind)

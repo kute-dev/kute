@@ -335,7 +335,8 @@ type Model struct {
 	filterQuery  string
 
 	// originKind/originName name the row whose filtered child view (a
-	// Deployment's pods, openDeploymentPods; a Helm release's objects,
+	// Deployment/StatefulSet/DaemonSet's pods, openDeploymentPods/
+	// openStatefulSetPods/openDaemonSetPods; a Helm release's objects,
 	// openReleaseObjects) is currently showing — when originName is
 	// non-empty, esc jumps back to that row on originKind instead of popping
 	// the task stack, and Header()'s breadcrumb names it. Cleared by every

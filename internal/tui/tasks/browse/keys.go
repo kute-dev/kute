@@ -334,11 +334,19 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, deployGroup)
 	}
-	if m.kind == kube.KindStatefulSet && m.mutator != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint()})
+	if m.kind == kube.KindStatefulSet {
+		stsGroup := []tui.KeyHint{verbs.Open.Hint()}
+		if m.mutator != nil {
+			stsGroup = append(stsGroup, verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
+		}
+		groups = append(groups, stsGroup)
 	}
-	if m.kind == kube.KindDaemonSet && m.mutator != nil {
-		groups = append(groups, []tui.KeyHint{verbs.SetImage.Hint(), verbs.SetResources.Hint()})
+	if m.kind == kube.KindDaemonSet {
+		dsGroup := []tui.KeyHint{verbs.Open.Hint()}
+		if m.mutator != nil {
+			dsGroup = append(dsGroup, verbs.SetImage.Hint(), verbs.SetResources.Hint())
+		}
+		groups = append(groups, dsGroup)
 	}
 	if m.kind == kube.KindService && m.openForward != nil {
 		groups = append(groups, []tui.KeyHint{verbs.Forward.Hint()})

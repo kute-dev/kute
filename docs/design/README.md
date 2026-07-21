@@ -129,6 +129,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **Not a new screen** — the pods skeleton (header · summary strip · table · keybar) with kind-specific columns: status glyph · NAME · READY · ROLLOUT · IMAGE · AGE. Unhealthy-first sort + `+ N stable` collapse carry over. Services, configmaps, etc. follow the same recipe.
 - ROLLOUT column: `stable` dim · `2m 14s ▸` yellow while progressing (IMAGE shows `new ← old` during transition) · `degraded` red.
 - Keys: `↵` = the deployment's pods (pods view with pre-applied filter, not a new view) · `r` rollout restart (non-destructive, no confirm — moved off `R` in 0.2.0 to make room for 25a's resources editor on the same row) · `R` resources editor (25a) · `y` yaml · `g` goto. Keybar pill `DEPLOY`.
+- **StatefulSets and DaemonSets get the same `↵` recipe** — pods view pre-filtered to the row's name, no rollout-restart verb (neither kind has one). Names still collide with the owning object's own pods since StatefulSet pods are `<name>-0, <name>-1, …` and DaemonSet pods are `<name>-<hash>`, so the existing fuzzy filter reads as an owner match with no extra mechanism.
 
 ### 9b — Events view (`e`)
 - Summary strip: `▲ 4 warnings` (yellow) · `○ 31 normal` · right `last hour · deduped · warnings first`.
