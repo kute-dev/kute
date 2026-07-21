@@ -196,18 +196,31 @@ func scheduleNamespaceSyncRetry(gen int) tea.Cmd {
 }
 
 // loadNamespacePalette populates m.palette from namespaceItems for gen, or
-// — while the informer cache is still filling just after launch or mid
-// SwitchContext — puts the palette in 6a's loading state and retries
+// — while the Namespace informer's cache is still empty just after launch
+// or mid SwitchContext — puts the palette in 6a's loading state and retries
 // shortly rather than flashing "no matches" for a cluster that actually has
 // namespaces (mirrors browse's listerSynced retry in applyRowsLoaded).
+//
+// It gates on namespaceItems' own result (rows), not the cluster-wide
+// listerSynced flag: *kube.Cluster.Synced only flips true once every
+// registered kind's informer (Pods, RBAC, HPA, …) has completed its initial
+// sync, but each informer fills its own cache independently — the
+// Namespace informer routinely has real data well before some unrelated,
+// rarely-watched kind (e.g. HorizontalPodAutoscalers on a cluster/RBAC
+// setup that can't list it) finishes syncing, or ever does. Gating on the
+// aggregate flag left this palette stuck on "loading namespaces…" forever
+// on such clusters even though the data it needs was already there;
+// checking listerSynced only as a fallback when rows come back empty keeps
+// the original regression (an empty cache read before real objects have
+// landed must not be mistaken for "no namespaces") covered.
 func (m *Model) loadNamespacePalette(gen int) tea.Cmd {
-	if !listerSynced(m.session) {
+	items, rows := namespaceItems(m.session)
+	if len(rows) == 0 && !listerSynced(m.session) {
 		m.palette.Loading = true
 		m.palette.Items = nil
 		return scheduleNamespaceSyncRetry(gen)
 	}
 	m.palette.Loading = false
-	items, rows := namespaceItems(m.session)
 	m.namespaceItemsCache = items
 	m.refreshNamespacePalette()
 	return fetchNamespaceCPUSharesCmd(m.session, rows, gen)
