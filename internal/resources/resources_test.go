@@ -141,6 +141,29 @@ func TestProjectPodClassifiesHealth(t *testing.T) {
 	}
 }
 
+func TestProjectPodHonorsFalseReadyConditionOverContainerReady(t *testing.T) {
+	// All containers report Ready, but the pod's own Ready condition is
+	// False (e.g. a readiness-gate check failing). k9s colors this red;
+	// kute previously ignored the condition and re-derived health purely
+	// from container ready counts, so it showed green.
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "redis", Namespace: "harbor-internal"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "redis"}}},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			Conditions:        []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionFalse}},
+		},
+	}
+	row := projectPod(pod)
+	if row.Cells[1] != "1/1" {
+		t.Fatalf("unexpected ready cell: %q", row.Cells[1])
+	}
+	if row.Status != StatusFail || row.Glyph != "✕" {
+		t.Fatalf("pod with False Ready condition should be StatusFail/✕ despite 1/1 container ready, got %s/%s", row.Status, row.Glyph)
+	}
+}
+
 func TestProjectIngressBackends(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	ing := &networkingv1.Ingress{

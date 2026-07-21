@@ -87,6 +87,20 @@ func podWaitingReason(statuses []corev1.ContainerStatus) string {
 	return ""
 }
 
+// podReadyConditionFalse reports whether the pod's own top-level Ready
+// condition is explicitly False. This can diverge from a simple tally of
+// containerStatuses[].Ready (e.g. a readiness-gate check failing, or the
+// condition lagging a flapping probe), so it must be checked separately
+// rather than re-derived from container ready counts alone.
+func podReadyConditionFalse(p *corev1.Pod) bool {
+	for _, c := range p.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionFalse
+		}
+	}
+	return false
+}
+
 func projectPod(obj runtime.Object) Row {
 	p, ok := obj.(*corev1.Pod)
 	if !ok {
@@ -118,6 +132,8 @@ func projectPod(obj runtime.Object) Row {
 		glyph, class = "◐", StatusWarn
 	case strings.Contains(podWaitingReason(p.Status.ContainerStatuses), "CrashLoop"):
 		glyph, class, status = "✕", StatusFail, podWaitingReason(p.Status.ContainerStatuses)
+	case total > 0 && ready >= total && podReadyConditionFalse(p):
+		glyph, class = "✕", StatusFail
 	case total > 0 && ready >= total:
 		glyph, class = "●", StatusOK
 	default:
