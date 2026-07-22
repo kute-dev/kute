@@ -91,8 +91,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.gone {
 		// "object gone ⇒ banner + auto-back after keypress" (mirrors
-		// poddetail's own §5a behavior).
-		return m, func() tea.Msg { return tui.BackMsg{} }
+		// poddetail's own §5a behavior), except q/ctrl+c: quit is a global
+		// expectation everywhere else in the app, and this banner shouldn't
+		// be the one state where it silently does something else instead.
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		default:
+			return m, func() tea.Msg { return tui.BackMsg{} }
+		}
 	}
 	switch msg.String() {
 	case "q", "ctrl+c":

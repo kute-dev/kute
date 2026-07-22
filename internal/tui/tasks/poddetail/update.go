@@ -108,8 +108,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.gone {
 		// "pod gone ⇒ banner + auto-back after keypress" (docs/design
-		// README.md §5a) — every key returns to browse.
-		return m, func() tea.Msg { return tui.BackMsg{} }
+		// README.md §5a) — every key returns to browse, except q/ctrl+c:
+		// quit is a global expectation everywhere else in the app, and this
+		// banner shouldn't be the one state where it silently does something
+		// else instead.
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		default:
+			return m, func() tea.Msg { return tui.BackMsg{} }
+		}
 	}
 	switch msg.String() {
 	case "q", "ctrl+c":

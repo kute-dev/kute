@@ -115,6 +115,18 @@ func TestApplyLoadedObjectGone(t *testing.T) {
 	if !got.gone || got.state != tui.TaskStateReady {
 		t.Fatalf("expected gone=true/ready, got gone=%v state=%s", got.gone, got.state)
 	}
+
+	// q/ctrl+c must still quit even while the "deleted" banner is showing —
+	// mirrors poddetail's own TestGonePodStillQuitsOnQAndCtrlC.
+	for _, key := range []string{"q", "ctrl+c"} {
+		_, cmd := got.Update(tea.KeyPressMsg{Text: key})
+		if cmd == nil {
+			t.Fatalf("%s: expected a command", key)
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Fatalf("%s: expected tea.QuitMsg, got %T", key, cmd())
+		}
+	}
 }
 
 func TestApplyLoadedEmptyObjectRedirectsToYAML(t *testing.T) {

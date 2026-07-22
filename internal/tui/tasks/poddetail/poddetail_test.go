@@ -344,6 +344,29 @@ func TestGonePodShowsBannerAndAnyKeyGoesBack(t *testing.T) {
 	}
 }
 
+// TestGonePodStillQuitsOnQAndCtrlC pins the fix to the "any key" gone banner
+// swallowing the app's one global quit expectation: q/ctrl+c must still
+// quit even while the banner is showing, not silently navigate back instead.
+func TestGonePodStillQuitsOnQAndCtrlC(t *testing.T) {
+	for _, key := range []string{"q", "ctrl+c"} {
+		lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}
+		m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "ghost"})
+		m.SetSize(120, 40)
+		m = step(t, m, m.Init()())
+		if !m.gone {
+			t.Fatalf("%s: expected gone=true for a pod missing from the cache", key)
+		}
+
+		_, cmd := m.Update(tea.KeyPressMsg{Text: key})
+		if cmd == nil {
+			t.Fatalf("%s: expected a command", key)
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Fatalf("%s: expected tea.QuitMsg, got %T", key, cmd())
+		}
+	}
+}
+
 func TestEscSendsBackMsg(t *testing.T) {
 	m := New(Config{Session: newSession(), Namespace: "default", Name: "api-0"})
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "esc"})
