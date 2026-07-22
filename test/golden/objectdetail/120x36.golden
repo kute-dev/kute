@@ -33,4 +33,4 @@ Normal    Requested         3m      Created new CertificateRequest resource "api
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   DETAIL  esc back │ j/k next/prev │ y yaml  e events │ ctrl-d delete                                          ? help  
+   DETAIL  esc back │ j/k next/prev │ ctrl-d delete                                                             ? help  

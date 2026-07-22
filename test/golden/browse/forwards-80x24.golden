@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   FORWARDS  g goto  / filter  space mark │ x stop  r restart  y copy url │ n...
+   FORWARDS  x stop  r restart  y copy url                              ? help  

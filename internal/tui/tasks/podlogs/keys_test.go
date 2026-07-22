@@ -21,7 +21,7 @@ func TestKeybarShowsLogsPillAndCoreGroups(t *testing.T) {
 			found[hint.Key] = true
 		}
 	}
-	for _, key := range []string{"esc", "space", "w/e", "/", "s", "tab", "ctrl-y"} {
+	for _, key := range []string{"esc", "space", "w/e", "s", "tab", "ctrl-y"} {
 		if !found[key] {
 			t.Fatalf("missing key hint %q in %+v", key, bar.Groups)
 		}

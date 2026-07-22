@@ -46,18 +46,12 @@ func (m Model) Keybar() tui.Keybar {
 			groups = append(groups, hints)
 		}
 	}
-	// §23a/§23b's "Y copy yaml · e events" group — acts on the viewed
-	// object itself, so it's offered whenever the seam is wired, independent
-	// of rowCount (unlike the row-scoped verbs above).
-	var objectHints []tui.KeyHint
+	// §23a/§23b's "Y copy yaml" — acts on the viewed object itself, so it's
+	// offered whenever the seam is wired, independent of rowCount (unlike the
+	// row-scoped verbs above). Events (e) is global grammar as of
+	// v.0.3.0.dc.html §29a, so it no longer renders here.
 	if m.yaml != nil {
-		objectHints = append(objectHints, verbs.CopyRouteYAML.Hint())
-	}
-	if m.openEvents != nil {
-		objectHints = append(objectHints, verbs.Events.Hint())
-	}
-	if len(objectHints) > 0 {
-		groups = append(groups, objectHints)
+		groups = append(groups, []tui.KeyHint{verbs.CopyRouteYAML.Hint()})
 	}
 
 	return tui.Keybar{

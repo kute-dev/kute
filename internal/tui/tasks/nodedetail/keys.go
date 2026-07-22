@@ -43,9 +43,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
-	if len(m.allPods) > 0 {
-		groups = append(groups, []tui.KeyHint{verbs.Filter.Hint()})
-	}
 	if len(m.pods) > 0 {
 		podGroup := []tui.KeyHint{}
 		if m.openPod != nil {
@@ -61,21 +58,9 @@ func (m Model) Keybar() tui.Keybar {
 		groups = append(groups, podGroup)
 	}
 	groups = append(groups, []tui.KeyHint{verbs.NodeShell.Hint()})
-	if m.node != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Edit.Hint()})
-	}
 	offline := m.conn.Offline()
 	if m.mutator != nil && !verbs.Cordon.HiddenWhileOffline(offline) && !verbs.Drain.HiddenWhileOffline(offline) {
 		groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})
-	}
-	if m.openYAML != nil {
-		groups = append(groups, []tui.KeyHint{verbs.YAML.Hint()})
-	}
-	if m.openEvents != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Events.Hint()})
-	}
-	if m.openTimeline != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Timeline.Hint()})
 	}
 
 	// 4a's offline treatment (docs/design README.md §52, §301): mutating

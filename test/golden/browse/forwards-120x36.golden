@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   FORWARDS  g goto  / filter  space mark │ x stop  r restart  y copy url │ n namespace  c context              ? help  
+   FORWARDS  x stop  r restart  y copy url                                                                      ? help  

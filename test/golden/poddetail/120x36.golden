@@ -33,4 +33,4 @@ Normal    Pulled            4m      Image already present on machine            
                                                                                         │                               
                                                                                         │                               
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   POD  esc back │ j/k next/prev │ l logs  y yaml  E edit  e events  x exec  alt+o/i related  tab cycle │ ctrl-d delete 
+   POD  esc back │ j/k next/prev │ l logs  x exec  alt+o/i related  tab cycle │ ctrl-d delete                   ? help  

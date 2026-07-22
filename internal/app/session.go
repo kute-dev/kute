@@ -77,27 +77,37 @@ func startupContext(sessionState state.State) string {
 }
 
 // helpScopeKeys is the 7b help overlay's fixed SCOPE column (docs/design
-// README.md §7b: "g n c a / ↵ toggles last"): the registered navigation
-// verbs plus the alt-tab toggle, which isn't a registry verb (it's a
-// modifier on the palette's own pre-selection, not a distinct action) — see
-// session.go's HelpScope doc comment for why this lives here rather than in
-// tui/help.go.
+// README.md §7b): the registered navigation verbs. The alt-tab bare-Enter
+// toggle (model.go's mostRecentOther) isn't listed here — it's a modifier on
+// the palette's own pre-selection, not a distinct action, and the palette's
+// own footer (recentPickHint) already surfaces it in context.
 func helpScopeKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		verbs.Goto.Hint(),
 		verbs.Namespace.Hint(),
 		verbs.Context.Hint(),
 		verbs.AllNamespaces.Hint(),
-		{Key: "↵", Label: "toggles last"},
 	}
 }
 
 // helpGlobalKeys is 7b's fixed GLOBAL column, trimmed to bindings that
 // actually exist today — the mockup's "p pause sync"/"r reconnect" aren't
 // implemented yet (Phase 4), so listing them would document a lie.
+//
+// v.0.3.0.dc.html §29a moved the "identical on every screen" verbs (filter,
+// mark, yaml, edit, events, timeline, meta — goto/namespace/context/
+// all-namespaces already live in helpScopeKeys) out of every screen's own
+// keybar; this column is their one remaining home so they stay discoverable.
 func helpGlobalKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		{Key: "↑↓ jk", Label: "move"},
+		verbs.Filter.Hint(),
+		verbs.Mark.Hint(),
+		verbs.YAML.Hint(),
+		verbs.Edit.Hint(),
+		verbs.Events.Hint(),
+		verbs.Timeline.Hint(),
+		verbs.Meta.Hint(),
 		{Key: "esc", Label: "back"},
 		{Key: "U", Label: "what's new"},
 		verbs.Help.Hint(),

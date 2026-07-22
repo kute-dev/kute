@@ -283,27 +283,12 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	baseGroup := []tui.KeyHint{verbs.Goto.Hint(), verbs.Filter.Hint(), verbs.Mark.Hint()}
-	if m.kind != kube.KindForward {
-		if m.kind != kube.KindHelmRelease {
-			// Helm Releases carry their own 'v' values verb below instead of
-			// the generic YAML/edit set — a release isn't a single real API
-			// object those act on (18a has no 'y'/'E', the same carve-out
-			// Forward's synthetic rows already take). Namespace-scoped 'e'
-			// events stays available, same as every other kind's list view.
-			if m.openYAML != nil {
-				baseGroup = append(baseGroup, verbs.YAML.Hint())
-			}
-			baseGroup = append(baseGroup, verbs.Edit.Hint())
-		}
-		if m.openEvents != nil {
-			baseGroup = append(baseGroup, verbs.Events.Hint())
-		}
-		if m.openTimeline != nil {
-			baseGroup = append(baseGroup, verbs.Timeline.Hint())
-		}
-	}
-	groups := [][]tui.KeyHint{baseGroup}
+	// v.0.3.0.dc.html §29a: goto/filter/mark/yaml/edit/events/timeline/meta/
+	// namespace/context/all-namespaces are identical on every screen, so they
+	// never render here — they're taught once, in the ? overlay's SCOPE/
+	// GLOBAL columns (app.helpScopeKeys/helpGlobalKeys). Only what's actually
+	// different about this kind's row goes in the bar below.
+	groups := [][]tui.KeyHint{}
 	if m.kind == kube.KindPod {
 		podGroup := []tui.KeyHint{}
 		if m.openPodDetail != nil {
@@ -331,8 +316,16 @@ func (m Model) Keybar() tui.Keybar {
 			groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})
 		}
 	}
+	// openPodsHint relabels ↵ to "pods" — Deployment/StatefulSet/DaemonSet
+	// rows all open the kind's own pods list (update.go's openDeploymentPods/
+	// openStatefulSetPods/openDaemonSetPods), the exact "pods of deployment"
+	// → "pods" compression v.0.3.0.dc.html §29a calls out; the key still
+	// comes from the registry, only the label is contextual (same pattern as
+	// the bulk-delete count override below).
+	openPodsHint := verbs.Open.Hint()
+	openPodsHint.Label = "pods"
 	if m.kind == kube.KindDeployment {
-		deployGroup := []tui.KeyHint{verbs.Open.Hint()}
+		deployGroup := []tui.KeyHint{openPodsHint}
 		if m.mutator != nil {
 			deployGroup = append(deployGroup, verbs.RolloutRestart.Hint(), verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
 		}
@@ -342,14 +335,14 @@ func (m Model) Keybar() tui.Keybar {
 		groups = append(groups, deployGroup)
 	}
 	if m.kind == kube.KindStatefulSet {
-		stsGroup := []tui.KeyHint{verbs.Open.Hint()}
+		stsGroup := []tui.KeyHint{openPodsHint}
 		if m.mutator != nil {
 			stsGroup = append(stsGroup, verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
 		}
 		groups = append(groups, stsGroup)
 	}
 	if m.kind == kube.KindDaemonSet {
-		dsGroup := []tui.KeyHint{verbs.Open.Hint()}
+		dsGroup := []tui.KeyHint{openPodsHint}
 		if m.mutator != nil {
 			dsGroup = append(dsGroup, verbs.SetImage.Hint(), verbs.SetResources.Hint())
 		}
@@ -387,12 +380,6 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, fwdGroup)
 	}
-	if m.mutator != nil && metaEditable(m.kind) {
-		// 26a: 'm' works on any row, any kind (CRDs included) — not
-		// kind-gated the way SetImage/SetResources are, since every real
-		// object has metadata.labels/annotations.
-		groups = append(groups, []tui.KeyHint{verbs.Meta.Hint()})
-	}
 	if m.mutator != nil && m.kind != kube.KindForward && m.kind != kube.KindHelmRelease {
 		// 18a: delete/uninstall is deliberately out of scope for Helm
 		// Releases, the same "no install/upgrade-from-repo" carve-out —
@@ -406,14 +393,12 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, []tui.KeyHint{deleteHint})
 	}
-	scopeGroup := []tui.KeyHint{verbs.Namespace.Hint(), verbs.Context.Hint()}
-	if !m.desc.ClusterScoped {
-		scopeGroup = append(scopeGroup, verbs.AllNamespaces.Hint())
-	}
 	if m.grouped() {
-		scopeGroup = append(scopeGroup, verbs.JumpNamespace.Hint(), verbs.ToggleGroup.Hint())
+		// JumpNamespace/ToggleGroup are only meaningful once already in ALL
+		// NS mode, so — unlike Namespace/Context/AllNamespaces themselves —
+		// they stay in the bar rather than moving to ?.
+		groups = append(groups, []tui.KeyHint{verbs.JumpNamespace.Hint(), verbs.ToggleGroup.Hint()})
 	}
-	groups = append(groups, scopeGroup)
 
 	return tui.Keybar{
 		Pill:       pill,

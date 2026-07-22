@@ -35,6 +35,13 @@ type Verb struct {
 	// declared per-verb in the command table"). Per-row-only verbs (logs,
 	// exec, ↵ open, …) leave this false.
 	Bulk bool
+	// Global marks a verb as identical on every screen — goto/filter/mark/
+	// yaml/edit/events/timeline/meta/namespace/context/all-namespaces
+	// (docs/design v.0.3.0.dc.html §29a: "the bar shows what's different
+	// here, grammar lives in ?"). A Global verb's Hint never renders in a
+	// screen's own Keybar() Groups; it's taught exactly once, in the ?
+	// overlay's SCOPE/GLOBAL columns (helpScopeKeys/helpGlobalKeys).
+	Global bool
 }
 
 // Hint renders the verb as a keybar key/label pair.
@@ -63,8 +70,8 @@ func (v Verb) HiddenWhileOffline(offline bool) bool {
 
 // Non-mutating navigation/view verbs.
 var (
-	Goto   = Verb{ID: "goto", Key: "g", Label: "goto"}
-	Filter = Verb{ID: "filter", Key: "/", Label: "filter"}
+	Goto   = Verb{ID: "goto", Key: "g", Label: "goto", Global: true}
+	Filter = Verb{ID: "filter", Key: "/", Label: "filter", Global: true}
 	Open   = Verb{ID: "open", Key: "↵", Label: "open"}
 	Logs   = Verb{ID: "logs", Key: "l", Label: "logs", Kinds: []kube.ResourceKind{kube.KindPod}}
 	YAML   = Verb{ID: "yaml", Key: "y", Label: "yaml"}
@@ -81,11 +88,11 @@ var (
 	// NodeShell — it carries no Tier/Mutating flag even though it's a real
 	// mutation; the PROD-only y/N gate each call site applies is driven by
 	// TierForEdit below, not this field.
-	Edit          = Verb{ID: "edit", Key: "E", Label: "edit"}
-	Events        = Verb{ID: "events", Key: "e", Label: "events"}
-	Namespace     = Verb{ID: "namespace", Key: "n", Label: "namespace"}
-	Context       = Verb{ID: "context", Key: "c", Label: "context"}
-	AllNamespaces = Verb{ID: "all-namespaces", Key: "a", Label: "all namespaces"}
+	Edit          = Verb{ID: "edit", Key: "E", Label: "edit", Global: true}
+	Events        = Verb{ID: "events", Key: "e", Label: "events", Global: true}
+	Namespace     = Verb{ID: "namespace", Key: "n", Label: "namespace", Global: true}
+	Context       = Verb{ID: "context", Key: "c", Label: "context", Global: true}
+	AllNamespaces = Verb{ID: "all-namespaces", Key: "a", Label: "all namespaces", Global: true}
 	// JumpNamespace is 6b's "N" — jump into the selected row's namespace
 	// without leaving the all-namespaces triage view for the palette.
 	JumpNamespace = Verb{ID: "jump-namespace", Key: "N", Label: "jump into namespace"}
@@ -114,10 +121,10 @@ var (
 	// lists, 16b object-scoped from detail views), docs/design README.md's
 	// system-wide interactions list: "t opens the incident timeline
 	// (namespace-scoped from lists, object-scoped from detail)".
-	Timeline = Verb{ID: "timeline", Key: "t", Label: "timeline"}
+	Timeline = Verb{ID: "timeline", Key: "t", Label: "timeline", Global: true}
 	// Mark is 20a's "space" — marks the cursor row and advances, works in
 	// any list.
-	Mark = Verb{ID: "mark", Key: "space", Label: "mark"}
+	Mark = Verb{ID: "mark", Key: "space", Label: "mark", Global: true}
 	// MarkAll is 20a's "*" — marks every row the current filter matches
 	// ("filter-then-mark is the bulk grammar — no range-mark chord").
 	MarkAll = Verb{ID: "mark-all", Key: "*", Label: "mark all"}
@@ -139,7 +146,7 @@ var (
 	// same Deployment row — resolved in favor of SetResources since it's the
 	// literal key the design doc names for 25a.
 	RolloutRestart = Verb{
-		ID: "rollout-restart", Key: "r", Label: "rollout restart",
+		ID: "rollout-restart", Key: "r", Label: "restart",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
 	Cordon = Verb{
@@ -196,7 +203,7 @@ var (
 	// meta.go's commitMeta/commitMetaRemove.
 	Meta = Verb{
 		ID: "meta", Key: "m", Label: "labels/annotations",
-		Tier: actions.TierNone, Mutating: true,
+		Tier: actions.TierNone, Mutating: true, Global: true,
 	}
 	// AddSecretKey is 27b's 'a' line-insert add on a Secret's Data view —
 	// same TierNone-nominal/TierForAddSecretKey-resolves-the-real-tier shape

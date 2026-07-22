@@ -54,16 +54,6 @@ func (m Model) Keybar() tui.Keybar {
 	if len(m.siblings) > 1 {
 		groups = append(groups, []tui.KeyHint{{Key: "j/k", Label: "next/prev"}})
 	}
-	verbGroup := []tui.KeyHint{}
-	if m.openYAML != nil {
-		verbGroup = append(verbGroup, verbs.YAML.Hint())
-	}
-	if m.openEvents != nil {
-		verbGroup = append(verbGroup, verbs.Events.Hint())
-	}
-	if len(verbGroup) > 0 {
-		groups = append(groups, verbGroup)
-	}
 	if m.mutator != nil && !verbs.Delete.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Delete.Hint()})
 	}

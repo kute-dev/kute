@@ -22,7 +22,6 @@ func (m Model) Keybar() tui.Keybar {
 	groups = append(groups, []tui.KeyHint{
 		{Key: "space", Label: followLabel(m.view.AutoScroll)},
 		{Key: "w/e", Label: "prev/next warn/err"},
-		verbs.Filter.Hint(),
 	})
 	nav := []tui.KeyHint{{Key: "s", Label: "since " + m.sinceLabel()}}
 	if len(m.pod.Containers) > 1 {

@@ -26,7 +26,7 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	groups := [][]tui.KeyHint{
 		{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
-		{{Key: "w", Label: warnLabel}, {Key: "t", Label: "time window"}, verbs.Filter.Hint()},
+		{{Key: "w", Label: warnLabel}, {Key: "t", Label: "time window"}},
 	}
 	if m.hasNormal() {
 		groups = append(groups, []tui.KeyHint{{Key: "tab", Label: "expand/collapse normal"}})

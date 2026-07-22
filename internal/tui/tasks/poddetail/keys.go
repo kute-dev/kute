@@ -65,18 +65,6 @@ func (m Model) Keybar() tui.Keybar {
 	if m.openLogs != nil {
 		verbGroup = append(verbGroup, verbs.Logs.Hint())
 	}
-	if m.openYAML != nil {
-		verbGroup = append(verbGroup, verbs.YAML.Hint())
-	}
-	if m.found {
-		verbGroup = append(verbGroup, verbs.Edit.Hint())
-	}
-	if m.openEvents != nil {
-		verbGroup = append(verbGroup, verbs.Events.Hint())
-	}
-	if m.openTimeline != nil {
-		verbGroup = append(verbGroup, verbs.Timeline.Hint())
-	}
 	if m.found && len(m.pod.ContainerInfos) > 0 {
 		verbGroup = append(verbGroup, verbs.Exec.Hint())
 	}

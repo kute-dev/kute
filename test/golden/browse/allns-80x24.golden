@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   ALL NS  g goto  / filter  space mark  E edit │ x exec │ n namespace  c con...
+   ALL NS  x exec │ N jump into namespace  tab expand/collapse          ? help  

@@ -26,7 +26,7 @@ func (m Model) Keybar() tui.Keybar {
 		PillText: "TIMELINE",
 		Groups: [][]tui.KeyHint{
 			{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
-			{{Key: "t", Label: "time window"}, verbs.Filter.Hint()},
+			{{Key: "t", Label: "time window"}},
 		},
 		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}

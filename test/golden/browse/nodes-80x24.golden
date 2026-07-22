@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   NODES  g goto  / filter  space mark  E edit │ s node shell │ n namespace  ...
+   NODES  s node shell                                                  ? help  
