@@ -241,6 +241,9 @@
         <li class="surf-row"><span class="surf-name">Exec (x) &amp; port-forward (f)</span><span class="surf-desc">a "will run" line shows the exact kubectl command first; exec suspends kute and hands the tty over, like git handing off to your editor</span></li>
         <li class="surf-row"><span class="surf-name">YAML view + edit</span><span class="surf-desc">syntax-highlighted, folds managedFields and status noise by default; server-side dry-run before apply, conflicts surfaced inline</span></li>
         <li class="surf-row"><span class="surf-name">Scale &amp; rollout restart</span><span class="surf-desc">+/− on a Deployment/StatefulSet row opens an inline prompt pre-filled current±1 — reversible, so no modal</span></li>
+        <li class="surf-row"><span class="surf-name">Set image (i) &amp; resources (R)</span><span class="surf-desc">tag-first prompt with rollout history pulled from the watch cache; resource limits edited next to their live p95 usage bar</span></li>
+        <li class="surf-row"><span class="surf-name">Labels &amp; annotations (m)</span><span class="surf-desc">selector and owner joins render before you touch anything; controller-managed keys stay read-only</span></li>
+        <li class="surf-row"><span class="surf-name">ConfigMap &amp; Secret data</span><span class="surf-desc">per-key edit with ctrl-r to chain a rollout restart of consumers; Secret's add-key flow stays masked end to end</span></li>
         <li class="surf-row"><span class="surf-name">Bulk operations</span><span class="surf-desc">space marks a row, * marks everything the current filter matches; verbs act on the whole marked set with the same tiered confirm as a single delete</span></li>
       </ul>
     </div>
@@ -323,6 +326,7 @@
         <li class="surf-row"><span class="surf-name">Helm releases</span><span class="surf-desc">browsed straight from the sh.helm.release.v1 secrets already visible to the watch — no helm binary needed unless you roll back</span></li>
         <li class="surf-row"><span class="surf-name">Dark + light themes</span><span class="surf-desc">one semantic token struct drives every screen — every mockup on this page renders from the same tokens as the real terminal app</span></li>
         <li class="surf-row"><span class="surf-name">Degrades gracefully</span><span class="surf-desc">256-color and ASCII glyph fallbacks for terminals without truecolor or Unicode block glyphs</span></li>
+        <li class="surf-row"><span class="surf-name">Update notice (U)</span><span class="surf-desc">an ambient chip after a once-daily check; kute never self-updates — it prints your package manager's exact upgrade command</span></li>
       </ul>
     </div>
   </div>

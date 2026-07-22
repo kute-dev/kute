@@ -254,6 +254,8 @@
           <li class="surf-row"><span class="surf-name">Exec &amp; port-forward</span><span class="surf-desc">will-run lines · session registry</span></li>
           <li class="surf-row"><span class="surf-name">YAML view + edit</span><span class="surf-desc">dry-run before apply, conflicts surfaced</span></li>
           <li class="surf-row"><span class="surf-name">Scale &amp; rollout restart</span><span class="surf-desc">inline, reversible, no modal</span></li>
+          <li class="surf-row"><span class="surf-name">Set image &amp; resources</span><span class="surf-desc">tag-first prompt, limits next to live usage</span></li>
+          <li class="surf-row"><span class="surf-name">Labels, annotations &amp; config data</span><span class="surf-desc">edit with joins and consumers visible</span></li>
           <li class="surf-row"><span class="surf-name">Bulk operations</span><span class="surf-desc">filter-then-mark grammar</span></li>
           <li class="surf-row"><span class="surf-name">Secret decode</span><span class="surf-desc">in memory only, re-masked on exit</span></li>
         </ul>
@@ -266,6 +268,7 @@
           <li class="surf-row"><span class="surf-name">Gateway API</span><span class="surf-desc">route ⇄ gateway joined both ways</span></li>
           <li class="surf-row"><span class="surf-name">Dark + light themes</span><span class="surf-desc">one semantic token struct</span></li>
           <li class="surf-row"><span class="surf-name">Degrades gracefully</span><span class="surf-desc">256-color, ASCII glyph fallbacks</span></li>
+          <li class="surf-row"><span class="surf-name">Update notice</span><span class="surf-desc">ambient chip, never self-updates</span></li>
         </ul>
       </div>
     </div>
@@ -307,8 +310,8 @@
         <p>Every action shows its command. Exec, forward, scale, bulk delete — the exact kubectl equivalent is printed before anything runs. Copyable documentation, not abstraction.</p>
         <div class="trust-cmd"><span class="label">will run</span> <code>kubectl scale deploy/nebula-qa --replicas=6</code></div>
         <div class="friction-list">
-          <div class="friction-item"><span class="tier rev">reversible</span> cordon, rollout restart — executes immediately</div>
-          <div class="friction-item"><span class="tier del">delete</span> inline y/N in the keybar — no modal</div>
+          <div class="friction-item"><span class="tier rev">reversible</span> cordon — executes immediately</div>
+          <div class="friction-item"><span class="tier del">delete, rollout restart</span> inline y/N in the keybar — no modal</div>
           <div class="friction-item"><span class="tier prod">prod / drain</span> type-the-name modal — the only red border in the app</div>
         </div>
         <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);">PROD comes from a kubeconfig annotation, never a name heuristic. Secrets decode in memory only and re-mask on exit.</p>
