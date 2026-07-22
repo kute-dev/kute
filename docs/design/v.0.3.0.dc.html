@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">0.3.0</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">Keybar re-curation — the legend earns its slots back</h1>
+  </div>
+  <p style="margin: 0 0 16px 92px; font-size: 12px; color: #676780;">every phase appended a group and none removed one · curation also surfaced a real collision: R = restart rollout (<a href="#9a">9a</a>) vs R = resources (<a href="#25a">25a</a>) on the same rows — the registry now lints for this</p>
+
+  <div style="margin: 0 0 32px 92px; max-width: 960px;">
+    <div style="font-size: 11px; letter-spacing: 0.06em; color: #ef6a6a; margin-bottom: 6px;">TODAY · 15 GROUPS ON A DEPLOYMENTS ROW — AND 0.2.0 ADDED i / R / m ON TOP</div>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 6px 14px; background: #12090b; border: 1px solid #4a1d22; border-radius: 6px; font-size: 12px;">
+      <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+      <span><span style="color: #a78bfa;">g</span> <span style="color: #676780;">goto</span></span>
+      <span><span style="color: #a78bfa;">/</span> <span style="color: #676780;">filter</span></span>
+      <span><span style="color: #a78bfa;">space</span> <span style="color: #676780;">mark</span></span>
+      <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">yaml</span></span>
+      <span><span style="color: #a78bfa;">E</span> <span style="color: #676780;">edit</span></span>
+      <span><span style="color: #a78bfa;">e</span> <span style="color: #676780;">events</span></span>
+      <span><span style="color: #a78bfa;">t</span> <span style="color: #676780;">timeline</span></span>
+      <span style="color: #26263a;">│</span>
+      <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">open</span></span>
+      <span><span style="color: #a78bfa;">R</span> <span style="color: #676780;">rollout restart</span></span>
+      <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+      <span><span style="color: #a78bfa;">f</span> <span style="color: #676780;">forward</span></span>
+      <span style="color: #26263a;">│</span>
+      <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+      <span style="color: #26263a;">│</span>
+      <span><span style="color: #a78bfa;">n</span> <span style="color: #676780;">namespace</span></span>
+      <span><span style="color: #a78bfa;">c</span> <span style="color: #676780;">context</span></span>
+      <span><span style="color: #a78bfa;">a</span> <span style="color: #676780;">all namespaces</span></span>
+    </div>
+    <div style="font-size: 11px; color: #55556e; margin-top: 6px;">it wraps at 120 cols — the bar no longer fits the terminal it documents. Whatever wins below, the registry gains a `kind-scoped | global` flag and a rank; the bar renders from that, per the command-registry invariant.</div>
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 29A ══════════════════ -->
+    <div id="29a" data-screen-label="29a Verbs only — grammar never renders" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">29a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Verbs only — the bar shows what's different here, grammar lives in ?</span>
+        <span style="font-size: 12px; color: #676780;">class-based rule · global keys render exactly once, in <a href="#7b">7b</a></span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Deployments</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>ROLLOUT</span><span>IMAGE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #9a9ab2;">4/4</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-worker:3.4.1</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-gateway</span><span style="color: #9a9ab2;">3/3</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-gateway:2.1.0</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-scheduler</span><span style="color: #9a9ab2;">1/1</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-scheduler:1.9.4</span><span style="color: #676780; text-align: right;">34d</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 4 stable</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">pods</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+          <span><span style="color: #a78bfa;">R</span> <span style="color: #676780;">restart</span></span>
+          <span><span style="color: #a78bfa;">f</span> <span style="color: #676780;">forward</span></span>
+          <span style="color: #26263a;">│</span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <div style="width: 960px; display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 4px 14px; font-size: 11px; padding: 8px 14px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px;">
+        <span style="color: #55556e;">stays</span>
+        <span style="color: #9a9ab2;">↵ · i · +/− · R · f · ctrl-d — the six verbs that only exist on this kind</span>
+        <span style="color: #55556e;">moves to ?</span>
+        <span style="color: #676780;">g / space y E e t m n c a esc — identical on every screen, learned once, indexed forever in <a href="#7b">7b</a></span>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The rule is a class, not a judgment call:</span> a verb renders in the bar iff its registry entry is kind-scoped. Global grammar (goto, filter, mark, yaml, edit, events, timeline, meta, scopes) is by definition the same everywhere — a legend that repeats it on every screen is teaching you what you already know, at the cost of the keys you came for.</li>
+          <li><span style="color: #e9e2ff;">Nothing is removed from the app</span> — every retired key keeps working and stays in the <a href="#7b">7b</a> overlay, whose Scope + Global columns were built for exactly this. The keybar's right slot renames from `? help` to `? all keys` so the contract is explicit.</li>
+          <li>Labels compress with the count: `rollout restart` → `restart`, `pods of deployment` → `pods` — at six groups each label can be one word and still be unambiguous.</li>
+          <li>Fails if a global key is genuinely undiscoverable — the mitigation is 29c's teaching layer, which composes with this rule.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 29B ══════════════════ -->
+    <div id="29b" data-screen-label="29b Slot budget with honest overflow" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">29b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Slot budget — rank everything, render what fits, count the rest</span>
+        <span style="font-size: 12px; color: #676780;">width-aware · the `… N more` slot is always honest</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Deployments</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>ROLLOUT</span><span>IMAGE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #9a9ab2;">4/4</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-worker:3.4.1</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-gateway</span><span style="color: #9a9ab2;">3/3</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-gateway:2.1.0</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 5 stable</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">pods</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+          <span><span style="color: #a78bfa;">R</span> <span style="color: #676780;">restart</span></span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">yaml</span></span>
+          <span><span style="color: #a78bfa;">/</span> <span style="color: #676780;">filter</span></span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">… 9 more</span></span>
+        </div>
+      </div>
+
+      <div style="width: 640px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
+        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">SAME RULE AT 90 COLS — THE BUDGET SHRINKS, THE COUNT GROWS</div>
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">pods</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">… 13 more</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Rank is data on the registry entry:</span> kind-scoped verbs first, then globals by measured session frequency (`/` and `y` earn slots on wide terminals; `a`, `c`, `t` never do). The bar fills rank-order until the next group wouldn't fit, then renders `? … N more`. One renderer, every width — no hand-tuned per-kind bars.</li>
+          <li><span style="color: #e9e2ff;">The overflow slot is a contract, not an ellipsis:</span> N is the exact count of live, applicable verbs not shown, and `?` opens <a href="#7b">7b</a> with those N sorted to the top. Nothing silently disappears.</li>
+          <li>Degrades exactly like the tables do at narrow widths — same philosophy as the min-size guard: show less, never lie.</li>
+          <li>Weakness: rank-by-frequency means the bar can differ subtly between screens of the same kind class, and between users once frequency is personal — 29a's class rule is more predictable; this is the choice if predictability loses to utility.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 29C ══════════════════ -->
+    <div id="29c" data-screen-label="29c Teaching bar that retires learned keys" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">29c</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Training wheels — keys you've learned stop rendering</span>
+        <span style="font-size: 12px; color: #676780;">per-user, in the versioned state dir · composes with 29a's class rule</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Deployments</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>ROLLOUT</span><span>IMAGE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #9a9ab2;">4/4</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-worker:3.4.1</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 64px 120px minmax(0,1.2fr) 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-gateway</span><span style="color: #9a9ab2;">3/3</span><span style="color: #676780;">stable</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">aim-gateway:2.1.0</span><span style="color: #676780; text-align: right;">21d</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 5 stable</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span> <span style="color: #44445c;">· new in 0.2</span></span>
+          <span><span style="color: #a78bfa;">f</span> <span style="color: #676780;">forward</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
+        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">SAME USER, DAY 1 — THE FULL TEACHING BAR</div>
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEPLOY</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">pods</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+          <span><span style="color: #a78bfa;">+/−</span> <span style="color: #676780;">scale</span></span>
+          <span><span style="color: #a78bfa;">R</span> <span style="color: #676780;">restart</span></span>
+          <span><span style="color: #a78bfa;">f</span> <span style="color: #676780;">forward</span></span>
+          <span style="color: #26263a;">│</span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The keybar's real job is teaching, and teaching ends.</span> A verb you've fired ≥15 times over ≥3 sessions retires from the bar — you've proven you don't read it. ↵ and R retired here; `i` stays with a `new in 0.2` tag because it shipped after your counts, `f` because you've never pressed it. The bar converges toward empty for experts and stays full for newcomers, with zero configuration.</li>
+          <li><span style="color: #e9e2ff;">Retired ≠ gone:</span> every key works forever and `? all keys` is the complete map (<a href="#7b">7b</a>). Counts live in the versioned per-user state (same file as recents), so the schema bump + migration rule applies; `keybar.teach: false` pins the day-1 bar for people who want a permanent legend.</li>
+          <li>Destructive verbs never retire — `ctrl-d` disappears only under 29a's class rule, never by learning; you don't want the delete affordance to be a memory test. (Shown composed with 29a: globals are already gone on day 1.)</li>
+          <li>Weakness: the bar becomes non-deterministic across machines and screenshots — docs and pairing suffer. If that kills it, 29a alone is the fallback; the `new in 0.2` tag is worth keeping regardless.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2100},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}"></script>
+</body>
+</html>
