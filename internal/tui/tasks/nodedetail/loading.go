@@ -115,18 +115,42 @@ func loadingCellBar(col components.Column, row int) string {
 	return strings.Repeat(loadingBarGlyph, n)
 }
 
-// loadingPodsPanel is the bottom pane's skeleton: the pods table's real
-// columns over loadingPodRows placeholder rows — same column set
+// loadingStripPlaceholder is podHealthStripLine's skeleton stand-in — a
+// placeholder bar plus its own rule underneath, reserving the same two
+// lines podHealthStripLine + podStripRule take, so the swap to the live
+// strip doesn't relayout the table beneath it.
+func loadingStripPlaceholder(theme tui.Theme, width int) string {
+	style := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	left := style.Render(strings.Repeat(loadingBarGlyph, 24))
+	return insetStripLine(padBetween(left, "", stripInnerWidth(width)), width) + "\n" + podStripRule(theme, width)
+}
+
+// loadingPodsFooterLine is Table.FooterLine's skeleton stand-in — "– of –"
+// plus an empty scrollbar track, duplicated from browse's own
+// loadingFooterLine per the repo's package-local-seam convention (calling
+// the real FooterLine here would show a real "1–5 of 5" range off the
+// skeleton's fake placeholder rows, not a loading look).
+func loadingPodsFooterLine(theme tui.Theme, width int) string {
+	const inset = 2
+	style := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	left := "– of –"
+	right := strings.Repeat("░", 6)
+
+	inner := max(width-2*inset, 0)
+	avail := inner - lipgloss.Width(left) - lipgloss.Width(right)
+	line := left
+	if avail >= 1 {
+		line = left + strings.Repeat(" ", avail) + right
+	}
+	return style.Render(components.Pad(strings.Repeat(" ", inset)+line, width))
+}
+
+// loadingPodsPanel is the bottom pane's skeleton: a placeholder strip line
+// (+ rule) over the pods table's real columns (+ header rule) over
+// loadingPodRows placeholder rows, plus a placeholder footer — same shape
 // podsPanel renders, so the swap to live pods is a fill-in, not a relayout.
 func (m Model) loadingPodsPanel(theme tui.Theme, width, height int) string {
-	cols := []components.Column{
-		{Title: "", Min: 1},
-		{Title: "Name", Min: 10, Flex: true},
-		{Title: "Namespace", Min: 12},
-		{Title: "MEM", Min: 8},
-		{Title: "CPU", Min: 8},
-		{Title: "Age", Min: 4, Align: components.AlignRight},
-	}
+	cols := podColumns()
 
 	rows := make([]components.Row, loadingPodRows)
 	for i := range rows {
@@ -143,14 +167,16 @@ func (m Model) loadingPodsPanel(theme tui.Theme, width, height int) string {
 	}
 
 	t := components.Table{
-		Columns:     cols,
-		Rows:        rows,
-		Selected:    -1,
-		Width:       width,
-		Height:      max(height-1, 1),
-		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),
+		Columns:        cols,
+		Rows:           rows,
+		Selected:       -1,
+		Width:          width,
+		Height:         max(height-3, 1),
+		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint),
+		ShowHeaderRule: true,
+		RuleStyle:      lipgloss.NewStyle().Foreground(theme.TextGhost2),
 	}
-	return t.Render()
+	return loadingStripPlaceholder(theme, width) + "\n" + t.Render() + "\n" + loadingPodsFooterLine(theme, width)
 }
 
 // loadingBody is 11b's applied 15a: the shell (breadcrumb, facts-panel
@@ -165,5 +191,5 @@ func (m Model) loadingBody(width, height int) string {
 
 	top := m.factsPanel(left, right, width, topHeight)
 	bottom := m.loadingPodsPanel(theme, width, bottomHeight)
-	return top + "\n" + bottom
+	return top + "\n" + podStripRule(theme, width) + "\n" + bottom
 }

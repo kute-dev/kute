@@ -1,7 +1,7 @@
 // Package nodedetail is 11b (docs/design/README.md §11b): a node's
 // CONDITIONS/ALLOCATED-ALLOCATABLE/TAINTS facts panel over the node's own
-// pods table (sorted by memory desc, so the greedy pod sits on top of a
-// MemoryPressure node). Reached from tasks/browse's Nodes list on 'enter'.
+// pods table (sorted unhealthy-first then name, the same order 2a's own
+// Pods list uses). Reached from tasks/browse's Nodes list on 'enter'.
 //
 // Pod-row 'enter' opens the same log-stream screen browse's 'l' verb does
 // (tasks/poddetail doesn't exist yet — Phase 5) rather than a stub; see the
@@ -23,10 +23,9 @@ import (
 )
 
 // MetricsReader is the live pod-usage seam nodedetail needs for the bottom
-// pane's MEM/CPU columns and memory-desc sort — same shape as
-// browse.MetricsReader, duplicated per the repo's package-local-seam
-// convention (CLAUDE.md: "define the interface you need in the task
-// package").
+// pane's MEM/CPU columns — same shape as browse.MetricsReader, duplicated
+// per the repo's package-local-seam convention (CLAUDE.md: "define the
+// interface you need in the task package").
 type MetricsReader interface {
 	PodMetricsByNamespace(ctx context.Context, namespace string) (map[string]kube.PodMetrics, error)
 }
@@ -90,12 +89,16 @@ type allocation struct {
 	cpuMilli, memBytes, pods int64
 }
 
+// nodePodRow is one bottom-pane row: pod carries what the row's actions
+// (openPod/openLogs/openExec/openForward) key off; row is the same
+// resources.Row the Pod descriptor's Project func produces for browse's own
+// Pods list (Name/Namespace/Ready/Status/Restarts/CPU/MEM-placeholder/Node/
+// Age cells, Status/Glyph/GlyphClass) — reusing it is what gives this
+// screen's pods table the same kubectl-style status fidelity (Init:,
+// CrashLoopBackOff, OOMKilled, Terminating…) browse's table already has.
 type nodePodRow struct {
-	pod      kube.Pod
-	glyph    string
-	glyphBad bool
-	memText  string
-	cpuText  string
+	pod kube.Pod
+	row resources.Row
 }
 
 type Model struct {
@@ -156,7 +159,7 @@ type Model struct {
 }
 
 // loadedMsg carries one load()'s result: the node itself plus its pods
-// (already sorted memory-desc) and their summed requests.
+// (already sorted unhealthy-first then name) and their summed requests.
 type loadedMsg struct {
 	node        *corev1.Node
 	allocated   allocation

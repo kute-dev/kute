@@ -17,8 +17,7 @@ import (
 // match), sums their CPU/MEM requests against the node's Allocatable
 // capacity (ALLOCATED/ALLOCATABLE, docs/design README.md §11b — request
 // sums, not live usage, so this works even without metrics-server), and
-// best-effort enriches the pods with live usage for the MEM/CPU columns and
-// the memory-desc sort.
+// best-effort enriches the pods with live usage for the MEM/CPU columns.
 func (m Model) load() tea.Cmd {
 	lister := m.lister
 	metrics := m.metrics
@@ -43,6 +42,8 @@ func (m Model) load() tea.Cmd {
 			podMetrics, _ = metrics.PodMetricsByNamespace(ctx, "")
 		}
 
+		podDesc, _ := resources.DefaultRegistry().Descriptor(kube.KindPod)
+
 		var allocated allocation
 		rows := make([]nodePodRow, 0, len(podObjs))
 		for _, obj := range podObjs {
@@ -54,21 +55,18 @@ func (m Model) load() tea.Cmd {
 			allocated.cpuMilli += pod.CPURequestMilli
 			allocated.memBytes += pod.MEMRequestBytes
 
-			row := nodePodRow{pod: pod}
-			row.glyph, row.glyphBad = podGlyph(pod)
 			if pm, found := podMetrics[pod.Name]; found {
 				pod.CPU, pod.MEM = pm.CPU, pm.MEM
 				pod.CPUMilli, pod.MEMBytes = pm.CPUMilli, pm.MemBytes
 			}
-			row.pod = pod
-			row.cpuText, row.memText = usageText(pod.CPU), usageText(pod.MEM)
-			rows = append(rows, row)
+			rows = append(rows, nodePodRow{pod: pod, row: podDesc.Project(p)})
 		}
 		sort.SliceStable(rows, func(i, j int) bool {
-			if rows[i].pod.MEMBytes != rows[j].pod.MEMBytes {
-				return rows[i].pod.MEMBytes > rows[j].pod.MEMBytes
+			ri, rj := healthRank(rows[i].row.Status), healthRank(rows[j].row.Status)
+			if ri != rj {
+				return ri < rj
 			}
-			return strings.Compare(rows[i].pod.Name, rows[j].pod.Name) < 0
+			return strings.Compare(strings.ToLower(rows[i].pod.Name), strings.ToLower(rows[j].pod.Name)) < 0
 		})
 
 		return loadedMsg{
@@ -111,29 +109,19 @@ func nodeDetailTerminalPod(p *corev1.Pod) bool {
 	return p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed
 }
 
-// podGlyph classifies a pod for the bottom pane's leading status glyph —
-// the same reasoning resources.projectPod applies, kept local since
-// nodedetail works from kube.Pod (PodFromObject), not a runtime.Object.
-func podGlyph(p kube.Pod) (glyph string, bad bool) {
-	switch {
-	case p.Deleting:
-		return "◌", false
-	case strings.Contains(p.Reason, "CrashLoop"):
-		return "✕", true
-	case p.Status == string(corev1.PodFailed):
-		return "✕", true
-	case p.Status == string(corev1.PodSucceeded):
-		return "○", false
-	case p.Status == string(corev1.PodPending):
-		return "◐", false
+// healthRank orders StatusClass worst-first — failing/warning rows sort to
+// the top, neutral rows sink to the bottom — duplicated from browse's own
+// healthRank per the repo's package-local-seam convention, so this screen's
+// pods sort exactly like 2a's own Pods list (unhealthy-first, then name).
+func healthRank(class resources.StatusClass) int {
+	switch class {
+	case resources.StatusFail:
+		return 0
+	case resources.StatusWarn:
+		return 1
+	case resources.StatusOK:
+		return 2
 	default:
-		return "●", false
+		return 3
 	}
-}
-
-func usageText(v string) string {
-	if v == "" || v == "n/a" {
-		return "–"
-	}
-	return v
 }

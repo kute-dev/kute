@@ -104,11 +104,19 @@ func step(t *testing.T, m Model, msg tea.Msg) Model {
 }
 
 func TestLoadRendersConditionsAllocationAndPods(t *testing.T) {
+	// "small" is crashlooping — pins that the sort is unhealthy-first (same
+	// as 2a's own Pods list), not alphabetical: "big" would otherwise sort
+	// first on name alone.
+	small := schedPod("default", "small", "node-a", "512Mi")
+	small.Status.ContainerStatuses[0] = corev1.ContainerStatus{
+		Ready: false,
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+	}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {testNode("node-a", corev1.Taint{Key: "dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule})},
 		kube.KindPod: {
 			schedPod("default", "big", "node-a", "2Gi"),
-			schedPod("default", "small", "node-a", "512Mi"),
+			small,
 			schedPod("default", "elsewhere", "other-node", "1Gi"),
 		},
 	}}
@@ -122,8 +130,8 @@ func TestLoadRendersConditionsAllocationAndPods(t *testing.T) {
 	if len(m.pods) != 2 {
 		t.Fatalf("pods = %d, want 2 (elsewhere's pod must be excluded)", len(m.pods))
 	}
-	if m.pods[0].pod.Name != "big" {
-		t.Fatalf("expected memory-desc sort to put 'big' first, got %q", m.pods[0].pod.Name)
+	if m.pods[0].pod.Name != "small" {
+		t.Fatalf("expected unhealthy-first sort to put crashlooping 'small' first, got %q", m.pods[0].pod.Name)
 	}
 	if m.allocated.memBytes == 0 {
 		t.Fatal("expected allocated memBytes to sum both scheduled pods' requests")
@@ -157,7 +165,10 @@ func TestNotReadyConditionRendersRedNotYellow(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	view := m.Render()
-	re := regexp.MustCompile(`\x1b\[([0-9;]+)mReady false`)
+	// [^\x1b]* skips the leading glyph + space conditionLines() now prefixes
+	// onto "Ready false" (same styled span, so the captured color code still
+	// applies) without hardcoding which glyph character it is.
+	re := regexp.MustCompile(`\x1b\[([0-9;]+)m[^\x1b]*Ready false`)
 	match := re.FindStringSubmatch(view)
 	if match == nil {
 		t.Fatalf("could not find the styled 'Ready false' condition line:\n%s", plain(view))
@@ -205,13 +216,15 @@ func TestActiveConditionAppendsAgeWithoutDanglingSeparator(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	view := plain(m.Render())
-	if !strings.Contains(view, "MemoryPressure true — system is low on memory · 5m") {
+	// Kute Spec.dc.html §11b never shows a "true" word on an active
+	// condition's line — glyph + color already say so.
+	if !strings.Contains(view, "MemoryPressure — system is low on memory · 5m") {
 		t.Fatalf("expected the message clause followed by age, got:\n%s", view)
 	}
-	if strings.Contains(view, "DiskPressure true — ") {
+	if strings.Contains(view, "DiskPressure — ") {
 		t.Fatalf("expected no dangling '— ' separator for an empty message, got:\n%s", view)
 	}
-	if !strings.Contains(view, "DiskPressure true · 5m") {
+	if !strings.Contains(view, "DiskPressure · 5m") {
 		t.Fatalf("expected the age still appended when the message is empty, got:\n%s", view)
 	}
 }
@@ -476,12 +489,3 @@ func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	return 1, nil
 }
 
-func TestPodGlyphShowsTerminatingOverStalePhase(t *testing.T) {
-	// A deleted pod keeps its last real phase ("Running") until the kubelet
-	// finishes tearing it down — Deleting must win regardless of Status.
-	pod := kube.Pod{Status: string(corev1.PodRunning), Deleting: true}
-	glyph, bad := podGlyph(pod)
-	if glyph != "◌" || bad {
-		t.Fatalf("deleting pod should show ◌/not-bad, got %s/%v", glyph, bad)
-	}
-}

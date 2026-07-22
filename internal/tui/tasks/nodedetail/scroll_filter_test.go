@@ -11,10 +11,11 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 )
 
-// manyPods builds n schedulable pods on node with distinct, ascending memory
-// requests so the memory-desc sort in load() gives a stable, predictable
-// order: pod-00 (smallest request) sorts last, pod-(n-1) (largest) sorts
-// first.
+// manyPods builds n schedulable, healthy pods on node — all tie at the same
+// health rank, so load()'s sort falls back to its name tiebreak, giving a
+// stable, predictable order: pod-00 sorts first, pod-(n-1) sorts last. The
+// distinct memory requests are unused by the sort (that only ever reads
+// live usage, never Requests) — kept only for schedPod's signature.
 func manyPods(node string, n int) []runtime.Object {
 	objs := make([]runtime.Object, n)
 	for i := range n {
@@ -46,9 +47,9 @@ func TestPodsListScrolls(t *testing.T) {
 		t.Fatalf("offset = %d before any movement, want 0", m.offset)
 	}
 
-	// Without a metrics reader every row's MEMBytes ties at 0, so load()'s
-	// sort falls back to its name tiebreak (ascending) — the last row here
-	// starts off the initial viewport regardless of which name that is.
+	// All 30 pods are healthy (same Status), so load()'s sort falls back to
+	// its name tiebreak (ascending) — the last row here starts off the
+	// initial viewport regardless of which name that is.
 	for range m.pods {
 		m.moveSelection(1)
 	}

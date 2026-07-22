@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
@@ -148,7 +150,11 @@ func (m Model) Body(width, height int) string {
 }
 
 // readyBody splits the body into 11b's top facts panel (CONDITIONS │
-// ALLOCATED/ALLOCATABLE + TAINTS) and bottom pods table.
+// ALLOCATED/ALLOCATABLE + TAINTS) and bottom pods table, with a rule
+// dividing the two — Kute Spec.dc.html §11b's facts-panel grid carries its
+// own border-bottom separating it from the strip below. panelHeights
+// already reserves exactly this one line (its "-1"), so this doesn't grow
+// the body past height.
 func (m Model) readyBody(width, height int) string {
 	theme := m.Theme()
 	left := m.conditionsBlock(theme)
@@ -157,7 +163,7 @@ func (m Model) readyBody(width, height int) string {
 
 	top := m.factsPanel(left, right, width, topHeight)
 	bottom := m.podsPanel(width, bottomHeight)
-	return top + "\n" + bottom
+	return top + "\n" + podStripRule(theme, width) + "\n" + bottom
 }
 
 // panelHeights splits the ready body's height between the top facts panel
@@ -179,7 +185,11 @@ func (m Model) tableDataRows() int {
 	left := m.conditionsBlock(theme)
 	right := m.allocationBlock(theme)
 	_, bottomHeight := panelHeights(body, len(left), len(right))
-	return max(bottomHeight-2, 1)
+	// -5: podsPanel's own health-strip line + its rule (2 lines) and the
+	// table's FooterLine (1 line) sit outside the table's own Height budget
+	// (bottomHeight-3, see podsPanel), which itself reserves 1 line for the
+	// column header and 1 more for ShowHeaderRule's divider.
+	return max(bottomHeight-5, 1)
 }
 
 // factsPanel lays left/right out side by side, line by line — each block's
@@ -219,7 +229,9 @@ func (m Model) conditionLines() []string {
 	good := lipgloss.NewStyle().Foreground(theme.Good)
 	warn := lipgloss.NewStyle().Foreground(theme.Warn)
 	bad := lipgloss.NewStyle().Foreground(theme.Bad)
+	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextGhost)
 
 	lines := make([]string, 0, len(m.node.Status.Conditions))
 	for _, c := range m.node.Status.Conditions {
@@ -227,25 +239,34 @@ func (m Model) conditionLines() []string {
 		label := string(c.Type)
 		switch {
 		case c.Type == corev1.NodeReady && active:
-			lines = append(lines, good.Render(label+" true"))
+			// Kute Spec.dc.html §11b: the healthy line is glyph + label only
+			// — no "true" word — and the label itself stays dim (only the
+			// glyph carries the green), the same "healthy state renders dim,
+			// not green" carve-out 11a's own STATUS/ROLLOUT columns use.
+			lines = append(lines, good.Render(tui.GlyphRunning)+" "+secondary.Render(label))
 		case c.Type == corev1.NodeReady:
 			// docs/design README.md §11a: NotReady renders red on the nodes
 			// list (the identical signal) — this detail screen previously
 			// diverged with yellow for the same condition.
-			lines = append(lines, bad.Render(label+" false"))
+			lines = append(lines, bad.Render(tui.GlyphFailed+" "+label+" false"))
 		case active:
 			// docs/design README.md §11b: "active pressure yellow with
 			// kubelet message + age" — the message clause is only appended
 			// when non-empty, so a condition with no kubelet message doesn't
-			// leave a dangling "— " with nothing after it.
-			line := label + " true"
+			// leave a dangling "— " with nothing after it. Kute Spec.dc.html
+			// §11b: no "true" word, and the message/age trail dims separately
+			// from the yellow glyph+label.
+			line := warn.Render(tui.GlyphPending) + " " + warn.Render(label)
 			if c.Message != "" {
-				line += " — " + c.Message
+				line += dim.Render(" — " + c.Message)
 			}
-			line += " · " + shortAge(time.Since(c.LastTransitionTime.Time))
-			lines = append(lines, warn.Render(line))
+			line += dim.Render(" · " + shortAge(time.Since(c.LastTransitionTime.Time)))
+			lines = append(lines, line)
 		default:
-			lines = append(lines, dim.Render(label+" false"))
+			// Kute Spec.dc.html §11b: glyph green (no pressure = healthy),
+			// label dim, and "false" itself a shade dimmer still than the
+			// label.
+			lines = append(lines, good.Render(tui.GlyphRunning)+" "+secondary.Render(label)+" "+faint.Render("false"))
 		}
 	}
 	return lines
@@ -316,55 +337,271 @@ func formatBytes(v int64) string {
 	}
 }
 
-// podsPanel renders the node's pods table — 11b's bottom half, already
-// sorted memory-desc by load().
+// podColumns builds 11b's bottom-pane column spec by reusing browse's own
+// Pods-list machinery (resources.Columns over the Pod descriptor, then the
+// same "Restarts" → ↺ relabel browse's browseColumns applies), with NODE
+// swapped for NAMESPACE since every row here is already scoped to this
+// node — the one deliberate divergence from a literal copy of 2a's table.
+func podColumns() []components.Column {
+	desc, _ := resources.DefaultRegistry().Descriptor(kube.KindPod)
+	titles := make([]string, len(desc.Columns))
+	for i, title := range desc.Columns {
+		if title == "Node" {
+			title = "Namespace"
+		}
+		titles[i] = title
+	}
+	desc.Columns = titles
+
+	cols := resources.Columns(desc)
+	for i := range cols {
+		switch cols[i].Title {
+		case "Restarts":
+			cols[i].Title = tui.GlyphRestarts
+		case "Namespace":
+			// resources.fixedWidths has no "Namespace" entry (Forwards' own
+			// Namespace column relies on its plain len+2 fallback) — 12 is
+			// this screen's own previous hardcoded width, kept local so it
+			// doesn't change Forwards' column width too.
+			cols[i].Min = 12
+		}
+	}
+	return cols
+}
+
+// podRowStyles is 11b's per-cell palette for the pods table — the same
+// per-status/per-column colors browse's own newRowCellStyles resolves for
+// its Pods list, duplicated locally per the repo's package-local-seam
+// convention (no muted/marked variants: neither applies to this screen).
+type podRowStyles struct {
+	name, nameBad, ready, restartsZero, restartsHot, dim lipgloss.Style
+	bars                                                 components.BarStyles
+	status                                               map[resources.StatusClass]lipgloss.Style
+}
+
+func newPodRowStyles(theme tui.Theme, selected bool) podRowStyles {
+	style := func(fg lipgloss.Color) lipgloss.Style {
+		s := lipgloss.NewStyle().Foreground(fg)
+		if selected {
+			s = s.Background(theme.SelBg)
+		}
+		return s
+	}
+	name := style(theme.TextPrimary)
+	if selected {
+		name = style(theme.Text) // the one cell that brightens on selection, mirroring browse
+	}
+	nameBad := style(theme.BadText)
+	if selected {
+		nameBad = name // selection brightening wins over the crashloop tint, same as browse
+	}
+	warn := style(theme.Warn)
+	return podRowStyles{
+		name:         name,
+		nameBad:      nameBad,
+		ready:        style(theme.TextSecondary),
+		restartsZero: style(theme.TextDim),
+		restartsHot:  warn,
+		dim:          style(theme.TextDim),
+		bars: components.BarStyles{
+			Track: style(theme.BarTrack),
+			Fill:  style(theme.Accent),
+			Warn:  warn,
+			Bad:   warn, // relative-to-busiest-pod bar, same reasoning as browse's metricCell
+		},
+		status: map[resources.StatusClass]lipgloss.Style{
+			resources.StatusOK:      style(theme.Good),
+			resources.StatusWarn:    style(theme.Warn),
+			resources.StatusFail:    style(theme.Bad),
+			resources.StatusNeutral: style(theme.Info),
+		},
+	}
+}
+
+// podDefaultGlyph/podGlyphColor mirror browse's defaultGlyphFor/glyphColor
+// (StatusClass → glyph/color), duplicated locally per the repo's
+// package-local-seam convention — used by the health strip's per-class
+// segments (row-level glyphs come from resources.Row.Glyph directly, since
+// projectPod always sets one for Pods).
+func podDefaultGlyph(class resources.StatusClass) string {
+	switch class {
+	case resources.StatusOK:
+		return tui.GlyphRunning
+	case resources.StatusWarn:
+		return tui.GlyphPending
+	case resources.StatusFail:
+		return tui.GlyphFailed
+	default:
+		return tui.GlyphCompleted
+	}
+}
+
+func podGlyphColor(theme tui.Theme, class resources.StatusClass) lipgloss.Color {
+	switch class {
+	case resources.StatusOK:
+		return theme.Good
+	case resources.StatusWarn:
+		return theme.Warn
+	case resources.StatusFail:
+		return theme.Bad
+	default:
+		return theme.Info
+	}
+}
+
+// podMetricsMax finds the busiest CPU/MEM usage across every pod on this
+// node (m.allPods, not the filtered m.pods, so the bar scale doesn't jump
+// around while filtering) — the bar denominator podMetricCell uses, mirror
+// of browse's own metricsMax.
+func (m Model) podMetricsMax() (cpuMax, memMax int64) {
+	for _, r := range m.allPods {
+		cpuMax = max(cpuMax, r.pod.CPUMilli)
+		memMax = max(memMax, r.pod.MEMBytes)
+	}
+	return cpuMax, memMax
+}
+
+// podMetricCell renders one row's CPU/MEM cell: a MiniBar scaled to the
+// busiest pod on this node, then the compact usage value in dim — same
+// bar-width math as browse's own metricCell (resources.MetricColumnWidth).
+func podMetricCell(cpu bool, pod kube.Pod, maxVal int64, st podRowStyles) components.Cell {
+	const barWidth = 6
+	valWidth := resources.MetricColumnWidth - barWidth - 1
+
+	value, used := pod.MEM, pod.MEMBytes
+	if cpu {
+		value, used = pod.CPU, pod.CPUMilli
+	}
+	if value == "" || value == "n/a" {
+		value = "–"
+	}
+	valText := st.dim.Render(" " + components.Truncate(value, valWidth))
+	return components.Cell{Text: components.MiniBar(used, maxVal, barWidth, st.bars) + valText}
+}
+
+// podHealthStripLine renders the bottom pane's own per-status glyph+count
+// summary, directly above the pods table — the same "● N running · ◐ M
+// pending · ✕ K crashloop" shape browse's 2a health strip uses.
+// Descriptor.Health/HealthLabel are reused as-is (already wired for Pod in
+// the registry); only the glyph/color mapping and line layout are
+// duplicated locally, mirroring browse's healthStripLine/defaultGlyphFor/
+// glyphColor (the marks/grouping/CRD/node-count branches there don't apply
+// here). Tallies m.allPods, the pre-filter population — filterStripLine
+// already shows matched/total separately, the same split browse's own
+// filter strip vs. health strip has.
+func (m Model) podHealthStripLine(theme tui.Theme, width int) string {
+	desc, _ := resources.DefaultRegistry().Descriptor(kube.KindPod)
+	rows := make([]resources.Row, len(m.allPods))
+	for i, r := range m.allPods {
+		rows[i] = r.row
+	}
+	counts := desc.Health(rows)
+
+	numStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
+	labelStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	segments := []struct {
+		class resources.StatusClass
+		n     int
+	}{
+		{resources.StatusOK, counts.OK},
+		{resources.StatusWarn, counts.Warn},
+		{resources.StatusFail, counts.Fail},
+		{resources.StatusNeutral, counts.Neutral},
+	}
+	var parts []string
+	for _, seg := range segments {
+		if seg.n == 0 {
+			continue
+		}
+		glyphStyle := lipgloss.NewStyle().Foreground(podGlyphColor(theme, seg.class))
+		parts = append(parts, glyphStyle.Render(podDefaultGlyph(seg.class))+" "+
+			numStyle.Render(fmt.Sprintf("%d", seg.n))+" "+labelStyle.Render(desc.HealthLabel(seg.class)))
+	}
+	left := strings.Join(parts, "   ")
+	right := labelStyle.Render(fmt.Sprintf("%d pods", len(rows)))
+	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
+}
+
+// podStripRule draws a full-width horizontal rule — the same "border-bottom"
+// treatment Frame's own Strips get (internal/tui/chrome.go's stripRule/
+// rule), duplicated here since these dividers render inside the body
+// (readyBody's top/bottom-panel divider, and podsPanel's own divider under
+// the health-strip line) rather than through Frame's Strips band.
+func podStripRule(theme tui.Theme, width int) string {
+	return lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(strings.Repeat("─", width))
+}
+
+// podsPanel renders 11b's bottom half: a health-strip summary line (with its
+// own rule underneath, mirroring 2a's own strip/table treatment) over the
+// node's pods table — reusing browse's own Pods-list widget (columns,
+// per-status coloring, live CPU/MEM mini-bars, restart/crashloop tinting,
+// the rule between the column headers and the data rows, and the same
+// "1–N of M" + scrollbar FooterLine 2a's own table footer uses) instead of
+// this screen's old bespoke glyph/Name/Namespace/MEM/CPU/Age table. Rows
+// are already sorted unhealthy-first then name by load(), same as 2a.
 func (m Model) podsPanel(width, height int) string {
 	theme := m.Theme()
-	cols := []components.Column{
-		{Title: "", Min: 1},
-		{Title: "Name", Min: 10, Flex: true},
-		{Title: "Namespace", Min: 12},
-		{Title: "MEM", Min: 8},
-		{Title: "CPU", Min: 8},
-		{Title: "Age", Min: 4, Align: components.AlignRight},
-	}
+	strip := m.podHealthStripLine(theme, width) + "\n" + podStripRule(theme, width)
+
+	cols := podColumns()
+	cpuMax, memMax := m.podMetricsMax()
+	styles := [2]podRowStyles{newPodRowStyles(theme, false), newPodRowStyles(theme, true)}
+
 	rows := make([]components.Row, 0, len(m.pods))
 	for i, p := range m.pods {
-		nameStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
-		glyphStyle := lipgloss.NewStyle().Foreground(theme.Good)
-		if p.glyphBad {
-			glyphStyle = lipgloss.NewStyle().Foreground(theme.Bad)
-			nameStyle = lipgloss.NewStyle().Foreground(theme.BadText)
-		}
-		dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+		st := styles[0]
 		if i == m.selected {
-			nameStyle = nameStyle.Background(theme.SelBg)
-			glyphStyle = glyphStyle.Background(theme.SelBg)
-			dim = dim.Background(theme.SelBg)
+			st = styles[1]
 		}
-		rows = append(rows, components.Row{Cells: []components.Cell{
-			{Text: p.glyph, Style: glyphStyle},
-			{Text: p.pod.Name, Style: nameStyle},
-			{Text: p.pod.Namespace, Style: dim},
-			{Text: p.memText, Style: dim},
-			{Text: p.cpuText, Style: dim},
-			{Text: p.pod.Age, Style: dim},
-		}})
+		r := p.row
+		cells := resources.Cells(r, width, nil)
+		for c := range cells {
+			switch {
+			case c == 0: // status glyph column
+				cells[c].Style = st.status[r.Status]
+			case cols[c].Title == "Name":
+				base := st.name
+				if r.Status == resources.StatusFail {
+					base = st.nameBad
+				}
+				cells[c].Style = base
+			case cols[c].Title == "Ready":
+				cells[c].Style = st.ready
+			case cols[c].Title == "Status":
+				cells[c].Style = st.status[r.Status]
+			case cols[c].Title == tui.GlyphRestarts:
+				cells[c].Style = st.restartsHot
+				if cells[c].Text == "0" {
+					cells[c].Style = st.restartsZero
+				}
+			case cols[c].Title == "CPU":
+				cells[c] = podMetricCell(true, p.pod, cpuMax, st)
+			case cols[c].Title == "MEM":
+				cells[c] = podMetricCell(false, p.pod, memMax, st)
+			case cols[c].Title == "Namespace":
+				cells[c] = components.Cell{Text: r.Namespace, Style: st.dim}
+			default: // Age
+				cells[c].Style = st.dim
+			}
+		}
+		rows = append(rows, components.Row{Cells: cells})
 	}
 
 	t := components.Table{
-		Columns:     cols,
-		Rows:        rows,
-		Selected:    m.selected,
-		Offset:      m.offset,
-		Width:       width,
-		Height:      max(height-1, 1),
-		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),
-		SelBarStyle: lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg),
-		SelRowStyle: lipgloss.NewStyle().Background(theme.SelBg),
-		FooterStyle: lipgloss.NewStyle().Foreground(theme.TextGhost),
+		Columns:        cols,
+		Rows:           rows,
+		Selected:       m.selected,
+		Offset:         m.offset,
+		Width:          width,
+		Height:         max(height-3, 1),
+		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint),
+		SelBarStyle:    lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg),
+		SelRowStyle:    lipgloss.NewStyle().Background(theme.SelBg),
+		FooterStyle:    lipgloss.NewStyle().Foreground(theme.TextGhost),
+		ShowHeaderRule: true,
+		RuleStyle:      lipgloss.NewStyle().Foreground(theme.TextGhost2),
 	}
-	return t.Render()
+	return strip + "\n" + t.Render() + "\n" + t.FooterLine(width)
 }
 
 func (m Model) confirmBody(width, height int) string {

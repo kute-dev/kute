@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -50,44 +51,65 @@ func goldenNode() *corev1.Node {
 	}
 }
 
-// goldenNodePods is the node's own pods, pre-sorted memory-desc (the order
-// load() would produce) — the greedy pod causing MemoryPressure sits on top.
+// goldenNodePods is the node's own pods, pre-sorted unhealthy-first then
+// name (the order load() would produce, same as 2a's own Pods list) — the
+// crashlooping pod sits on top, the two healthy ones follow alphabetically.
 // Built as nodePodRow literals directly (bypassing load()'s corev1.Pod →
-// kube.PodFromObject path) because podsPanel renders kube.Pod.Age verbatim
-// (view.go:351 — the raw Go duration string, not the shortAge/shortDur
-// rounding poddetail's own AGE cell uses). That raw string carries
-// sub-second precision straight from time.Now(), so driving it through a
-// real load() would make the golden bytes drift between the UPDATE_GOLDEN
-// run and every later comparison run. Pre-built Age strings sidestep that.
+// kube.PodFromObject/resources.Project path) so the AGE cell (row.Cells'
+// last entry) is a fixed, deterministic string rather than something a real
+// Project call would derive from time.Since(creationTimestamp) — that would
+// make the golden bytes drift between the UPDATE_GOLDEN run and every later
+// comparison run.
 func goldenNodePods() []nodePodRow {
 	return []nodePodRow{
 		{
-			pod:     kube.Pod{Namespace: "nva-stage", Name: "nva-worker-9k2ss", Node: "worker-01", Age: "3h"},
-			glyph:   "●",
-			memText: "3.6Gi",
-			cpuText: "410m",
+			pod: kube.Pod{
+				Namespace: "nva-stage", Name: "cache-redis-6f8c2", Node: "worker-01", Age: "42m",
+				CPU: "180m", MEM: "2.1Gi", CPUMilli: 180, MEMBytes: 2254857830,
+			},
+			row: resources.Row{
+				Namespace: "nva-stage", Name: "cache-redis-6f8c2",
+				Cells:      []string{"cache-redis-6f8c2", "0/1", "CrashLoopBackOff", "5", "–", "–", "worker-01", "42m"},
+				Status:     resources.StatusFail,
+				Glyph:      "✕",
+				GlyphClass: resources.StatusFail,
+			},
 		},
 		{
-			pod:      kube.Pod{Namespace: "nva-stage", Name: "cache-redis-6f8c2", Node: "worker-01", Age: "42m"},
-			glyph:    "✕",
-			glyphBad: true,
-			memText:  "2.1Gi",
-			cpuText:  "180m",
+			pod: kube.Pod{
+				Namespace: "nva-stage", Name: "nva-worker-9k2ss", Node: "worker-01", Age: "3h",
+				CPU: "410m", MEM: "3.6Gi", CPUMilli: 410, MEMBytes: 3865470157,
+			},
+			row: resources.Row{
+				Namespace: "nva-stage", Name: "nva-worker-9k2ss",
+				Cells:      []string{"nva-worker-9k2ss", "1/1", "Running", "0", "–", "–", "worker-01", "3h"},
+				Status:     resources.StatusOK,
+				Glyph:      "●",
+				GlyphClass: resources.StatusOK,
+			},
 		},
 		{
-			pod:     kube.Pod{Namespace: "istio-system", Name: "sidecar-envoy-x4b2q", Node: "worker-01", Age: "6h"},
-			glyph:   "●",
-			memText: "512Mi",
-			cpuText: "35m",
+			pod: kube.Pod{
+				Namespace: "istio-system", Name: "sidecar-envoy-x4b2q", Node: "worker-01", Age: "6h",
+				CPU: "35m", MEM: "512Mi", CPUMilli: 35, MEMBytes: giByte / 2,
+			},
+			row: resources.Row{
+				Namespace: "istio-system", Name: "sidecar-envoy-x4b2q",
+				Cells:      []string{"sidecar-envoy-x4b2q", "1/1", "Running", "0", "–", "–", "worker-01", "6h"},
+				Status:     resources.StatusOK,
+				Glyph:      "●",
+				GlyphClass: resources.StatusOK,
+			},
 		},
 	}
 }
 
 // goldenNodeDetailModel builds one deterministic 11b model: a node with an
 // active MemoryPressure condition, allocated/allocatable bars (mem hot at
-// ~92%, cpu cool), one taint, and 3 of the node's own pods sorted memory-desc.
-// It skips m.Init()/load() and feeds the state straight in via loadedMsg —
-// see goldenNodePods' comment for why (podsPanel's raw Age string).
+// ~92%, cpu cool), one taint, and 3 of the node's own pods sorted
+// unhealthy-first then name. It skips m.Init()/load() and feeds the state
+// straight in via loadedMsg — see goldenNodePods' comment for why
+// (podsPanel's raw Age string).
 func goldenNodeDetailModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	node := goldenNode()
