@@ -128,7 +128,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 9a — Deployments list (exemplar for every non-pod kind)
 - **Not a new screen** — the pods skeleton (header · summary strip · table · keybar) with kind-specific columns: status glyph · NAME · READY · ROLLOUT · IMAGE · AGE. Unhealthy-first sort + `+ N stable` collapse carry over. Services, configmaps, etc. follow the same recipe.
 - ROLLOUT column: `stable` dim · `2m 14s ▸` yellow while progressing (IMAGE shows `new ← old` during transition) · `degraded` red.
-- Keys: `↵` = the deployment's pods (pods view with pre-applied filter, not a new view) · `r` rollout restart (non-destructive, no confirm — moved off `R` in 0.2.0 to make room for 25a's resources editor on the same row) · `R` resources editor (25a) · `y` yaml · `g` goto. Keybar pill `DEPLOY`.
+- Keys: `↵` = the deployment's pods (pods view with pre-applied filter, not a new view) · `ctrl-r` rollout restart (inline `y/N` confirm, PROD escalates to the type-the-name modal — moved off bare `r` post-0.2.0: `r` collides with the retry/refresh muscle memory used elsewhere, and an unconfirmed mutation on a single keypress was too easy to trigger by accident) · `R` resources editor (25a) · `y` yaml · `g` goto. Keybar pill `DEPLOY`.
 - **StatefulSets and DaemonSets get the same `↵` recipe** — pods view pre-filtered to the row's name, no rollout-restart verb (neither kind has one). Names still collide with the owning object's own pods since StatefulSet pods are `<name>-0, <name>-1, …` and DaemonSet pods are `<name>-<hash>`, so the existing fuzzy filter reads as an owner match with no extra mechanism.
 
 ### 9b — Events view (`e`)
@@ -275,7 +275,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `y` copies the decoded value of the cursor key (the only plaintext export); `Y` full-YAML copy keeps values base64. Multiline values expand to an indented block with the fold idiom. Keybar pill `SECRET`.
 
 ### 22a — RBAC who-can (registry kind, `g "who"`; `w` from a 403 card)
-- **A query, not a browser**: the summary strip holds the question — `who can list secrets in nva-stage` — with `v` verb · `k` resource · `n` namespace opening the palette shell to change each slot.
+- **A query, not a browser**: the summary strip holds the question — `who can list secrets in nva-stage` — with `v` verb · `K` resource · `n` namespace opening the palette shell to change each slot (`K`, not `k` — this screen's own `k`/`↑` already means move-up, so a lowercase intercept would have permanently shadowed movement here).
 - Columns: glyph · SUBJECT · KIND · VIA (`clusterrole/admin ← rb/admins`, ellipsized) · SCOPE (`namespace` dim / `cluster` blue). Resolution walks (Cluster)RoleBindings → (Cluster)Roles **from the watch cache — no server round-trip, works read-only**; wildcards and aggregated ClusterRoles resolve to the effective rule in VIA.
 - **Entry from 4b**: the 403 card gains `w who-can`, arriving with the failed verb+resource pre-filled and the current user pinned as a red `✕` row whose VIA explains the closest miss (`role/viewer grants get, list on pods — not secrets`).
 - `same as` strip shows the equivalent `kubectl auth can-i` (10a's idiom). `↵` opens the binding's YAML — the answer is always inspectable. Keybar pill `WHO CAN`.
@@ -304,7 +304,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-u full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
 
 ### 25a — Resources — set limits next to live usage (`R` on a workload)
-- **Key conflict resolved (0.2.0):** `R` here collided with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. Resolved in favor of this screen — rollout-restart moved to `r`; `R` now opens the resources editor on Deployment/StatefulSet/DaemonSet rows.
+- **Key conflict resolved (0.2.0):** `R` here collided with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. Resolved in favor of this screen — rollout-restart moved off `R`, then later off bare `r` too (onto `ctrl-r`, with an inline `y/N` confirm — see 9a); `R` now opens the resources editor on Deployment/StatefulSet/DaemonSet rows.
 - The fix for the OOMKill diagnosed in 5a. Strip under the header: container tabs, `usage: p95 over the last 6h · from the metrics poll`, right-aligned failure callout (`✕ OOMKilled 4m ago at the current limit`).
 - Table: FIELD · CURRENT · NEW · P95 USAGE, rows for cpu/mem request and limit. Each field's usage renders as a mini bar sourced from the metrics poll — the mem-limit row shows the bar pinned at capacity with the OOMKill context, so the new value is a decision, not a guess. No metrics → USAGE column reads `metrics unavailable` dim, editor still works.
 - Typing replaces the selected field's value; `+/−` nudges by unit steps (64Mi / 50m). Values parse as k8s quantities — an invalid quantity underlines red inline and blocks `↵`, never a modal (same inline-error idiom as 17a).
@@ -332,7 +332,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 27a — ConfigMap value edit (`↵` on a key, inside a ConfigMap's Data view)
 - A value-edit, not a YAML session. Strip under the header names every consumer from the watch (`deploy/aim-worker ↗ env`, `deploy/aim-gateway ↗ volume`), right-aligned `pods don't reload configmaps on their own`.
-- Table: KEY · VALUE · SIZE. Short values edit in place (prior value stays visible as `was info ·` while typing). Multi-line keys show a folded summary (`▸ 48 lines · e opens the buffer editor`) — `e` opens the 17a buffer editor scoped to just that value, same dry-run-first apply.
+- Table: KEY · VALUE · SIZE. Short values edit in place (prior value stays visible as `was info ·` while typing). Multi-line keys show a folded summary (`▸ 48 lines · e opens the buffer editor`) — `e` opens the 17a buffer editor scoped to just that value, same dry-run-first apply (apply key is `ctrl-o`, not 17a's `ctrl-s` — `ctrl-s` is the terminal XOFF key in some environments, so this screen's own buffer editor moved off it).
 - Two apply depths from the same row: `↵` applies without restarting anything (kute never restarts consumers on its own); `ctrl-r` chains the apply with `kubectl rollout restart` for every consuming workload and prints every command it runs.
 - Conflict handling matches 17a: the patch carries the observed resourceVersion; a concurrent change surfaces the diff/rebase/discard banner.
 - `will run` line: `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`.
@@ -371,7 +371,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `j/k` and `↑↓` are synonyms for movement everywhere; in detail view `j/k` means next/prev sibling resource.
 - Connection loss: switch to 4a automatically; keep the last snapshot; retry with exponential backoff and a visible countdown; disable mutating verbs. On reconnect, silently return to live and drop the stale strip.
 - RELATED/CONTROLLER links reuse the goto navigation (push detail view of the target).
-- **Destructive-action policy:** reversible verbs (cordon, rollout restart) execute immediately; delete = inline `y/N` in non-prod, type-the-name modal in PROD contexts; drain and force-delete get the modal always. The PROD flag comes from a kubeconfig annotation, never a name heuristic.
+- **Destructive-action policy:** reversible-and-immediate verbs (cordon) execute right away; delete and rollout restart are both tiered — inline `y/N` in non-prod, type-the-name modal in PROD contexts; drain and force-delete get the modal always. The PROD flag comes from a kubeconfig annotation, never a name heuristic.
 - `x` execs: single container → straight to shell; multiple → picker (10a). App suspends, shell takes the tty, exit restores the exact prior state.
 - `e` opens events (namespace-scoped from a list view; object-scoped from a detail view). `↵` on an event navigates to its object.
 - `y` opens the YAML view on any selected object, any kind.
@@ -387,7 +387,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Helm releases browse without the helm binary; rollback shells out with a `will run` line (18a).
 - Ingress/HTTPRoute `↵` opens a live routing table (23a/23b) — backends resolved from the watch, never a describe page; `p` on an HTTPRoute opens its parent Gateway.
 - `i` opens the set-image/tag editor on a workload row (24a); history comes from the watch cache (ReplicaSet revisions + cross-workload image sightings), never a registry call.
-- `R` on a workload row opens the resources editor (25a); 9a's rollout-restart moved to `r` to make room for it.
+- `R` on a workload row opens the resources editor (25a); 9a's rollout-restart moved to `ctrl-r` (inline `y/N` confirm) to make room for it.
 - `m` opens the labels/annotations editor (26a) on any object, CRDs included; selector-linked labels carry an inline join warning before you can edit them.
 - ConfigMap/Secret `Data` views: `↵` edits a value in place (27a), `a` inserts a new key as a line-insert (27b); `ctrl-r` on a ConfigMap value chains the apply with a rollout-restart of every consumer.
 - `U` opens the what's-new/update panel from anywhere (28a/28b), also reachable as `:update`; kute checks once per 24h and never self-updates — it only prints the detected package manager's upgrade command.
