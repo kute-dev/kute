@@ -310,7 +310,7 @@ func (m Model) multilineBody(theme tui.Theme, width, height int) string {
 	e := m.multiline
 	headerStyle := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	hintStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
-	header := headerStyle.Render(e.key) + hintStyle.Render("  ctrl-s apply · ctrl-r apply + restart consumers · esc discard")
+	header := headerStyle.Render(e.key) + hintStyle.Render("  ctrl-o apply · ctrl-r apply + restart consumers · esc discard")
 
 	willRun := m.willRunStrip(theme, width)
 	budget := height - 2 // header + blank line
@@ -411,7 +411,7 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 		}
 	case m.multiline != nil:
 		if !m.multiline.changed() {
-			primary = label.Render("will run") + fill.Render(" ") + cmd.Render("no changes — ctrl-s has nothing to apply")
+			primary = label.Render("will run") + fill.Render(" ") + cmd.Render("no changes — ctrl-o has nothing to apply")
 		} else {
 			primary = label.Render("will run") + fill.Render(" ") + cmd.Render(m.commandForKey(m.multiline.key))
 		}

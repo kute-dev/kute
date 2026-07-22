@@ -3,7 +3,7 @@
   2 keys                                                                                                                
   no consumers found                                                         pods don't reload configmaps on their own  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-nginx.conf  ctrl-s apply · ctrl-r apply + restart consumers · esc discard                                               
+nginx.conf  ctrl-o apply · ctrl-r apply + restart consumers · esc discard                                               
                                                                                                                         
    1  server {                                                                                                          
    2    listen 80;                                                                                                      
@@ -11,7 +11,7 @@ nginx.conf  ctrl-s apply · ctrl-r apply + restart consumers · esc discard
    4  }▎                                                                                                                
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  will run no changes — ctrl-s has nothing to apply                                                                     
+  will run no changes — ctrl-o has nothing to apply                                                                     
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -33,4 +33,4 @@ nginx.conf  ctrl-s apply · ctrl-r apply + restart consumers · esc discard
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   BUFFER EDITOR  ctrl-s apply  ctrl-r apply + restart consumers  esc discard                                           
+   BUFFER EDITOR  ctrl-o apply  ctrl-r apply + restart consumers  esc discard                                           

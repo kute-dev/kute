@@ -104,8 +104,10 @@ func (e editKeyState) changed() bool { return e.value != e.original }
 // for 17a's shared buffer editor (which doesn't exist yet): a small,
 // self-contained textarea scoped to one key's value, opened by 'e' (or '↵')
 // on a row whose value contains a newline. lines holds the buffer split on
-// '\n'; row/col is the cursor position. ctrl+s applies, ctrl+r applies and
-// restarts every consumer, esc cancels back to navigation without applying.
+// '\n'; row/col is the cursor position. ctrl+o applies (moved off ctrl+s,
+// which is the terminal's own XOFF flow-control key in some environments and
+// can read as a frozen app), ctrl+r applies and restarts every consumer, esc
+// cancels back to navigation without applying.
 type multilineEditState struct {
 	key      string
 	original []string

@@ -60,7 +60,7 @@ func (m Model) Keybar() tui.Keybar {
 			Pill:     tui.ModeBrowse,
 			PillText: "BUFFER EDITOR",
 			Groups: [][]tui.KeyHint{{
-				{Key: "ctrl-s", Label: "apply"},
+				{Key: "ctrl-o", Label: "apply"},
 				verbs.RestartConfigMapConsumers.Hint(),
 				{Key: "esc", Label: "discard"},
 			}},

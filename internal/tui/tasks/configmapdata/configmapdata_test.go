@@ -448,7 +448,7 @@ func TestEnterOnMultilineRowAlsoOpensBufferEditor(t *testing.T) {
 	}
 }
 
-func TestMultilineBufferEditorEditsAndAppliesWithCtrlS(t *testing.T) {
+func TestMultilineBufferEditorEditsAndAppliesWithCtrlO(t *testing.T) {
 	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "a\nb"})
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil)
@@ -456,7 +456,7 @@ func TestMultilineBufferEditorEditsAndAppliesWithCtrlS(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "e"})
 	// Cursor starts at the end of the last line ("b") — append 'c'.
 	m = step(t, m, tea.KeyPressMsg{Text: "c"})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+s"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+o"})
 
 	if m.multiline != nil {
 		t.Fatal("expected the buffer editor to close after a successful apply")
