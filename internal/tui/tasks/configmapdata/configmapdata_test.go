@@ -541,7 +541,7 @@ func TestKeybarGoesOfflineAndHidesAddRemove(t *testing.T) {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})
-	step(t, m, tea.KeyPressMsg{Text: "enter"})
+	_ = step(t, m, tea.KeyPressMsg{Text: "enter"})
 	if cm.Data["FEATURE_X"] != "" {
 		t.Fatalf("expected the add refused while offline, cm.Data = %+v", cm.Data)
 	}
