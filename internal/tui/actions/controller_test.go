@@ -11,11 +11,13 @@ import (
 )
 
 type fakeMutator struct {
-	deleted           []string
-	forceDeleted      []string
-	metaPatches       []string
-	secretDataPatches []string
-	err               error
+	deleted              []string
+	forceDeleted         []string
+	metaPatches          []string
+	secretDataPatches    []string
+	configMapDataPatches []string
+	rolloutRestarts      []string
+	err                  error
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, kind kube.ResourceKind, ns, name string) error {
@@ -28,7 +30,10 @@ func (f *fakeMutator) DeleteResourceForced(_ context.Context, kind kube.Resource
 	return f.err
 }
 
-func (f *fakeMutator) RolloutRestart(context.Context, string, string) error { return f.err }
+func (f *fakeMutator) RolloutRestart(_ context.Context, kind kube.ResourceKind, ns, name string) error {
+	f.rolloutRestarts = append(f.rolloutRestarts, string(kind)+"/"+ns+"/"+name)
+	return f.err
+}
 
 func (f *fakeMutator) Cordon(context.Context, string, bool) error { return f.err }
 
@@ -62,6 +67,15 @@ func (f *fakeMutator) PatchSecretData(_ context.Context, namespace, name, key, v
 		entry = key + "-"
 	}
 	f.secretDataPatches = append(f.secretDataPatches, namespace+"/"+name+" "+entry)
+	return f.err
+}
+
+func (f *fakeMutator) PatchConfigMapData(_ context.Context, namespace, name, key, value string, remove bool) error {
+	entry := key + "=" + value
+	if remove {
+		entry = key + "-"
+	}
+	f.configMapDataPatches = append(f.configMapDataPatches, namespace+"/"+name+" "+entry)
 	return f.err
 }
 
@@ -263,6 +277,67 @@ func TestExecuteDispatchesSecretDataToPatchSecretData(t *testing.T) {
 	}
 	if len(mut.secretDataPatches) != 1 || mut.secretDataPatches[0] != "default/aim-secrets SMTP_PASSWORD=hunter2-staging" {
 		t.Fatalf("secretDataPatches = %v, want one default/aim-secrets SMTP_PASSWORD=hunter2-staging patch", mut.secretDataPatches)
+	}
+}
+
+func TestExecuteDispatchesConfigMapDataToPatchConfigMapData(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID:    "add-configmap-key-default/aim-config/LOG_LEVEL",
+		Label: "Add key LOG_LEVEL to aim-config?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindConfigMap), ResourceName: "aim-config", Namespace: "default",
+			Verb: "configmap-data", IsMutating: true,
+			ConfigMapKey: "LOG_LEVEL", ConfigMapValue: "debug",
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected a TierNone configmap-data action to return an execution command")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.configMapDataPatches) != 1 || mut.configMapDataPatches[0] != "default/aim-config LOG_LEVEL=debug" {
+		t.Fatalf("configMapDataPatches = %v, want one default/aim-config LOG_LEVEL=debug patch", mut.configMapDataPatches)
+	}
+	if len(mut.rolloutRestarts) != 0 {
+		t.Fatalf("rolloutRestarts = %v, want none for a plain apply", mut.rolloutRestarts)
+	}
+}
+
+// TestExecuteConfigMapDataChainsRolloutRestart pins 27a's ctrl-r behavior:
+// the patch runs, then every consumer in ConfigMapConsumers gets its own
+// RolloutRestart call, kind carried through so a StatefulSet/DaemonSet
+// consumer restarts correctly rather than being coerced to Deployment.
+func TestExecuteConfigMapDataChainsRolloutRestart(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID:    "edit-configmap-key-default/aim-config/LOG_LEVEL",
+		Label: "Update key LOG_LEVEL on aim-config?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindConfigMap), ResourceName: "aim-config", Namespace: "default",
+			Verb: "configmap-data", IsMutating: true,
+			ConfigMapKey: "LOG_LEVEL", ConfigMapValue: "debug",
+			ConfigMapRestartConsumers: true,
+			ConfigMapConsumers: []kube.ConfigMapConsumerRef{
+				{Kind: kube.KindDeployment, Name: "aim-worker"},
+				{Kind: kube.KindStatefulSet, Name: "aim-db"},
+			},
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected a TierNone configmap-data action to return an execution command")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	want := []string{"Deployment/default/aim-worker", "StatefulSet/default/aim-db"}
+	if len(mut.rolloutRestarts) != len(want) || mut.rolloutRestarts[0] != want[0] || mut.rolloutRestarts[1] != want[1] {
+		t.Fatalf("rolloutRestarts = %v, want %v", mut.rolloutRestarts, want)
 	}
 }
 

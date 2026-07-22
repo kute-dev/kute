@@ -42,7 +42,9 @@ func (f *fakeMutator) DeleteResource(context.Context, kube.ResourceKind, string,
 func (f *fakeMutator) DeleteResourceForced(context.Context, kube.ResourceKind, string, string) error {
 	return nil
 }
-func (f *fakeMutator) RolloutRestart(context.Context, string, string) error { return nil }
+func (f *fakeMutator) RolloutRestart(context.Context, kube.ResourceKind, string, string) error {
+	return nil
+}
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error {
 	return nil
 }
@@ -75,6 +77,9 @@ func (f *fakeMutator) PatchSecretData(_ context.Context, namespace, name, key, v
 	} else {
 		f.secret.Data[key] = []byte(value)
 	}
+	return nil
+}
+func (f *fakeMutator) PatchConfigMapData(context.Context, string, string, string, string, bool) error {
 	return nil
 }
 

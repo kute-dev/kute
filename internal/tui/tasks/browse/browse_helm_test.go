@@ -180,9 +180,11 @@ func (f *fakeHelmMutator) DeleteResource(_ context.Context, _ kube.ResourceKind,
 func (f *fakeHelmMutator) DeleteResourceForced(_ context.Context, _ kube.ResourceKind, _, _ string) error {
 	return nil
 }
-func (f *fakeHelmMutator) RolloutRestart(_ context.Context, _, _ string) error { return nil }
-func (f *fakeHelmMutator) Cordon(_ context.Context, _ string, _ bool) error    { return nil }
-func (f *fakeHelmMutator) Drain(_ context.Context, _ string) (int, error)      { return 0, nil }
+func (f *fakeHelmMutator) RolloutRestart(_ context.Context, _ kube.ResourceKind, _, _ string) error {
+	return nil
+}
+func (f *fakeHelmMutator) Cordon(_ context.Context, _ string, _ bool) error { return nil }
+func (f *fakeHelmMutator) Drain(_ context.Context, _ string) (int, error)   { return 0, nil }
 func (f *fakeHelmMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
@@ -196,6 +198,9 @@ func (f *fakeHelmMutator) PatchMeta(context.Context, kube.ResourceKind, string, 
 	return nil
 }
 func (f *fakeHelmMutator) PatchSecretData(context.Context, string, string, string, string, bool) error {
+	return nil
+}
+func (f *fakeHelmMutator) PatchConfigMapData(context.Context, string, string, string, string, bool) error {
 	return nil
 }
 func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {

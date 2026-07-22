@@ -466,7 +466,9 @@ func (f *fakeMutator) DeleteResource(context.Context, kube.ResourceKind, string,
 func (f *fakeMutator) DeleteResourceForced(context.Context, kube.ResourceKind, string, string) error {
 	return nil
 }
-func (f *fakeMutator) RolloutRestart(context.Context, string, string) error    { return nil }
+func (f *fakeMutator) RolloutRestart(context.Context, kube.ResourceKind, string, string) error {
+	return nil
+}
 func (f *fakeMutator) Cordon(context.Context, string, bool) error              { return nil }
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error { return nil }
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
@@ -484,8 +486,10 @@ func (f *fakeMutator) PatchMeta(context.Context, kube.ResourceKind, string, stri
 func (f *fakeMutator) PatchSecretData(context.Context, string, string, string, string, bool) error {
 	return nil
 }
+func (f *fakeMutator) PatchConfigMapData(context.Context, string, string, string, string, bool) error {
+	return nil
+}
 func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	f.drained = append(f.drained, node)
 	return 1, nil
 }
-

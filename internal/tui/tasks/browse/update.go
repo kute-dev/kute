@@ -462,6 +462,9 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 	if task, cmd, ok := m.openSelectedSecretData(); ok {
 		return task, cmd, true
 	}
+	if task, cmd, ok := m.openSelectedConfigMapData(); ok {
+		return task, cmd, true
+	}
 	if cmd, ok := m.openSelectedNamespacePods(); ok {
 		return m, cmd, true
 	}
@@ -688,6 +691,22 @@ func (m Model) openSelectedSecretData() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, false
 	}
 	task, cmd := m.openSecretData(row.Namespace, row.Name, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// openSelectedConfigMapData pushes 27a for the selected ConfigMap row's Data
+// view. ok is false when the hook isn't wired, the current kind isn't
+// ConfigMap, or nothing's selected — so ↵ falls through to whatever the rest
+// of openSelectedEnter's chain (or ultimately nothing) resolves to.
+func (m Model) openSelectedConfigMapData() (tea.Model, tea.Cmd, bool) {
+	if m.openConfigMapData == nil || m.kind != kube.KindConfigMap {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	task, cmd := m.openConfigMapData(row.Namespace, row.Name, m.width, m.height)
 	return task, cmd, task != nil
 }
 

@@ -88,6 +88,19 @@ type TaskScope struct {
 	SecretKey    string
 	SecretValue  string
 	SecretRemove bool
+	// ConfigMapKey/ConfigMapValue/ConfigMapRemove are a "configmap-data" verb's
+	// (27a) target ConfigMap data-key edit. ConfigMapRemove true is a ctrl-d
+	// key removal (ConfigMapValue is "" in that case). Empty/false for every
+	// other verb.
+	ConfigMapKey    string
+	ConfigMapValue  string
+	ConfigMapRemove bool
+	// ConfigMapRestartConsumers/ConfigMapConsumers are a "configmap-data"
+	// edit/add's ctrl-r commit (27a) — chains the patch with a RolloutRestart
+	// of every entry in ConfigMapConsumers. Empty/false for a plain ↵ apply
+	// or any removal.
+	ConfigMapRestartConsumers bool
+	ConfigMapConsumers        []kube.ConfigMapConsumerRef
 }
 
 // TaskAction describes an operation available from a task screen.

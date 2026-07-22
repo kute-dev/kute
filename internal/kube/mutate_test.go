@@ -22,7 +22,7 @@ func TestRolloutRestartPatchesTemplateAnnotation(t *testing.T) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
 	c, cs := newTestCluster(deploy)
 
-	if err := c.RolloutRestart(context.Background(), "default", "api"); err != nil {
+	if err := c.RolloutRestart(context.Background(), KindDeployment, "default", "api"); err != nil {
 		t.Fatalf("RolloutRestart: %v", err)
 	}
 	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
@@ -34,11 +34,45 @@ func TestRolloutRestartPatchesTemplateAnnotation(t *testing.T) {
 	}
 }
 
+// TestRolloutRestartCoversStatefulSetAndDaemonSet pins 27a's own reason for
+// generalizing RolloutRestart beyond Deployment: ctrl-r has to be able to
+// restart a ConfigMap's consumer regardless of which of the three pod-
+// template kinds it is.
+func TestRolloutRestartCoversStatefulSetAndDaemonSet(t *testing.T) {
+	t.Parallel()
+	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "default"}}
+	ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: "default"}}
+	c, cs := newTestCluster(sts, ds)
+	ctx := context.Background()
+
+	if err := c.RolloutRestart(ctx, KindStatefulSet, "default", "worker"); err != nil {
+		t.Fatalf("RolloutRestart statefulset: %v", err)
+	}
+	gotSts, err := cs.AppsV1().StatefulSets("default").Get(ctx, "worker", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get statefulset: %v", err)
+	}
+	if _, ok := gotSts.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]; !ok {
+		t.Fatalf("expected restartedAt annotation on statefulset, got %+v", gotSts.Spec.Template.Annotations)
+	}
+
+	if err := c.RolloutRestart(ctx, KindDaemonSet, "default", "agent"); err != nil {
+		t.Fatalf("RolloutRestart daemonset: %v", err)
+	}
+	gotDs, err := cs.AppsV1().DaemonSets("default").Get(ctx, "agent", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get daemonset: %v", err)
+	}
+	if _, ok := gotDs.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"]; !ok {
+		t.Fatalf("expected restartedAt annotation on daemonset, got %+v", gotDs.Spec.Template.Annotations)
+	}
+}
+
 func TestRolloutRestartRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.RolloutRestart(context.Background(), "default", ""); err == nil {
-		t.Fatalf("expected an error for an empty deployment name")
+	if err := c.RolloutRestart(context.Background(), KindDeployment, "default", ""); err == nil {
+		t.Fatalf("expected an error for an empty name")
 	}
 }
 
@@ -487,6 +521,105 @@ func TestPatchSecretDataRejectsEmptyName(t *testing.T) {
 	c, _ := newTestCluster()
 	if err := c.PatchSecretData(context.Background(), "default", "", "k", "v", false); err == nil {
 		t.Fatal("expected an error for an empty secret name")
+	}
+}
+
+// TestConfigMapDataCommandStringRendersValueVerbatim pins 27a's own
+// deliberate departure from SecretDataCommandString: a ConfigMap value isn't
+// sensitive, so the will-run line prints it as-is rather than masking it.
+func TestConfigMapDataCommandStringRendersValueVerbatim(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		key    string
+		value  string
+		remove bool
+		want   string
+	}{
+		{
+			name:  "add renders the real value",
+			key:   "LOG_LEVEL",
+			value: "debug",
+			want:  `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`,
+		},
+		{
+			name:   "removal renders the null literal",
+			key:    "LOG_LEVEL",
+			remove: true,
+			want:   `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":null}}' -n aim-stage`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ConfigMapDataCommandString("aim-stage", "aim-config", tt.key, tt.value, tt.remove)
+			if got != tt.want {
+				t.Errorf("ConfigMapDataCommandString = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfigMapConsumerRestartCommandStringAcrossKinds(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		ref  ConfigMapConsumerRef
+		want string
+	}{
+		{ConfigMapConsumerRef{Kind: KindDeployment, Name: "aim-worker"}, "kubectl rollout restart deploy/aim-worker -n aim-stage"},
+		{ConfigMapConsumerRef{Kind: KindStatefulSet, Name: "aim-db"}, "kubectl rollout restart sts/aim-db -n aim-stage"},
+		{ConfigMapConsumerRef{Kind: KindDaemonSet, Name: "aim-agent"}, "kubectl rollout restart ds/aim-agent -n aim-stage"},
+	}
+	for _, tt := range tests {
+		got := ConfigMapConsumerRestartCommandString("aim-stage", tt.ref)
+		if got != tt.want {
+			t.Errorf("ConfigMapConsumerRestartCommandString(%+v) = %q, want %q", tt.ref, got, tt.want)
+		}
+	}
+}
+
+// TestPatchConfigMapDataSetsAndRemovesKeys pins the patch shape
+// PatchConfigMapData sends against the fake clientset's tracker.
+func TestPatchConfigMapDataSetsAndRemovesKeys(t *testing.T) {
+	t.Parallel()
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "aim-config", Namespace: "default"},
+		Data:       map[string]string{"LOG_LEVEL": "info"},
+	}
+	c, cs := newTestCluster(cm)
+	ctx := context.Background()
+
+	if err := c.PatchConfigMapData(ctx, "default", "aim-config", "FEATURE_X", "on", false); err != nil {
+		t.Fatalf("PatchConfigMapData add: %v", err)
+	}
+	got, err := cs.CoreV1().ConfigMaps("default").Get(ctx, "aim-config", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Data["FEATURE_X"] != "on" {
+		t.Errorf("data[FEATURE_X] = %q, want on", got.Data["FEATURE_X"])
+	}
+	if got.Data["LOG_LEVEL"] != "info" {
+		t.Errorf("existing key data[LOG_LEVEL] = %q, want unchanged", got.Data["LOG_LEVEL"])
+	}
+
+	if err := c.PatchConfigMapData(ctx, "default", "aim-config", "LOG_LEVEL", "", true); err != nil {
+		t.Fatalf("PatchConfigMapData remove: %v", err)
+	}
+	got, err = cs.CoreV1().ConfigMaps("default").Get(ctx, "aim-config", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if _, ok := got.Data["LOG_LEVEL"]; ok {
+		t.Errorf("expected LOG_LEVEL removed, got %+v", got.Data)
+	}
+}
+
+func TestPatchConfigMapDataRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.PatchConfigMapData(context.Background(), "default", "", "k", "v", false); err == nil {
+		t.Fatal("expected an error for an empty configmap name")
 	}
 }
 

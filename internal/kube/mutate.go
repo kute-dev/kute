@@ -25,10 +25,13 @@ type Mutator interface {
 	DeleteResource(ctx context.Context, kind ResourceKind, namespace, name string) error
 	// DeleteResourceForced deletes immediately (grace period 0 — ctrl-k).
 	DeleteResourceForced(ctx context.Context, kind ResourceKind, namespace, name string) error
-	// RolloutRestart patches deployment's pod template with a fresh
-	// restartedAt annotation, the same mechanism `kubectl rollout restart`
-	// uses to trigger a new rollout without changing the spec.
-	RolloutRestart(ctx context.Context, namespace, deployment string) error
+	// RolloutRestart patches kind's pod template with a fresh restartedAt
+	// annotation, the same mechanism `kubectl rollout restart` uses to
+	// trigger a new rollout without changing the spec. Deployment,
+	// StatefulSet, and DaemonSet are the three kinds with a pod template
+	// browse exposes it on (9a's own 'r'; 27a's ctrl-r restarts a
+	// ConfigMap's consumers regardless of which of the three they are).
+	RolloutRestart(ctx context.Context, kind ResourceKind, namespace, name string) error
 	// Cordon sets (cordon=true) or clears spec.unschedulable on node.
 	Cordon(ctx context.Context, node string, cordon bool) error
 	// Drain cordons node then evicts every evictable pod on it (skipping
@@ -69,6 +72,21 @@ type Mutator interface {
 	// otherwise sets key=value via .stringData, so the API server does the
 	// base64 encoding, not the caller.
 	PatchSecretData(ctx context.Context, namespace, name, key, value string, remove bool) error
+	// PatchConfigMapData sets or removes a single key in a ConfigMap's data —
+	// 27a's value-edit editor. remove=true deletes the key (a JSON-merge-patch
+	// null under .data, same idiom as PatchSecretData's removal); otherwise
+	// sets key=value directly under .data — unlike Secret, ConfigMap's .data
+	// is already plain text, so there's no .stringData split to make.
+	PatchConfigMapData(ctx context.Context, namespace, name, key, value string, remove bool) error
+}
+
+// ConfigMapConsumerRef is one workload that references a ConfigMap from its
+// pod template (27a's consumer strip / ctrl-r restart set) — the kind is
+// carried alongside the name since ctrl-r's RolloutRestart call needs it and
+// a consumer can be a Deployment, StatefulSet, or DaemonSet.
+type ConfigMapConsumerRef struct {
+	Kind ResourceKind
+	Name string
 }
 
 // DeleteResource implements Mutator against the live clientset. It maps the kind
@@ -127,19 +145,28 @@ func (c *Cluster) deleteResource(ctx context.Context, kind ResourceKind, namespa
 	}
 }
 
-// RolloutRestart patches deployment's pod template annotations with a fresh
+// RolloutRestart patches kind's pod template annotations with a fresh
 // restartedAt timestamp — the same strategic-merge patch `kubectl rollout
-// restart` issues — which the deployment controller treats as a template
-// change and rolls out.
-func (c *Cluster) RolloutRestart(ctx context.Context, namespace, deployment string) error {
-	if deployment == "" {
-		return fmt.Errorf("cannot restart rollout: empty deployment name")
+// restart` issues — which the owning controller treats as a template change
+// and rolls out. Deployment, StatefulSet, and DaemonSet all accept the
+// identical patch shape via their own typed AppsV1 clients.
+func (c *Cluster) RolloutRestart(ctx context.Context, kind ResourceKind, namespace, name string) error {
+	if name == "" {
+		return fmt.Errorf("cannot restart rollout: empty name")
 	}
-	patch := fmt.Sprintf(
+	patch := []byte(fmt.Sprintf(
 		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
 		time.Now().Format(time.RFC3339),
-	)
-	_, err := c.clientset.AppsV1().Deployments(namespace).Patch(ctx, deployment, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	))
+	var err error
+	switch kind {
+	case KindStatefulSet:
+		_, err = c.clientset.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	case KindDaemonSet:
+		_, err = c.clientset.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	default:
+		_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	}
 	return err
 }
 
@@ -561,6 +588,51 @@ func SecretDataCommandString(namespace, name, key string, remove bool) string {
 		return fmt.Sprintf("kubectl patch %s --type merge -p '{\"data\":{%q:null}}' -n %s", arg, key, namespace)
 	}
 	return fmt.Sprintf("kubectl patch %s --type merge -p '{\"stringData\":{%q:\"••••••\"}}' -n %s", arg, key, namespace)
+}
+
+// PatchConfigMapData implements Mutator against the live clientset — a JSON
+// merge patch (RFC 7386) targeting .data directly to set or (with a null
+// value) remove a key. Unlike Secret, ConfigMap's .data is already plain
+// text server-side, so there's no .stringData split to make.
+func (c *Cluster) PatchConfigMapData(ctx context.Context, namespace, name, key, value string, remove bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot patch configmap: empty name")
+	}
+	patch := []byte(configMapDataPatchJSON(key, value, remove))
+	_, err := c.clientset.CoreV1().ConfigMaps(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+// configMapDataPatchJSON builds the JSON merge patch body PatchConfigMapData
+// sends — a null value under the target key removes it (same idiom
+// metaPatchJSON/secretDataPatchJSON use), otherwise sets it.
+func configMapDataPatchJSON(key, value string, remove bool) string {
+	if remove {
+		return fmt.Sprintf(`{"data":{%q:null}}`, key)
+	}
+	return fmt.Sprintf(`{"data":{%q:%q}}`, key, value)
+}
+
+// ConfigMapDataCommandString renders the exact `kubectl patch` invocation
+// PatchConfigMapData runs — 27a's "will run" documentation line. Unlike
+// SecretDataCommandString, the value is never masked: ConfigMap data isn't
+// sensitive, and docs/design README.md §27a's own mockup line shows it
+// verbatim (`kubectl patch cm/aim-config --type merge -p
+// '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`).
+func ConfigMapDataCommandString(namespace, name, key, value string, remove bool) string {
+	arg := "cm/" + name
+	if remove {
+		return fmt.Sprintf("kubectl patch %s --type merge -p '{\"data\":{%q:null}}' -n %s", arg, key, namespace)
+	}
+	return fmt.Sprintf("kubectl patch %s --type merge -p '{\"data\":{%q:%q}}' -n %s", arg, key, value, namespace)
+}
+
+// ConfigMapConsumerRestartCommandString renders the `kubectl rollout
+// restart` invocation ctrl-r runs for one consumer — 27a's "prints every
+// command it runs," one line per entry in ConfigMapConsumers alongside the
+// patch itself.
+func ConfigMapConsumerRestartCommandString(namespace string, ref ConfigMapConsumerRef) string {
+	return fmt.Sprintf("kubectl rollout restart %s/%s -n %s", workloadResourceArg(ref.Kind), ref.Name, namespace)
 }
 
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a

@@ -1,0 +1,36 @@
+  kute │ test-cluster › aim-stage › cm/aim-config › Data                                            ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  2 keys                                                                                                                
+  deploy/aim-worker ↗ env · sts/aim-gateway ↗ volume                         pods don't reload configmaps on their own  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  KEY                         VALUE                                                                               SIZE  
+› FEATURE_X                   on                                                                                   2 B  
+  LOG_LEVEL                   info                                                                                 4 B  
++ a add key                                                                                                             
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   DATA  esc back  ↑↓ move │ ↵ edit  a add key  ctrl-d remove key                                               ? help  

@@ -19,6 +19,7 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/tasks/browse"
+	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
 	"github.com/kute-dev/kute/internal/tui/tasks/forwardpicker"
@@ -197,28 +198,29 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		openEvents := openEventsFunc(sess, demoCluster)
 		openTimeline := openTimelineFunc(sess, demoCluster)
 		b := browse.New(browse.Config{
-			Session:          sess,
-			Lister:           lister,
-			Metrics:          demoCluster,
-			NodeMetrics:      demoCluster,
-			Mutator:          demoCluster,
-			OpenLogs:         openLogs,
-			OpenNodeDetail:   openNodeDetail,
-			OpenPodDetail:    openPodDetail,
-			OpenYAML:         openYAML,
-			OpenEvents:       openEvents,
-			OpenTimeline:     openTimeline,
-			OpenExec:         browse.OpenExecFunc(openExec),
-			OpenForward:      openForward,
-			OpenObjectDetail: openObjectDetailFunc(sess, demoCluster, openYAML),
-			OpenRouteTable:   openRouteTableFunc(sess, demoCluster),
-			OpenWhoCan:       openWhoCanFunc(sess, demoCluster),
-			OpenHelmHistory:  openHelmHistoryFunc(sess, demoCluster),
-			OpenHelmValues:   openHelmValuesFunc(sess),
-			OpenSecretData:   openSecretDataFunc(sess, demoCluster),
-			OpenOverview:     openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
-			Forwards:         sess.Forwards,
-			Retrier:          demoCluster,
+			Session:           sess,
+			Lister:            lister,
+			Metrics:           demoCluster,
+			NodeMetrics:       demoCluster,
+			Mutator:           demoCluster,
+			OpenLogs:          openLogs,
+			OpenNodeDetail:    openNodeDetail,
+			OpenPodDetail:     openPodDetail,
+			OpenYAML:          openYAML,
+			OpenEvents:        openEvents,
+			OpenTimeline:      openTimeline,
+			OpenExec:          browse.OpenExecFunc(openExec),
+			OpenForward:       openForward,
+			OpenObjectDetail:  openObjectDetailFunc(sess, demoCluster, openYAML),
+			OpenRouteTable:    openRouteTableFunc(sess, demoCluster),
+			OpenWhoCan:        openWhoCanFunc(sess, demoCluster),
+			OpenHelmHistory:   openHelmHistoryFunc(sess, demoCluster),
+			OpenHelmValues:    openHelmValuesFunc(sess),
+			OpenSecretData:    openSecretDataFunc(sess, demoCluster),
+			OpenConfigMapData: openConfigMapDataFunc(sess, demoCluster),
+			OpenOverview:      openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
+			Forwards:          sess.Forwards,
+			Retrier:           demoCluster,
 		})
 		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
 		return model, nil, demoCluster
@@ -256,28 +258,29 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openEvents := openEventsFunc(sess, cluster)
 	openTimeline := openTimelineFunc(sess, cluster)
 	b := browse.New(browse.Config{
-		Session:          sess,
-		Lister:           lister,
-		Metrics:          cluster,
-		NodeMetrics:      cluster,
-		Mutator:          cluster,
-		OpenLogs:         openLogs,
-		OpenNodeDetail:   openNodeDetail,
-		OpenPodDetail:    openPodDetail,
-		OpenYAML:         openYAML,
-		OpenEvents:       openEvents,
-		OpenTimeline:     openTimeline,
-		OpenExec:         browse.OpenExecFunc(openExec),
-		OpenForward:      openForward,
-		OpenObjectDetail: openObjectDetailFunc(sess, cluster, openYAML),
-		OpenRouteTable:   openRouteTableFunc(sess, cluster),
-		OpenWhoCan:       openWhoCanFunc(sess, cluster),
-		OpenHelmHistory:  openHelmHistoryFunc(sess, cluster),
-		OpenHelmValues:   openHelmValuesFunc(sess),
-		OpenSecretData:   openSecretDataFunc(sess, cluster),
-		OpenOverview:     openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
-		Forwards:         sess.Forwards,
-		Retrier:          cluster,
+		Session:           sess,
+		Lister:            lister,
+		Metrics:           cluster,
+		NodeMetrics:       cluster,
+		Mutator:           cluster,
+		OpenLogs:          openLogs,
+		OpenNodeDetail:    openNodeDetail,
+		OpenPodDetail:     openPodDetail,
+		OpenYAML:          openYAML,
+		OpenEvents:        openEvents,
+		OpenTimeline:      openTimeline,
+		OpenExec:          browse.OpenExecFunc(openExec),
+		OpenForward:       openForward,
+		OpenObjectDetail:  openObjectDetailFunc(sess, cluster, openYAML),
+		OpenRouteTable:    openRouteTableFunc(sess, cluster),
+		OpenWhoCan:        openWhoCanFunc(sess, cluster),
+		OpenHelmHistory:   openHelmHistoryFunc(sess, cluster),
+		OpenHelmValues:    openHelmValuesFunc(sess),
+		OpenSecretData:    openSecretDataFunc(sess, cluster),
+		OpenConfigMapData: openConfigMapDataFunc(sess, cluster),
+		OpenOverview:      openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
+		Forwards:          sess.Forwards,
+		Retrier:           cluster,
 	})
 	return &b
 }
@@ -606,6 +609,24 @@ func openSecretDataFunc(sess *tui.Session, active seams) browse.OpenSecretDataFu
 		})
 		sd.SetSize(width, height)
 		return &sd, sd.Init()
+	}
+}
+
+// openConfigMapDataFunc pushes tasks/configmapdata (27a) for a ConfigMap
+// row — active alone satisfies the RawLister/Mutator seams it needs (ListRaw
+// for the ConfigMap itself and its Deployment/StatefulSet/DaemonSet
+// consumers, kube.Mutator.PatchConfigMapData/RolloutRestart for apply/ctrl-r).
+func openConfigMapDataFunc(sess *tui.Session, active seams) browse.OpenConfigMapDataFunc {
+	return func(namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+		cd := configmapdata.New(configmapdata.Config{
+			Session:   sess,
+			Lister:    active,
+			Mutator:   active,
+			Namespace: namespace,
+			Name:      name,
+		})
+		cd.SetSize(width, height)
+		return &cd, cd.Init()
 	}
 }
 

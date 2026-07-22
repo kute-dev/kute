@@ -1,0 +1,36 @@
+  kute │ test-cluster › aim-stage › cm/aim-config › Data                                            ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  2 keys                                                                                                                
+  no consumers found                                                         pods don't reload configmaps on their own  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+nginx.conf  ctrl-s apply · ctrl-r apply + restart consumers · esc discard                                               
+                                                                                                                        
+   1  server {                                                                                                          
+   2    listen 80;                                                                                                      
+   3    server_name aim.internal;                                                                                       
+   4  }▎                                                                                                                
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  will run no changes — ctrl-s has nothing to apply                                                                     
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   BUFFER EDITOR  ctrl-s apply  ctrl-r apply + restart consumers  esc discard                                           

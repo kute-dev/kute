@@ -23,6 +23,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -136,22 +137,42 @@ func (c *Cluster) DeleteResourceForced(ctx context.Context, kind kube.ResourceKi
 	return c.DeleteResource(ctx, kind, namespace, name)
 }
 
-func (c *Cluster) RolloutRestart(_ context.Context, namespace, deployment string) error {
+// RolloutRestart stamps kind's pod template with a fresh restartedAt
+// annotation in place — Deployment, StatefulSet, and DaemonSet all carry a
+// pod template, so all three are supported (27a's ctrl-r restarts whichever
+// kind a ConfigMap's consumer happens to be).
+func (c *Cluster) RolloutRestart(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, obj := range c.objects[kube.KindDeployment] {
-		d, ok := obj.(*appsv1.Deployment)
-		if !ok || d.Name != deployment || d.Namespace != namespace {
+	for _, obj := range c.objects[kind] {
+		var tpl *metav1.ObjectMeta
+		switch o := obj.(type) {
+		case *appsv1.Deployment:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			tpl = &o.Spec.Template.ObjectMeta
+		case *appsv1.StatefulSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			tpl = &o.Spec.Template.ObjectMeta
+		case *appsv1.DaemonSet:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			tpl = &o.Spec.Template.ObjectMeta
+		default:
 			continue
 		}
-		if d.Spec.Template.Annotations == nil {
-			d.Spec.Template.Annotations = map[string]string{}
+		if tpl.Annotations == nil {
+			tpl.Annotations = map[string]string{}
 		}
-		d.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-		c.notify(kube.KindDeployment)
+		tpl.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		c.notify(kind)
 		return nil
 	}
-	return fmt.Errorf("deployment %q not found", deployment)
+	return fmt.Errorf("%s %q not found", kind, name)
 }
 
 func (c *Cluster) Cordon(_ context.Context, node string, cordon bool) error {
@@ -368,6 +389,30 @@ func (c *Cluster) PatchSecretData(_ context.Context, namespace, name, key, value
 		return nil
 	}
 	return fmt.Errorf("%s %q not found", kube.KindSecret, name)
+}
+
+// PatchConfigMapData sets or removes a single key in a ConfigMap's .Data map
+// in place — 27a's value-edit editor against the fake cluster.
+func (c *Cluster) PatchConfigMapData(_ context.Context, namespace, name, key, value string, remove bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindConfigMap] {
+		cm, ok := obj.(*corev1.ConfigMap)
+		if !ok || cm.Name != name || cm.Namespace != namespace {
+			continue
+		}
+		if remove {
+			delete(cm.Data, key)
+		} else {
+			if cm.Data == nil {
+				cm.Data = map[string]string{}
+			}
+			cm.Data[key] = value
+		}
+		c.notify(kube.KindConfigMap)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindConfigMap, name)
 }
 
 // applyResourceEdits mutates ctr's Resources.Requests/Limits in place per

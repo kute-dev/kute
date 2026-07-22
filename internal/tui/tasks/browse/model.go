@@ -135,6 +135,10 @@ type OpenHelmValuesFunc func(release kube.HelmRelease, width, height int) (tea.M
 // view.
 type OpenSecretDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenConfigMapDataFunc pushes tasks/configmapdata (27a) for a ConfigMap
+// row's Data view.
+type OpenConfigMapDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenOverviewFunc pushes tasks/overview (19a) — the `g "ov"` goto entry
 // (kube.KindOverview, handled by switchKind's carve-out below, the same
 // shape as OpenWhoCanFunc's KindWhoCan carve-out since there's nothing to
@@ -145,26 +149,27 @@ type OpenOverviewFunc func(width, height int) (tea.Model, tea.Cmd)
 // (package-local Config struct, interface-typed fields, New fills zero
 // values).
 type Config struct {
-	Session          *tui.Session
-	Lister           resources.RawLister
-	Metrics          MetricsReader
-	NodeMetrics      NodeMetricsReader
-	Mutator          kube.Mutator
-	OpenLogs         OpenLogsFunc
-	OpenNodeDetail   OpenNodeDetailFunc
-	OpenPodDetail    OpenPodDetailFunc
-	OpenYAML         OpenYAMLFunc
-	OpenEvents       OpenEventsFunc
-	OpenTimeline     OpenTimelineFunc
-	OpenExec         OpenExecFunc
-	OpenForward      OpenForwardFunc
-	OpenObjectDetail OpenObjectDetailFunc
-	OpenRouteTable   OpenRouteTableFunc
-	OpenWhoCan       OpenWhoCanFunc
-	OpenHelmHistory  OpenHelmHistoryFunc
-	OpenHelmValues   OpenHelmValuesFunc
-	OpenSecretData   OpenSecretDataFunc
-	OpenOverview     OpenOverviewFunc
+	Session           *tui.Session
+	Lister            resources.RawLister
+	Metrics           MetricsReader
+	NodeMetrics       NodeMetricsReader
+	Mutator           kube.Mutator
+	OpenLogs          OpenLogsFunc
+	OpenNodeDetail    OpenNodeDetailFunc
+	OpenPodDetail     OpenPodDetailFunc
+	OpenYAML          OpenYAMLFunc
+	OpenEvents        OpenEventsFunc
+	OpenTimeline      OpenTimelineFunc
+	OpenExec          OpenExecFunc
+	OpenForward       OpenForwardFunc
+	OpenObjectDetail  OpenObjectDetailFunc
+	OpenRouteTable    OpenRouteTableFunc
+	OpenWhoCan        OpenWhoCanFunc
+	OpenHelmHistory   OpenHelmHistoryFunc
+	OpenHelmValues    OpenHelmValuesFunc
+	OpenSecretData    OpenSecretDataFunc
+	OpenConfigMapData OpenConfigMapDataFunc
+	OpenOverview      OpenOverviewFunc
 	// Forwards is the app-wide port-forward registry (13c's stop/restart/
 	// stop-all verbs act on it directly, unlike OpenForward's picker push) —
 	// nil disables those verbs the same way a nil Mutator disables delete.
@@ -180,30 +185,31 @@ type Config struct {
 type Model struct {
 	width, height int
 
-	session          *tui.Session
-	lister           resources.RawLister
-	metrics          MetricsReader
-	nodeMetricsSrc   NodeMetricsReader
-	mutator          kube.Mutator
-	actions          actions.Controller
-	openLogs         OpenLogsFunc
-	openNodeDetail   OpenNodeDetailFunc
-	openPodDetail    OpenPodDetailFunc
-	openYAML         OpenYAMLFunc
-	openEvents       OpenEventsFunc
-	openTimeline     OpenTimelineFunc
-	openExec         OpenExecFunc
-	openForward      OpenForwardFunc
-	openObjectDetail OpenObjectDetailFunc
-	openRouteTable   OpenRouteTableFunc
-	openWhoCan       OpenWhoCanFunc
-	openHelmHistory  OpenHelmHistoryFunc
-	openHelmValues   OpenHelmValuesFunc
-	openSecretData   OpenSecretDataFunc
-	openOverview     OpenOverviewFunc
-	forwards         *kube.ForwardManager
-	retrier          ConnRetrier
-	timeout          time.Duration
+	session           *tui.Session
+	lister            resources.RawLister
+	metrics           MetricsReader
+	nodeMetricsSrc    NodeMetricsReader
+	mutator           kube.Mutator
+	actions           actions.Controller
+	openLogs          OpenLogsFunc
+	openNodeDetail    OpenNodeDetailFunc
+	openPodDetail     OpenPodDetailFunc
+	openYAML          OpenYAMLFunc
+	openEvents        OpenEventsFunc
+	openTimeline      OpenTimelineFunc
+	openExec          OpenExecFunc
+	openForward       OpenForwardFunc
+	openObjectDetail  OpenObjectDetailFunc
+	openRouteTable    OpenRouteTableFunc
+	openWhoCan        OpenWhoCanFunc
+	openHelmHistory   OpenHelmHistoryFunc
+	openHelmValues    OpenHelmValuesFunc
+	openSecretData    OpenSecretDataFunc
+	openConfigMapData OpenConfigMapDataFunc
+	openOverview      OpenOverviewFunc
+	forwards          *kube.ForwardManager
+	retrier           ConnRetrier
+	timeout           time.Duration
 	// execFeedback carries a non-zero kubectl-exec exit's message (docs/design
 	// README.md §10a: "exit returns to the same pod with a feedback line on
 	// non-zero exit") — single-container pods exec directly from browse
@@ -455,39 +461,40 @@ func New(cfg Config) Model {
 	}
 
 	return Model{
-		width:            tui.DefaultWidth,
-		height:           tui.DefaultHeight,
-		session:          cfg.Session,
-		lister:           cfg.Lister,
-		metrics:          cfg.Metrics,
-		nodeMetricsSrc:   cfg.NodeMetrics,
-		mutator:          cfg.Mutator,
-		actions:          actions.New(cfg.Mutator),
-		openLogs:         cfg.OpenLogs,
-		openNodeDetail:   cfg.OpenNodeDetail,
-		openPodDetail:    cfg.OpenPodDetail,
-		openYAML:         cfg.OpenYAML,
-		openEvents:       cfg.OpenEvents,
-		openTimeline:     cfg.OpenTimeline,
-		openExec:         cfg.OpenExec,
-		openForward:      cfg.OpenForward,
-		openObjectDetail: cfg.OpenObjectDetail,
-		openRouteTable:   cfg.OpenRouteTable,
-		openWhoCan:       cfg.OpenWhoCan,
-		openHelmHistory:  cfg.OpenHelmHistory,
-		openHelmValues:   cfg.OpenHelmValues,
-		openSecretData:   cfg.OpenSecretData,
-		openOverview:     cfg.OpenOverview,
-		forwards:         cfg.Forwards,
-		retrier:          cfg.Retrier,
-		timeout:          cfg.LoadTimeout,
-		kind:             kind,
-		namespace:        namespace,
-		desc:             desc,
-		state:            state,
-		feedback:         feedback,
-		now:              time.Now(),
-		loadStartedAt:    time.Now(),
+		width:             tui.DefaultWidth,
+		height:            tui.DefaultHeight,
+		session:           cfg.Session,
+		lister:            cfg.Lister,
+		metrics:           cfg.Metrics,
+		nodeMetricsSrc:    cfg.NodeMetrics,
+		mutator:           cfg.Mutator,
+		actions:           actions.New(cfg.Mutator),
+		openLogs:          cfg.OpenLogs,
+		openNodeDetail:    cfg.OpenNodeDetail,
+		openPodDetail:     cfg.OpenPodDetail,
+		openYAML:          cfg.OpenYAML,
+		openEvents:        cfg.OpenEvents,
+		openTimeline:      cfg.OpenTimeline,
+		openExec:          cfg.OpenExec,
+		openForward:       cfg.OpenForward,
+		openObjectDetail:  cfg.OpenObjectDetail,
+		openRouteTable:    cfg.OpenRouteTable,
+		openWhoCan:        cfg.OpenWhoCan,
+		openHelmHistory:   cfg.OpenHelmHistory,
+		openHelmValues:    cfg.OpenHelmValues,
+		openSecretData:    cfg.OpenSecretData,
+		openConfigMapData: cfg.OpenConfigMapData,
+		openOverview:      cfg.OpenOverview,
+		forwards:          cfg.Forwards,
+		retrier:           cfg.Retrier,
+		timeout:           cfg.LoadTimeout,
+		kind:              kind,
+		namespace:         namespace,
+		desc:              desc,
+		state:             state,
+		feedback:          feedback,
+		now:               time.Now(),
+		loadStartedAt:     time.Now(),
 	}
 }
 

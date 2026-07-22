@@ -1,0 +1,24 @@
+  kute │ test-cluster › aim-stage › cm/aim-config › Data    ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────
+  2 keys → 3                                                                    
+  deploy/aim-worker ↗ env · sts/aim-gateway ↗ volume                            
+────────────────────────────────────────────────────────────────────────────────
+  KEY                   VALUE                                             SIZE  
+  FEATURE_X             on                                                 2 B  
+  LOG_LEVEL             info                                               4 B  
++ RETRIES               3▎                                                 new  
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+  will run kubectl patch cm/aim-config --type merge -p '{"data":{"RETRIES":"3"}…
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   ADD KEY  ↵ apply  ctrl-r apply + restart consumers  esc discard              

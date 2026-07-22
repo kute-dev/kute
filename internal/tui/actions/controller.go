@@ -10,6 +10,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -277,7 +278,8 @@ func (c *Controller) execute() tea.Cmd {
 			err = mutator.DeleteResourceForced(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
 		case "rollout-restart":
-			err = mutator.RolloutRestart(context.Background(), action.Scope.Namespace, action.Scope.ResourceName)
+			err = mutator.RolloutRestart(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
 		case "cordon":
 			err = mutator.Cordon(context.Background(), action.Scope.ResourceName, true)
 		case "uncordon":
@@ -302,6 +304,18 @@ func (c *Controller) execute() tea.Cmd {
 		case "secret-data":
 			err = mutator.PatchSecretData(context.Background(),
 				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.SecretKey, action.Scope.SecretValue, action.Scope.SecretRemove)
+		case "configmap-data":
+			err = mutator.PatchConfigMapData(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.ConfigMapKey, action.Scope.ConfigMapValue, action.Scope.ConfigMapRemove)
+			if err == nil && action.Scope.ConfigMapRestartConsumers {
+				var errs []error
+				for _, c := range action.Scope.ConfigMapConsumers {
+					if rerr := mutator.RolloutRestart(context.Background(), c.Kind, action.Scope.Namespace, c.Name); rerr != nil {
+						errs = append(errs, rerr)
+					}
+				}
+				err = errors.Join(errs...)
+			}
 		default:
 			err = fmt.Errorf("unsupported verb %q", action.Scope.Verb)
 		}

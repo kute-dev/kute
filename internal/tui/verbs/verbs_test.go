@@ -103,7 +103,7 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range All {
-		if v.Mutating && v.Tier == actions.TierNone && v.ID != "rollout-restart" && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" && v.ID != "set-resources" && v.ID != "meta" && v.ID != "add-secret-key" {
+		if v.Mutating && v.Tier == actions.TierNone && v.ID != "rollout-restart" && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" && v.ID != "set-resources" && v.ID != "meta" && v.ID != "add-secret-key" && v.ID != "add-configmap-key" && v.ID != "restart-configmap-consumers" {
 			t.Errorf("%s is mutating with TierNone but isn't an allow-listed reversible verb", v.ID)
 		}
 	}

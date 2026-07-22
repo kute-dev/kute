@@ -217,6 +217,29 @@ var (
 		ID: "remove-secret-key", Key: "ctrl-d", Label: "remove key",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindSecret}, Mutating: true,
 	}
+	// AddConfigMapKey is 27a's 'a' line-insert add on a ConfigMap's Data
+	// view — same TierNone-nominal/TierForConfigMapData-resolves-the-real-tier
+	// shape as AddSecretKey above.
+	AddConfigMapKey = Verb{
+		ID: "add-configmap-key", Key: "a", Label: "add key",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
+	}
+	// RemoveConfigMapKey is 27a's ctrl-d removal of an existing Data-view
+	// key — always TierInline regardless of PROD, the same "removal always
+	// confirms inline" policy RemoveSecretKey uses.
+	RemoveConfigMapKey = Verb{
+		ID: "remove-configmap-key", Key: "ctrl-d", Label: "remove key",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
+	}
+	// RestartConfigMapConsumers is 27a's ctrl-r — chains a value apply with
+	// `kubectl rollout restart` for every workload that consumes the
+	// ConfigMap. TierNone here is nominal like AddConfigMapKey/SetImage/etc:
+	// the real tier is TierForConfigMapData, the same PROD gate the plain
+	// apply uses (it's the same patch, plus extra restarts).
+	RestartConfigMapConsumers = Verb{
+		ID: "restart-configmap-consumers", Key: "ctrl-r", Label: "apply + restart consumers",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
+	}
 )
 
 // Port-forward verbs (13a/13c, docs/design README.md). Forward pushes the
@@ -284,6 +307,7 @@ var All = []Verb{
 	HelmValues, HelmHistory, Mark, MarkAll,
 	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
+	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
@@ -364,6 +388,19 @@ func TierForSetResources(isProd bool) actions.Tier {
 // inline y/N on apply"), routed through actions.Controller/kube.Mutator like
 // those two rather than a screen-local gate.
 func TierForAddSecretKey(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForConfigMapData resolves AddConfigMapKey's/an edit's/ctrl-r's
+// confirmation policy — the same TierNone-outside-PROD/TierInline-in-PROD
+// shape as TierForAddSecretKey (docs/design README.md §27a inherits 8b's
+// PROD tiering the same way 27b does), used for both a plain apply and a
+// ctrl-r apply+restart commit since both run through the same
+// actions.Controller/kube.Mutator path.
+func TierForConfigMapData(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}
