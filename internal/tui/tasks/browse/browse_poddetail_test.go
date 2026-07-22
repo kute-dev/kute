@@ -44,14 +44,13 @@ func TestEnterOpensPodDetail(t *testing.T) {
 	}
 }
 
-// TestEnterOpensPodDetailWhileFiltering is the regression test for enter
-// doing nothing while a filter query is being typed (docs/design
-// README.md's "↵ opens the selected resource's full view ... palette/
-// filter → close" — a live filter only changes what esc does, not enter).
-// Before openSelectedEnter was wired into updateFilterKey, enter fell
-// through to the filter input's default branch, which is a no-op for enter
-// (Key.Text is empty for special keys), so it silently did nothing.
-func TestEnterOpensPodDetailWhileFiltering(t *testing.T) {
+// TestEnterCommitsFilterThenOpensPodDetail covers enter's two-step behavior
+// while filtering: the first enter never opens a destination, even for a
+// kind (Pods) that has one — it commits the filter instead (query/rows stay
+// narrowed, but keys stop being captured as typing). A second enter, now
+// routed through the normal unfiltered path, opens the selected pod's
+// detail exactly as it would with no filter at all.
+func TestEnterCommitsFilterThenOpensPodDetail(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {pod("default", "api-0"), pod("default", "worker-0")},
 	}}
@@ -76,9 +75,18 @@ func TestEnterOpensPodDetailWhileFiltering(t *testing.T) {
 		t.Fatalf("expected the filter to narrow to just api-0, got active=%v visible=%+v", m.filterActive, m.visible)
 	}
 
+	updated, _ = m.Update(tea.KeyPressMsg{Text: "enter"})
+	m = *updated.(*Model)
+	if openedName != "" {
+		t.Fatalf("expected the first enter to commit the filter, not open api-0's detail, got %q", openedName)
+	}
+	if !m.filterActive || !m.filterListFocused || m.filterQuery != "api" {
+		t.Fatalf("filterActive=%v filterListFocused=%v filterQuery=%q, want all committed", m.filterActive, m.filterListFocused, m.filterQuery)
+	}
+
 	final, _ := m.Update(tea.KeyPressMsg{Text: "enter"})
 	if openedName != "api-0" {
-		t.Fatalf("expected enter to open api-0's detail while filtering, got %q", openedName)
+		t.Fatalf("expected the second enter to open api-0's detail, got %q", openedName)
 	}
 	if _, ok := final.(stubTask); !ok {
 		t.Fatalf("expected Update to return the pushed stub task, got %T", final)

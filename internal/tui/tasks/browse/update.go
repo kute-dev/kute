@@ -255,7 +255,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
-	if m.filterActive {
+	if m.filterActive && !m.filterListFocused {
 		return m.updateFilterKey(msg)
 	}
 	switch msg.String() {
@@ -264,6 +264,17 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc", "backspace":
 		// 20a: "esc clears marks before it walks back a level."
 		if m.clearMarks() {
+			return m, nil
+		}
+		if m.filterActive {
+			// A committed-but-list-focused filter (filterListFocused) still
+			// owns esc, same as while typing — "palette/filter → close"
+			// applies to both, so esc clears it rather than walking back.
+			m.filterActive = false
+			m.filterListFocused = false
+			m.setFilter("")
+			m.clearOrigin()
+			m.recomputeVisible()
 			return m, nil
 		}
 		if m.originName != "" {
@@ -285,6 +296,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
+			m.filterListFocused = false
 		}
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
@@ -427,9 +439,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openSelectedEnter is enter's routing chain, shared by updateKey's plain
-// enter and updateFilterKey's (a live filter doesn't change what enter
-// does — see updateFilterKey's "enter" case): node/pod detail, the
+// openSelectedEnter is enter's routing chain for updateKey's plain enter —
+// not while filtering, where enter commits the filter instead of opening
+// anything (updateFilterKey's "enter" case): node/pod detail, the
 // Ingress/Gateway-API routing table (23a/23b — checked ahead of the generic
 // Custom-kind branch below since HTTPRoute/GRPCRoute/TCPRoute/Gateway are
 // themselves Custom), a Deployment's own pods, a StatefulSet's own pods, a
@@ -570,20 +582,19 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.filterActive = false
+		m.filterListFocused = false
 		m.setFilter("")
 		m.clearOrigin()
 		m.recomputeVisible()
 	case "enter":
-		// docs/design README.md §"System-wide interactions": "↵ opens the
-		// selected resource's full view; esc walks back one level
-		// (detail → table; palette/filter → close)" — a live filter only
-		// changes what esc does, not enter. Without this, enter fell
-		// through to the default branch below, which is a no-op for enter
-		// (Key.Text is empty for special keys like enter), so it silently
-		// did nothing while filtering.
-		if task, cmd, ok := m.openSelectedEnter(); ok {
-			return task, cmd
-		}
+		// Enter never opens a destination while filtering, even for kinds
+		// that have one (Pods, Nodes, Deployments, …) — it always commits
+		// the filter instead: query/rows/chrome stay exactly as they are,
+		// but keys stop being captured as typing, so j/k, ctrl-d, etc. act
+		// on the narrowed rows directly. '/' resumes editing the same
+		// query; a second enter (now routed through updateKey, unfiltered)
+		// opens the selected row's destination same as it always has.
+		m.filterListFocused = true
 	case "backspace":
 		if len(m.filterQuery) > 0 {
 			m.setFilter(m.filterQuery[:len(m.filterQuery)-1])

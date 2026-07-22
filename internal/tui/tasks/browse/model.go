@@ -335,6 +335,14 @@ type Model struct {
 
 	filterActive bool
 	filterQuery  string
+	// filterListFocused is true once a live filter has been committed
+	// (enter, unconditionally — see updateFilterKey) without clearing it:
+	// the query/chrome stay exactly as filterActive left them, but keys
+	// stop being captured as typing and route through updateKey instead, so
+	// j/k, ctrl-d, a second enter to open the row's destination, etc. all
+	// act on the narrowed rows directly. '/' resets it to false to resume
+	// editing the same query.
+	filterListFocused bool
 
 	// originKind/originName name the row whose filtered child view (a
 	// Deployment/StatefulSet/DaemonSet's pods, openDeploymentPods/
@@ -643,9 +651,10 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	if m.session != nil {
 		m.session.Location.Namespace = namespace
 	}
-	query, active := m.filterQuery, m.filterActive
+	query, active, focused := m.filterQuery, m.filterActive, m.filterListFocused
 	cmd := m.resetAndLoad()
 	m.filterActive = active
+	m.filterListFocused = focused
 	m.setFilter(query)
 	return cmd
 }
@@ -764,6 +773,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.display = nil
 	m.selected, m.offset = 0, 0
 	m.filterActive = false
+	m.filterListFocused = false
 	m.setFilter("")
 	m.nodeCount = 0
 	m.podMetrics = nil

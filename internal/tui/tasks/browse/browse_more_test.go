@@ -150,6 +150,64 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 	}
 }
 
+// TestEnterCommitsFilterForKindWithNoDestination covers enter's commit
+// behavior on a kind with no enter-destination at all (ConfigMaps —
+// openSelectedEnter would return ok=false for it even unfiltered): query/
+// rows/strip stay exactly as they were, but keys stop being captured as
+// typing, so j/k moves the cursor and ctrl-d runs delete directly on the
+// narrowed list.
+func TestEnterCommitsFilterForKindWithNoDestination(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindConfigMap: {configMap("default", "app-config"), configMap("default", "other-config")},
+	}}
+	mut := &fakeMutator{}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tui.GotoKindMsg{Kind: kube.KindConfigMap})
+
+	m = step(t, m, tea.KeyPressMsg{Code: '/', Text: "/"})
+	for _, r := range "app-" {
+		m = step(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	if len(m.visible) != 1 || m.visible[0].row.Name != "app-config" {
+		t.Fatalf("visible = %+v, want just app-config", m.visible)
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "enter"})
+	m = *updated.(*Model)
+	if !m.filterActive || !m.filterListFocused {
+		t.Fatalf("filterActive=%v filterListFocused=%v, want both true after enter", m.filterActive, m.filterListFocused)
+	}
+	if m.filterQuery != "app-" || len(m.visible) != 1 {
+		t.Fatalf("expected the filter to stay committed: query=%q visible=%+v", m.filterQuery, m.visible)
+	}
+	if m.CapturingInput() {
+		t.Fatal("expected CapturingInput to release once the filter is list-focused")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "FILTER") {
+		t.Fatalf("expected the FILTER pill to stay visible:\n%s", view)
+	}
+	if strings.Contains(view, "app-"+tui.GlyphSelBar) {
+		t.Fatalf("expected the filter strip's typing cursor gone once committed (GlyphSelBar is reused as the table's row-selection marker elsewhere, so check it's not glued to the query):\n%s", view)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	if !m.actions.Active() {
+		t.Fatalf("expected ctrl-d to open the inline delete confirm while list-focused, got actions.Active()=false")
+	}
+	kb := m.Keybar()
+	if kb.RightNote == "" || !strings.Contains(kb.RightNote, "app-config") {
+		t.Fatalf("expected the confirm to target app-config (the filtered cursor row), got %q", kb.RightNote)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.deleted) != 1 || mut.deleted[0] != "app-config" {
+		t.Fatalf("deleted = %v, want [app-config]", mut.deleted)
+	}
+}
+
 // TestSelectionScrollsIntoView pins tableDataRows to the real rendered
 // viewport: after walking selection to the last of many rows on a short
 // terminal, the selected row must actually be on screen (this once lagged —

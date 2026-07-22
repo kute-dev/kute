@@ -217,6 +217,13 @@ func (m Model) Keybar() tui.Keybar {
 	if m.grouped() {
 		pillText, pill = "ALL NS", tui.ModeAllNS
 	}
+	if m.filterActive && m.filterListFocused {
+		// The filter strip stays up (view.go's Strips) once committed via
+		// enter, so the pill keeps saying so too — takes over ALL NS (still
+		// true regardless, just less urgent) but itself yields to a mark
+		// count below, same "more urgent state wins" precedent.
+		pillText, pill = "FILTER", tui.ModeFilter
+	}
 	if n := len(m.marks); n > 0 {
 		// 20a: "mode pill shows the count" — takes over the pill entirely,
 		// the more urgent state once anything is marked.
@@ -254,7 +261,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	if m.filterActive {
+	if m.filterActive && !m.filterListFocused {
 		return tui.Keybar{
 			Pill:      tui.ModeFilter,
 			PillText:  "FILTER",
@@ -432,8 +439,11 @@ func singularDisplay(plural string) string {
 // CapturingInput reports whether the filter box is open, so the root shell
 // (tui.InputCapturer) lets every keystroke — including g/n/c/? — reach
 // browse's own key handling instead of treating them as global shortcuts.
+// A committed-but-list-focused filter (filterListFocused) doesn't count:
+// its query is done being typed, so g/n/c/? go back to being the shell's
+// global shortcuts, same as any other ready list.
 func (m Model) CapturingInput() bool {
-	return m.filterActive || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
+	return (m.filterActive && !m.filterListFocused) || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
 		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
 		m.pendingBulkDelete != nil
 }

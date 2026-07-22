@@ -354,7 +354,10 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
+	left := accent.Render("/ ") + text.Render(m.filterQuery)
+	if !m.filterListFocused {
+		left += accent.Render(tui.GlyphSelBar)
+	}
 
 	total, matched := len(m.rows), len(m.visible)
 	right := dim.Render(fmt.Sprintf("%d/%d", matched, total))
