@@ -131,6 +131,12 @@ type Model struct {
 	filterActive bool
 	filterQuery  string
 
+	// reloadEpoch guards a debounced reload-on-still-syncing retry (see
+	// CacheSyncChecker/scheduleReload in load.go) against a stale reply
+	// arriving after a newer one's already in flight — mirrors browse's own
+	// reloadEpoch.
+	reloadEpoch int
+
 	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
 	// header badge's real connection state (never a hardcoded "connected").
 	conn kube.ConnState
@@ -212,6 +218,27 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)
 	m.width, m.height = size.Width, size.Height
+}
+
+// CacheSyncChecker is optionally implemented by a Lister whose cache
+// populates asynchronously (*kube.Cluster's informers, right after launch or
+// mid SwitchContext) — duplicated from browse's own CacheSyncChecker per the
+// repo's package-local-seam convention, since resources.RawLister itself
+// carries no such method. ListRaw reads the cache regardless of sync state,
+// so a load() landing right after this screen opens can see a truthful-
+// looking empty pod list before the first real objects have arrived;
+// listerSynced tells that apart from the node genuinely having no pods.
+type CacheSyncChecker interface {
+	Synced() bool
+}
+
+// listerSynced reports whether m.lister's cache has finished its initial
+// sync — true for any lister that doesn't opt into CacheSyncChecker (fakes,
+// test doubles), so this only changes behavior for *kube.Cluster. Mirrors
+// browse.Model.listerSynced.
+func (m Model) listerSynced() bool {
+	sc, ok := m.lister.(CacheSyncChecker)
+	return !ok || sc.Synced()
 }
 
 func (m Model) selectedPod() (nodePodRow, bool) {

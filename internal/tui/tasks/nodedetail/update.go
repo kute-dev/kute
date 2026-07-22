@@ -23,6 +23,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.now = time.Now()
 	case loadedMsg:
 		return m.applyLoaded(msg)
+	case reloadDueMsg:
+		if msg.epoch == m.reloadEpoch {
+			return m, m.load()
+		}
 	case components.SpinnerTickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
@@ -88,6 +92,16 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.allocatable = msg.allocatable
 	m.allPods = msg.pods
 	m.recomputeFiltered()
+
+	if len(m.allPods) == 0 && !m.listerSynced() {
+		// The informer cache is still filling (just after launch, mid a
+		// context switch, or on a very fast node-open) — this empty pod
+		// list isn't trustworthy yet. Stay loading and retry shortly rather
+		// than flashing "no pods on this node" before they've landed.
+		m.reloadEpoch++
+		return m, m.scheduleReload(m.reloadEpoch)
+	}
+
 	m.state = tui.TaskStateReady
 	m.feedback = ""
 	return m, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +13,24 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 )
+
+// reloadDebounce is how long a still-syncing retry waits before re-running
+// load() — same value as browse's own reloadDebounce, duplicated per the
+// repo's package-local-seam convention.
+const reloadDebounce = 250 * time.Millisecond
+
+// reloadDueMsg fires scheduleReload's retry — epoch guards a stale reply
+// (from an earlier retry, or a since-superseded node) against re-triggering
+// a load() that's no longer wanted, mirroring browse's own reloadDueMsg.
+type reloadDueMsg struct{ epoch int }
+
+// scheduleReload arranges one reloadDueMsg reloadDebounce from now —
+// mirrors browse's own scheduleReload.
+func (m Model) scheduleReload(epoch int) tea.Cmd {
+	return tea.Tick(reloadDebounce, func(time.Time) tea.Msg {
+		return reloadDueMsg{epoch: epoch}
+	})
+}
 
 // load fetches the node itself and its non-terminal pods (spec.nodeName
 // match), sums their CPU/MEM requests against the node's Allocatable
