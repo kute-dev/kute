@@ -144,10 +144,20 @@ var (
 	// RolloutRestart's key moved off 'R' (was 9a's original binding) to make
 	// room for 25a's SetResources, which the design doc spec'd as 'R' on the
 	// same Deployment row — resolved in favor of SetResources since it's the
-	// literal key the design doc names for 25a.
+	// literal key the design doc names for 25a. It moved a second time, off
+	// bare 'r' onto 'ctrl-r': plain 'r' already meant retry/re-probe
+	// everywhere else in the app (offline banner, permission-denied card,
+	// Forward's own restart), so a bare keypress here both fought that
+	// meaning and fired an unconfirmed pod restart across a whole
+	// Deployment — the only TierNone mutating verb bound to a single
+	// unmodified letter with zero friction. TierInline now gives it the same
+	// will-run y/N (escalating to the type-the-name modal in PROD via
+	// TierFor) every other single-target mutation gets; the deliberate
+	// two-key chord plus that confirm makes an accidental fire meaningfully
+	// harder, not just documented against.
 	RolloutRestart = Verb{
-		ID: "rollout-restart", Key: "r", Label: "restart",
-		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
+		ID: "rollout-restart", Key: "ctrl-r", Label: "restart",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
 	Cordon = Verb{
 		ID: "cordon", Key: "C", Label: "cordon",

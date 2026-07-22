@@ -33,7 +33,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// kind-name carve-out, just triggered by a kind switch instead
 			// of a row Enter (there's no row: 22a is "a query, not a
 			// browser"). Defaults to "list" against the currently showing
-			// kind's own resource name; 'v'/'k'/'n' change any slot once
+			// kind's own resource name; 'v'/'K'/'n' change any slot once
 			// whocan is open.
 			if task, cmd, ok := m.openWhoCanFromCurrentKind(); ok {
 				return task, cmd
@@ -351,12 +351,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.grouped() {
 			m.toggleGroup()
 		}
-	case "r":
-		switch {
-		case m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil:
+	case "ctrl+r":
+		if m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginRolloutRestart(row)
 			}
+		}
+	case "r":
+		switch {
 		case m.kind == kube.KindForward && m.state == tui.TaskStateReady:
 			return m, m.restartSelectedForward()
 		case m.offline() && m.retrier != nil:

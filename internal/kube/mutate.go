@@ -635,6 +635,15 @@ func ConfigMapConsumerRestartCommandString(namespace string, ref ConfigMapConsum
 	return fmt.Sprintf("kubectl rollout restart %s/%s -n %s", workloadResourceArg(ref.Kind), ref.Name, namespace)
 }
 
+// RolloutRestartCommandString renders the exact `kubectl rollout restart`
+// invocation 9a's ctrl-r confirm runs on a Deployment/StatefulSet/DaemonSet
+// row — same idiom as ConfigMapConsumerRestartCommandString, for the
+// "prints every command it runs" documentation line the confirm shows
+// before it executes.
+func RolloutRestartCommandString(kind ResourceKind, namespace, name string) string {
+	return fmt.Sprintf("kubectl rollout restart %s/%s -n %s", workloadResourceArg(kind), name, namespace)
+}
+
 // DeleteCommandString renders the exact `kubectl delete` invocation a 20a
 // bulk delete runs — one call naming every marked object, the same
 // copyable-documentation idiom as 10a/13a/17b/18a. namespace == "" (a

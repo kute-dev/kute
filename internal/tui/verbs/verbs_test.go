@@ -89,7 +89,7 @@ func TestTiers(t *testing.T) {
 		{Delete, actions.TierInline},
 		{ForceDelete, actions.TierModal},
 		{Drain, actions.TierModal},
-		{RolloutRestart, actions.TierNone},
+		{RolloutRestart, actions.TierInline},
 		{Cordon, actions.TierNone},
 	}
 	for _, tt := range tests {
@@ -103,7 +103,7 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range All {
-		if v.Mutating && v.Tier == actions.TierNone && v.ID != "rollout-restart" && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" && v.ID != "set-resources" && v.ID != "meta" && v.ID != "add-secret-key" && v.ID != "add-configmap-key" && v.ID != "restart-configmap-consumers" {
+		if v.Mutating && v.Tier == actions.TierNone && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" && v.ID != "set-resources" && v.ID != "meta" && v.ID != "add-secret-key" && v.ID != "add-configmap-key" && v.ID != "restart-configmap-consumers" {
 			t.Errorf("%s is mutating with TierNone but isn't an allow-listed reversible verb", v.ID)
 		}
 	}
@@ -117,6 +117,12 @@ func TestTierForEscalatesInlineToModalInProd(t *testing.T) {
 	}
 	if got := TierFor(Delete, true); got != actions.TierModal {
 		t.Errorf("TierFor(Delete, prod) = %v, want TierModal (escalated)", got)
+	}
+	if got := TierFor(RolloutRestart, false); got != actions.TierInline {
+		t.Errorf("TierFor(RolloutRestart, non-prod) = %v, want TierInline", got)
+	}
+	if got := TierFor(RolloutRestart, true); got != actions.TierModal {
+		t.Errorf("TierFor(RolloutRestart, prod) = %v, want TierModal (escalated)", got)
 	}
 }
 
@@ -163,7 +169,6 @@ func TestTierForLeavesNonInlineVerbsAlone(t *testing.T) {
 		{Drain, actions.TierModal},
 		{ForceDelete, actions.TierModal},
 		{Cordon, actions.TierNone},
-		{RolloutRestart, actions.TierNone},
 	}
 	for _, tt := range tests {
 		for _, isProd := range []bool{false, true} {

@@ -1,10 +1,10 @@
 // Deployment-specific browse machinery for 9a (docs/design README.md §9a):
-// the r rollout-restart verb (moved off 'R' to make room for 25a's
-// SetResources on the same row) and the ↵ "open this deployment's pods"
-// shortcut, plus StatefulSet's and DaemonSet's own ↵ "open this
-// workload's pods" (same recipe, no rollout-restart verb — neither
-// StatefulSets nor DaemonSets have one). Kept in its own file, browse's
-// per-concern split convention (like nodes.go/sort.go/grouping.go/
+// the ctrl-r rollout-restart verb (moved off 'R', then off bare 'r' too —
+// see verbs.RolloutRestart's own doc comment) and the ↵ "open this
+// deployment's pods" shortcut, plus StatefulSet's and DaemonSet's own ↵
+// "open this workload's pods" (same recipe, no rollout-restart verb —
+// neither StatefulSets nor DaemonSets have one). Kept in its own file,
+// browse's per-concern split convention (like nodes.go/sort.go/grouping.go/
 // delete.go) rather than sprinkled through model.go/view.go/update.go.
 package browse
 
@@ -19,10 +19,10 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// beginRolloutRestart restarts row's rollout — TierNone (verbs.RolloutRestart),
-// so actions.Controller.Begin executes immediately with no confirmation
-// (docs/design README.md §9a: "r rollout restart (non-destructive, no
-// confirm)").
+// beginRolloutRestart restarts row's rollout — TierInline
+// (verbs.RolloutRestart), so actions.Controller.Begin moves to the
+// confirming state (inline y/N non-prod, escalated to the type-the-name
+// modal in PROD via TierFor) rather than executing immediately.
 func (m *Model) beginRolloutRestart(row resources.Row) tea.Cmd {
 	return m.actions.Begin(verbs.RolloutRestart.Tier, tui.TaskAction{
 		ID:    "rollout-restart-" + row.Namespace + "/" + row.Name,
@@ -35,6 +35,13 @@ func (m *Model) beginRolloutRestart(row resources.Row) tea.Cmd {
 			IsMutating:   true,
 		},
 	})
+}
+
+// rolloutRestartWillRunLine is the confirm's "will run: kubectl rollout
+// restart ..." documentation line — same idiom as deleteWillRunLine/
+// setImageWillRunLine.
+func rolloutRestartWillRunLine(scope tui.TaskScope) string {
+	return "will run: " + kube.RolloutRestartCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
 }
 
 // openDeploymentPods switches kind to Pods with row's name pre-applied as

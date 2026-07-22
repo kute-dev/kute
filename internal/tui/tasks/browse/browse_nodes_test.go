@@ -46,6 +46,7 @@ type fakeMutator struct {
 	drained              []string
 	deleted              []string
 	forceDeleted         []string
+	restarted            []string
 	scaled               []int32
 	setImages            []string // "namespace/name container=image"
 	setResources         []string // "namespace/name container" of every SetResources call
@@ -77,8 +78,12 @@ func (f *fakeMutator) DeleteResourceForced(_ context.Context, _ kube.ResourceKin
 	f.forceDeleted = append(f.forceDeleted, name)
 	return nil
 }
-func (f *fakeMutator) RolloutRestart(context.Context, kube.ResourceKind, string, string) error {
-	return f.err
+func (f *fakeMutator) RolloutRestart(_ context.Context, _ kube.ResourceKind, _ string, name string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.restarted = append(f.restarted, name)
+	return nil
 }
 func (f *fakeMutator) Cordon(_ context.Context, node string, cordon bool) error {
 	if f.err != nil {

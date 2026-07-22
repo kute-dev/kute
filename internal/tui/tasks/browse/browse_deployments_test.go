@@ -12,6 +12,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 )
 
 func deploymentObj(ns, name string) *appsv1.Deployment {
@@ -61,7 +62,11 @@ func TestDeploymentsKeybarPillIsShortForm(t *testing.T) {
 	}
 }
 
-func TestRKeyRestartsRollout(t *testing.T) {
+// TestPlainRKeyDoesNotTouchDeploymentRollout pins RolloutRestart's move off
+// bare 'r' (verbs.go's own doc comment on the move): 'r' is retry/re-probe
+// vocabulary everywhere else in the app, so a Deployment row must ignore it
+// entirely now — only ctrl-r reaches beginRolloutRestart.
+func TestPlainRKeyDoesNotTouchDeploymentRollout(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {deploymentObj("default", "api")},
 	}}
@@ -72,13 +77,45 @@ func TestRKeyRestartsRollout(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	// 'r' (lowercase) — 'R' now opens 25a's resources editor on the same row.
 	m = step(t, m, tea.KeyPressMsg{Text: "r"})
 	if m.actions.Active() {
-		t.Fatal("rollout-restart is TierNone and should execute immediately, not show a confirm")
+		t.Fatal("plain 'r' should not open a confirm on a Deployment row")
 	}
-	if m.state != tui.TaskStateReady {
-		t.Fatalf("expected state back to ready after rollout-restart, got %s", m.state)
+	if len(mut.restarted) != 0 {
+		t.Fatalf("plain 'r' unexpectedly restarted the rollout: %v", mut.restarted)
+	}
+}
+
+// TestCtrlRShowsConfirmThenRestartsRolloutOnY pins RolloutRestart's new
+// TierInline confirm (moved off TierNone's unconfirmed immediate fire):
+// ctrl-r shows the will-run line and waits for 'y', mirroring
+// TestCtrlDNonProdShowsInlinePromptAndDeletesOnY's shape for delete.
+func TestCtrlRShowsConfirmThenRestartsRolloutOnY(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
+	}
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "kubectl rollout restart deploy/api -n default") {
+		t.Fatalf("expected the will-run line in the confirm, got %q", kb.RightNote)
+	}
+	if len(mut.restarted) != 0 {
+		t.Fatalf("expected no restart before 'y', got %v", mut.restarted)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.restarted) != 1 || mut.restarted[0] != "api" {
+		t.Fatalf("restarted = %v, want [api]", mut.restarted)
 	}
 }
 

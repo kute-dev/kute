@@ -170,6 +170,10 @@ func (m Model) Keybar() tui.Keybar {
 					// 25a: the exact "will run: kubectl set resources ..." line,
 					// same idiom as set-image above.
 					note = setResourcesWillRunLine(pending.Scope)
+				case "rollout-restart":
+					// 9a: the exact "will run: kubectl rollout restart ..." line,
+					// same idiom as set-image/set-resources above.
+					note = rolloutRestartWillRunLine(pending.Scope)
 				case "set-meta":
 					// 26a: the panel itself stays open under this confirm
 					// (meta.go's own doc comment) and already renders the full
