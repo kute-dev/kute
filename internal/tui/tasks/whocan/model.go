@@ -137,7 +137,7 @@ func (m *Model) SetSize(width, height int) {
 }
 
 // WhoCanQuery satisfies tui.WhoCanScoped — lets the root shell seed the
-// 'v'/'k' palette opens from the query currently showing.
+// 'v'/'K' palette opens from the query currently showing.
 func (m Model) WhoCanQuery() (verb, resource string) {
 	return m.verb, m.resource
 }

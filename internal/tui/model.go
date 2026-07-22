@@ -177,7 +177,7 @@ type Model struct {
 	namespaceGen int
 
 	// whoCanVerbItemsCache/whoCanResourceItemsCache hold tasks/whocan's (22a)
-	// 'v'/'k' palette's unfiltered item lists for the palette session
+	// 'v'/'K' palette's unfiltered item lists for the palette session
 	// currently open — both lists are static (a fixed verb vocabulary, the
 	// registry's kind list), so unlike namespaceItemsCache there's no live
 	// fetch to avoid repeating; the cache still exists so refresh*Palette can
@@ -490,7 +490,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		case "v":
 			verb, _ := wc.WhoCanQuery()
 			return true, m, m.openVerbPalette(verb)
-		case "k":
+		case "K":
+			// Capital K, not lowercase k — whocan's own updateKey already
+			// binds "up"/"k" to move-selection-up, so a lowercase intercept
+			// here would permanently steal j/k movement from that one screen
+			// (mvp-tasks.md/CLAUDE.md: "j/k ≡ ↑↓ everywhere").
 			_, resource := wc.WhoCanQuery()
 			return true, m, m.openResourcePalette(resource)
 		}

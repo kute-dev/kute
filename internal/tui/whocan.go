@@ -10,14 +10,16 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components/palette"
 )
 
-// This file wires real data into tasks/whocan's (22a) 'v'/'k' slot edits —
-// the summary strip's "v verb · k resource" palette opens (docs/design
-// README.md §22a) — following goto.go/namespace.go's pattern: the palette
-// package stays pure UI, this file is where the root shell reaches into
-// Session for real content.
+// This file wires real data into tasks/whocan's (22a) 'v'/'K' slot edits —
+// the summary strip's "v verb · K pick resource kind" palette opens
+// (docs/design README.md §22a) — following goto.go/namespace.go's pattern:
+// the palette package stays pure UI, this file is where the root shell
+// reaches into Session for real content. 'K' is capital: lowercase 'k'
+// stays universal move-up (CLAUDE.md's "j/k ≡ ↑↓ everywhere"), which a
+// lowercase intercept here would have permanently broken on this one screen.
 
 // WhoCanScoped is implemented by tasks/whocan's Model so the root shell can
-// read the current verb/resource slots to seed the palette on 'v'/'k' and
+// read the current verb/resource slots to seed the palette on 'v'/'K' and
 // gate those two keys to whocan's own screen — unlike g/n/c (global
 // everywhere), whocan's query lives on the task itself, not Session, so
 // there's nothing for the root shell to key off without this.
@@ -30,7 +32,7 @@ type WhoCanScoped interface {
 var whoCanVerbs = []string{"get", "list", "watch", "create", "update", "patch", "delete", "deletecollection", "*"}
 
 // whoCanVerbTarget/whoCanResourceTarget are the opaque payloads carried in
-// palette.Item.Data for the 'v'/'k' scopes.
+// palette.Item.Data for the 'v'/'K' scopes.
 type whoCanVerbTarget struct{ verb string }
 type whoCanResourceTarget struct{ resource string }
 

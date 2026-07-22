@@ -25,7 +25,7 @@ const (
 	ScopeGoto      Scope = "goto"
 	ScopeNamespace Scope = "namespace"
 	ScopeContext   Scope = "context"
-	// ScopeVerb/ScopeResource back tasks/whocan's (22a) 'v'/'k' slot edits —
+	// ScopeVerb/ScopeResource back tasks/whocan's (22a) 'v'/'K' slot edits —
 	// "opening the palette shell to change each slot" (docs/design
 	// README.md §22a). Same shell, same Filter/Move/Render machinery as
 	// every other scope; only whocan's own root-shell wiring (tui/whocan.go)

@@ -7,9 +7,14 @@ import (
 
 // Keybar composes the bottom band from verb references only, per the
 // registry invariant — 22a's pill is WHO CAN (docs/design README.md §22a).
-// v/k are screen-local (there's no cross-screen verb to register for them).
-// Namespace (n) is global grammar as of v.0.3.0.dc.html §29a, so it no
-// longer renders here — it's taught once in the ? overlay's SCOPE column.
+// v/K are screen-local (there's no cross-screen verb to register for them).
+// K is capital — lowercase k stays movement (CLAUDE.md's "j/k ≡ ↑↓
+// everywhere"), which whocan itself used to break: the root shell (model.go)
+// intercepted lowercase 'k' for this screen's own resource-kind palette
+// before whocan's own updateKey ever saw it, so only the literal Up arrow
+// ever moved the cursor up here. Namespace (n) is global grammar as of
+// v.0.3.0.dc.html §29a, so it no longer renders here — it's taught once in
+// the ? overlay's SCOPE column.
 func (m Model) Keybar() tui.Keybar {
 	if m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty {
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "WHO CAN"}
@@ -20,7 +25,7 @@ func (m Model) Keybar() tui.Keybar {
 
 	groups := [][]tui.KeyHint{
 		{{Key: "esc", Label: "back"}},
-		{{Key: "v", Label: "verb"}, {Key: "k", Label: "resource"}},
+		{{Key: "v", Label: "verb"}, {Key: "K", Label: "pick resource kind"}},
 	}
 	if row, ok := m.selectedRow(); ok && row.subject.BindingName != "" {
 		groups = append(groups, []tui.KeyHint{{Key: "↵", Label: "open binding yaml"}})
