@@ -320,7 +320,7 @@ func (m Model) timelineBody(theme tui.Theme, width, height int) string {
 	}
 	feed = feed[:height]
 
-	divider := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render("│")
+	divider := lipgloss.NewStyle().Foreground(theme.TextGhost2).Render("│")
 	lines := make([]string, height)
 	for i := 0; i < height; i++ {
 		lines[i] = rail[i] + divider + feed[i]
@@ -870,7 +870,7 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 		line := prefix + gap(2) + text.Render(bl)
 		lines = append(lines, fillLine(line, width, selected, theme))
 	}
-	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))
+	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(strings.Repeat("─", width))
 	return append(lines, rule)
 }
 
