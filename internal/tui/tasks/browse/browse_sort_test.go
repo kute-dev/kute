@@ -20,7 +20,7 @@ import (
 func podWithRestartsAndAge(ns, name string, restarts int32, age time.Duration) *corev1.Pod {
 	p := pod(ns, name)
 	p.Status.ContainerStatuses[0].RestartCount = restarts
-	p.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-age))
+	p.CreationTimestamp = metav1.NewTime(time.Now().Add(-age))
 	return p
 }
 
