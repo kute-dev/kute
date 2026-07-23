@@ -194,7 +194,7 @@ func TestReadyStateRendersRows(t *testing.T) {
 		t.Fatalf("state = %s, want ready", m.state)
 	}
 	view := plain(m.Render())
-	for _, want := range []string{"api-1", "worker-2", "READY", "STATUS"} {
+	for _, want := range []string{"api-1", "worker-2", "RDY", "STATUS"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -222,7 +222,7 @@ func TestLoadingStateRender(t *testing.T) {
 		"Pods", "(g to jump)", // shell breadcrumb
 		"loading pods",                                                 // header timer
 		"listing pods in default…", "watch starts when the list lands", // strip
-		"NAME", "READY", "STATUS", "NODE", "AGE", // real column headers
+		"NAME", "RDY", "STATUS", "NODE", "AGE", // real column headers
 		"– of –",                                      // placeholder footer
 		"g", "goto", "n", "namespace", "c", "context", // live nav keys
 		"row actions enable when data lands", // disabled-verbs note

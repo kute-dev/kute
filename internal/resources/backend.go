@@ -94,7 +94,7 @@ func ResolveServiceBackend(ctx context.Context, lister RawLister, namespace, nam
 }
 
 // podReady reports whether every one of pod's containers is Ready — the
-// same ContainerStatuses-based readiness projectPod's own READY column
+// same ContainerStatuses-based readiness projectPod's own RDY column
 // computes (projections.go), rather than Status.Conditions' PodReady entry:
 // this repo's demo fixtures (and, in practice, kubelet's own container
 // statuses) are the reliable signal either way.

@@ -45,13 +45,13 @@ type scaleTarget struct {
 
 // scalable reports whether kind takes 17b's scale prompt — Deployments and
 // StatefulSets, the only two kinds browse projects a spec.replicas-derived
-// READY column for.
+// RDY column for.
 func scalable(kind kube.ResourceKind) bool {
 	return kind == kube.KindDeployment || kind == kube.KindStatefulSet
 }
 
 // currentReplicas reads a Deployment/StatefulSet row's desired replica
-// count back out of its own READY cell ("3/3" — resources/projections.go's
+// count back out of its own RDY cell ("3/3" — resources/projections.go's
 // readyRatio puts the ready count and spec.replicas at Cells[1] for both
 // kinds) rather than a second raw fetch.
 func currentReplicas(row resources.Row) int32 {

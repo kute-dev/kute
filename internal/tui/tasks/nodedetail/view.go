@@ -565,7 +565,7 @@ func (m Model) podsPanel(width, height int) string {
 					base = st.nameBad
 				}
 				cells[c].Style = base
-			case cols[c].Title == "Ready":
+			case cols[c].Title == "Rdy":
 				cells[c].Style = st.ready
 			case cols[c].Title == "Status":
 				cells[c].Style = st.status[r.Status]

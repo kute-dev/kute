@@ -339,6 +339,15 @@ type Model struct {
 	// switched kind, consumed by recomputeVisible.
 	pendingSelect string
 
+	// sortColumn is the 1-based index into m.desc.Columns the user picked
+	// with a 1-9 key (sort.go's handleSortKey) — 0 means no manual override,
+	// so applySort falls back to sortForDisplay's built-in default. Reset by
+	// resetAndLoad alongside the rest of the per-view state, since a column
+	// index only means something against the kind/namespace it was chosen
+	// on. sortAsc is only meaningful while sortColumn is non-zero.
+	sortColumn int
+	sortAsc    bool
+
 	filterActive bool
 	filterQuery  string
 	// filterListFocused is true once a live filter has been committed
@@ -792,6 +801,11 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	// 20a: "marks are per-view and drop on kind/namespace switch."
 	m.marks = nil
 	m.pendingBulkDelete = nil
+	// A manual column choice only means something against the kind/
+	// namespace it was picked on, so it resets here too — same lifecycle as
+	// the filter box above.
+	m.sortColumn = 0
+	m.sortAsc = false
 	m.reloadEpoch++
 	m.metricsEpoch++
 

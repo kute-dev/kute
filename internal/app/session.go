@@ -101,6 +101,7 @@ func helpScopeKeys() []tui.KeyHint {
 func helpGlobalKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		{Key: "↑↓ jk", Label: "move"},
+		{Key: "1-9", Label: "sort column"},
 		verbs.Filter.Hint(),
 		verbs.Mark.Hint(),
 		verbs.YAML.Hint(),

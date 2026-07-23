@@ -38,11 +38,11 @@ func (r Registry) Register(d Descriptor) {
 // Adding a resource type is a single entry here plus its Project function.
 func DefaultRegistry() Registry {
 	descriptors := []Descriptor{
-		{Kind: kube.KindPod, Group: GroupWorkloads, Display: "Pods", Icon: "◈", Columns: []string{"Name", "Ready", "Status", "Restarts", "CPU", "MEM", "Node", "Age"}, Describe: "running application instances", Project: projectPod, HealthLabel: podHealthLabel},
-		{Kind: kube.KindDeployment, Group: GroupWorkloads, Display: "Deployments", Icon: "◈", Columns: []string{"Name", "Ready", "Rollout", "Image", "Age"}, Describe: "declarative pod rollouts", Project: projectDeployment(nil), HealthLabel: deploymentHealthLabel},
-		{Kind: kube.KindDaemonSet, Group: GroupWorkloads, Display: "DaemonSets", Icon: "◈", Columns: []string{"Name", "Ready", "Available", "Age"}, Describe: "one pod per matching node", Project: projectDaemonSet},
-		{Kind: kube.KindStatefulSet, Group: GroupWorkloads, Display: "StatefulSets", Icon: "◈", Columns: []string{"Name", "Ready", "Age"}, Describe: "stable, ordered pod identities", Project: projectStatefulSet},
-		{Kind: kube.KindReplicaSet, Group: GroupWorkloads, Display: "ReplicaSets", Icon: "◈", Columns: []string{"Name", "Ready", "Replicas", "Age"}, Describe: "pod replica sets behind a deployment", Project: projectReplicaSet},
+		{Kind: kube.KindPod, Group: GroupWorkloads, Display: "Pods", Icon: "◈", Columns: []string{"Name", "Rdy", "Status", "Restarts", "CPU", "MEM", "Node", "Age"}, Describe: "running application instances", Project: projectPod, HealthLabel: podHealthLabel},
+		{Kind: kube.KindDeployment, Group: GroupWorkloads, Display: "Deployments", Icon: "◈", Columns: []string{"Name", "Rdy", "Rollout", "Image", "Age"}, Describe: "declarative pod rollouts", Project: projectDeployment(nil), HealthLabel: deploymentHealthLabel},
+		{Kind: kube.KindDaemonSet, Group: GroupWorkloads, Display: "DaemonSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Available", "Age"}, Describe: "one pod per matching node", Project: projectDaemonSet},
+		{Kind: kube.KindStatefulSet, Group: GroupWorkloads, Display: "StatefulSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Age"}, Describe: "stable, ordered pod identities", Project: projectStatefulSet},
+		{Kind: kube.KindReplicaSet, Group: GroupWorkloads, Display: "ReplicaSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Replicas", "Age"}, Describe: "pod replica sets behind a deployment", Project: projectReplicaSet},
 		{Kind: kube.KindJob, Group: GroupWorkloads, Display: "Jobs", Icon: "◈", Columns: []string{"Name", "Completions", "Active", "Age"}, Describe: "run-to-completion pods", Project: projectJob},
 		{Kind: kube.KindCronJob, Group: GroupWorkloads, Display: "CronJobs", Icon: "◷", Columns: []string{"Name", "Schedule", "Suspend", "Active", "Age"}, Describe: "jobs run on a schedule", Project: projectCronJob},
 		{Kind: kube.KindService, Group: GroupNetworking, Display: "Services", Icon: "◇", Columns: []string{"Name", "Type", "ClusterIP", "Ports", "Age"}, Describe: "stable network endpoints", Project: projectService},

@@ -5,10 +5,13 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
-// rightAlignTitles are the column titles that read as numeric/right-aligned
+// RightAlignTitles are the column titles that read as numeric/right-aligned
 // in every mockup (AGE etc.) across kinds. Restarts is not among them — the
 // 2a mockup renders the restart count left-aligned under its ↺ header.
-var rightAlignTitles = map[string]bool{
+// Exported so browse's own 1-9 manual sort (sort.go) can reuse the same
+// "reads as numeric" set for its descending-first default, instead of
+// re-deriving it.
+var RightAlignTitles = map[string]bool{
 	"Age": true, "Data": true, "Replicas": true,
 	"Completions": true, "Active": true, "Capacity": true,
 	"Traffic": true, "Rev": true, "Updated": true,
@@ -40,7 +43,7 @@ func Columns(d Descriptor) []components.Column {
 	cols = append(cols, components.Column{Title: "", Min: 1})
 	for i, title := range d.Columns {
 		col := components.Column{Title: title, Min: minWidthFor(title)}
-		if rightAlignTitles[title] {
+		if RightAlignTitles[title] {
 			col.Align = components.AlignRight
 		}
 		if title == "Status" {
@@ -65,7 +68,7 @@ const MetricColumnWidth = 12
 // cells). Status is 16 — the mockup renders "CrashLoopBackOff" untruncated,
 // so the README's approximate "13ch" loses to the mock here.
 var fixedWidths = map[string]int{
-	"Ready":    5,
+	"Rdy":      5,
 	"Status":   16,
 	"Health":   13, // "●12 ◐1 ✕1" — matches the namespace palette's HEALTH width
 	"Restarts": 4,

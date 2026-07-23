@@ -2,7 +2,9 @@ package browse
 
 import (
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -108,4 +110,184 @@ func namespaceTrouble(rows []resources.Row, grouped bool) map[string]bool {
 		}
 	}
 	return trouble
+}
+
+// applySort is sortForDisplay's own call site, upgraded with a manual
+// override: once the user has picked a column with 1-9 (handleSortKey),
+// that choice wins over the built-in default (unhealthy-first, CRD's
+// group-then-name, etc.) for as long as it stays set — grouped mode (6b)
+// is the one exception, since namespace partitioning keeps sole ownership
+// of row order there and the sort arrow already hides in that mode too
+// (tableBody's own !grouped guard).
+func (m *Model) applySort() {
+	if m.sortColumn > 0 && !m.grouped() {
+		m.applyUserSort(m.rows)
+		return
+	}
+	sortForDisplay(m.kind, m.namespace, m.rows)
+}
+
+// applyUserSort stable-sorts rows by m.sortColumn/m.sortAsc — a no-op if
+// the column index doesn't exist for the current kind (defensive only;
+// handleSortKey already guards this before ever setting m.sortColumn).
+func (m Model) applyUserSort(rows []resources.Row) {
+	idx := m.sortColumn - 1
+	if idx < 0 || idx >= len(m.desc.Columns) {
+		return
+	}
+	less := m.cellLess(m.desc.Columns[idx], idx)
+	asc := m.sortAsc
+	sort.SliceStable(rows, func(i, j int) bool {
+		if asc {
+			return less(rows[i], rows[j])
+		}
+		return less(rows[j], rows[i])
+	})
+}
+
+// handleSortKey applies one 1-9 press: the same column pressed again flips
+// direction, a different column switches to it at its own natural first
+// direction (defaultSortAsc) — a no-op while grouped (6b's namespace
+// partitioning owns row order there) or if this kind has no such column.
+func (m *Model) handleSortKey(col int) {
+	if m.grouped() {
+		return
+	}
+	if col < 1 || col > len(m.desc.Columns) {
+		return
+	}
+	if m.sortColumn == col {
+		m.sortAsc = !m.sortAsc
+	} else {
+		m.sortColumn = col
+		m.sortAsc = defaultSortAsc(m.desc.Columns[col-1])
+	}
+	m.applySort()
+	m.recomputeVisible()
+}
+
+// descendingFirstTitles are numeric-ish columns not already covered by
+// resources.RightAlignTitles: Restarts renders left-aligned (2a's own ↺
+// header), and CPU/MEM are bar cells with no right-aligned text at all —
+// but "biggest/busiest first" is exactly as sensible a first press for all
+// three as it is for Age/Replicas/etc.
+var descendingFirstTitles = map[string]bool{
+	"Restarts": true, "CPU": true, "MEM": true,
+}
+
+// defaultSortAsc is a column's "first press" direction: descending for
+// anything that reads as a metric/count/recency (busiest, most, or most
+// recent first reads more useful than the reverse), ascending — the
+// ordinary alphabetical sense — for everything else (Name, Status, Node,
+// Ready, ...).
+func defaultSortAsc(title string) bool {
+	return !resources.RightAlignTitles[title] && !descendingFirstTitles[title]
+}
+
+// cellLess returns an ascending "a sorts before b" comparator for column
+// idx (canonicalTitle is m.desc.Columns[idx] — the un-swapped title, e.g.
+// "Restarts" rather than browseColumns' ↺ glyph, since that's what this
+// dispatch and metricValue key off). CPU/MEM read live usage off
+// m.podMetrics/m.nodeMetrics — resources.Row carries no numeric value for
+// them at all, only a "–" placeholder cell (the bar is rendered from those
+// maps, not from Cells). Age parses shortAge's compact display string back
+// into a duration. Everything else compares as an integer when both cells
+// parse as one (Restarts, Replicas, Completions, Active, Data, Rev, ...),
+// falling back to a case-insensitive string compare otherwise — mirroring
+// sortForDisplay's own tie-breaker above.
+func (m Model) cellLess(canonicalTitle string, idx int) func(a, b resources.Row) bool {
+	switch canonicalTitle {
+	case "Age":
+		return func(a, b resources.Row) bool {
+			return parseShortAge(cellAt(a, idx)) < parseShortAge(cellAt(b, idx))
+		}
+	case "CPU":
+		return func(a, b resources.Row) bool {
+			return m.metricValue(a.Name, true) < m.metricValue(b.Name, true)
+		}
+	case "MEM":
+		return func(a, b resources.Row) bool {
+			return m.metricValue(a.Name, false) < m.metricValue(b.Name, false)
+		}
+	default:
+		return func(a, b resources.Row) bool {
+			at, bt := cellAt(a, idx), cellAt(b, idx)
+			if an, aok := parseNumeric(at); aok {
+				if bn, bok := parseNumeric(bt); bok {
+					return an < bn
+				}
+			}
+			return strings.Compare(strings.ToLower(at), strings.ToLower(bt)) < 0
+		}
+	}
+}
+
+// cellAt reads row.Cells[idx], "" for a short/empty row (never expected in
+// practice, same defensive convention as crdGroupCell above).
+func cellAt(r resources.Row, idx int) string {
+	if idx < 0 || idx >= len(r.Cells) {
+		return ""
+	}
+	return r.Cells[idx]
+}
+
+// metricValue looks up a Pod/Node row's live CPU/MEM usage by name — the
+// only place that data exists, since neither kind's Cells carry a numeric
+// value for these (metrics.go's metricCell/nodes.go's nodeMetricCell render
+// straight from these same maps). -1 for a row with no metrics yet (still
+// loading, or the row is neither a Pod nor a Node), so it sorts below every
+// real reading regardless of direction rather than colliding with a
+// genuine zero-usage row.
+func (m Model) metricValue(name string, cpu bool) int64 {
+	switch m.kind {
+	case kube.KindPod:
+		if pm, ok := m.podMetrics[name]; ok {
+			if cpu {
+				return pm.CPUMilli
+			}
+			return pm.MemBytes
+		}
+	case kube.KindNode:
+		if nm, ok := m.nodeMetrics[name]; ok {
+			if cpu {
+				return nm.CPUMilli
+			}
+			return nm.MemBytes
+		}
+	}
+	return -1
+}
+
+// parseShortAge inverts resources' shortAge display format ("12m"/"3h"/
+// "5d"/"45s") back into a comparable duration — kept browse-local since
+// sort ordering is a browse concern, not resources'. Unparseable input
+// (never expected — every kind's Age cell is always shortAge's own output)
+// sorts as zero.
+func parseShortAge(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s[:len(s)-1])
+	if err != nil {
+		return 0
+	}
+	switch s[len(s)-1] {
+	case 's':
+		return time.Duration(n) * time.Second
+	case 'm':
+		return time.Duration(n) * time.Minute
+	case 'h':
+		return time.Duration(n) * time.Hour
+	case 'd':
+		return time.Duration(n) * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// parseNumeric parses a plain base-10 integer cell (Restarts, Replicas,
+// Completions, Active, Data, Rev, ...) for cellLess's numeric comparison.
+func parseNumeric(s string) (int64, bool) {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	return n, err == nil
 }

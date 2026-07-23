@@ -93,10 +93,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case podMetricsLoadedMsg:
 		if msg.epoch == m.metricsEpoch && msg.namespace == m.countNamespace() && msg.err == nil {
 			m.podMetrics = msg.metrics
+			// A live CPU/MEM sort (sort.go's cellLess) reads straight off
+			// this map, so a fresh poll can change the rank ordering even
+			// though m.rows itself didn't change — re-sort to keep it live.
+			if m.sortColumn > 0 {
+				m.applySort()
+				m.recomputeVisible()
+			}
 		}
 	case nodeMetricsLoadedMsg:
 		if msg.epoch == m.metricsEpoch && msg.err == nil {
 			m.nodeMetrics = msg.metrics
+			if m.sortColumn > 0 {
+				m.applySort()
+				m.recomputeVisible()
+			}
 		}
 	case bulkDeleteResultMsg:
 		m.pendingBulkDelete = nil
@@ -174,7 +185,8 @@ type nodeShellResultMsg struct{ err error }
 type editResultMsg struct{ err error }
 
 // applyRowsLoaded handles a fresh List reply: sorts workload kinds
-// unhealthy-first, recomputes the filtered/visible set (preserving
+// unhealthy-first (or the user's own 1-9 column choice, if any —
+// applySort/sort.go), recomputes the filtered/visible set (preserving
 // selection by name where possible), and picks the resulting task state.
 func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.kind != m.kind {
@@ -189,8 +201,8 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	sortForDisplay(m.kind, m.namespace, msg.rows)
 	m.rows = msg.rows
+	m.applySort()
 	m.pods = msg.pods
 	m.helmReleases = msg.helmReleases
 	m.nodeCount = msg.nodeCount
@@ -293,6 +305,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if m.state == tui.TaskStateReady {
+			m.handleSortKey(int(msg.String()[0] - '0'))
+		}
 	case "/":
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true

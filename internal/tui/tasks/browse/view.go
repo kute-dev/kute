@@ -313,8 +313,14 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	case m.kind == kube.KindCustomResourceDefinition:
 		// 14b: "28 definitions · 9 API groups · sorted by group" — the
 		// generic "<N> <kind>" wording never names the group count or the
-		// sort order this list is unique in guaranteeing.
-		rightText = fmt.Sprintf("%d definitions · %d API groups · sorted by group", len(m.rows), distinctCRDGroups(m.rows))
+		// sort order this list is unique in guaranteeing. Dropped once a
+		// manual 1-9 sort overrides that guarantee (sort.go's applySort),
+		// since the clause would otherwise describe an order the rows are
+		// no longer actually in.
+		rightText = fmt.Sprintf("%d definitions · %d API groups", len(m.rows), distinctCRDGroups(m.rows))
+		if m.sortColumn == 0 {
+			rightText += " · sorted by group"
+		}
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
 	}
@@ -606,7 +612,7 @@ func (m Model) emptyBody(width, height int) string {
 
 // rowCellStyles is the docs/design §2a per-column palette, resolved from
 // theme once per render: only the status glyph and STATUS text carry the
-// status color; the name is TextPrimary (BadText when crashlooping), READY
+// status color; the name is TextPrimary (BadText when crashlooping), RDY
 // TextSecondary, restarts Warn when non-zero, and NODE/AGE/metric values
 // TextDim. selBg carries the selection background: for the selected row
 // every style (and every ANSI span embedded in a cell — match highlights,
@@ -700,6 +706,27 @@ func newRowCellStyles(theme tui.Theme, selected, muted, marked bool) rowCellStyl
 func (m Model) tableBody(width, height int) string {
 	theme := m.Theme()
 	cols := browseColumns(m.desc)
+	grouped := m.grouped()
+	// The sorted column's header arrow (components.Table's own SortKey/
+	// SortAsc → renderHeaderV2) — a manual 1-9 choice (sort.go) wins over
+	// the built-in default, mutating cols[m.sortColumn] in place (rather
+	// than pre-populating every column's Sort field) since only one column
+	// is ever active at a time. This must happen before tableCols is
+	// derived below, since a marked view's tableCols copies cols into a new
+	// backing array — mutating cols afterward wouldn't reach it.
+	sortKey, sortAsc := "", false
+	switch {
+	case m.sortColumn > 0 && !grouped:
+		if m.sortColumn < len(cols) {
+			cols[m.sortColumn].Sort = cols[m.sortColumn].Title
+			sortKey, sortAsc = cols[m.sortColumn].Title, m.sortAsc
+		}
+	case workloadKinds[m.kind] && !grouped:
+		// The sort indicator implies a straight global status sort; 6b
+		// groups by namespace first, so showing "↑" on STATUS would
+		// misdescribe the order.
+		sortKey, sortAsc = "status", true
+	}
 	cpuMax, memMax := m.metricsMax()
 	muted := m.offline() || m.cachedView
 	styles := [2]rowCellStyles{newRowCellStyles(theme, false, muted, false), newRowCellStyles(theme, true, muted, false)}
@@ -719,8 +746,6 @@ func (m Model) tableBody(width, height int) string {
 	if m.kind == kube.KindNode {
 		majorityVersion = m.nodeMajorityVersion()
 	}
-
-	grouped := m.grouped()
 
 	rows := make([]components.Row, 0, len(m.display))
 	for idx, dr := range m.display {
@@ -763,14 +788,6 @@ func (m Model) tableBody(width, height int) string {
 		// into the leading marker slot and inter-column gaps, which per-cell
 		// Style alone doesn't reach (components.Table's renderRowV2).
 		rows = append(rows, components.Row{Cells: cells, RowStyle: st.dim})
-	}
-
-	sortKey, sortAsc := "", false
-	if workloadKinds[m.kind] && !grouped {
-		// The sort indicator implies a straight global status sort; 6b
-		// groups by namespace first, so showing "↑" on STATUS would
-		// misdescribe the order.
-		sortKey, sortAsc = "status", true
 	}
 
 	t := components.Table{
@@ -850,7 +867,7 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 				text += st.dim.Render(r.NameSuffix)
 			}
 			cells[i] = components.Cell{Text: text}
-		case cols[i].Title == "Ready":
+		case cols[i].Title == "Rdy":
 			cells[i].Style = st.ready
 		case m.kind == kube.KindNode && cols[i].Title == "Status":
 			// docs/design README.md §11a: "healthy state renders dim,

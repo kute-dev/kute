@@ -228,7 +228,7 @@ func (t Table) renderHeaderV2(widths []int, width int) string {
 }
 
 // renderRowV2 draws one data row. The selected row keeps per-cell styling
-// (mockup 2a: only the name brightens — READY/STATUS/… keep their colors on
+// (mockup 2a: only the name brightens — RDY/STATUS/… keep their colors on
 // the selection background): the caller must bake the selection background
 // into every selected-row cell style/span, and the table renders each
 // cell's padding and the inter-column gaps through SelRowStyle so the
