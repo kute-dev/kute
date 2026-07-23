@@ -95,14 +95,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// expectation everywhere else in the app, and this banner shouldn't
 		// be the one state where it silently does something else instead.
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
 		default:
 			return m, func() tea.Msg { return tui.BackMsg{} }
 		}
 	}
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }

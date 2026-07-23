@@ -200,7 +200,7 @@ func TestRootModelHelpOverlayRendersScopeGlobalAndViewColumns(t *testing.T) {
 	task := &screenTask{name: "browse"}
 	sess := testSession()
 	sess.HelpScope = []tui.KeyHint{{Key: "g", Label: "jump anywhere"}}
-	sess.HelpGlobal = []tui.KeyHint{{Key: "q", Label: "quit"}}
+	sess.HelpGlobal = []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}}
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "?"})

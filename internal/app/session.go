@@ -111,7 +111,7 @@ func helpGlobalKeys() []tui.KeyHint {
 		{Key: "esc", Label: "back"},
 		{Key: "U", Label: "what's new"},
 		verbs.Help.Hint(),
-		{Key: "q", Label: "quit"},
+		{Key: "ctrl+q", Label: "quit"},
 	}
 }
 

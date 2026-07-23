@@ -119,7 +119,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.message, m.lastError = "", ""
 	}
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }

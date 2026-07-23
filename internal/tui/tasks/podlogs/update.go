@@ -74,7 +74,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		m.cancelStream()
 		m.stream = StreamClosed
 		m.feedback = "Log stream closed."

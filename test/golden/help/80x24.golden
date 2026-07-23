@@ -8,7 +8,7 @@ cache-0 ╭───────────────────────
         │ l logs              n namespace         esc back            │         
         │ e exec              c context           U what's new        │         
         │ ctrl-d delete       a all namespaces    ? help              │         
-        │ y yaml              ↵ toggles last      q quit              │         
+        │ y yaml              ↵ toggles last      ctrl+q quit         │         
         │─────────────────────────────────────────────────────────────│         
         │                                                   esc close │         
         ╰─────────────────────────────────────────────────────────────╯         

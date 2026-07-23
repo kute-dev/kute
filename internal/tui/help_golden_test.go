@@ -24,7 +24,7 @@ func (helpBackdropScreen) View() tea.View {
 	return tea.NewView(helpBackdropScreen{}.Body(120, 30))
 }
 func (helpBackdropScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return helpBackdropScreen{}, nil }
-func (helpBackdropScreen) Theme() tui.Theme                       { return tui.Dark() }
+func (helpBackdropScreen) Theme() tui.Theme                        { return tui.Dark() }
 func (helpBackdropScreen) Header() tui.HeaderState {
 	return tui.HeaderState{Crumbs: []tui.Crumb{
 		{Text: "microk8s-cluster"}, {Text: "nva-stage"}, {Text: "Pods"},
@@ -52,7 +52,7 @@ func goldenHelpSession(theme tui.Theme) *tui.Session {
 	}
 	sess.HelpGlobal = []tui.KeyHint{
 		{Key: "↑↓ jk", Label: "move"}, {Key: "esc", Label: "back"},
-		{Key: "U", Label: "what's new"}, {Key: "?", Label: "help"}, {Key: "q", Label: "quit"},
+		{Key: "U", Label: "what's new"}, {Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"},
 	}
 	return sess
 }

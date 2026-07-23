@@ -118,7 +118,7 @@ func TestApplyLoadedObjectGone(t *testing.T) {
 
 	// q/ctrl+c must still quit even while the "deleted" banner is showing —
 	// mirrors poddetail's own TestGonePodStillQuitsOnQAndCtrlC.
-	for _, key := range []string{"q", "ctrl+c"} {
+	for _, key := range []string{"ctrl+q", "ctrl+c"} {
 		_, cmd := got.Update(tea.KeyPressMsg{Text: key})
 		if cmd == nil {
 			t.Fatalf("%s: expected a command", key)

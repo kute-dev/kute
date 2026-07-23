@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   SETUP  r retry  k enter kubeconfig path                                                                      q quit  
+   SETUP  r retry  k enter kubeconfig path                                                                 ctrl+q quit  

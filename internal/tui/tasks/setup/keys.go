@@ -7,7 +7,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateEditKey(msg)
 	}
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "r":
 		return m.doRetry("")

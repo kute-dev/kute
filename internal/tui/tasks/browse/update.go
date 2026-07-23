@@ -259,7 +259,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateFilterKey(msg)
 	}
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
 	case "esc", "backspace":
 		// 20a: "esc clears marks before it walks back a level."

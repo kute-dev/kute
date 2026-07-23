@@ -72,14 +72,14 @@ func (m Model) Keybar() tui.Keybar {
 			PillText:   "NO CLUSTER",
 			Groups:     [][]tui.KeyHint{hints},
 			RightNote:  "probing other kubeconfig contexts in the background",
-			RightHints: []tui.KeyHint{{Key: "q", Label: "quit"}},
+			RightHints: []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}},
 		}
 	default:
 		return tui.Keybar{
 			Pill:       tui.ModeSetup,
 			PillText:   "SETUP",
 			Groups:     [][]tui.KeyHint{{verbs.Retry.Hint(), {Key: "k", Label: "enter kubeconfig path"}}},
-			RightHints: []tui.KeyHint{{Key: "q", Label: "quit"}},
+			RightHints: []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}},
 		}
 	}
 }

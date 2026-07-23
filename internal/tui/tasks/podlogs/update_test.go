@@ -43,7 +43,7 @@ func TestExitClosesStream(t *testing.T) {
 	t.Parallel()
 
 	model := testModel()
-	_, cmd := model.Update(tea.KeyPressMsg{Text: "q"})
+	_, cmd := model.Update(tea.KeyPressMsg{Text: "ctrl+q"})
 	if cmd == nil || model.stream != StreamClosed {
 		t.Fatalf("cmd = %v stream = %s", cmd, model.stream)
 	}

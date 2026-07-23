@@ -348,7 +348,7 @@ func TestGonePodShowsBannerAndAnyKeyGoesBack(t *testing.T) {
 // swallowing the app's one global quit expectation: q/ctrl+c must still
 // quit even while the banner is showing, not silently navigate back instead.
 func TestGonePodStillQuitsOnQAndCtrlC(t *testing.T) {
-	for _, key := range []string{"q", "ctrl+c"} {
+	for _, key := range []string{"ctrl+q", "ctrl+c"} {
 		lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}
 		m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "ghost"})
 		m.SetSize(120, 40)

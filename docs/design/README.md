@@ -63,7 +63,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
   - Title row: `✕ microk8s-cluster is unreachable` (bold) + right `retrying in 8s · attempt 2`.
   - Raw error in a red-tinted box (bg `#16121a`, border `#3a2a30`, text `#c98a8a`).
   - `SWITCH CONTEXT` section: bordered list of all kubeconfig contexts, **pre-probed in the background** with reachability + latency — `✕ microk8s-cluster (current · timeout)`, `● prod-eks (reachable · 32ms)` (selected), `● kind-local (reachable · 4ms)`. Failing context stays listed.
-  - Keys: `↵ connect to selected · r retry now · e edit kubeconfig path · q quit`.
+  - Keys: `↵ connect to selected · r retry now · e edit kubeconfig path · ctrl+q quit`.
 - **Keybar:** `NO CLUSTER` pill + `probing other kubeconfig contexts in the background`.
 
 ### 5a — Pod full view (↵ on a table row)
@@ -110,7 +110,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 7b — Help overlay (`?`)
 - Floating panel (~79% width) over dimmed table. Header: `? help` + `keys for <View> view · globals below` + version right-aligned.
-- **Three columns, ~6 rows each:** column 1 = current view's keys (swaps per view: PODS VIEW, LOGS…), columns 2–3 fixed = SCOPE (`g n c a / ↵ toggles last`) and GLOBAL (`↑↓ jk`, `esc`, `p pause sync`, `r reconnect`, `?`, `q`). Column headings `#c4b5fd` uppercase over `#1c1c2c` rule.
+- **Three columns, ~6 rows each:** column 1 = current view's keys (swaps per view: PODS VIEW, LOGS…), columns 2–3 fixed = SCOPE (`g n c a / ↵ toggles last`) and GLOBAL (`↑↓ jk`, `esc`, `p pause sync`, `r reconnect`, `?`, `ctrl+q`). Column headings `#c4b5fd` uppercase over `#1c1c2c` rule.
 - Must fit without scrolling — if the key map outgrows one screen, cut keys, don't paginate. Read-only; app keeps syncing underneath. Close on `?` or `esc`. Keybar pill `HELP`.
 
 ### 8a — Manifest / YAML view (`y` on any object)
@@ -147,7 +147,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - The only screen with the wordmark (ASCII-art logo, `#33334a`) + tagline + version. Header shows `○ no cluster` in the connection-state slot.
 - **`LOOKED IN` box** (border `#1c1c2c`, bg `#0c0c12`): each path checked with why it failed — `✕ $KUBECONFIG — not set`, `✕ ~/.kube/config — no such file`.
 - One dim line of provider hints (`aws eks update-kubeconfig · gcloud … · microk8s config`). No in-app wizard.
-- Keys: `r retry` (after fetching credentials) · `k enter kubeconfig path` · `q quit`. Keybar pill `SETUP` (neutral gray `#1c1c2c`/`#9a9ab2`).
+- Keys: `r retry` (after fetching credentials) · `k enter kubeconfig path` · `ctrl+q quit`. Keybar pill `SETUP` (neutral gray `#1c1c2c`/`#9a9ab2`).
 
 ### 10c — Empty namespace (connected, zero pods)
 - **Distinct from error states:** header stays green/connected, table column header still renders — the app is fine.

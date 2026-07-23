@@ -32,7 +32,7 @@ func TestRenderHelpDoesNotTruncateColumns(t *testing.T) {
 		}},
 	}}
 	scope := []KeyHint{{Key: "g", Label: "goto"}, {Key: "n", Label: "namespace"}}
-	global := []KeyHint{{Key: "?", Label: "help"}, {Key: "q", Label: "quit"}}
+	global := []KeyHint{{Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"}}
 
 	for _, width := range []int{80, 100, 120, 160, 220} {
 		panel := renderHelp(Dark(), view, scope, global, width)
