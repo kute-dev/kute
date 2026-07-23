@@ -453,10 +453,29 @@ func New(cfg Config) Model {
 	// — falling back to Pod here, like switchKind already does for the same
 	// "unknown kind" case, avoids handing load() a zero-value Descriptor
 	// (empty Kind) that ListRaw has no informer for.
+	//
+	// KindEvent gets the same fallback even though it does resolve a real
+	// Descriptor: 9b (tasks/events) is the curated experience for this kind
+	// (docs/design README.md §9b) — every live path to it (the 'e' key, the
+	// goto palette's Events entry) redirects through openSelectedEvents
+	// rather than ever calling switchKind(KindEvent), so browse's own stock
+	// Events table is otherwise unreachable. But Location.Kind can still
+	// end up "Event" (the root shell's GotoKindMsg handler sets it before
+	// forwarding to that redirect, and 9b itself never corrects it back
+	// while it's the active task) — if the user quits from 9b, PerContext
+	// persists that verbatim, and next launch's buildBrowseTask would
+	// otherwise render the never-meant-to-be-seen stock list instead of
+	// bouncing back to 9b. Resetting kind (and Location.Kind, so quitting
+	// again doesn't just re-persist "Event") to Pod here is simpler than
+	// teaching NewModel/buildBrowseTask to redirect to tasks/events before
+	// the root model even exists.
 	desc, ok := reg.Descriptor(kind)
-	if !ok {
+	if !ok || kind == kube.KindEvent {
 		kind = kube.KindPod
 		desc, _ = reg.Descriptor(kind)
+		if cfg.Session != nil {
+			cfg.Session.Location.Kind = kind
+		}
 	}
 
 	state := tui.TaskStateLoading

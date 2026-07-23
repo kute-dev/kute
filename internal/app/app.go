@@ -174,9 +174,24 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Forwards = kube.NewForwardManager()
 		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
 		sess.Metrics = cluster
+		// Snapshot before buildBrowseTask: browse.New's own KindEvent
+		// carve-out (its doc comment) resets Session.Location.Kind to Pod
+		// as a side effect of building the underlying browse task below.
+		restoreNamespace, restoreToEvents := sess.Location.Namespace, sess.Location.Kind == kube.KindEvent
 		model := tui.NewWithSession(buildBrowseTask(cfg, sess, cluster), sess).
 			WithRootFactories(buildSetupFactory(cfg, sess, cluster), buildBrowseFactory(cfg, sess, cluster)).
 			WithUpdatePanel(buildUpdateFactory(sess, checker))
+		if restoreToEvents {
+			// A persisted Location.Kind of "Event" (quitting from 9b) should
+			// land back on 9b, not the Pod-fallback browse task built above —
+			// pushed on top of it, so esc walks back to browse exactly like
+			// live navigation to 9b would have.
+			openEvents := openEventsFunc(sess, cluster, openYAMLFunc(sess, cluster))
+			eventsModel, _ := openEvents(restoreNamespace, tui.DefaultWidth, tui.DefaultHeight)
+			if eventsTask, ok := eventsModel.(tui.Task); ok {
+				model = model.WithInitialPush(eventsTask)
+			}
+		}
 		return model, cluster, nil
 
 	case cfg.Demo:
@@ -222,6 +237,10 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			Forwards:          sess.Forwards,
 			Retrier:           demoCluster,
 		})
+		// No restore-to-9b carve-out here (unlike the real-cluster branch
+		// above): BuildSession returns before ever reading PerContext for
+		// cfg.Demo (session.go), so Session.Location.Kind is always "" at
+		// this point — Location.Kind == KindEvent can't happen in demo mode.
 		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
 		return model, nil, demoCluster
 

@@ -386,3 +386,40 @@ func TestEKeyOpensEventsFromEmptyState(t *testing.T) {
 		t.Fatalf("expected 'e' from TaskStateEmpty to push tasks/events, got %T", updated)
 	}
 }
+
+// TestNewFallsBackToPodWhenRestoredKindIsEvent is a restart-persistence
+// regression: every live path to Events (the 'e' key, the goto palette)
+// redirects to tasks/events (9b) rather than ever calling
+// switchKind(KindEvent), so browse's own stock Events table should be
+// unreachable — but the root shell's GotoKindMsg handler sets
+// Session.Location.Kind = KindEvent before forwarding that redirect, and 9b
+// never corrects it back while active. If the user quits from 9b,
+// PerContext persists "Event" verbatim, and the next launch's
+// buildBrowseTask built browse directly against it — rendering the
+// never-meant-to-be-seen stock list (KindEvent has a real Descriptor,
+// unlike KindWhoCan/KindOverview, so it slipped past the existing
+// unknown-kind fallback) instead of bouncing back to 9b. New must reset to
+// Pod, and correct Location.Kind too so quitting again doesn't just
+// re-persist "Event".
+func TestNewFallsBackToPodWhenRestoredKindIsEvent(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindEvent
+
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.kind != kube.KindPod {
+		t.Fatalf("kind = %s, want Pod fallback instead of rendering the stock Events table", m.kind)
+	}
+	if session.Location.Kind != kube.KindPod {
+		t.Fatalf("Session.Location.Kind = %s, want corrected to Pod (else quitting again re-persists Event)", session.Location.Kind)
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "Pods") {
+		t.Fatalf("expected the Pods breadcrumb, got:\n%s", view)
+	}
+}

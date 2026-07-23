@@ -250,6 +250,22 @@ func (m Model) WithUpdatePanel(build func() Task) Model {
 	return m
 }
 
+// WithInitialPush seeds the navigation stack with the model's current task
+// and makes pushed the active one — the composition-root equivalent of a
+// live in-app push (a task's Update returning a different task instance;
+// see the Task-contract doc comment above), for cases that need to start
+// already one level deep. The one caller today is a persisted
+// Location.Kind of "Event" restoring straight to 9b (tasks/events) instead
+// of browse's own stock Events list (browse.New's own doc comment covers
+// why that list is never meant to be a resting screen) — esc from pushed
+// pops back to the browse task exactly like pressing 'e' from it live
+// would have gotten here in the first place.
+func (m Model) WithInitialPush(pushed Task) Model {
+	m.stack = append(m.stack, m.task)
+	m.task = pushed
+	return m
+}
+
 // Mode is the current shell mode (drives the keybar pill while an overlay
 // is open).
 func (m Model) Mode() Mode { return m.mode }
@@ -287,6 +303,21 @@ func (m Model) resizeTask() {
 	}
 }
 
+// setAllSizes resizes the active task and every task sitting in m.stack.
+// A live push's child normally inherits its parent's already-correct
+// current width/height at construction time (the parent built it with
+// m.width/m.height), so only the newly active task ever needs resizing —
+// but WithInitialPush seeds the stack before the runtime has delivered any
+// real terminal size at all (both tasks start at tui.Default* dimensions),
+// so the one tea.WindowSizeMsg that follows must reach the whole stack too,
+// or the seeded parent renders letterboxed the moment esc pops back to it.
+func (m Model) setAllSizes(width, height int) {
+	m.task.SetSize(width, height)
+	for _, t := range m.stack {
+		t.SetSize(width, height)
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Unwrap a reconnected cluster's forwarded event/conn message (see
 	// clusterwatch.go) to the same kube types the switch below and every
@@ -319,10 +350,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.task.SetSize(msg.Width, msg.Height)
+		m.setAllSizes(msg.Width, msg.Height)
 	case WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.task.SetSize(msg.Width, msg.Height)
+		m.setAllSizes(msg.Width, msg.Height)
 	case BackMsg:
 		if len(m.stack) > 0 {
 			m.task = m.stack[len(m.stack)-1]

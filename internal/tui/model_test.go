@@ -485,6 +485,42 @@ func TestRootTaskSwapsPropagateTerminalSize(t *testing.T) {
 	_ = updated
 }
 
+// TestWithInitialPushSeedsStackAndResizesBothTasks pins a persisted
+// Location.Kind of "Event" restoring straight to 9b (tasks/events) instead
+// of browse's own stock Events list (internal/app's NewModel calls
+// WithInitialPush for exactly this): the pushed task is immediately active,
+// esc/BackMsg pops back to the seeded task underneath, and — the fix this
+// regression actually pins — a live task's child normally inherits its
+// parent's already-correct width/height at construction time, but
+// WithInitialPush seeds the stack before the runtime has delivered any real
+// terminal size, so the first tea.WindowSizeMsg must resize the seeded
+// stack task too, not just the active one, or it renders letterboxed at
+// tui.Default* dimensions the moment esc pops back to it.
+func TestWithInitialPushSeedsStackAndResizesBothTasks(t *testing.T) {
+	t.Parallel()
+
+	browseTask := &sizedTask{screenTask: screenTask{name: "browse-pods"}}
+	eventsTask := &sizedTask{screenTask: screenTask{name: "events-view"}}
+	model := tui.NewWithSession(browseTask, testSession()).WithInitialPush(eventsTask)
+
+	if view := model.View().Content; !strings.Contains(view, "events-view") {
+		t.Fatalf("expected the pushed task active immediately, got:\n%s", view)
+	}
+
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if got := eventsTask.lastSize(); got != [2]int{120, 40} {
+		t.Fatalf("active (pushed) task size = %v, want [120 40]", got)
+	}
+	if got := browseTask.lastSize(); got != [2]int{120, 40} {
+		t.Fatalf("seeded stack task size = %v, want [120 40] — must not be stuck at tui.Default* dimensions", got)
+	}
+
+	updated, _ = updated.(tui.Model).Update(tui.BackMsg{})
+	if view := updated.(tui.Model).View().Content; !strings.Contains(view, "browse-pods") {
+		t.Fatalf("expected esc/BackMsg to pop back to the seeded browse task, got:\n%s", view)
+	}
+}
+
 // TestNeverConnectedLatchesOffAfterFirstConnect pins the "latches false for
 // good" half of the same doc comment: once any Connected state has been
 // observed, a later mid-session drop is 4a (browse's own job), not another
