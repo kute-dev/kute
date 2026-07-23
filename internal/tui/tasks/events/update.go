@@ -21,6 +21,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+	case tui.SwitchNamespaceMsg:
+		return m, m.switchNamespace(msg.Namespace)
 	case loadedMsg:
 		return m.applyLoaded(msg)
 	case components.SpinnerTickMsg:
@@ -116,6 +118,29 @@ func matchesQuery(g kube.EventGroup, query string) bool {
 		strings.Contains(strings.ToLower(g.Message), q)
 }
 
+// switchNamespace re-scopes 9b to a different namespace — namespace == ""
+// switches to all-namespaces (browse's own "a" key, docs/design README.md
+// §6a/§6b's "a all namespaces" idiom), reached here either via 9b's own "a"
+// key or the namespace palette's tui.SwitchNamespaceMsg (the root shell's
+// "n" key opens the palette for whatever Screen is active, not just
+// browse — 9b already satisfies Screen/CapturingInput, so the palette
+// already opens over it; this is what makes selecting a namespace there
+// actually do something). A no-op in object-scoped mode (poddetail's/
+// nodedetail's "e"), where there's no namespace to switch — the screen is
+// pinned to one object, mirroring poddetail/nodedetail themselves never
+// reacting to tui.SwitchNamespaceMsg either — and a no-op if already
+// showing the requested namespace.
+func (m *Model) switchNamespace(namespace string) tea.Cmd {
+	if m.objectKind != "" || namespace == m.namespace {
+		return nil
+	}
+	m.namespace = namespace
+	m.selected = 0
+	m.state = tui.TaskStateLoading
+	m.feedback = "Loading events..."
+	return tea.Batch(m.load(), components.SpinnerTick())
+}
+
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive {
 		return m.updateFilterKey(msg)
@@ -145,6 +170,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.recomputeVisible()
 	case "t":
 		m.cycleWindow()
+	case "a":
+		return m, m.switchNamespace("")
 	case "/":
 		if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
 			m.filterActive = true

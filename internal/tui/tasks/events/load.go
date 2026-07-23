@@ -53,6 +53,10 @@ func (m Model) load() tea.Cmd {
 // cross-check — nil (every warning renders yellow) when lister isn't wired
 // or the Pod descriptor can't be resolved, the same "degrade gracefully"
 // precedent browse's own busiestOtherNamespace/otherKindsIn hints use.
+// Keyed by "namespace/name" rather than bare name — in 9b's all-namespaces
+// mode (namespace == "") two different namespaces can each have their own
+// "cache-0" pod, and a bare-name key would wrongly mark a healthy pod's
+// warnings red just because a same-named pod elsewhere is crashlooping.
 func failingPods(ctx context.Context, lister resources.RawLister, reg resources.Registry, namespace string) map[string]bool {
 	if lister == nil {
 		return nil
@@ -68,7 +72,7 @@ func failingPods(ctx context.Context, lister resources.RawLister, reg resources.
 	failing := make(map[string]bool, len(rows))
 	for _, r := range rows {
 		if r.Status == resources.StatusFail {
-			failing[r.Name] = true
+			failing[r.Namespace+"/"+r.Name] = true
 		}
 	}
 	return failing

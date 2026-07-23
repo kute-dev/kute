@@ -304,16 +304,31 @@ func (m Model) renderRow(theme tui.Theme, r displayRow, selected bool, width int
 
 // severityStyle is 9b's red-vs-yellow-vs-blue rule (docs/design README.md
 // §9b): Warning groups render red when the involved object is a currently
-// StatusFail pod (m.failing, load.go's best-effort cross-check), yellow
-// otherwise; Normal groups are always the neutral Info color.
+// StatusFail pod (m.failing, load.go's best-effort cross-check keyed by
+// "namespace/name" so all-namespaces mode can't confuse two same-named pods
+// in different namespaces), yellow otherwise; Normal groups are always the
+// neutral Info color.
 func (m Model) severityStyle(theme tui.Theme, g kube.EventGroup) lipgloss.Style {
 	if g.Type != "Warning" {
 		return lipgloss.NewStyle().Foreground(theme.Info)
 	}
-	if m.failing[objectName(g.Object)] {
+	if m.failing[g.Namespace+"/"+objectName(g.Object)] {
 		return lipgloss.NewStyle().Foreground(theme.Bad)
 	}
 	return lipgloss.NewStyle().Foreground(theme.Warn)
+}
+
+// objectDisplay is the OBJECT line's text: g.Object ("Kind/Name") as-is when
+// the screen is scoped to one namespace, prefixed with the group's own
+// namespace when this is 9b's all-namespaces mode (m.namespace == "",
+// mirroring 6b) — otherwise two different namespaces' identically-named
+// objects (e.g. "Pod/cache-0" in both shop-checkout and shop-payments)
+// would render as indistinguishable rows.
+func (m Model) objectDisplay(g kube.EventGroup) string {
+	if m.namespace != "" || m.objectKind != "" {
+		return g.Object
+	}
+	return g.Namespace + "/" + g.Object
 }
 
 func objectName(object string) string {
@@ -379,7 +394,7 @@ func (m Model) renderGroupRow(theme tui.Theme, g kube.EventGroup, selected bool,
 		countStyle.Render(components.Pad(countText, countW)) + gap +
 		lastStyle.Render(padLeft(shortEventAge(g.LastSeen, m.fetchedAt), lastW))
 	line2 := blankGlyph + gap +
-		objStyle.Render(components.Pad(components.Truncate(g.Object, reasonObjW), reasonObjW)) + gap +
+		objStyle.Render(components.Pad(components.Truncate(m.objectDisplay(g), reasonObjW), reasonObjW)) + gap +
 		msgLine(1) + gap + blankCount + gap + blankLast
 
 	lines := make([]string, 0, 2+max(len(msgLines)-2, 0))

@@ -8,8 +8,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -98,6 +102,173 @@ func TestNamespaceScopedLoadDedupesAndFoldsNormal(t *testing.T) {
 	// the summary strip's own "N warnings · N normal" separator.
 	if !strings.Contains(view, "normal") || !strings.Contains(view, "2 events") {
 		t.Fatalf("expected folded normal summary line in view:\n%s", view)
+	}
+}
+
+// TestAllNamespacesKeepsCrossNamespaceObjectsSeparateAndLabelsNamespace is
+// 9b's all-namespaces mode (browse's 'e' with Namespace == "", mirroring
+// 6b): two different namespaces each have their own "cache-0" pod hitting
+// the same FailedScheduling reason — one is actively failing
+// (CrashLoopBackOff), the other merely pending. Regression coverage for two
+// bugs a bare-name key would cause: the rows wrongly folding into one, and
+// the healthy namespace's warning wrongly rendering red because a
+// same-named pod elsewhere is crashlooping.
+func TestAllNamespacesKeepsCrossNamespaceObjectsSeparateAndLabelsNamespace(t *testing.T) {
+	failingPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "cache-0", Namespace: "shop-checkout"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "cache", RestartCount: 9,
+				State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+			}},
+		},
+	}
+	healthyPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "cache-0", Namespace: "shop-payments"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodPending,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "cache", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ContainerCreating"}},
+			}},
+		},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {failingPod, healthyPod},
+	}}
+
+	events := []kube.Event{
+		{Type: "Warning", Reason: "FailedScheduling", Object: "Pod/cache-0", Namespace: "shop-checkout", Message: "0/5 nodes available", Count: 1, LastSeen: time.Now()},
+		{Type: "Warning", Reason: "FailedScheduling", Object: "Pod/cache-0", Namespace: "shop-payments", Message: "0/5 nodes available", Count: 1, LastSeen: time.Now()},
+	}
+	sess := newSession()
+	sess.Registry = resources.DefaultRegistry()
+	m := New(Config{
+		Session:   sess,
+		Events:    fakeEvents{namespaceEvents: events},
+		Lister:    lister,
+		Namespace: "", // all-namespaces
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if len(m.rows) != 2 {
+		t.Fatalf("rows = %d, want 2 (same reason+object, different namespaces must stay separate), rows=%+v", len(m.rows), m.rows)
+	}
+	if !m.failing["shop-checkout/cache-0"] {
+		t.Fatalf("expected shop-checkout/cache-0 marked failing, failing=%+v", m.failing)
+	}
+	if m.failing["shop-payments/cache-0"] {
+		t.Fatalf("shop-payments/cache-0 wrongly marked failing off a same-named pod in another namespace, failing=%+v", m.failing)
+	}
+
+	// The REASON·OBJECT column is a fixed 20 chars wide, so
+	// "shop-checkout/Pod/cache-0" ellipsizes — check the namespace-prefixed
+	// start survives, not the untruncated string.
+	view := plain(m.Render())
+	if !strings.Contains(view, "shop-checkout/Pod") {
+		t.Fatalf("expected the OBJECT line namespace-prefixed for all-namespaces mode:\n%s", view)
+	}
+	if !strings.Contains(view, "shop-payments/Pod") {
+		t.Fatalf("expected the OBJECT line namespace-prefixed for all-namespaces mode:\n%s", view)
+	}
+}
+
+// TestAKeySwitchesToAllNamespaces covers 9b's "a" key (verbs.AllNamespaces,
+// browse's own idiom) re-scoping the screen to all namespaces and
+// re-fetching.
+func TestAKeySwitchesToAllNamespaces(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "shop-checkout", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Namespace: "shop-checkout"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if !strings.Contains(plain(m.Render()), "shop-checkout") {
+		t.Fatalf("expected the namespace-scoped breadcrumb before 'a':\n%s", plain(m.Render()))
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "a"})
+
+	if m.namespace != "" {
+		t.Fatalf("namespace = %q, want \"\" (all namespaces) after 'a'", m.namespace)
+	}
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after the reload settles", m.state)
+	}
+	if !strings.Contains(plain(m.Render()), "all namespaces") {
+		t.Fatalf("expected the all-namespaces breadcrumb after 'a':\n%s", plain(m.Render()))
+	}
+}
+
+// TestObjectScopedIgnoresAKey covers the flip side: 9b's object-scoped mode
+// (poddetail's/nodedetail's "e") has no namespace to switch, so "a" must be
+// a no-op — mirroring poddetail/nodedetail themselves never reacting to a
+// namespace switch either.
+func TestObjectScopedIgnoresAKey(t *testing.T) {
+	objectEvents := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "default", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{objectEvents: objectEvents},
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: "worker-0",
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "a"})
+
+	if m.namespace != "default" {
+		t.Fatalf("namespace = %q, want unchanged \"default\" — 'a' should be a no-op in object-scoped mode", m.namespace)
+	}
+}
+
+// TestSwitchNamespaceMsgReloadsEvents is the namespace palette's half of the
+// same wiring: the root shell's "n" key opens the one namespace palette over
+// whatever Screen is active (9b included, since it already satisfies
+// Screen/CapturingInput) and forwards tui.SwitchNamespaceMsg on Enter.
+// Before this fix, 9b silently ignored that message — selecting a namespace
+// from the palette looked like it did nothing.
+func TestSwitchNamespaceMsgReloadsEvents(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "shop-checkout", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Namespace: "shop-checkout"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: "shop-payments"})
+
+	if m.namespace != "shop-payments" {
+		t.Fatalf("namespace = %q, want shop-payments after tui.SwitchNamespaceMsg", m.namespace)
+	}
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after the reload settles", m.state)
+	}
+	if !strings.Contains(plain(m.Render()), "shop-payments") {
+		t.Fatalf("expected the shop-payments breadcrumb after switching:\n%s", plain(m.Render()))
+	}
+}
+
+// TestSwitchNamespaceMsgNoopInObjectScopedMode: the palette can still be
+// opened while looking at object-scoped events (it's a root-shell overlay,
+// not gated per-screen), but there's no namespace to switch to — the screen
+// is pinned to one object.
+func TestSwitchNamespaceMsgNoopInObjectScopedMode(t *testing.T) {
+	objectEvents := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "default", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{objectEvents: objectEvents},
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: "worker-0",
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: "shop-payments"})
+
+	if m.namespace != "default" {
+		t.Fatalf("namespace = %q, want unchanged \"default\" in object-scoped mode", m.namespace)
 	}
 }
 
