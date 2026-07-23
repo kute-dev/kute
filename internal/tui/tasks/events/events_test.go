@@ -88,10 +88,15 @@ func TestNamespaceScopedLoadDedupesAndFoldsNormal(t *testing.T) {
 	}
 
 	view := plain(m.Render())
-	if !strings.Contains(view, "BackOff") || !strings.Contains(view, "×2") {
-		t.Fatalf("expected deduped BackOff ×2 in view:\n%s", view)
+	// docs/design README.md §9b's grid puts the "×" in the column header
+	// (columnHeaderLines) and the bare count in the cell (renderGroupRow).
+	if !strings.Contains(view, "BackOff") || !strings.Contains(view, "×") || !strings.Contains(view, "2") {
+		t.Fatalf("expected deduped BackOff with a × count column in view:\n%s", view)
 	}
-	if !strings.Contains(view, "normal · 2 events") {
+	// docs/design README.md §9b's mockup renders "normal" and "N events —
+	// reasons" as separate spans with a plain space between (no "·"), unlike
+	// the summary strip's own "N warnings · N normal" separator.
+	if !strings.Contains(view, "normal") || !strings.Contains(view, "2 events") {
 		t.Fatalf("expected folded normal summary line in view:\n%s", view)
 	}
 }

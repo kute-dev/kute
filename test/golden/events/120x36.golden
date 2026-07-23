@@ -2,13 +2,13 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▲ 2 warnings   ○ 4 normal                                                           last hour · deduped · warnings first
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ▲ BackOff                                                                                                     ×41   2m
-    Pod/nva-worker-9k2ss  Back-off restarting failed container worker in pod nva-worker-9k2ss_nva-stage(a1b2c3)         
-  ▲ FailedScheduling                                                                                             ×3   8m
-    Pod/cache-0  0/5 nodes are available: 5 Insufficient cpu.                                                           
-  ▸ normal · 4 events — Pulled · Created · Started · Scheduled                                                          
-                                                                                                                        
-                                                                                                                        
+    REASON · OBJECT       MESSAGE                                                                           ×       LAST
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▲   BackOff               Back-off restarting failed container worker in pod nva-worker-9k2ss_nva-          41        2m
+    Pod/nva-worker-9k2ss  stage(a1b2c3)                                                                                 
+▲   FailedScheduling      0/5 nodes are available: 5 Insufficient cpu.                                      3         8m
+    Pod/cache-0                                                                                                         
+  ▸ normal 4 events — Pulled · Created · Started · Scheduled                                                    ↹ expand
                                                                                                                         
                                                                                                                         
                                                                                                                         

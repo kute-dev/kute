@@ -13,6 +13,57 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
+// Column layout (docs/design README.md §9b's grid: `20px 148px minmax(0,1fr)
+// 40px 70px`, translated to a monospace character grid at the mockup's own
+// 960px-card-≈120-column ratio): glyph · REASON·OBJECT (fixed) · MESSAGE
+// (flex, the widest column — "the message is why you're here") · × count
+// (fixed) · LAST (fixed, right-aligned). evColGap is the 12px inter-column
+// gap, matching components.Table's own 2-cell convention.
+const (
+	evGlyphW     = 2
+	evReasonObjW = 20
+	evCountW     = 4
+	evLastW      = 6
+	evColGap     = 2
+)
+
+// eventColumnWidths derives the flex MESSAGE column width from the terminal
+// width and the other columns' fixed widths — one place both the header row
+// and every data row read, so they can never drift out of alignment.
+func eventColumnWidths(width int) (reasonObjW, msgW, countW, lastW int) {
+	fixed := evGlyphW + evReasonObjW + evCountW + evLastW + 4*evColGap
+	return evReasonObjW, max(width-fixed, 10), evCountW, evLastW
+}
+
+// padLeft right-aligns value within width, the mirror of components.Pad's
+// left-align — used for the LAST column, the one right-aligned field in
+// 9b's grid.
+func padLeft(value string, width int) string {
+	value = components.Truncate(value, width)
+	slack := width - lipgloss.Width(value)
+	if slack <= 0 {
+		return value
+	}
+	return strings.Repeat(" ", slack) + value
+}
+
+// columnHeaderLines renders 9b's "" · REASON · OBJECT · MESSAGE · × · LAST
+// column-title row plus its rule, both new in this pass (previously this
+// screen had no header row at all).
+func (m Model) columnHeaderLines(theme tui.Theme, width int) []string {
+	reasonObjW, msgW, countW, lastW := eventColumnWidths(width)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	gap := strings.Repeat(" ", evColGap)
+
+	row := strings.Repeat(" ", evGlyphW) + gap +
+		faint.Render(components.Pad("REASON · OBJECT", reasonObjW)) + gap +
+		faint.Render(components.Pad("MESSAGE", msgW)) + gap +
+		faint.Render(components.Pad("×", countW)) + gap +
+		faint.Render(padLeft("LAST", lastW))
+	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))
+	return []string{fillLine(row, width, false, theme), rule}
+}
+
 func (m Model) View() tea.View { return tea.NewView(m.Render()) }
 
 func (m Model) Render() string { return tui.Frame(m.width, m.height, m) }
@@ -177,32 +228,41 @@ func (m Model) emptyMessage() string {
 	return "no events in " + m.namespace
 }
 
-// eventRows renders the currently visible window of m.rows, growing around
-// m.selected until height is filled — computed fresh every render from
-// Model state alone (no persisted scroll offset), which keeps Body a pure
-// function of (m, width, height).
+// eventRows renders 9b's column header + rule followed by the currently
+// visible window of m.rows, growing around m.selected until the remaining
+// height is filled — computed fresh every render from Model state alone (no
+// persisted scroll offset), which keeps Body a pure function of (m, width,
+// height).
 func (m Model) eventRows(theme tui.Theme, width, height int) string {
+	header := m.columnHeaderLines(theme, width)
 	if len(m.rows) == 0 {
-		return components.CenterLines([]string{m.emptyMessage()}, width, height)
+		return strings.Join(header, "\n") + "\n" + components.CenterLines([]string{m.emptyMessage()}, width, max(height-len(header), 0))
 	}
-	start, end := visibleWindow(m.rows, m.selected, height, width)
-	lines := make([]string, 0, end-start)
+	rowsHeight := max(height-len(header), 0)
+	start, end := visibleWindow(m.rows, m.selected, rowsHeight, width)
+	lines := make([]string, 0, len(header)+end-start)
+	lines = append(lines, header...)
 	for i := start; i < end; i++ {
 		lines = append(lines, m.renderRow(theme, m.rows[i], i == m.selected, width))
 	}
 	return strings.Join(lines, "\n")
 }
 
-// rowLines is how many terminal lines r occupies at width: 1 for the reason
-// line plus however many lines the OBJECT/MESSAGE cell wraps to (docs/design
-// README.md §9b's "MESSAGE (widest, verbatim)" — wrapped rather than
-// truncated, so a long message just grows the row instead of losing text),
-// 1 for the folded normal-events summary.
+// rowLines is how many terminal lines r occupies at width: a group row is 2
+// lines at minimum (the REASON line and the OBJECT line under it, docs/design
+// README.md §9b's "two-line REASON·OBJECT cell") plus one more per MESSAGE
+// line beyond the first 2 — the first 2 wrapped message lines share the
+// REASON and OBJECT lines respectively, so only wraps past that grow the
+// row (docs/design README.md §9b's "MESSAGE (widest, verbatim)" — wrapped
+// rather than truncated, so a long message just grows the row instead of
+// losing text); 1 for the folded normal-events summary.
 func rowLines(r displayRow, width int) int {
 	if r.kind == rowFolded {
 		return 1
 	}
-	return 1 + len(wrappedMessageLines(r.group, width))
+	_, msgW, _, _ := eventColumnWidths(width)
+	n := len(wrapMessage(r.group.Message, msgW))
+	return 2 + max(n-2, 0)
 }
 
 // visibleWindow finds a [start,end) row range around selected that fits
@@ -264,14 +324,29 @@ func objectName(object string) string {
 	return name
 }
 
+// renderGroupRow draws one 9b row on the same 5-column grid as
+// columnHeaderLines (docs/design README.md §9b): glyph · REASON (line 1) /
+// OBJECT (line 2, dim, under REASON) · MESSAGE (its own flex column,
+// word-wrapped in place rather than truncated so long messages just grow
+// the row) · × count · LAST — count/last only ever render on line 1, the
+// mockup's own layout (README.md's `Kute Spec.dc.html#9b`).
 func (m Model) renderGroupRow(theme tui.Theme, g kube.EventGroup, selected bool, width int) string {
+	reasonObjW, msgW, countW, lastW := eventColumnWidths(width)
+
 	sev := m.severityStyle(theme, g)
-	dim := lipgloss.NewStyle().Foreground(theme.TextFaint)
-	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	objStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	msgStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	if selected {
+		msgStyle = lipgloss.NewStyle().Foreground(theme.TextPrimary)
+	}
+	countStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	lastStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
 	if selected {
 		sev = sev.Background(theme.SelBg)
-		dim = dim.Background(theme.SelBg)
-		secondary = secondary.Background(theme.SelBg)
+		objStyle = objStyle.Background(theme.SelBg)
+		msgStyle = msgStyle.Background(theme.SelBg)
+		countStyle = countStyle.Background(theme.SelBg)
+		lastStyle = lastStyle.Background(theme.SelBg)
 	}
 
 	glyph := tui.GlyphWarning
@@ -280,75 +355,93 @@ func (m Model) renderGroupRow(theme tui.Theme, g kube.EventGroup, selected bool,
 	}
 	countText := ""
 	if g.Count > 1 {
-		countText = fmt.Sprintf("×%d", g.Count)
+		countText = fmt.Sprintf("%d", g.Count)
 	}
 
-	left1 := selSpace(2, selected, theme) + sev.Render(glyph+" "+g.Reason)
-	right1 := dim.Render(strings.TrimSpace(countText + "   " + shortEventAge(g.LastSeen, m.fetchedAt)))
-	line1 := fillLine(padBetween(left1, right1, width, selected, theme), width, selected, theme)
+	msgLines := wrapMessage(g.Message, msgW)
+	gap := selSpace(evColGap, selected, theme)
+	blankGlyph := selSpace(evGlyphW, selected, theme)
+	blankReasonObj := selSpace(reasonObjW, selected, theme)
+	blankCount := selSpace(countW, selected, theme)
+	blankLast := selSpace(lastW, selected, theme)
 
-	object := objectCell(g.Object, width)
-	prefix := "    " + object + "  "
-	lines := make([]string, 0, 2)
-	lines = append(lines, line1)
-	for i, ml := range wrappedMessageLines(g, width) {
-		var lead string
-		if i == 0 {
-			lead = selSpace(4, selected, theme) + dim.Render(object) + selSpace(2, selected, theme)
-		} else {
-			lead = selSpace(lipgloss.Width(prefix), selected, theme)
+	msgLine := func(i int) string {
+		if i < len(msgLines) {
+			return msgStyle.Render(components.Pad(msgLines[i], msgW))
 		}
-		lines = append(lines, fillLine(lead+secondary.Render(ml), width, selected, theme))
+		return selSpace(msgW, selected, theme)
+	}
+
+	glyphCell := sev.Render(components.Pad(glyph, evGlyphW))
+	line1 := glyphCell + gap +
+		sev.Render(components.Pad(g.Reason, reasonObjW)) + gap +
+		msgLine(0) + gap +
+		countStyle.Render(components.Pad(countText, countW)) + gap +
+		lastStyle.Render(padLeft(shortEventAge(g.LastSeen, m.fetchedAt), lastW))
+	line2 := blankGlyph + gap +
+		objStyle.Render(components.Pad(components.Truncate(g.Object, reasonObjW), reasonObjW)) + gap +
+		msgLine(1) + gap + blankCount + gap + blankLast
+
+	lines := make([]string, 0, 2+max(len(msgLines)-2, 0))
+	lines = append(lines, fillLine(line1, width, selected, theme), fillLine(line2, width, selected, theme))
+	for i := 2; i < len(msgLines); i++ {
+		l := blankGlyph + gap + blankReasonObj + gap + msgLine(i) + gap + blankCount + gap + blankLast
+		lines = append(lines, fillLine(l, width, selected, theme))
 	}
 	return strings.Join(lines, "\n")
 }
 
-// objectCell is g.Object truncated to the same width budget renderGroupRow
-// and wrappedMessageLines both use — factored out so the two never disagree
-// about how much room the message gets.
-func objectCell(object string, width int) string {
-	return components.Truncate(object, max(width/3, 10))
-}
-
-// wrappedMessageLines word-wraps g.Message to fit the remaining width after
-// the "    "+object+"  " prefix, rather than truncating it away (docs/design
+// wrapMessage word-wraps a message to fit msgW — the MESSAGE column's own
+// width (eventColumnWidths), rather than truncating it away (docs/design
 // README.md §9b's "MESSAGE (widest, verbatim)"). rowLines calls this too, so
 // the row-height math visibleWindow relies on never disagrees with what
 // renderGroupRow actually draws.
-func wrappedMessageLines(g kube.EventGroup, width int) []string {
-	prefixWidth := lipgloss.Width("    " + objectCell(g.Object, width) + "  ")
-	msgWidth := max(width-prefixWidth, 8)
-	wrapped := lipgloss.NewStyle().Width(msgWidth).Render(g.Message)
+func wrapMessage(message string, msgW int) []string {
+	wrapped := lipgloss.NewStyle().Width(max(msgW, 1)).Render(message)
 	return strings.Split(wrapped, "\n")
 }
 
-// renderFoldedRow is 9b's "▸ normal · 31 events — Pulled · Created…"
-// collapsed summary line for every folded normal group (docs/design
-// README.md §9b), naming up to 4 distinct reasons.
+// renderFoldedRow is 9b's "▸ normal · 31 events — Pulled · Created… ↹
+// expand" collapsed summary line for every folded normal group (docs/design
+// README.md §9b), naming up to 4 distinct reasons. Not on the 5-column grid
+// (the mockup's own fold row is a plain full-width flex line, chrome-toned
+// unless selected).
 func (m Model) renderFoldedRow(theme tui.Theme, groups []kube.EventGroup, selected bool, width int) string {
-	info := lipgloss.NewStyle().Foreground(theme.Info)
-	dim := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	bg := theme.BgChrome
 	if selected {
-		info = info.Background(theme.SelBg)
-		dim = dim.Background(theme.SelBg)
+		bg = theme.SelBg
 	}
+	space := lipgloss.NewStyle().Background(bg)
+	glyphStyle := lipgloss.NewStyle().Foreground(theme.TextFaint).Background(bg)
+	labelStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(bg)
+	reasonStyle := lipgloss.NewStyle().Foreground(theme.TextFaint).Background(bg)
+	hintStyle := lipgloss.NewStyle().Foreground(theme.TextDim).Background(bg)
 
 	seen := map[string]bool{}
-	reasons := make([]string, 0, 4)
+	names := make([]string, 0, 4)
 	for _, g := range groups {
 		if seen[g.Reason] {
 			continue
 		}
 		seen[g.Reason] = true
-		reasons = append(reasons, g.Reason)
-		if len(reasons) == 4 {
+		names = append(names, g.Reason)
+		if len(names) == 4 {
 			break
 		}
 	}
 
-	content := selSpace(2, selected, theme) + info.Render(tui.GlyphExpand) + " " +
-		dim.Render(fmt.Sprintf("normal · %d events — %s", len(groups), strings.Join(reasons, " · ")))
-	return fillLine(components.Truncate(content, width), width, selected, theme)
+	left := space.Render("  ") + glyphStyle.Render(tui.GlyphExpand) + space.Render(" ") +
+		labelStyle.Render("normal") + space.Render(" ") +
+		reasonStyle.Render(fmt.Sprintf("%d events — %s", len(groups), strings.Join(names, " · ")))
+	right := hintStyle.Render(tui.GlyphTab + " expand")
+
+	line := left
+	if gap := width - lipgloss.Width(left) - lipgloss.Width(right); gap >= 1 {
+		line = left + space.Render(strings.Repeat(" ", gap)) + right
+	}
+	line = components.Truncate(line, width)
+	slack := max(width-lipgloss.Width(line), 0)
+	return line + space.Render(strings.Repeat(" ", slack))
 }
 
 func shortEventAge(t, now time.Time) string {
