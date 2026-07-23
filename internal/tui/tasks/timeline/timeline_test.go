@@ -249,6 +249,59 @@ func TestTimeWindowFiltersOldEntries(t *testing.T) {
 	}
 }
 
+// TestEOpensEventsNamespaceScoped covers 16a's 'e': the global Events verb
+// must push 9b scoped to the same namespace timeline itself is showing,
+// with no object kind/name (this bug: 'e' was wired for every other list/
+// detail screen but never for tasks/timeline).
+func TestEOpensEventsNamespaceScoped(t *testing.T) {
+	var gotKind kube.ResourceKind
+	var gotNamespace, gotName string
+	m := New(Config{
+		Session:   newSession(),
+		Events:    fakeEvents{},
+		Namespace: "default",
+		OpenEvents: func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+			gotKind, gotNamespace, gotName = kind, namespace, name
+			return &Model{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "e"})
+	if cmd != nil {
+		t.Fatal("openEvents returns no cmd in this test double, expected nil")
+	}
+	if gotNamespace != "default" || gotKind != "" || gotName != "" {
+		t.Fatalf("expected namespace-scoped events push (kind=%q name=%q namespace=%q), want kind=\"\" name=\"\" namespace=default", gotKind, gotName, gotNamespace)
+	}
+}
+
+// TestEOpensEventsObjectScoped covers 16b's 'e': object-scoped timelines
+// must push 9b scoped to that same object.
+func TestEOpensEventsObjectScoped(t *testing.T) {
+	var gotKind kube.ResourceKind
+	var gotNamespace, gotName string
+	m := New(Config{
+		Session:    newSession(),
+		Events:     fakeEvents{},
+		Namespace:  "default",
+		ObjectKind: kube.KindPod,
+		ObjectName: "worker-0",
+		OpenEvents: func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+			gotKind, gotNamespace, gotName = kind, namespace, name
+			return &Model{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m.Update(tea.KeyPressMsg{Text: "e"})
+	if gotKind != kube.KindPod || gotNamespace != "default" || gotName != "worker-0" {
+		t.Fatalf("expected object-scoped events push, got kind=%q namespace=%q name=%q", gotKind, gotNamespace, gotName)
+	}
+}
+
 func TestEscSendsBackMsg(t *testing.T) {
 	m := New(Config{Session: newSession(), Events: fakeEvents{}})
 	m.SetSize(120, 36)

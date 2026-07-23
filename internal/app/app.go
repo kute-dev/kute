@@ -196,7 +196,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
 		openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
 		openEvents := openEventsFunc(sess, demoCluster, openYAML)
-		openTimeline := openTimelineFunc(sess, demoCluster)
+		openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
 		b := browse.New(browse.Config{
 			Session:           sess,
 			Lister:            lister,
@@ -256,7 +256,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward)
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward)
 	openEvents := openEventsFunc(sess, cluster, openYAML)
-	openTimeline := openTimelineFunc(sess, cluster)
+	openTimeline := openTimelineFunc(sess, cluster, openEvents)
 	b := browse.New(browse.Config{
 		Session:           sess,
 		Lister:            lister,
@@ -446,7 +446,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 		return openPodDetail(pod, []string{pod.Name}, 0, width, height)
 	}
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
-	openObjectTimeline := openObjectTimelineFunc(sess, active)
+	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
 	return func(nodeName string, width, height int) (tea.Model, tea.Cmd) {
 		nd := nodedetail.New(nodedetail.Config{
 			Session:      sess,
@@ -471,7 +471,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 // the same seams active already satisfies for browse/nodedetail.
 func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc) browse.OpenPodDetailFunc {
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
-	openObjectTimeline := openObjectTimelineFunc(sess, active)
+	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
 	return func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd) {
 		pd := poddetail.New(poddetail.Config{
 			Session:      sess,
@@ -770,14 +770,18 @@ func openObjectEventsFunc(sess *tui.Session, active seams, openYAML browse.OpenY
 }
 
 // openTimelineFunc pushes tasks/timeline (16a) namespace-scoped for
-// browse's 't'.
-func openTimelineFunc(sess *tui.Session, active seams) browse.OpenTimelineFunc {
+// browse's 't' — openEvents backs 16a's own 'e' (namespace-scoped, so
+// timeline.OpenEventsFunc's kind/name args are dropped on the way through).
+func openTimelineFunc(sess *tui.Session, active seams, openEvents browse.OpenEventsFunc) browse.OpenTimelineFunc {
 	return func(namespace string, width, height int) (tea.Model, tea.Cmd) {
 		tl := timeline.New(timeline.Config{
 			Session:   sess,
 			Events:    active,
 			Lister:    active,
 			Namespace: namespace,
+			OpenEvents: func(_ kube.ResourceKind, namespace string, _ string, width, height int) (tea.Model, tea.Cmd) {
+				return openEvents(namespace, width, height)
+			},
 		})
 		tl.SetSize(width, height)
 		return &tl, tl.Init()
@@ -805,8 +809,10 @@ func openOverviewFunc(sess *tui.Session, lister resources.RawLister, nodeMetrics
 
 // openObjectTimelineFunc pushes tasks/timeline (16b) object-scoped for
 // poddetail/nodedetail's 't' — same named-type-conversion-at-call-site
-// pattern openObjectEventsFunc already establishes.
-func openObjectTimelineFunc(sess *tui.Session, active seams) func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+// pattern openObjectEventsFunc already establishes. openEvents backs 16b's
+// own 'e', reusing the same object-scoped closure poddetail/nodedetail's
+// own OpenEvents is built from.
+func openObjectTimelineFunc(sess *tui.Session, active seams, openEvents func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)) func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 	return func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 		tl := timeline.New(timeline.Config{
 			Session:    sess,
@@ -815,6 +821,7 @@ func openObjectTimelineFunc(sess *tui.Session, active seams) func(kind kube.Reso
 			Namespace:  namespace,
 			ObjectKind: kind,
 			ObjectName: name,
+			OpenEvents: timeline.OpenEventsFunc(openEvents),
 		})
 		tl.SetSize(width, height)
 		return &tl, tl.Init()

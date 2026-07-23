@@ -37,6 +37,13 @@ type EventsReader interface {
 // 30m" (docs/design README.md §16a's breadcrumb tag).
 var windowSteps = []time.Duration{30 * time.Minute, time.Hour, 6 * time.Hour, 24 * time.Hour, 0}
 
+// OpenEventsFunc pushes tasks/events (9b) for the 'e' global verb — object-
+// scoped (kind/name non-empty) when timeline itself is 16b object-scoped,
+// namespace-scoped (kind/name empty) when it's 16a — same signature as
+// poddetail/nodedetail's own OpenEventsFunc so app.go's openObjectEventsFunc
+// closure can be reused directly for the 16b wiring.
+type OpenEventsFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // Config are timeline's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values).
 // ObjectKind/ObjectName non-empty switches the screen into 16b's
@@ -50,16 +57,18 @@ type Config struct {
 	Namespace   string
 	ObjectKind  kube.ResourceKind
 	ObjectName  string
+	OpenEvents  OpenEventsFunc
 	LoadTimeout time.Duration
 }
 
 type Model struct {
 	width, height int
 
-	session *tui.Session
-	events  EventsReader
-	lister  resources.RawLister
-	timeout time.Duration
+	session    *tui.Session
+	events     EventsReader
+	lister     resources.RawLister
+	openEvents OpenEventsFunc
+	timeout    time.Duration
 
 	namespace  string
 	objectKind kube.ResourceKind
@@ -118,6 +127,7 @@ func New(cfg Config) Model {
 		session:    cfg.Session,
 		events:     cfg.Events,
 		lister:     cfg.Lister,
+		openEvents: cfg.OpenEvents,
 		timeout:    cfg.LoadTimeout,
 		namespace:  cfg.Namespace,
 		objectKind: cfg.ObjectKind,
@@ -171,4 +181,16 @@ func (m Model) openSelectedObject() (tea.Cmd, bool) {
 		func() tea.Msg { return tui.BackMsg{} },
 		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
 	), true
+}
+
+// openSelectedEvents is the 'e' global verb: pushes 9b scoped exactly like
+// this timeline itself is scoped — object-scoped in 16b, namespace-scoped
+// in 16a (docs/design README.md: "e opens events (namespace-scoped from a
+// list view; object-scoped from a detail view)").
+func (m Model) openSelectedEvents() (tea.Model, tea.Cmd, bool) {
+	if m.openEvents == nil {
+		return nil, nil, false
+	}
+	task, cmd := m.openEvents(m.objectKind, m.namespace, m.objectName, m.width, m.height)
+	return task, cmd, task != nil
 }
