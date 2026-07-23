@@ -136,7 +136,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Summary strip: `▲ 4 warnings` (yellow) · `○ 31 normal` · right `last hour · deduped · warnings first`.
 - **Deduped, not a firehose:** repeats collapse to one row with a count column (`×41`). Columns: type glyph · REASON·OBJECT (two-line cell: reason colored by severity, object `pod/name` under it in `#676780` 11px) · MESSAGE (widest, verbatim) · × count · LAST right-aligned.
 - Red reserved for events tied to an actively-failing object (BackOff on the crashlooping pod); other warnings yellow. Normal events fold into one group line (`▸ normal · 31 events — Pulled · Created…`), `↹` expands.
-- Keys: `↵` go to object (its table, row selected) · `w` warnings only · `t` time window · `/` filter. Events are a routing layer, not a dead end; also reachable per-object from pod detail.
+- Keys: `↵` go to object (its table, row selected) · `y` yaml (the selected row's involved object) · `w` warnings only · `t` time window · `/` filter. Events are a routing layer, not a dead end; also reachable per-object from pod detail. Also reachable from the goto palette's Events kind/alias (`g` → `e`), which routes here instead of the stock browse list.
 
 ### 10a — Exec container picker (`x` on a pod)
 - **Skipped entirely for single-container pods.** Small centered panel: header `exec › <pod>` + `2 containers`.

@@ -51,6 +51,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			task, cmd := m.openOverview(m.width, m.height)
 			return task, cmd
 		}
+		if msg.Kind == kube.KindEvent {
+			// Unlike KindWhoCan/KindOverview, Events does have a
+			// resources.Descriptor and could list as a stock browse table —
+			// but 9b (tasks/events) is the curated experience for this kind
+			// (dedup, severity coloring, folded normals), so a goto jump to
+			// Events (the "e" alias or the ranked-list row) is redirected
+			// here the same way the 'e' key already redirects (update.go's
+			// openSelectedEvents, same gating).
+			if task, cmd, ok := m.openSelectedEvents(); ok {
+				return task, cmd
+			}
+			return m, nil
+		}
 		cmd := m.switchKind(msg.Kind)
 		if msg.Filter != "" {
 			// 23b: "↵ on a listener filters to attached routes" — switchKind

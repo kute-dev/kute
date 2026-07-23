@@ -133,6 +133,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openSelectedObject(); ok {
 			return m, cmd
 		}
+	case "y":
+		if task, cmd, ok := m.openSelectedYAML(); ok {
+			return task, cmd
+		}
 	case "tab":
 		m.normalExpanded = !m.normalExpanded
 		m.recomputeVisible()

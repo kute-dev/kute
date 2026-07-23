@@ -34,6 +34,10 @@ type EventsReader interface {
 	ObjectEvents(ctx context.Context, namespace string, kind kube.ResourceKind, name string) ([]kube.Event, error)
 }
 
+// OpenYAMLFunc pushes tasks/yamlview (8a) for a selected row's involved
+// object — same shape as browse.OpenYAMLFunc/poddetail.OpenYAMLFunc/etc.
+type OpenYAMLFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // Config are events' dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values).
 // ObjectKind/ObjectName non-empty switches the screen into object-scoped
@@ -43,6 +47,7 @@ type Config struct {
 	Session     *tui.Session
 	Events      EventsReader
 	Lister      resources.RawLister // optional: best-effort "actively-failing object" red cross-check
+	OpenYAML    OpenYAMLFunc
 	Namespace   string
 	ObjectKind  kube.ResourceKind
 	ObjectName  string
@@ -73,10 +78,11 @@ var eventWindows = []time.Duration{15 * time.Minute, time.Hour, 6 * time.Hour, 2
 type Model struct {
 	width, height int
 
-	session *tui.Session
-	events  EventsReader
-	lister  resources.RawLister
-	timeout time.Duration
+	session  *tui.Session
+	events   EventsReader
+	lister   resources.RawLister
+	openYAML OpenYAMLFunc
+	timeout  time.Duration
 
 	namespace  string
 	objectKind kube.ResourceKind
@@ -135,6 +141,7 @@ func New(cfg Config) Model {
 		session:    cfg.Session,
 		events:     cfg.Events,
 		lister:     cfg.Lister,
+		openYAML:   cfg.OpenYAML,
 		timeout:    cfg.LoadTimeout,
 		namespace:  cfg.Namespace,
 		objectKind: cfg.ObjectKind,
@@ -188,6 +195,28 @@ func (m Model) openSelectedObject() (tea.Cmd, bool) {
 		func() tea.Msg { return tui.BackMsg{} },
 		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
 	), true
+}
+
+// openSelectedYAML pushes 8a for the selected row's involved object (the
+// system-wide "y opens the YAML view on any selected object, any kind"
+// interaction browse/poddetail/nodedetail/whocan/objectdetail already
+// implement) — same kind/namespace/name resolution as openSelectedObject's
+// ↵, a no-op for the folded normal-events summary row or an unresolvable
+// object.
+func (m Model) openSelectedYAML() (tea.Model, tea.Cmd, bool) {
+	if m.openYAML == nil {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok || row.kind != rowGroup {
+		return nil, nil, false
+	}
+	kind, name := splitObject(row.group.Object)
+	if kind == "" || name == "" {
+		return nil, nil, false
+	}
+	task, cmd := m.openYAML(kind, row.group.Namespace, name, m.width, m.height)
+	return task, cmd, task != nil
 }
 
 // splitObject splits a kube.Event.Object string ("Pod/nva-worker-9k2ss")

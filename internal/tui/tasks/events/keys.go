@@ -28,6 +28,9 @@ func (m Model) Keybar() tui.Keybar {
 		{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
 		{{Key: "w", Label: warnLabel}, {Key: "t", Label: "time window"}},
 	}
+	if row, ok := m.selectedRow(); ok && row.kind == rowGroup {
+		groups = append(groups, []tui.KeyHint{verbs.YAML.Hint()})
+	}
 	if m.hasNormal() {
 		groups = append(groups, []tui.KeyHint{{Key: "tab", Label: "expand/collapse normal"}})
 	}

@@ -318,3 +318,35 @@ func TestEKeyOpensNamespaceScopedEvents(t *testing.T) {
 		t.Fatalf("expected Update to return the pushed stub task, got %T", updated)
 	}
 }
+
+// TestGotoKindMsgEventPushesEventsTask covers the goto palette's Events
+// entry (kind alias "e", internal/tui/goto.go's gotoAliases): unlike
+// KindWhoCan/KindOverview, Event has a real resources.Descriptor and could
+// list as a stock browse table, but 9b (tasks/events) is the curated
+// experience for it, so GotoKindMsg{Kind: KindEvent} must redirect there
+// the same way the 'e' key already does (TestEKeyOpensNamespaceScopedEvents
+// above), not fall through to switchKind.
+func TestGotoKindMsgEventPushesEventsTask(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	var openedNamespace string
+	session := newSession()
+	m := New(Config{
+		Session: session, Lister: lister,
+		OpenEvents: func(namespace string, w, h int) (tea.Model, tea.Cmd) {
+			openedNamespace = namespace
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, _ := m.Update(tui.GotoKindMsg{Kind: kube.KindEvent})
+	if openedNamespace != "default" {
+		t.Fatalf("expected events opened for namespace default, got %q", openedNamespace)
+	}
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected GotoKindMsg{KindEvent} to push tasks/events, got %T", updated)
+	}
+}

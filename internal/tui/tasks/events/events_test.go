@@ -280,6 +280,65 @@ func TestEnterOnFoldedRowIsNoop(t *testing.T) {
 	}
 }
 
+// stubYAMLTask is a minimal tea.Model standing in for tasks/yamlview,
+// mirroring browse's own stubTask pattern for OpenYAML-style seams.
+type stubYAMLTask struct{}
+
+func (stubYAMLTask) Init() tea.Cmd                       { return nil }
+func (stubYAMLTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return stubYAMLTask{}, nil }
+func (stubYAMLTask) View() tea.View                      { return tea.NewView("") }
+
+// TestYKeyOnGroupRowOpensYAML covers the system-wide "y opens the YAML view
+// on any selected object, any kind" interaction (already implemented by
+// browse/poddetail/nodedetail/whocan/objectdetail) applied to 9b: 'y' on a
+// real event row resolves the same kind/namespace/name openSelectedObject's
+// ↵ does and pushes it through OpenYAML.
+func TestYKeyOnGroupRowOpensYAML(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "nva-stage", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	var gotKind kube.ResourceKind
+	var gotNamespace, gotName string
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Namespace: "nva-stage",
+		OpenYAML: func(kind kube.ResourceKind, namespace, name string, w, h int) (tea.Model, tea.Cmd) {
+			gotKind, gotNamespace, gotName = kind, namespace, name
+			return stubYAMLTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "y"})
+	if gotKind != kube.KindPod || gotNamespace != "nva-stage" || gotName != "worker-0" {
+		t.Fatalf("openYAML called with (%q, %q, %q), want (Pod, nva-stage, worker-0)", gotKind, gotNamespace, gotName)
+	}
+	if _, ok := updated.(stubYAMLTask); !ok {
+		t.Fatalf("expected Update to return the pushed stub task, got %T", updated)
+	}
+}
+
+// TestYKeyOnFoldedRowIsNoop mirrors TestEnterOnFoldedRowIsNoop: 'y' has no
+// single object to resolve on the folded normal-events summary row.
+func TestYKeyOnFoldedRowIsNoop(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Normal", Reason: "Pulled", Object: "Pod/worker-0", Message: "m", Count: 1, LastSeen: time.Now()},
+		{Type: "Normal", Reason: "Created", Object: "Pod/worker-0", Message: "m", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Namespace: "default",
+		OpenYAML: func(kind kube.ResourceKind, namespace, name string, w, h int) (tea.Model, tea.Cmd) {
+			return stubYAMLTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if _, _, ok := m.openSelectedYAML(); ok {
+		t.Fatal("expected 'y' on the folded summary row to be a no-op")
+	}
+}
+
 func TestEscSendsBackMsg(t *testing.T) {
 	m := New(Config{Session: newSession(), Events: fakeEvents{}})
 	m.SetSize(120, 36)

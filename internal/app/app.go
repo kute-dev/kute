@@ -195,7 +195,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
 		openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
 		openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
-		openEvents := openEventsFunc(sess, demoCluster)
+		openEvents := openEventsFunc(sess, demoCluster, openYAML)
 		openTimeline := openTimelineFunc(sess, demoCluster)
 		b := browse.New(browse.Config{
 			Session:           sess,
@@ -212,7 +212,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			OpenExec:          browse.OpenExecFunc(openExec),
 			OpenForward:       openForward,
 			OpenObjectDetail:  openObjectDetailFunc(sess, demoCluster, openYAML),
-			OpenRouteTable:    openRouteTableFunc(sess, demoCluster),
+			OpenRouteTable:    openRouteTableFunc(sess, demoCluster, openYAML),
 			OpenWhoCan:        openWhoCanFunc(sess, demoCluster),
 			OpenHelmHistory:   openHelmHistoryFunc(sess, demoCluster),
 			OpenHelmValues:    openHelmValuesFunc(sess),
@@ -255,7 +255,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openForward := openForwardFunc(sess, lister, cluster)
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward)
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward)
-	openEvents := openEventsFunc(sess, cluster)
+	openEvents := openEventsFunc(sess, cluster, openYAML)
 	openTimeline := openTimelineFunc(sess, cluster)
 	b := browse.New(browse.Config{
 		Session:           sess,
@@ -272,7 +272,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenExec:          browse.OpenExecFunc(openExec),
 		OpenForward:       openForward,
 		OpenObjectDetail:  openObjectDetailFunc(sess, cluster, openYAML),
-		OpenRouteTable:    openRouteTableFunc(sess, cluster),
+		OpenRouteTable:    openRouteTableFunc(sess, cluster, openYAML),
 		OpenWhoCan:        openWhoCanFunc(sess, cluster),
 		OpenHelmHistory:   openHelmHistoryFunc(sess, cluster),
 		OpenHelmValues:    openHelmValuesFunc(sess),
@@ -445,7 +445,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 	openPod := func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd) {
 		return openPodDetail(pod, []string{pod.Name}, 0, width, height)
 	}
-	openObjectEvents := openObjectEventsFunc(sess, active)
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active)
 	return func(nodeName string, width, height int) (tea.Model, tea.Cmd) {
 		nd := nodedetail.New(nodedetail.Config{
@@ -470,7 +470,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 // openPodDetailFunc pushes tasks/poddetail (5a) for a pod, wiring it against
 // the same seams active already satisfies for browse/nodedetail.
 func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc) browse.OpenPodDetailFunc {
-	openObjectEvents := openObjectEventsFunc(sess, active)
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active)
 	return func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd) {
 		pd := poddetail.New(poddetail.Config{
@@ -499,7 +499,7 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 // kind's row, wiring it against the same seams active already satisfies for
 // browse/nodedetail/poddetail.
 func openObjectDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) browse.OpenObjectDetailFunc {
-	openObjectEvents := openObjectEventsFunc(sess, active)
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	return func(kind kube.ResourceKind, namespace, name string, siblings []string, index, width, height int) (tea.Model, tea.Cmd) {
 		od := objectdetail.New(objectdetail.Config{
 			Session:      sess,
@@ -524,8 +524,8 @@ func openObjectDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenY
 // needs (RawLister for rows, YAMLReader for 'Y', plus its own object-scoped
 // events push for 'e', the same openObjectEventsFunc objectdetail already
 // uses).
-func openRouteTableFunc(sess *tui.Session, active seams) browse.OpenRouteTableFunc {
-	openEvents := openObjectEventsFunc(sess, active)
+func openRouteTableFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) browse.OpenRouteTableFunc {
+	openEvents := openObjectEventsFunc(sess, active, openYAML)
 	return func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 		rt := routetable.New(routetable.Config{
 			Session:    sess,
@@ -731,13 +731,16 @@ func openForwardFuncDemo(sess *tui.Session, lister resources.RawLister, mgr *kub
 	}
 }
 
-// openEventsFunc pushes tasks/events (9b) namespace-scoped for browse's 'e'.
-func openEventsFunc(sess *tui.Session, active seams) browse.OpenEventsFunc {
+// openEventsFunc pushes tasks/events (9b) namespace-scoped for browse's 'e'
+// (and the goto palette's Events kind carve-out) — openYAML wires 9b's own
+// 'y' the same way every other list/detail screen already gets it.
+func openEventsFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) browse.OpenEventsFunc {
 	return func(namespace string, width, height int) (tea.Model, tea.Cmd) {
 		ev := events.New(events.Config{
 			Session:   sess,
 			Events:    active,
 			Lister:    active,
+			OpenYAML:  events.OpenYAMLFunc(openYAML),
 			Namespace: namespace,
 		})
 		ev.SetSize(width, height)
@@ -746,15 +749,17 @@ func openEventsFunc(sess *tui.Session, active seams) browse.OpenEventsFunc {
 }
 
 // openObjectEventsFunc pushes tasks/events (9b) object-scoped for
-// poddetail/nodedetail's 'e' — the underlying closure is reused by both via
-// an explicit named-type conversion at each call site (the same pattern
-// OpenYAMLFunc already uses across browse/poddetail/nodedetail).
-func openObjectEventsFunc(sess *tui.Session, active seams) func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+// poddetail/nodedetail/objectdetail/routetable's 'e' — the underlying
+// closure is reused by all four via an explicit named-type conversion at
+// each call site (the same pattern OpenYAMLFunc already uses across
+// browse/poddetail/nodedetail).
+func openObjectEventsFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 	return func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 		ev := events.New(events.Config{
 			Session:    sess,
 			Events:     active,
 			Lister:     active,
+			OpenYAML:   events.OpenYAMLFunc(openYAML),
 			Namespace:  namespace,
 			ObjectKind: kind,
 			ObjectName: name,
