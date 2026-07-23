@@ -508,8 +508,12 @@ func padBetweenBG(left, right string, width int, gapStyle lipgloss.Style) string
 // feedLines renders the currently visible window of m.rows, growing around
 // m.selected until height is filled — computed fresh every render from
 // Model state alone (no persisted scroll offset), mirroring tasks/events'
-// own eventRows. 16a's folded-normal footer line (foldedNormalLine), when
-// present, takes one line off the bottom of the budget.
+// own eventRows. Rows are no longer fixed at one physical line each (long
+// WHAT text wraps, and a ROLLOUT divider always carries a trailing rule
+// line — see renderRow/rowLineCount), so the window is chosen by each row's
+// actual line count (visibleLineWindow), not a flat entry count. 16a's
+// folded-normal footer line (foldedNormalLine), when present, takes one
+// line off the bottom of the budget.
 func (m Model) feedLines(theme tui.Theme, width, height int) []string {
 	footer := m.foldedNormalLine(theme, width)
 	rowsHeight := height
@@ -524,15 +528,41 @@ func (m Model) feedLines(theme tui.Theme, width, height int) []string {
 		}
 		return []string{body, footer}
 	}
-	start, end := visibleWindow(len(m.rows), m.selected, rowsHeight)
-	lines := make([]string, 0, end-start+1)
+	heights := make([]int, len(m.rows))
+	for i, e := range m.rows {
+		heights[i] = m.rowLineCount(e, width)
+	}
+	start, end := visibleLineWindow(heights, m.selected, rowsHeight)
+	lines := make([]string, 0, rowsHeight)
 	for i := start; i < end; i++ {
-		lines = append(lines, m.renderRow(theme, m.rows[i], i == m.selected, width))
+		lines = append(lines, m.renderRow(theme, m.rows[i], i == m.selected, width)...)
+	}
+	// visibleLineWindow can only overflow rowsHeight when the selected row
+	// alone (heights[selected]) is taller than the whole budget — every
+	// other row it admits fits inside what's left. timelineBody's no-rail
+	// (16a) branch joins feedLines' return straight into the body with no
+	// further trim, unlike its with-rail (16b) branch's own pad/truncate-
+	// to-height step, so this has to be the one place that guarantees the
+	// "at most `height` lines back" contract every caller relies on.
+	if len(lines) > rowsHeight {
+		lines = lines[:rowsHeight]
 	}
 	if footer != "" {
 		lines = append(lines, footer)
 	}
 	return lines
+}
+
+// rowLineCount is the physical line count m.renderRow(e, ...) will return at
+// width — used by feedLines' windowing to budget by actual rendered height
+// rather than assuming one line per entry, without rendering every row
+// twice just to measure it.
+func (m Model) rowLineCount(e kube.TimelineEntry, width int) int {
+	whatW := m.feedWhatWidth(width)
+	if e.Kind == kube.TimelineRollout {
+		return len(wrapText(m.rolloutBodyText(e), whatW)) + 1 // +1: the trailing rule line
+	}
+	return len(wrapText(entrySummary(e), whatW))
 }
 
 // foldedNormalLine is 9b's "▸ normal · N normal events — reason1 ·
@@ -567,19 +597,31 @@ func (m Model) foldedNormalLine(theme tui.Theme, width int) string {
 	return fillLine(padBetween(left, right, width), width, false, theme)
 }
 
-func visibleWindow(n, selected, height int) (start, end int) {
-	if n == 0 || height <= 0 {
+// visibleLineWindow mirrors the old entry-count visibleWindow's own "grow
+// around selected, forward first, then backward" algorithm, but budgets by
+// each row's actual physical line count (heights[i]) rather than assuming
+// one line per row, now that wrapped WHAT text and the ROLLOUT divider's
+// rule line make rows variable-height. A row only enters the window if it
+// fits inside the remaining budget whole — the same "always full rows,
+// never a partial one cut off mid-render" contract the old function gave
+// for free when every row was exactly one line.
+func visibleLineWindow(heights []int, selected, budget int) (start, end int) {
+	n := len(heights)
+	if n == 0 || budget <= 0 {
 		return 0, 0
 	}
 	selected = clamp(selected, 0, n-1)
 	start, end = selected, selected+1
-	for end-start < height {
+	used := heights[selected]
+	for used < budget {
 		grew := false
-		if end < n {
+		if end < n && used+heights[end] <= budget {
+			used += heights[end]
 			end++
 			grew = true
 		}
-		if end-start < height && start > 0 {
+		if used < budget && start > 0 && used+heights[start-1] <= budget {
+			used += heights[start-1]
 			start--
 			grew = true
 		}
@@ -608,11 +650,18 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 	}
 }
 
-// renderRow renders one feed line — a full-width purple divider for a
-// TimelineRollout entry (renderRolloutDivider; rollouts are visual anchors,
-// not ordinary rows, docs/design README.md §16a), or the ordinary WHEN/
-// glyph/[+CHANGE/]WHAT/[OBJECT] layout for everything else.
-func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) string {
+// renderRow renders one feed entry as one or more physical lines — a
+// full-width purple divider (renderRolloutDivider; rollouts are visual
+// anchors, not ordinary rows, docs/design README.md §16a) for a
+// TimelineRollout entry, or the ordinary WHEN/glyph/[+CHANGE/]WHAT/[OBJECT]
+// layout for everything else. WHAT text that doesn't fit the column wraps
+// onto continuation lines (wrapText) rather than ellipsizing — the WHEN/
+// glyph/+CHANGE/OBJECT columns stay blank on those so the wrapped text
+// reads as a continuation of the same row, not a new one. Every returned
+// line carries the same background as the first (fillLine/the styles below
+// already thread `selected` through consistently), so a wrapped row's
+// background never looks patchy.
+func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) []string {
 	if e.Kind == kube.TimelineRollout {
 		return m.renderRolloutDivider(theme, e, selected, width)
 	}
@@ -635,12 +684,22 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 		when = shortAge(m.fetchedAt.Sub(e.Time))
 	}
 	left := "  " + dim.Render(padRight(when, feedWhenW)) + "  " + glyphStyle.Render(glyph)
+	blankLeft := "  " + dim.Render(padRight("", feedWhenW)) + "  " + dim.Render(padRight("", feedGlyphW))
 
 	whatW := m.feedWhatWidth(width)
+	whatLines := wrapText(entrySummary(e), whatW)
+
 	if m.objectScoped() {
-		msg := components.Truncate(entrySummary(e), whatW)
-		line := left + "  " + secondary.Render(msg)
-		return fillLine(line, width, selected, theme)
+		lines := make([]string, len(whatLines))
+		for i, wl := range whatLines {
+			prefix := left
+			if i > 0 {
+				prefix = blankLeft
+			}
+			line := prefix + "  " + secondary.Render(wl)
+			lines[i] = fillLine(line, width, selected, theme)
+		}
+		return lines
 	}
 
 	changeText, warn := m.changeOffset(e)
@@ -648,12 +707,19 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 	if warn {
 		changeStyle = warnTone
 	}
-	objText := components.Truncate(e.Object, feedObjectW)
-	what := padRight(components.Truncate(entrySummary(e), whatW), whatW)
-	line := left + "  " + changeStyle.Render(padRight(changeText, feedChangeW)) + "  " +
-		secondary.Render(what) + "  " +
-		object.Render(padLeft(objText, feedObjectW))
-	return fillLine(line, width, selected, theme)
+	objText := padLeft(components.Truncate(e.Object, feedObjectW), feedObjectW)
+	lines := make([]string, len(whatLines))
+	for i, wl := range whatLines {
+		prefix, change, obj := blankLeft, padRight("", feedChangeW), padLeft("", feedObjectW)
+		if i == 0 {
+			prefix, change, obj = left, padRight(changeText, feedChangeW), objText
+		}
+		line := prefix + "  " + changeStyle.Render(change) + "  " +
+			secondary.Render(wl) + "  " +
+			object.Render(obj)
+		lines[i] = fillLine(line, width, selected, theme)
+	}
+	return lines
 }
 
 // changeOffset is 16a's "+CHANGE" column: the row's time offset from the
@@ -688,37 +754,17 @@ func (m Model) changeOffset(e kube.TimelineEntry) (text string, warn bool) {
 	return "+" + shortAge(e.Time.Sub(nearest.Time)), warn
 }
 
-// renderRolloutDivider is the full-width rollout anchor row: a quieter
-// background + thin rule (theme.MarkBg/theme.Accent, reusing 20a's own
-// "quieter than SelBg" tint rather than a new token), spanning WHEN/glyph/
-// message with no +CHANGE/OBJECT columns. 16a's namespace-scoped feed spells
-// out the object since rows from many Deployments are interleaved —
-// "ROLLOUT deploy/x · rev A → B · image a → b [· by author]" (docs/design
-// README.md §16a). 16b's object-scoped feed already names the object in the
-// header/breadcrumb, so it drops the "deploy/x"/"image"/"by" context and
-// keeps just the transition itself, tag-only on both sides since the repo
-// name is redundant there too — "ROLLOUT rev A → B · :a → :b". selected
-// swaps the background to theme.SelBg (the one selection color everywhere
-// else in the app) instead of MarkBg — otherwise a rollout row selected via
-// 16b's rail-cursor live sync (point 2: "the very last event from it" is
-// often the rollout itself, for a revision nothing else happened under)
-// would carry no visible cursor at all, since MarkBg is already a
-// permanent, selection-independent tint on every rollout row.
-func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) string {
-	markBg := theme.MarkBg
-	if selected {
-		markBg = theme.SelBg
-	}
-	bg := lipgloss.NewStyle().Background(markBg)
-	when := bg.Foreground(theme.TextFaint)
-	glyphStyle := bg.Foreground(theme.Accent).Bold(true)
-	text := bg.Foreground(theme.TextPrimary)
-
-	whenText := "–"
-	if !e.Time.IsZero() {
-		whenText = shortAge(m.fetchedAt.Sub(e.Time))
-	}
-
+// rolloutBodyText builds a TimelineRollout entry's own message text, shared
+// between renderRolloutDivider (which wraps/renders it) and rowLineCount
+// (which only needs its wrapped line count) so the two can never disagree.
+// 16a's namespace-scoped feed spells out the object since rows from many
+// Deployments are interleaved — "ROLLOUT deploy/x · rev A → B · image a → b
+// [· by author]" (docs/design README.md §16a). 16b's object-scoped feed
+// already names the object in the header/breadcrumb, so it drops the
+// "deploy/x"/"image"/"by" context and keeps just the transition itself,
+// tag-only on both sides since the repo name is redundant there too —
+// "ROLLOUT rev A → B · :a → :b".
+func (m Model) rolloutBodyText(e kube.TimelineEntry) string {
 	_, name := splitObject(e.Object)
 	revText := fmt.Sprintf("rev %d", e.Revision)
 	imageText := shortImage(e.Image)
@@ -728,20 +774,50 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 		imageText = imageTransition(shortImage(prev.Image), shortImage(e.Image))
 		compactImageText = compactImageTransition(shortImage(prev.Image), shortImage(e.Image))
 	}
-
-	var body string
 	if m.objectScoped() {
-		body = fmt.Sprintf("ROLLOUT %s · %s", revText, compactImageText)
-	} else {
-		body = fmt.Sprintf("ROLLOUT deploy/%s · %s · image %s", name, revText, imageText)
-		if e.By != "" {
-			body += " · by " + e.By
-		}
+		return fmt.Sprintf("ROLLOUT %s · %s", revText, compactImageText)
 	}
-	body = components.Truncate(body, m.feedWhatWidth(width))
-	line := "  " + when.Render(padRight(whenText, feedWhenW)) + "  " + glyphStyle.Render(tui.GlyphRollout) + "  " + text.Render(body)
-	slack := max(width-lipgloss.Width(line), 0)
-	return line + bg.Render(strings.Repeat(" ", slack))
+	body := fmt.Sprintf("ROLLOUT deploy/%s · %s · image %s", name, revText, imageText)
+	if e.By != "" {
+		body += " · by " + e.By
+	}
+	return body
+}
+
+// renderRolloutDivider is the rollout anchor row: WHEN/glyph/message, no
+// +CHANGE/OBJECT columns, on the exact same (unselected: plain, selected:
+// theme.SelBg) background every other feed row uses — rollouts are called
+// out by their bold purple ⇅/text and a full-width rule on the line right
+// below them, not by a permanent background tint of their own, so every row
+// in the feed reads on one consistent surface. Long bodies wrap onto
+// continuation lines (wrapText) the same way renderRow's WHAT column does,
+// rather than ellipsizing.
+func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) []string {
+	bg := lipgloss.NewStyle()
+	if selected {
+		bg = bg.Background(theme.SelBg)
+	}
+	when := bg.Foreground(theme.TextFaint)
+	glyphStyle := bg.Foreground(theme.Accent).Bold(true)
+	text := bg.Foreground(theme.TextPrimary)
+
+	whenText := "–"
+	if !e.Time.IsZero() {
+		whenText = shortAge(m.fetchedAt.Sub(e.Time))
+	}
+
+	bodyLines := wrapText(m.rolloutBodyText(e), m.feedWhatWidth(width))
+	lines := make([]string, 0, len(bodyLines)+1)
+	for i, bl := range bodyLines {
+		prefix := "  " + when.Render(padRight("", feedWhenW)) + "  " + bg.Render(padRight("", feedGlyphW))
+		if i == 0 {
+			prefix = "  " + when.Render(padRight(whenText, feedWhenW)) + "  " + glyphStyle.Render(tui.GlyphRollout)
+		}
+		line := prefix + "  " + text.Render(bl)
+		lines = append(lines, fillLine(line, width, selected, theme))
+	}
+	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))
+	return append(lines, rule)
 }
 
 // previousRollout finds the next-older TimelineRollout entry for the same
@@ -880,4 +956,19 @@ func padLeft(s string, width int) string {
 		return strings.Repeat(" ", width-w) + s
 	}
 	return s
+}
+
+// wrapText word-wraps plain (unstyled) s to width-wide, right-padded lines
+// — reused by renderRow's WHAT column and the ROLLOUT divider's own body so
+// long text grows the row onto another line instead of ellipsizing (unlike
+// components.Truncate, which every other fixed-width column in the feed
+// still uses). Reuses lipgloss's own Width-based reflow rather than
+// hand-rolling a wrap algorithm; callers style each returned line
+// individually since s must stay ANSI-free going in for the wrap width math
+// to be accurate.
+func wrapText(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	return strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
 }

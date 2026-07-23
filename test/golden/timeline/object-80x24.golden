@@ -3,12 +3,12 @@
 ⇅ 1 rollout   ↺ 1 restarts   ▲ 1 warnings                 all time · merged feed
 ────────────────────────────────────────────────────────────────────────────────
   ROLLOUT HISTORY     │  WHEN       WHAT — pod/checkout-api-7d9f6c8b95-k2m9x + …
-▎ rev 5            2m │  1m      ▲  BackOff · back-off restarting failed contai…
-▎ checkout-api:1.9.0  │  2m      ⇅  ROLLOUT rev 5 · checkout-api:1.9.0          
-▎ ● stable 2m         │  4m      ↺  Restarted · app · OOMKilled · exit 137      
-                      │  5m      ○  Started · Started container checkout-api    
-  rev 4           45m │                                                         
-  checkout-api:1.8.2  │                                                         
+▎ rev 5            2m │  1m      ▲  BackOff · back-off restarting failed        
+▎ checkout-api:1.9.0  │             container                                   
+▎ ● stable 2m         │  2m      ⇅  ROLLOUT rev 5 · checkout-api:1.9.0          
+                      │─────────────────────────────────────────────────────────
+  rev 4           45m │  4m      ↺  Restarted · app · OOMKilled · exit 137      
+  checkout-api:1.8.2  │  5m      ○  Started · Started container checkout-api    
   ▲ 1 restart         │                                                         
                       │                                                         
   rev 3            3h │                                                         

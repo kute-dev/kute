@@ -7,7 +7,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -820,6 +822,107 @@ func TestRailSelectionSyncsToLatestEventNotJustRollout(t *testing.T) {
 // "name:tag" component of an image reference is ever shown — an internal
 // registry host (with its own port, common for self-hosted registries)
 // never belongs in a 60-column sidebar.
+// TestFeedLinesNeverExceedsRequestedHeight is the overflow-guard regression
+// test for feedLines' new variable-height rows: a message long enough that
+// its own wrapped line count alone exceeds a tiny height budget must still
+// come back trimmed to that budget — 16a's no-rail Body branch joins
+// feedLines' return straight into the screen with no further trim (unlike
+// 16b's with-rail branch, which pads/truncates to height itself), so a
+// wrapped row overflowing its budget would otherwise blow past the body's
+// allotted height and misalign the keybar underneath it.
+func TestFeedLinesNeverExceedsRequestedHeight(t *testing.T) {
+	longMsg := strings.Repeat("word ", 200)
+	entries := []kube.TimelineEntry{
+		{Time: time.Now(), Kind: kube.TimelineEvent, Object: "Pod/worker-0", Namespace: "default", Severity: "Warning", Reason: "BackOff", Message: longMsg},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	const height = 2
+	lines := m.feedLines(m.Theme(), 80, height)
+	if len(lines) > height {
+		t.Fatalf("expected feedLines to trim to at most %d lines even when the selected row alone wraps taller than that, got %d", height, len(lines))
+	}
+}
+
+// TestLongWhatTextWrapsOntoContinuationLine covers the feed's own long-text
+// handling: a WHAT message that doesn't fit the column grows the row onto a
+// second physical line (wrapText) rather than ellipsizing with "…" the way
+// every other fixed-width column (OBJECT, the rail's own rev/image lines)
+// still does.
+func TestLongWhatTextWrapsOntoContinuationLine(t *testing.T) {
+	longMsg := "BackOff · back-off restarting failed container because the readiness probe has been failing continuously for the last several minutes across every replica"
+	entries := []kube.TimelineEntry{
+		{Time: time.Now(), Kind: kube.TimelineEvent, Object: "Pod/worker-0", Namespace: "default", Severity: "Warning", Reason: "", Message: longMsg},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	lines := m.renderRow(m.Theme(), m.rows[0], false, 80)
+	if len(lines) < 2 {
+		t.Fatalf("expected the long WHAT text to wrap onto at least 2 physical lines, got %d: %+v", len(lines), lines)
+	}
+	joined := plain(strings.Join(lines, " "))
+	if !strings.Contains(joined, "every replica") {
+		t.Fatalf("expected the full message to survive across wrapped lines (no ellipsis truncation), got:\n%s", joined)
+	}
+	if strings.Contains(joined, "…") {
+		t.Fatalf("did not expect the wrapped WHAT text to still be ellipsized:\n%s", joined)
+	}
+}
+
+// TestRolloutDividerFollowedByHorizontalRule covers the feed's own
+// separator between a ROLLOUT divider and the older entries beneath it: a
+// full-width rule line, not just a background-color change.
+func TestRolloutDividerFollowedByHorizontalRule(t *testing.T) {
+	entries := []kube.TimelineEntry{
+		{Time: time.Now().Add(-time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/api-gateway", Namespace: "default", Reason: "Rollout", Revision: 5, Image: "api-gateway:2.3.1"},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	lines := m.renderRow(m.Theme(), m.rows[0], false, 80)
+	if len(lines) < 2 {
+		t.Fatalf("expected the ROLLOUT divider to carry a trailing rule line, got %d lines: %+v", len(lines), lines)
+	}
+	rule := plain(lines[len(lines)-1])
+	if !strings.Contains(rule, "────") {
+		t.Fatalf("expected the divider's last line to be a horizontal rule, got %q", rule)
+	}
+}
+
+// TestUnselectedRolloutRowHasNoPermanentBackground covers the "same
+// background for every item" requirement: unlike the old MarkBg tint that
+// used to mark every ROLLOUT row regardless of selection, an unselected
+// rollout row's body line must carry no background escape at all — the
+// exact same (absent) background a plain unselected feed row has. Only
+// selection (theme.SelBg) or the trailing rule (its own foreground-only
+// style) may add color.
+func TestUnselectedRolloutRowHasNoPermanentBackground(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	entries := []kube.TimelineEntry{
+		{Time: time.Now().Add(-time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/api-gateway", Namespace: "default", Reason: "Rollout", Revision: 5, Image: "api-gateway:2.3.1"},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	lines := m.renderRow(m.Theme(), m.rows[0], false, 80)
+	if strings.Contains(lines[0], "48;2;") {
+		t.Fatalf("expected an unselected ROLLOUT row to carry no background color, got:\n%q", lines[0])
+	}
+}
+
 func TestShortImageDropsRegistryPrefix(t *testing.T) {
 	cases := map[string]string{
 		"r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108": "aim.bp.app:5.31.0.58108",
