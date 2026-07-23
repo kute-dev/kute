@@ -759,9 +759,16 @@ func (m Model) openSelectedYAML() (tea.Model, tea.Cmd, bool) {
 // openSelectedEvents pushes 9b namespace-scoped (docs/design README.md
 // §9b: "reached by e from browse, namespace-scoped") — m.namespace is
 // already "" in 6b's all-namespaces triage, so no separate branch is needed
-// for that case. Doesn't need a selected row, unlike YAML/logs/detail.
+// for that case. Doesn't need a selected row, unlike YAML/logs/detail —
+// which is exactly why TaskStateEmpty (10c: connected, zero rows of *this
+// kind* in this namespace) must work too, not just TaskStateReady: the
+// namespace can easily have events tied to some other kind (10c's own hint
+// line already says as much — "g other kinds — this namespace has N
+// pods...") even when the browsed kind has none. Excluding TaskStateEmpty
+// silently ate every 'e' press (and 'g'-jump to Events, which redirects
+// through this same gate) from an empty-state screen.
 func (m Model) openSelectedEvents() (tea.Model, tea.Cmd, bool) {
-	if m.openEvents == nil || m.state != tui.TaskStateReady {
+	if m.openEvents == nil || (m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty) {
 		return nil, nil, false
 	}
 	task, cmd := m.openEvents(m.namespace, m.width, m.height)
@@ -770,9 +777,10 @@ func (m Model) openSelectedEvents() (tea.Model, tea.Cmd, bool) {
 
 // openSelectedTimeline pushes 16a namespace-scoped (docs/design README.md
 // §16a) — same "no selected row needed, namespace already carries the
-// all-namespaces ” case" shape as openSelectedEvents.
+// all-namespaces ” case" shape as openSelectedEvents, including the same
+// TaskStateEmpty carve-out.
 func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
-	if m.openTimeline == nil || m.state != tui.TaskStateReady {
+	if m.openTimeline == nil || (m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty) {
 		return nil, nil, false
 	}
 	task, cmd := m.openTimeline(m.namespace, m.width, m.height)

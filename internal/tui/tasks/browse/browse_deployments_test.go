@@ -350,3 +350,39 @@ func TestGotoKindMsgEventPushesEventsTask(t *testing.T) {
 		t.Fatalf("expected GotoKindMsg{KindEvent} to push tasks/events, got %T", updated)
 	}
 }
+
+// TestEKeyOpensEventsFromEmptyState is a live-cluster regression: a
+// namespace can easily have events tied to some other kind (10c's own hint
+// line says as much — "g other kinds — this namespace has N pods...") even
+// when the browsed kind has zero rows here. 'e' is namespace-scoped and
+// needs no selected row, so it must work from TaskStateEmpty exactly like
+// it does from TaskStateReady — before this fix, openSelectedEvents gated
+// on TaskStateReady only, silently eating the keypress (and the equivalent
+// goto-palette jump to Events, which redirects through the same gate) from
+// an empty-state screen.
+func TestEKeyOpensEventsFromEmptyState(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}
+	var openedNamespace string
+	session := newSession()
+	m := New(Config{
+		Session: session, Lister: lister,
+		OpenEvents: func(namespace string, w, h int) (tea.Model, tea.Cmd) {
+			openedNamespace = namespace
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty (no pods seeded)", m.state)
+	}
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "e"})
+
+	if openedNamespace != "default" {
+		t.Fatalf("expected events opened for namespace default from an empty-state screen, got %q", openedNamespace)
+	}
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected 'e' from TaskStateEmpty to push tasks/events, got %T", updated)
+	}
+}
