@@ -875,6 +875,32 @@ func TestLongWhatTextWrapsOntoContinuationLine(t *testing.T) {
 	}
 }
 
+// TestSelectedWrappedRowBarCoversEveryLine is the regression test for a
+// selected row whose WHAT text wraps: the "▎" selection bar (the "primary
+// cue" per docs/design README.md) must run down every physical line the row
+// occupies, not just the first — a bar that stops after line one reads as
+// only half the row being selected.
+func TestSelectedWrappedRowBarCoversEveryLine(t *testing.T) {
+	longMsg := "BackOff · back-off restarting failed container because the readiness probe has been failing continuously for the last several minutes across every replica"
+	entries := []kube.TimelineEntry{
+		{Time: time.Now(), Kind: kube.TimelineEvent, Object: "Pod/worker-0", Namespace: "default", Severity: "Warning", Reason: "", Message: longMsg},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	lines := m.renderRow(m.Theme(), m.rows[0], true, 80)
+	if len(lines) < 2 {
+		t.Fatalf("expected the long WHAT text to wrap onto at least 2 physical lines, got %d", len(lines))
+	}
+	for i, l := range lines {
+		if got := plain(l); !strings.HasPrefix(got, tui.GlyphSelBar) {
+			t.Fatalf("expected every wrapped line of a selected row to start with the %q bar, line %d was %q", tui.GlyphSelBar, i, got)
+		}
+	}
+}
+
 // TestRolloutDividerFollowedByHorizontalRule covers the feed's own
 // separator between a ROLLOUT divider and the older entries beneath it: a
 // full-width rule line, not just a background-color change.

@@ -711,8 +711,12 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 	if selected {
 		marker = feedSelBarStyle(theme).Render(tui.GlyphSelBar) + gap(1)
 	}
+	// blankLeft reuses marker (not a bare gap(2)) so a wrapped row's
+	// selection bar runs down every physical line, not just the first —
+	// the bar is "the primary cue" (docs/design README.md), so a wrapped
+	// selected row can't let it stop short.
 	left := marker + dim.Render(padRight(when, feedWhenW)) + gap(2) + glyphStyle.Render(glyph)
-	blankLeft := gap(2) + dim.Render(padRight("", feedWhenW)) + gap(2) + dim.Render(padRight("", feedGlyphW))
+	blankLeft := marker + dim.Render(padRight("", feedWhenW)) + gap(2) + dim.Render(padRight("", feedGlyphW))
 
 	whatW := m.feedWhatWidth(width)
 	whatLines := wrapText(entrySummary(e), whatW)
@@ -845,7 +849,10 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 	bodyLines := wrapText(m.rolloutBodyText(e), m.feedWhatWidth(width))
 	lines := make([]string, 0, len(bodyLines)+1)
 	for i, bl := range bodyLines {
-		prefix := gap(2) + when.Render(padRight("", feedWhenW)) + gap(2) + bg.Render(padRight("", feedGlyphW))
+		// marker (not a bare gap(2)) on every line, including
+		// continuation ones, so a wrapped selected divider's bar runs the
+		// full height of the row rather than stopping after line one.
+		prefix := marker + when.Render(padRight("", feedWhenW)) + gap(2) + bg.Render(padRight("", feedGlyphW))
 		if i == 0 {
 			prefix = marker + when.Render(padRight(whenText, feedWhenW)) + gap(2) + glyphStyle.Render(tui.GlyphRollout)
 		}

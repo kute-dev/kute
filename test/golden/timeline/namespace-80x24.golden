@@ -4,7 +4,7 @@
 ────────────────────────────────────────────────────────────────────────────────
   WHEN       +CHANGE  WHAT                                                OBJECT
 ▎ 1m      ▲  +4m      BackOff · back-off restarting failed  Pod/api-gateway-9x2…
-                      container                                                 
+▎                     container                                                 
   3m      ↺  +3m      Restarted · app · OOMKilled · exit    Pod/api-gateway-9x2…
                       137                                                       
   6m      ⇅  ROLLOUT deploy/api-gateway · rev 5 ·                               
