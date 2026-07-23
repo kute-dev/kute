@@ -110,7 +110,7 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 		left += "   " + dim.Render(tui.GlyphCompleted) + " " + num.Render(fmt.Sprintf("%d", normal)) + " " + dim.Render("normal")
 	}
 	right := dim.Render(windowLabel(m.window) + " · deduped · warnings first")
-	return fillLine(padBetween(left, right, width), width, false, theme)
+	return fillLine(padBetween(left, right, width, false, theme), width, false, theme)
 }
 
 // filterStripLine mirrors browse's own filter strip (the live "/" query and
@@ -135,7 +135,7 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	if matched < total {
 		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
 	}
-	return fillLine(padBetween(left, right, width), width, false, theme)
+	return fillLine(padBetween(left, right, width, false, theme), width, false, theme)
 }
 
 func windowLabel(d time.Duration) string {
@@ -185,7 +185,7 @@ func (m Model) eventRows(theme tui.Theme, width, height int) string {
 	if len(m.rows) == 0 {
 		return components.CenterLines([]string{m.emptyMessage()}, width, height)
 	}
-	start, end := visibleWindow(m.rows, m.selected, height)
+	start, end := visibleWindow(m.rows, m.selected, height, width)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		lines = append(lines, m.renderRow(theme, m.rows[i], i == m.selected, width))
@@ -193,36 +193,38 @@ func (m Model) eventRows(theme tui.Theme, width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// rowLines is how many terminal lines r occupies: 2 for a real event group
-// (docs/design README.md §9b's two-line REASON/OBJECT cell), 1 for the
-// folded normal-events summary.
-func rowLines(r displayRow) int {
+// rowLines is how many terminal lines r occupies at width: 1 for the reason
+// line plus however many lines the OBJECT/MESSAGE cell wraps to (docs/design
+// README.md §9b's "MESSAGE (widest, verbatim)" — wrapped rather than
+// truncated, so a long message just grows the row instead of losing text),
+// 1 for the folded normal-events summary.
+func rowLines(r displayRow, width int) int {
 	if r.kind == rowFolded {
 		return 1
 	}
-	return 2
+	return 1 + len(wrappedMessageLines(r.group, width))
 }
 
 // visibleWindow finds a [start,end) row range around selected that fits
 // within height lines (rowLines-aware, since rows have mixed heights),
 // growing downward first then upward while budget remains.
-func visibleWindow(rows []displayRow, selected, height int) (start, end int) {
+func visibleWindow(rows []displayRow, selected, height, width int) (start, end int) {
 	n := len(rows)
 	if n == 0 || height <= 0 {
 		return 0, 0
 	}
 	selected = clamp(selected, 0, n-1)
 	start, end = selected, selected+1
-	used := rowLines(rows[selected])
+	used := rowLines(rows[selected], width)
 	for {
 		grew := false
-		if end < n && used+rowLines(rows[end]) <= height {
-			used += rowLines(rows[end])
+		if end < n && used+rowLines(rows[end], width) <= height {
+			used += rowLines(rows[end], width)
 			end++
 			grew = true
 		}
-		if start > 0 && used+rowLines(rows[start-1]) <= height {
-			used += rowLines(rows[start-1])
+		if start > 0 && used+rowLines(rows[start-1], width) <= height {
+			used += rowLines(rows[start-1], width)
 			start--
 			grew = true
 		}
@@ -281,15 +283,43 @@ func (m Model) renderGroupRow(theme tui.Theme, g kube.EventGroup, selected bool,
 		countText = fmt.Sprintf("×%d", g.Count)
 	}
 
-	left1 := "  " + sev.Render(glyph+" "+g.Reason)
+	left1 := selSpace(2, selected, theme) + sev.Render(glyph+" "+g.Reason)
 	right1 := dim.Render(strings.TrimSpace(countText + "   " + shortEventAge(g.LastSeen, m.fetchedAt)))
-	line1 := fillLine(padBetween(left1, right1, width), width, selected, theme)
+	line1 := fillLine(padBetween(left1, right1, width, selected, theme), width, selected, theme)
 
-	object := components.Truncate(g.Object, max(width/3, 10))
-	msg := components.Truncate(g.Message, max(width-lipgloss.Width(object)-6, 8))
-	line2 := fillLine("    "+dim.Render(object)+"  "+secondary.Render(msg), width, selected, theme)
+	object := objectCell(g.Object, width)
+	prefix := "    " + object + "  "
+	lines := make([]string, 0, 2)
+	lines = append(lines, line1)
+	for i, ml := range wrappedMessageLines(g, width) {
+		var lead string
+		if i == 0 {
+			lead = selSpace(4, selected, theme) + dim.Render(object) + selSpace(2, selected, theme)
+		} else {
+			lead = selSpace(lipgloss.Width(prefix), selected, theme)
+		}
+		lines = append(lines, fillLine(lead+secondary.Render(ml), width, selected, theme))
+	}
+	return strings.Join(lines, "\n")
+}
 
-	return line1 + "\n" + line2
+// objectCell is g.Object truncated to the same width budget renderGroupRow
+// and wrappedMessageLines both use — factored out so the two never disagree
+// about how much room the message gets.
+func objectCell(object string, width int) string {
+	return components.Truncate(object, max(width/3, 10))
+}
+
+// wrappedMessageLines word-wraps g.Message to fit the remaining width after
+// the "    "+object+"  " prefix, rather than truncating it away (docs/design
+// README.md §9b's "MESSAGE (widest, verbatim)"). rowLines calls this too, so
+// the row-height math visibleWindow relies on never disagrees with what
+// renderGroupRow actually draws.
+func wrappedMessageLines(g kube.EventGroup, width int) []string {
+	prefixWidth := lipgloss.Width("    " + objectCell(g.Object, width) + "  ")
+	msgWidth := max(width-prefixWidth, 8)
+	wrapped := lipgloss.NewStyle().Width(msgWidth).Render(g.Message)
+	return strings.Split(wrapped, "\n")
 }
 
 // renderFoldedRow is 9b's "▸ normal · 31 events — Pulled · Created…"
@@ -316,7 +346,7 @@ func (m Model) renderFoldedRow(theme tui.Theme, groups []kube.EventGroup, select
 		}
 	}
 
-	content := "  " + info.Render(tui.GlyphExpand) + " " +
+	content := selSpace(2, selected, theme) + info.Render(tui.GlyphExpand) + " " +
 		dim.Render(fmt.Sprintf("normal · %d events — %s", len(groups), strings.Join(reasons, " · ")))
 	return fillLine(components.Truncate(content, width), width, selected, theme)
 }
@@ -343,23 +373,38 @@ func shortEventAge(t, now time.Time) string {
 
 // padBetween places left-aligned left and right-aligned right within width
 // (measuring already-styled/ANSI content), matching browse's own strip
-// layout helper. Drops right when there isn't room for both.
-func padBetween(left, right string, width int) string {
+// layout helper. Drops right when there isn't room for both. The gap itself
+// is rendered through selSpace so a selected row's highlight doesn't break
+// into disjoint patches around the plain-space fill (the bug docs/design
+// README.md §9b's golden fixtures caught: an unstyled gap of literal spaces
+// between the reason and the age column left a hole in the highlight).
+func padBetween(left, right string, width int, selected bool, theme tui.Theme) string {
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		return left
 	}
-	return left + strings.Repeat(" ", gap) + right
+	return left + selSpace(gap, selected, theme) + right
+}
+
+// selSpace renders n literal spaces, styled with the selection background
+// when selected — used everywhere a row concatenates plain-string indent/gap
+// spaces next to styled text, so a selected row's highlight is one solid bar
+// rather than patches around each Render() call (unstyled string
+// concatenation leaves the terminal's default background showing through).
+func selSpace(n int, selected bool, theme tui.Theme) string {
+	if n <= 0 {
+		return ""
+	}
+	if !selected {
+		return strings.Repeat(" ", n)
+	}
+	return lipgloss.NewStyle().Background(theme.SelBg).Render(strings.Repeat(" ", n))
 }
 
 // fillLine pads content out to width with trailing spaces styled through
 // the selection background when selected, so a selected row's highlight
 // reaches the row's right edge instead of stopping at the last glyph.
 func fillLine(content string, width int, selected bool, theme tui.Theme) string {
-	pad := lipgloss.NewStyle()
-	if selected {
-		pad = lipgloss.NewStyle().Background(theme.SelBg)
-	}
 	slack := max(width-lipgloss.Width(content), 0)
-	return content + pad.Render(strings.Repeat(" ", slack))
+	return content + selSpace(slack, selected, theme)
 }
