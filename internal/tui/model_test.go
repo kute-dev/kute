@@ -190,6 +190,98 @@ func TestRootModelQuestionMarkOpensHelp(t *testing.T) {
 	}
 }
 
+// TestRootModelQOpensQuitConfirm covers the quit-confirmation overlay: 'q'
+// must not quit immediately (unlike ctrl+q/ctrl+c, each task's own
+// unchanged instant-quit binding) — it opens a confirm the root shell owns,
+// the same way g/n/c/? open their own overlays.
+func TestRootModelQOpensQuitConfirm(t *testing.T) {
+	t.Parallel()
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, testSession())
+	updated, cmd := model.Update(tea.KeyPressMsg{Text: "q"})
+	m := updated.(tui.Model)
+	if !m.QuitConfirmOpen() {
+		t.Fatalf("expected 'q' to open the quit confirmation")
+	}
+	if m.Mode() != tui.ModeConfirm {
+		t.Fatalf("Mode() = %v, want ModeConfirm", m.Mode())
+	}
+	if cmd != nil {
+		t.Fatalf("expected no cmd from opening the confirm (must not quit yet)")
+	}
+}
+
+// TestRootModelQuitConfirmNCancels covers 'n'/'esc' declining the quit
+// confirmation: the overlay closes and the program keeps running.
+func TestRootModelQuitConfirmNCancels(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"n", "esc"} {
+		task := &screenTask{name: "browse"}
+		model := tui.NewWithSession(task, testSession())
+		updated, _ := model.Update(tea.KeyPressMsg{Text: "q"})
+		var msg tea.KeyPressMsg
+		if key == "esc" {
+			msg = tea.KeyPressMsg{Code: tea.KeyEscape}
+		} else {
+			msg = tea.KeyPressMsg{Text: key}
+		}
+		updated, cmd := updated.(tui.Model).Update(msg)
+		m := updated.(tui.Model)
+		if m.QuitConfirmOpen() {
+			t.Fatalf("%q: expected the quit confirmation to close", key)
+		}
+		if m.Mode() != tui.ModeBrowse {
+			t.Fatalf("%q: Mode() = %v, want ModeBrowse after cancelling", key, m.Mode())
+		}
+		if cmd != nil {
+			t.Fatalf("%q: expected no cmd from cancelling (must not quit)", key)
+		}
+	}
+}
+
+// TestRootModelQuitConfirmYQuits covers 'y'/'enter' confirming the quit —
+// the only path that actually returns tea.Quit for the 'q' key.
+func TestRootModelQuitConfirmYQuits(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"y", "enter"} {
+		task := &screenTask{name: "browse"}
+		model := tui.NewWithSession(task, testSession())
+		updated, _ := model.Update(tea.KeyPressMsg{Text: "q"})
+		var msg tea.KeyPressMsg
+		if key == "enter" {
+			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
+		} else {
+			msg = tea.KeyPressMsg{Text: key}
+		}
+		_, cmd := updated.(tui.Model).Update(msg)
+		if cmd == nil {
+			t.Fatalf("%q: expected a quit cmd", key)
+		}
+	}
+}
+
+// TestRootModelInputCapturingTaskGetsQ covers 'q' alongside g/n/c/?:
+// browse's own filter box (and every other CapturingInput task) must still
+// be able to type the letter q rather than have the shell steal it for the
+// quit confirmation.
+func TestRootModelInputCapturingTaskGetsQ(t *testing.T) {
+	t.Parallel()
+
+	task := &capturingTask{screenTask: screenTask{name: "browse-filter"}}
+	model := tui.NewWithSession(task, testSession())
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "q"})
+	m := updated.(tui.Model)
+	if m.QuitConfirmOpen() {
+		t.Fatalf("shell must not intercept 'q' while the task is capturing input")
+	}
+	if got := task.received; len(got) != 1 || got[0] != "q" {
+		t.Fatalf("expected the task to receive 'q' verbatim, got %v", got)
+	}
+}
+
 // TestRootModelHelpOverlayRendersScopeGlobalAndViewColumns covers 7b: the
 // active screen's own Keybar() groups become the current-view column, and
 // the fixed SCOPE/GLOBAL columns come from Session.HelpScope/HelpGlobal

@@ -33,6 +33,15 @@ type ConfirmStyles struct {
 // confirm needs — the full type-the-name PROD modal (mvp-plan.md §8b) is a
 // later addition to this same file.
 func ConfirmCard(title, detail string, styles ConfirmStyles, width, height int) string {
+	box := ConfirmBox(title, detail, styles)
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// ConfirmBox renders ConfirmCard's bordered content only, without the
+// width×height Place wrapper — for callers that composite it themselves
+// (the root shell's quit confirm, layered over the active screen via
+// components.Compose rather than centered in its own width×height).
+func ConfirmBox(title, detail string, styles ConfirmStyles) string {
 	lines := []string{styles.Title.Render(title)}
 	if detail != "" {
 		lines = append(lines, styles.Detail.Render(detail))
@@ -40,8 +49,7 @@ func ConfirmCard(title, detail string, styles ConfirmStyles, width, height int) 
 	keyLine := styles.Key.Render("y") + styles.Label.Render(" confirm") + "   " + styles.Key.Render("n") + styles.Label.Render(" cancel")
 	lines = append(lines, styles.Rule.Render(strings.Repeat("─", maxLineWidth(lines, keyLine))), keyLine)
 	content := strings.Join(lines, "\n")
-	box := styles.Border.Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(content)
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+	return styles.Border.Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(content)
 }
 
 // TypeModalStyles are the pre-styled spans TypeNameModal composes from —

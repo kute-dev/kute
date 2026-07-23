@@ -146,7 +146,12 @@ type Model struct {
 	conn          kube.ConnState
 	palette       *palette.Model
 	helpOpen      bool
-	session       *Session
+	// quitConfirm is 'q's confirmation overlay (ctrl+q/ctrl+c stay each
+	// task's own immediate-quit key, unchanged) — a root-shell global
+	// exactly like helpOpen, so 'q' works from any screen without touching
+	// every task's own update.go.
+	quitConfirm bool
+	session     *Session
 
 	// probes/probeGen back the 7a context palette's lazily-streamed
 	// reachability results (kube.ProbeContexts): probes holds what's
@@ -262,6 +267,10 @@ func (m Model) PaletteOpen() bool { return m.palette != nil }
 
 // HelpOpen reports whether the help overlay is showing.
 func (m Model) HelpOpen() bool { return m.helpOpen }
+
+// QuitConfirmOpen reports whether 'q's quit confirmation overlay is
+// showing.
+func (m Model) QuitConfirmOpen() bool { return m.quitConfirm }
 
 func (m Model) Init() tea.Cmd {
 	return m.task.Init()
@@ -467,10 +476,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleShellKey routes keys the root shell owns: overlay navigation while
-// a palette/help panel is open, otherwise g/n/c/? to open one. Reports
-// false when the key isn't the shell's to handle, so the caller falls
-// through to the task.
+// a palette/help/quit-confirm panel is open, otherwise g/n/c/q/? to open
+// one. Reports false when the key isn't the shell's to handle, so the
+// caller falls through to the task.
 func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
+	if m.quitConfirm {
+		switch msg.String() {
+		case "y", "enter":
+			return true, m, tea.Quit
+		case "n", "esc":
+			m.quitConfirm = false
+			m.mode = ModeBrowse
+		}
+		return true, m, nil
+	}
 	if m.palette != nil {
 		return m.handlePaletteKey(msg)
 	}
@@ -508,6 +527,9 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		return true, m, m.openPalette(palette.ScopeContext, "ctx ›", "")
 	case "U":
 		return true, m, m.openUpdatePanel()
+	case "q":
+		m.quitConfirm = true
+		m.mode = ModeConfirm
 	case "?":
 		m.helpOpen = true
 		m.mode = ModeHelp
@@ -956,7 +978,7 @@ func sameTask(a, b Task) bool {
 func (m Model) View() tea.View {
 	view := m.task.View()
 	view.AltScreen = true
-	if m.session == nil || (m.palette == nil && !m.helpOpen) {
+	if m.session == nil || (m.palette == nil && !m.helpOpen && !m.quitConfirm) {
 		return view
 	}
 
@@ -972,6 +994,8 @@ func (m Model) View() tea.View {
 
 	var panel string
 	switch {
+	case m.quitConfirm:
+		panel = renderQuitConfirm(theme)
 	case m.palette != nil:
 		panel = m.palette.Render(paletteStyles(theme), width)
 	case m.helpOpen:
@@ -1005,6 +1029,25 @@ func (m Model) View() tea.View {
 		view.Content = replaceLastLine(view.Content, helpKeybarLine(theme, width))
 	}
 	return view
+}
+
+// renderQuitConfirm draws 'q's quit confirmation: the same
+// components.ConfirmBox shape every other y/N confirm card uses, but
+// bordered in Theme.BorderPalette/BgPalette — the neutral floating-dialog
+// tokens palette/help already use — rather than Theme.ConfirmBorder, since
+// quitting isn't a destructive resource action (invariant: "red borders
+// reserved exclusively for destructive confirms").
+func renderQuitConfirm(theme Theme) string {
+	bg := lipgloss.NewStyle().Background(theme.BgPalette)
+	styles := components.ConfirmStyles{
+		Border: bg.Foreground(theme.BorderPalette),
+		Title:  bg.Foreground(theme.Text).Bold(true),
+		Detail: bg.Foreground(theme.TextSecondary),
+		Rule:   bg.Foreground(theme.TextGhost),
+		Key:    bg.Foreground(theme.Accent),
+		Label:  bg.Foreground(theme.TextDim),
+	}
+	return components.ConfirmBox("Quit kute?", "", styles)
 }
 
 // gotoKeybarLine renders 2b's main-keybar-while-open treatment: a GOTO mode
