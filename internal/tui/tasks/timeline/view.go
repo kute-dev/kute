@@ -10,6 +10,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
@@ -44,9 +45,17 @@ func (m Model) Header() tui.HeaderState {
 		{Text: ctxName, Style: dim},
 	}
 	if m.objectScoped() {
+		if m.namespace != "" {
+			crumbs = append(crumbs,
+				tui.Crumb{Text: " › ", Style: ghost},
+				tui.Crumb{Text: m.namespace, Style: dim},
+			)
+		}
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},
 			tui.Crumb{Text: string(m.objectKind) + "/" + m.objectName, Style: dim},
+			tui.Crumb{Text: " › ", Style: ghost},
+			tui.Crumb{Text: "Timeline", Style: text},
 		)
 	} else {
 		nsText := m.namespace
@@ -56,13 +65,11 @@ func (m Model) Header() tui.HeaderState {
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},
 			tui.Crumb{Text: nsText, Style: lipgloss.NewStyle().Foreground(theme.Accent)},
+			tui.Crumb{Text: " › ", Style: ghost},
+			tui.Crumb{Text: "Timeline", Style: text},
+			tui.Crumb{Text: " · " + windowLabel(m.window), Style: ghost},
 		)
 	}
-	crumbs = append(crumbs,
-		tui.Crumb{Text: " › ", Style: ghost},
-		tui.Crumb{Text: "Timeline", Style: text},
-		tui.Crumb{Text: " · " + windowLabel(m.window), Style: ghost},
-	)
 
 	var forwardChip tui.ConnBadge
 	if m.session != nil {
@@ -106,8 +113,11 @@ func (m Model) counts() (rollouts, restarts, warnings int) {
 	return rollouts, restarts, warnings
 }
 
-// summaryLine is 16a's "⇅ 1 rollout · ↺ 41 restarts · ▲ warnings …" strip
-// (docs/design README.md §16a).
+// summaryLine is 16a's "⇅ 1 rollout · ↺ 41 restarts · ▲ warnings …" strip,
+// with a right-aligned yellow correlation callout ("first BackOff 45s after
+// rollout of nva-worker") once a rollout has a warning-grade entry after it
+// — the same insight changeOffset highlights inline on that row (docs/design
+// README.md §16a: "echoed in the health strip").
 func (m Model) summaryLine(theme tui.Theme, width int) string {
 	rollout := lipgloss.NewStyle().Foreground(theme.Accent)
 	restart := lipgloss.NewStyle().Foreground(theme.TextSecondary)
@@ -125,7 +135,56 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 
 	left := strings.Join(parts, "   ")
 	right := dim.Render(windowLabel(m.window) + " · merged feed")
+	if !m.objectScoped() {
+		if trouble, rollout, ok := m.firstTroubleAfterRollout(); ok {
+			_, depName := splitObject(rollout.Object)
+			offset := shortAge(trouble.Time.Sub(rollout.Time))
+			right = lipgloss.NewStyle().Foreground(theme.Warn).Render(
+				fmt.Sprintf("first %s %s after rollout of %s", trouble.Reason, offset, depName))
+		}
+	}
 	return fillLine(padBetween(left, right, width), width, false, theme)
+}
+
+// firstTroubleAfterRollout finds the latest TimelineRollout in m.rows and,
+// among rows strictly after it that are a restart or a warning-severity
+// event, the one closest in time — the "first sign of trouble" the summary
+// strip's callout and changeOffset's yellow highlight both point at (they
+// read this same function so they can never disagree).
+func (m Model) firstTroubleAfterRollout() (trouble, rollout kube.TimelineEntry, ok bool) {
+	var latest *kube.TimelineEntry
+	for i := range m.rows {
+		r := &m.rows[i]
+		if r.Kind != kube.TimelineRollout {
+			continue
+		}
+		if latest == nil || r.Time.After(latest.Time) {
+			latest = r
+		}
+	}
+	if latest == nil {
+		return kube.TimelineEntry{}, kube.TimelineEntry{}, false
+	}
+	var best *kube.TimelineEntry
+	for i := range m.rows {
+		e := &m.rows[i]
+		if !e.Time.After(latest.Time) || !isTrouble(*e) {
+			continue
+		}
+		if best == nil || e.Time.Before(best.Time) {
+			best = e
+		}
+	}
+	if best == nil {
+		return kube.TimelineEntry{}, *latest, false
+	}
+	return *best, *latest, true
+}
+
+// isTrouble reports whether e is a "sign of trouble" — a container restart,
+// or a warning-severity event.
+func isTrouble(e kube.TimelineEntry) bool {
+	return e.Kind == kube.TimelineRestart || (e.Kind == kube.TimelineEvent && e.Severity == "Warning")
 }
 
 func pluralize(n int, word string) string {
@@ -169,6 +228,15 @@ func windowLabel(d time.Duration) string {
 }
 
 func (m Model) Body(width, height int) string {
+	// 16b's PROD rollback escalates to the type-the-deployment-name modal —
+	// a floating card over the still-rendered rail/feed, the same "only the
+	// PROD escalation gets this floating card" shape helmhistory.Body uses
+	// for its own Helm rollback (TierInline stays inline: the rail/feed
+	// render normally below, with the confirm text in the keybar's
+	// RightNote instead).
+	if m.actionsCtl.Active() && m.actionsCtl.Tier() == actions.TierModal {
+		return m.rollbackConfirmModal(width, height)
+	}
 	switch m.state {
 	case tui.TaskStateEmpty:
 		return components.CenterLines([]string{m.emptyMessage()}, width, height)
@@ -182,6 +250,37 @@ func (m Model) Body(width, height int) string {
 	}
 }
 
+// rollbackConfirmModal renders 16b's PROD "type the deployment name to
+// confirm" card for 'R' rollback — same TypeModalStyles/TypeNameModal shape
+// as 8b's delete confirm (poddetail's own deleteConfirmModal), reusing the
+// "rollback" actionVerb TypeNameModal now takes so its key row reads "↵
+// rollback (when name matches)" rather than the delete-specific default.
+func (m Model) rollbackConfirmModal(width, height int) string {
+	theme := m.Theme()
+	title := "Confirm"
+	target := m.railDeployment
+	detail := ""
+	if pending := m.actionsCtl.Pending(); pending != nil {
+		title = "⇅ " + pending.Label
+		target = pending.Scope.ResourceName
+		detail = "will run: " + kube.RolloutUndoCommandString(pending.Scope.Namespace, pending.Scope.ResourceName, pending.Scope.Revision)
+	}
+
+	styles := components.TypeModalStyles{
+		Border:   lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
+		Title:    lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
+		ProdTag:  lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
+		Owner:    lipgloss.NewStyle().Foreground(theme.Good).Background(theme.ConfirmHeaderBg),
+		Detail:   lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
+		Rule:     lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
+		Input:    lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
+		Progress: lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
+		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
+		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
+	}
+	return components.TypeNameModal(title, "", detail, target, m.actionsCtl.TypedName(), "rollback", m.isProd(), styles, width, height)
+}
+
 func (m Model) emptyMessage() string {
 	if m.objectScoped() {
 		return "nothing changed for " + string(m.objectKind) + "/" + m.objectName + " in " + windowLabel(m.window)
@@ -192,90 +291,270 @@ func (m Model) emptyMessage() string {
 	return "nothing changed in " + m.namespace + " in " + windowLabel(m.window)
 }
 
-// timelineBody stacks 16b's revision rail (when resolved) above the merged
-// feed, separated by a rule — the "vertical rail" idiom (docs/design
-// README.md §16b) sitting over the same one-clock feed 16a renders alone.
+// timelineBody puts 16b's revision rail in a fixed-width left sidebar next
+// to the merged feed, divided by a vertical rule — the "vertical rail"
+// idiom (docs/design README.md §16b: "deployment revisions as a vertical
+// rail") sitting alongside the same one-clock feed 16a renders alone, not
+// stacked above it.
 func (m Model) timelineBody(theme tui.Theme, width, height int) string {
-	var lines []string
-	if len(m.rail) > 0 {
-		lines = append(lines, m.railLines(theme, width)...)
-		lines = append(lines, dividerLine(theme, width))
+	if len(m.rail) == 0 {
+		lines := []string{m.feedHeader(theme, width)}
+		feedHeight := max(height-len(lines), 1)
+		lines = append(lines, m.feedLines(theme, width, feedHeight)...)
+		return strings.Join(lines, "\n")
 	}
-	feedHeight := max(height-len(lines), 1)
-	lines = append(lines, m.feedLines(theme, width, feedHeight)...)
+
+	railWidth := m.railWidth(width)
+	feedWidth := max(width-railWidth-1, 8)
+
+	rail := m.railColumnLines(theme, railWidth, height)
+	// feedLines' own entries aren't always one visual line each (the empty
+	// state's components.CenterLines embeds newlines in a single returned
+	// element) — split on "\n" to flatten before pairing index-for-index
+	// with rail, or an empty feed shifts every card line out of alignment.
+	feedText := m.feedHeader(theme, feedWidth) + "\n" + strings.Join(m.feedLines(theme, feedWidth, max(height-1, 1)), "\n")
+	feed := strings.Split(feedText, "\n")
+	for len(feed) < height {
+		feed = append(feed, fillLine("", feedWidth, false, theme))
+	}
+	feed = feed[:height]
+
+	divider := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render("│")
+	lines := make([]string, height)
+	for i := 0; i < height; i++ {
+		lines[i] = rail[i] + divider + feed[i]
+	}
 	return strings.Join(lines, "\n")
 }
 
-var railColumns = []components.Column{
-	{Title: "", Min: 2},
-	{Title: "REV", Min: 14},
-	{Title: "IMAGE", Min: 20, Flex: true},
-	{Title: "UPDATED", Min: 10, Align: components.AlignRight},
+// Column widths shared between feedHeader and renderRow/renderRolloutDivider
+// so the header always lines up with the data underneath (docs/design
+// README.md §16a/§16b's exact grid: "56px 20px 64px minmax(0,1fr) 76px" in
+// 16a, no +CHANGE/OBJECT columns in 16b).
+const (
+	feedWhenW   = 6
+	feedGlyphW  = 1
+	feedChangeW = 7
+	feedObjectW = 20
+)
+
+// feedWhatWidth is the WHAT column's flex width — every other column's
+// fixed width (plus the 2-space gaps between them) subtracted from the
+// available width.
+func (m Model) feedWhatWidth(width int) int {
+	used := 2 + feedWhenW + 2 + feedGlyphW + 2
+	if !m.objectScoped() {
+		used += feedChangeW + 2 + feedObjectW + 2
+	}
+	return max(width-used, 8)
 }
 
-// railLines renders 16b's revision rail: newest-first, one line per
-// revision, index 0 (the current revision) bright/bold instead of the dim
-// treatment every other revision gets — "the current one highlighted"
-// (docs/design README.md §16b), the same idiom tasks/helmhistory later
-// reused for Helm release history.
-func (m Model) railLines(theme tui.Theme, width int) []string {
-	good := lipgloss.NewStyle().Foreground(theme.Good)
-	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
-	current := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+// feedHeader is 16a's "WHEN │ │ +CHANGE │ WHAT │ OBJECT" column header row,
+// or 16b's narrower "WHEN │ │ WHAT — <kind>/<name> + its pods" (no
+// +CHANGE/OBJECT — the mockup drops both once the feed is already scoped to
+// one object, docs/design README.md §16b).
+func (m Model) feedHeader(theme tui.Theme, width int) string {
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
-
-	rows := make([]components.Row, 0, len(m.rail))
-	for i, e := range m.rail {
-		glyph, glyphStyle := tui.GlyphCompleted, dim
-		revStyle := dim
-		revText := fmt.Sprintf("%d", e.Revision)
-		if i == 0 {
-			glyph, glyphStyle = tui.GlyphRunning, good
-			revStyle = current
-			revText += " (current)"
-		}
-		updated := "–"
-		if !e.Time.IsZero() {
-			updated = shortAge(time.Since(e.Time)) + " ago"
-		}
-		rows = append(rows, components.Row{Cells: []components.Cell{
-			{Text: glyph, Style: glyphStyle},
-			{Text: revText, Style: revStyle},
-			{Text: e.Image, Style: dim},
-			{Text: updated, Style: dim},
-		}})
+	whatW := m.feedWhatWidth(width)
+	when := padRight("WHEN", feedWhenW)
+	glyph := padRight("", feedGlyphW)
+	var line string
+	if m.objectScoped() {
+		what := "WHAT — " + strings.ToLower(string(m.objectKind)) + "/" + m.objectName + " + its pods"
+		line = "  " + when + "  " + glyph + "  " + components.Truncate(what, whatW)
+	} else {
+		change := padRight("+CHANGE", feedChangeW)
+		what := padRight("WHAT", whatW)
+		object := padLeft("OBJECT", feedObjectW)
+		line = "  " + when + "  " + glyph + "  " + change + "  " + what + "  " + object
 	}
-
-	t := components.Table{
-		Columns:     railColumns,
-		Rows:        rows,
-		Selected:    -1,
-		Width:       width,
-		Height:      len(rows) + 1,
-		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),
-	}
-	header := label.Render("REVISIONS · " + m.railDeployment)
-	return append([]string{header}, strings.Split(t.Render(), "\n")...)
+	return fillLine(label.Render(line), width, false, theme)
 }
 
-func dividerLine(theme tui.Theme, width int) string {
-	return lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", max(width, 0)))
+// railWidth is 16b's revision-rail sidebar width: a fixed fraction of the
+// body (the mockup's own 264/960 ratio), clamped so the feed always keeps
+// enough room at both golden widths (80 and 120).
+func (m Model) railWidth(width int) int {
+	return clamp(width*28/100, 22, 36)
+}
+
+// railColumnLines renders 16b's revision rail as a left sidebar — a
+// "ROLLOUT HISTORY" label over one 3-line card per revision (rev + age,
+// image, restarts-since/stable-for), newest first, a blank line between
+// cards — padded/truncated to exactly w×height so it composes edge-to-edge
+// with the feed column in timelineBody. The selected card (m.railSelected)
+// carries the highlight regardless of which pane currently has focus: moving
+// the rail cursor must be visible in both panels at once, since it live-
+// syncs the feed's own cursor to the matching ROLLOUT row (see
+// update.go's moveRailSelection/syncFeedToRailSelection).
+func (m Model) railColumnLines(theme tui.Theme, w, height int) []string {
+	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	lines := []string{fillLine("  "+label.Render("ROLLOUT HISTORY"), w, false, theme)}
+	for i, e := range m.rail {
+		if i > 0 {
+			lines = append(lines, fillLine("", w, false, theme))
+		}
+		lines = append(lines, m.railCardLines(theme, e, i, w)...)
+	}
+	for len(lines) < height {
+		lines = append(lines, fillLine("", w, false, theme))
+	}
+	return lines[:min(len(lines), height)]
+}
+
+// railCardLines renders one revision's 3-line card: "rev N" + right-aligned
+// age, the image, then a restarts-since (red) or stable-for (green) status
+// line — "was it ever stable?" at a glance (docs/design README.md §16b).
+// idx 0 (the current revision) gets bright/accent text instead of the dim
+// treatment every other revision gets.
+func (m Model) railCardLines(theme tui.Theme, e kube.TimelineEntry, idx, w int) []string {
+	current := idx == 0
+	selected := idx == m.railSelected
+
+	revStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	imageStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	ageStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	if current {
+		revStyle = lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+		imageStyle = lipgloss.NewStyle().Foreground(theme.AccentHi)
+	}
+	bar := lipgloss.NewStyle().Foreground(theme.Accent)
+	gapStyle := lipgloss.NewStyle()
+	if selected {
+		revStyle = revStyle.Background(theme.SelBg)
+		imageStyle = imageStyle.Background(theme.SelBg)
+		ageStyle = ageStyle.Background(theme.SelBg)
+		bar = bar.Background(theme.SelBg)
+		gapStyle = gapStyle.Background(theme.SelBg)
+	}
+
+	gutter := "  "
+	if selected {
+		gutter = bar.Render(tui.GlyphSelBar) + " "
+	}
+	contentW := max(w-3, 4)
+
+	age := "–"
+	if !e.Time.IsZero() {
+		age = shortAge(m.fetchedAt.Sub(e.Time))
+	}
+	revText := components.Truncate(fmt.Sprintf("rev %d", e.Revision), max(contentW-lipgloss.Width(age)-1, 1))
+	revLine := gutter + padBetweenBG(revStyle.Render(revText), ageStyle.Render(age), contentW, gapStyle)
+
+	imageLine := gutter + imageStyle.Render(components.Truncate(shortImage(e.Image), contentW))
+
+	statusGlyph, statusText, statusStyle := m.revisionStatus(theme, idx)
+	if selected {
+		statusStyle = statusStyle.Background(theme.SelBg)
+	}
+	statusLine := gutter + statusStyle.Render(statusGlyph+" "+components.Truncate(statusText, max(contentW-2, 1)))
+
+	return []string{
+		fillLine(revLine, w, selected, theme),
+		fillLine(imageLine, w, selected, theme),
+		fillLine(statusLine, w, selected, theme),
+	}
+}
+
+// revisionStatus computes rail idx's status line: a red "▲ N restart(s)
+// since" if a container restart landed inside this revision's own lifetime
+// window (its own rollout up to whenever it was superseded — or "now" for
+// the current revision), else a green "● stable <duration>" — scanning
+// m.entries (unwindowed) since a stale revision's window can fall well
+// outside the feed's current time window.
+func (m Model) revisionStatus(theme tui.Theme, idx int) (glyph, text string, style lipgloss.Style) {
+	start := m.rail[idx].Time
+	end := m.fetchedAt
+	if idx > 0 {
+		end = m.rail[idx-1].Time
+	}
+	restarts := 0
+	for _, e := range m.entries {
+		if e.Kind == kube.TimelineRestart && !e.Time.Before(start) && e.Time.Before(end) {
+			restarts++
+		}
+	}
+	if restarts > 0 {
+		suffix := ""
+		if idx == 0 {
+			suffix = " since"
+		}
+		return tui.GlyphWarning, fmt.Sprintf("%d %s%s", restarts, pluralize(restarts, "restart"), suffix), lipgloss.NewStyle().Foreground(theme.Bad)
+	}
+	return tui.GlyphRunning, "stable " + shortAge(end.Sub(start)), lipgloss.NewStyle().Foreground(theme.Good)
+}
+
+// padBetweenBG mirrors padBetween but fills the gap through gapStyle
+// (rather than leaving it unstyled) so a selected rail card's background
+// tint reaches all the way across the rev/age line's middle gap.
+func padBetweenBG(left, right string, width int, gapStyle lipgloss.Style) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + gapStyle.Render(strings.Repeat(" ", gap)) + right
 }
 
 // feedLines renders the currently visible window of m.rows, growing around
 // m.selected until height is filled — computed fresh every render from
 // Model state alone (no persisted scroll offset), mirroring tasks/events'
-// own eventRows.
+// own eventRows. 16a's folded-normal footer line (foldedNormalLine), when
+// present, takes one line off the bottom of the budget.
 func (m Model) feedLines(theme tui.Theme, width, height int) []string {
-	if len(m.rows) == 0 {
-		return []string{components.CenterLines([]string{m.emptyMessage()}, width, height)}
+	footer := m.foldedNormalLine(theme, width)
+	rowsHeight := height
+	if footer != "" {
+		rowsHeight = max(height-1, 1)
 	}
-	start, end := visibleWindow(len(m.rows), m.selected, height)
-	lines := make([]string, 0, end-start)
+
+	if len(m.rows) == 0 {
+		body := components.CenterLines([]string{m.emptyMessage()}, width, rowsHeight)
+		if footer == "" {
+			return []string{body}
+		}
+		return []string{body, footer}
+	}
+	start, end := visibleWindow(len(m.rows), m.selected, rowsHeight)
+	lines := make([]string, 0, end-start+1)
 	for i := start; i < end; i++ {
 		lines = append(lines, m.renderRow(theme, m.rows[i], i == m.selected, width))
 	}
+	if footer != "" {
+		lines = append(lines, footer)
+	}
 	return lines
+}
+
+// foldedNormalLine is 9b's "▸ normal · N normal events — reason1 ·
+// reason2… ↹ expand" collapsed summary line, adapted for timeline's
+// TimelineEntry rows (docs/design README.md §16a: "normals collapsed into
+// one group line"). 16b never folds (see recomputeVisible's doc comment).
+func (m Model) foldedNormalLine(theme tui.Theme, width int) string {
+	if m.objectScoped() || m.normalExpanded || len(m.foldedNormal) == 0 {
+		return ""
+	}
+	glyphStyle := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	labelStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	reasonStyle := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	hintStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+
+	seen := map[string]bool{}
+	names := make([]string, 0, 4)
+	for _, e := range m.foldedNormal {
+		if e.Reason == "" || seen[e.Reason] {
+			continue
+		}
+		seen[e.Reason] = true
+		names = append(names, e.Reason)
+		if len(names) == 4 {
+			break
+		}
+	}
+
+	left := glyphStyle.Render(tui.GlyphExpand) + " " + labelStyle.Render("normal") + " " +
+		reasonStyle.Render(fmt.Sprintf("%d normal events — %s…", len(m.foldedNormal), strings.Join(names, " · ")))
+	right := hintStyle.Render(tui.GlyphTab + " expand")
+	return fillLine(padBetween(left, right, width), width, false, theme)
 }
 
 func visibleWindow(n, selected, height int) (start, end int) {
@@ -319,27 +598,176 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 	}
 }
 
+// renderRow renders one feed line — a full-width purple divider for a
+// TimelineRollout entry (renderRolloutDivider; rollouts are visual anchors,
+// not ordinary rows, docs/design README.md §16a), or the ordinary WHEN/
+// glyph/[+CHANGE/]WHAT/[OBJECT] layout for everything else.
 func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) string {
+	if e.Kind == kube.TimelineRollout {
+		return m.renderRolloutDivider(theme, e, selected, width)
+	}
+
 	glyph, glyphStyle := m.entryGlyphStyle(theme, e)
 	dim := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	object := lipgloss.NewStyle().Foreground(theme.TextDim)
+	warnTone := lipgloss.NewStyle().Foreground(theme.Warn)
 	if selected {
 		glyphStyle = glyphStyle.Background(theme.SelBg)
 		dim = dim.Background(theme.SelBg)
 		secondary = secondary.Background(theme.SelBg)
 		object = object.Background(theme.SelBg)
+		warnTone = warnTone.Background(theme.SelBg)
 	}
 
-	ts := "–"
+	when := "–"
 	if !e.Time.IsZero() {
-		ts = e.Time.Local().Format("15:04:05")
+		when = shortAge(m.fetchedAt.Sub(e.Time))
 	}
-	objText := components.Truncate(e.Object, max(width/4, 10))
-	left := "  " + dim.Render(ts) + "  " + glyphStyle.Render(glyph) + "  " + object.Render(objText)
-	msg := components.Truncate(entrySummary(e), max(width-lipgloss.Width(left)-2, 8))
-	line := left + "  " + secondary.Render(msg)
+	left := "  " + dim.Render(padRight(when, feedWhenW)) + "  " + glyphStyle.Render(glyph)
+
+	whatW := m.feedWhatWidth(width)
+	if m.objectScoped() {
+		msg := components.Truncate(entrySummary(e), whatW)
+		line := left + "  " + secondary.Render(msg)
+		return fillLine(line, width, selected, theme)
+	}
+
+	changeText, warn := m.changeOffset(e)
+	changeStyle := dim
+	if warn {
+		changeStyle = warnTone
+	}
+	objText := components.Truncate(e.Object, feedObjectW)
+	what := padRight(components.Truncate(entrySummary(e), whatW), whatW)
+	line := left + "  " + changeStyle.Render(padRight(changeText, feedChangeW)) + "  " +
+		secondary.Render(what) + "  " +
+		object.Render(padLeft(objText, feedObjectW))
 	return fillLine(line, width, selected, theme)
+}
+
+// changeOffset is 16a's "+CHANGE" column: the row's time offset from the
+// nearest TimelineRollout at-or-before it ("+45s"), "before" when the row
+// predates every rollout in view, or "–" when there's no rollout in view at
+// all to correlate against. warn is true only for the single row
+// firstTroubleAfterRollout identifies (docs/design README.md §16a: "'+45s'
+// next to the first BackOff is the correlation doing the triage for you").
+func (m Model) changeOffset(e kube.TimelineEntry) (text string, warn bool) {
+	var nearest *kube.TimelineEntry
+	hasRollout := false
+	for i := range m.rows {
+		r := &m.rows[i]
+		if r.Kind != kube.TimelineRollout {
+			continue
+		}
+		hasRollout = true
+		if !r.Time.After(e.Time) && (nearest == nil || r.Time.After(nearest.Time)) {
+			nearest = r
+		}
+	}
+	if nearest == nil {
+		if hasRollout {
+			return "before", false
+		}
+		return "–", false
+	}
+	if trouble, _, ok := m.firstTroubleAfterRollout(); ok &&
+		trouble.Object == e.Object && trouble.Kind == e.Kind && trouble.Time.Equal(e.Time) {
+		warn = true
+	}
+	return "+" + shortAge(e.Time.Sub(nearest.Time)), warn
+}
+
+// renderRolloutDivider is 16a's full-width rollout anchor row: a quieter
+// background + thin rule (theme.MarkBg/theme.Accent, reusing 20a's own
+// "quieter than SelBg" tint rather than a new token), spanning WHEN/glyph/
+// message with no +CHANGE/OBJECT columns — "ROLLOUT deploy/x · rev A → B ·
+// image a → b [· by author]" (docs/design README.md §16a). selected swaps
+// the background to theme.SelBg (the one selection color everywhere else in
+// the app) instead of MarkBg — otherwise a rollout row selected via 16b's
+// rail-cursor live sync (point 2: "the very last event from it" is often
+// the rollout itself, for a revision nothing else happened under) would
+// carry no visible cursor at all, since MarkBg is already a permanent,
+// selection-independent tint on every rollout row.
+func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) string {
+	markBg := theme.MarkBg
+	if selected {
+		markBg = theme.SelBg
+	}
+	bg := lipgloss.NewStyle().Background(markBg)
+	when := bg.Foreground(theme.TextFaint)
+	glyphStyle := bg.Foreground(theme.Accent).Bold(true)
+	text := bg.Foreground(theme.TextPrimary)
+
+	whenText := "–"
+	if !e.Time.IsZero() {
+		whenText = shortAge(m.fetchedAt.Sub(e.Time))
+	}
+
+	_, name := splitObject(e.Object)
+	revText := fmt.Sprintf("rev %d", e.Revision)
+	imageText := shortImage(e.Image)
+	if prev, ok := m.previousRollout(e); ok {
+		revText = fmt.Sprintf("rev %d → %d", prev.Revision, e.Revision)
+		imageText = imageTransition(shortImage(prev.Image), shortImage(e.Image))
+	}
+	body := fmt.Sprintf("ROLLOUT deploy/%s · %s · image %s", name, revText, imageText)
+	if e.By != "" {
+		body += " · by " + e.By
+	}
+	body = components.Truncate(body, m.feedWhatWidth(width))
+	line := "  " + when.Render(padRight(whenText, feedWhenW)) + "  " + glyphStyle.Render(tui.GlyphRollout) + "  " + text.Render(body)
+	slack := max(width-lipgloss.Width(line), 0)
+	return line + bg.Render(strings.Repeat(" ", slack))
+}
+
+// previousRollout finds the next-older TimelineRollout entry for the same
+// object as e, scanning the full unwindowed/unfiltered m.entries so the
+// divider's "rev A → B" context survives even once the window trims the
+// earlier rollout out of view.
+func (m Model) previousRollout(e kube.TimelineEntry) (kube.TimelineEntry, bool) {
+	var best *kube.TimelineEntry
+	for i := range m.entries {
+		r := &m.entries[i]
+		if r.Kind != kube.TimelineRollout || r.Object != e.Object || !r.Time.Before(e.Time) {
+			continue
+		}
+		if best == nil || r.Time.After(best.Time) {
+			best = r
+		}
+	}
+	if best == nil {
+		return kube.TimelineEntry{}, false
+	}
+	return *best, true
+}
+
+// shortImage drops the registry/path prefix from a container image
+// reference, keeping just the trailing "name:tag" component —
+// "r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108" renders as
+// "aim.bp.app:5.31.0.58108". Nobody needs the internal registry host in a
+// narrow rail card or a truncated feed row.
+func shortImage(image string) string {
+	if i := strings.LastIndex(image, "/"); i >= 0 {
+		return image[i+1:]
+	}
+	return image
+}
+
+// imageTransition elides a shared "repo:" prefix between two image
+// references ("nva-worker:3.4.0" → "nva-worker:3.4.1" renders as
+// "nva-worker:3.4.0 → :3.4.1", the mockup's own abbreviation) — a plain
+// "a → b" when the repos differ or either side lacks a tag.
+func imageTransition(prev, next string) string {
+	if prev == "" || prev == next {
+		return next
+	}
+	prevRepo, _, prevOk := strings.Cut(prev, ":")
+	nextRepo, nextTag, nextOk := strings.Cut(next, ":")
+	if prevOk && nextOk && prevRepo == nextRepo {
+		return prev + " → :" + nextTag
+	}
+	return prev + " → " + next
 }
 
 // entrySummary is the row's "what changed" text — the Reason leads (9b's
@@ -393,4 +821,21 @@ func fillLine(content string, width int, selected bool, theme tui.Theme) string 
 	}
 	slack := max(width-lipgloss.Width(content), 0)
 	return content + pad.Render(strings.Repeat(" ", slack))
+}
+
+// padRight/padLeft fix plain (unstyled) text to width — the feed's fixed
+// columns (WHEN, +CHANGE, OBJECT) are padded before styling so header and
+// data rows always line up.
+func padRight(s string, width int) string {
+	if w := lipgloss.Width(s); w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return s
+}
+
+func padLeft(s string, width int) string {
+	if w := lipgloss.Width(s); w < width {
+		return strings.Repeat(" ", width-w) + s
+	}
+	return s
 }

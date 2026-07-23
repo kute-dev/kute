@@ -39,6 +39,7 @@ func (f *fakeMutator) Cordon(context.Context, string, bool) error { return f.err
 
 func (f *fakeMutator) Drain(context.Context, string) (int, error)              { return 0, f.err }
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error { return f.err }
+func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error  { return f.err }
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return f.err
 }

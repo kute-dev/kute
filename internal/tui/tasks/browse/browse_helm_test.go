@@ -207,3 +207,4 @@ func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return nil
 }
+func (f *fakeHelmMutator) RolloutUndo(context.Context, string, string, int) error { return nil }

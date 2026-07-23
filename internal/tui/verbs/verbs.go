@@ -175,6 +175,16 @@ var (
 		ID: "rollback", Key: "R", Label: "rollback",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindHelmRelease}, Mutating: true,
 	}
+	// RolloutUndo is 16b's 'R' on the revision rail — a deliberately
+	// separate verb from the Helm-only Rollback above (same key/label,
+	// different Kind and a different Scope.Verb string: "rollout-undo") so
+	// extending actions.requiresTypedName for this one can't change 18a's
+	// existing plain-y/N-even-in-PROD rollback behavior. §16b: "y/N in the
+	// keybar for non-prod, type-the-deployment-name modal in PROD".
+	RolloutUndo = Verb{
+		ID: "rollout-undo", Key: "R", Label: "rollback",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
+	}
 	// Scale is 17b's '+'/'−' on a Deployment/StatefulSet row — TierNone
 	// (docs/design README.md §17b: "reversible → inline keybar prompt, never
 	// a modal"). The confirming step every other TierNone verb skips is
@@ -322,7 +332,7 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
-	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, Scale, SetImage, SetResources, Meta,
+	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,

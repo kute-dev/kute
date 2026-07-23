@@ -9,8 +9,10 @@
 // 16b additionally grows a revision rail — "deployment revisions as a
 // vertical rail with the current one highlighted" — when the scoped object
 // resolves to an owning Deployment (a Pod's ReplicaSet owner, or the
-// Deployment itself); tasks/helmhistory (18a's 'h') later reused this same
-// rail idiom for Helm release history.
+// Deployment itself): a fixed-width left sidebar of per-revision cards
+// alongside the feed, not a table stacked above it. tasks/helmhistory
+// (18a's 'h') reuses the rail concept for Helm release history, in its own
+// single-line-per-revision table shape.
 package timeline
 
 import (
@@ -22,6 +24,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
@@ -54,6 +57,7 @@ type Config struct {
 	Session     *tui.Session
 	Events      EventsReader
 	Lister      resources.RawLister
+	Mutator     kube.Mutator
 	Namespace   string
 	ObjectKind  kube.ResourceKind
 	ObjectName  string
@@ -67,6 +71,8 @@ type Model struct {
 	session    *tui.Session
 	events     EventsReader
 	lister     resources.RawLister
+	mutator    kube.Mutator
+	actionsCtl actions.Controller
 	openEvents OpenEventsFunc
 	timeout    time.Duration
 
@@ -75,12 +81,27 @@ type Model struct {
 	objectName string
 
 	entries []kube.TimelineEntry // every merged entry, unwindowed
-	rows    []kube.TimelineEntry // entries after the window/filter — what's walked/rendered
+	rows    []kube.TimelineEntry // entries after the window/filter/warnings/fold — what's walked/rendered
 	// filterBaselineRows is recomputeVisible's own window-only tally (no
 	// filterQuery applied) — lets the strip say how many the query itself
 	// hid, same reasoning as tasks/events' filterBaselineGroups.
 	filterBaselineRows int
 	selected           int
+
+	// warningsOnly is 16a's 'w' toggle (docs/design README.md §16a),
+	// mirroring tasks/events' own field of the same name: hard-excludes
+	// Normal-severity Events from m.rows entirely (restarts/rollouts always
+	// survive it — they're never "normal" chatter). 16b has no 'w' key.
+	warningsOnly bool
+	// normalExpanded is 16a's fold/expand toggle for Normal-severity Events
+	// (tasks/events' own §9b idiom) — folded entries are tracked in
+	// foldedNormal for the footer line rather than appearing in m.rows.
+	normalExpanded bool
+	foldedNormal   []kube.TimelineEntry
+	// normalPresent is set by recomputeVisible regardless of normalExpanded
+	// (unlike foldedNormal, which empties out once expanded) — the
+	// keybar's own hasNormal-equivalent gate for advertising 'tab'.
+	normalPresent bool
 
 	// rail is 16b's revision rail: the resolved owning Deployment's
 	// TimelineRollout entries, newest-first, index 0 == current. Empty in
@@ -88,6 +109,18 @@ type Model struct {
 	// to a Deployment (e.g. a Node).
 	rail           []kube.TimelineEntry
 	railDeployment string
+	// railFocused/railSelected are 16b's rail navigation: 'tab' toggles
+	// focus between the rail (↑↓ moves railSelected, enabling 'R' rollback —
+	// the default focus once a rail resolves, applyLoaded's own doc comment)
+	// and the feed (↑↓ moves m.selected). Moving railSelected live-syncs
+	// m.selected to the most recent entry from that revision's own lifetime
+	// (update.go's syncFeedToRailSelection/railSelectionTarget) so the feed
+	// always reflects whichever revision the rail cursor is on without
+	// waiting for '↵'. The rail's own selection highlight isn't gated on
+	// railFocused — it stays visible in both panels at once, since the two
+	// are one linked view.
+	railFocused  bool
+	railSelected int
 
 	window       time.Duration
 	filterActive bool
@@ -127,6 +160,8 @@ func New(cfg Config) Model {
 		session:    cfg.Session,
 		events:     cfg.Events,
 		lister:     cfg.Lister,
+		mutator:    cfg.Mutator,
+		actionsCtl: actions.New(cfg.Mutator),
 		openEvents: cfg.OpenEvents,
 		timeout:    cfg.LoadTimeout,
 		namespace:  cfg.Namespace,
@@ -161,6 +196,24 @@ func (m Model) selectedRow() (kube.TimelineEntry, bool) {
 		return kube.TimelineEntry{}, false
 	}
 	return m.rows[m.selected], true
+}
+
+// selectedRevision is 16b's rail cursor target for 'R' rollback.
+func (m Model) selectedRevision() (kube.TimelineEntry, bool) {
+	if m.railSelected < 0 || m.railSelected >= len(m.rail) {
+		return kube.TimelineEntry{}, false
+	}
+	return m.rail[m.railSelected], true
+}
+
+// isProd mirrors helmhistory's/browse's own isProd (Session.Config.IsProd),
+// duplicated per the repo's package-local-seam convention — every screen's
+// write-confirm policy reads its own Session directly.
+func (m Model) isProd() bool {
+	if m.session == nil {
+		return false
+	}
+	return m.session.Config.IsProd(m.session.Location.Context)
 }
 
 // openSelectedObject is 16a/16b's "↵ goes to the object": pop back to

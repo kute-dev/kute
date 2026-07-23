@@ -1,14 +1,14 @@
   kute │ microk8s-cluster › default › Timeline · all time                                                  ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                                                         all time · merged feed
+⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                                first Restarted 3m after rollout of api-gateway
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  14:28:30  ▲  Pod/api-gateway-9x2kd  BackOff · back-off restarting failed container                                    
-  14:27:00  ↺  Pod/api-gateway-9x2kd  Restarted · app · OOMKilled · exit 137                                            
-  14:24:00  ⇅  Deployment/api-gateway  Rollout · revision 5 · api-gateway:2.3.1                                         
-  14:19:00  ▲  Pod/worker-77f9c-abcde  FailedScheduling · 0/3 nodes are available: insufficient cpu                     
-  14:12:00  ↺  Pod/worker-77f9c-abcde  Restarted · app · OOMKilled · exit 137                                           
-  14:06:00  ○  Pod/api-gateway-9x2kd  Pulled · Successfully pulled image "api-gateway:2.3.1"                            
-                                                                                                                        
+  WHEN       +CHANGE  WHAT                                                                                        OBJECT
+  1m      ▲  +4m      BackOff · back-off restarting failed container                                Pod/api-gateway-9x2…
+  3m      ↺  +3m      Restarted · app · OOMKilled · exit 137                                        Pod/api-gateway-9x2…
+  6m      ⇅  ROLLOUT deploy/api-gateway · rev 5 · image api-gateway:2.3.1                                               
+  11m     ▲  before   FailedScheduling · 0/3 nodes are available: insufficient cpu                  Pod/worker-77f9c-ab…
+  18m     ↺  before   Restarted · app · OOMKilled · exit 137                                        Pod/worker-77f9c-ab…
+▸ normal 1 normal events — Pulled…                                                                              ↹ expand
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   TIMELINE  esc back  ↵ open │ t time window                                                                   ? help  
+   TIMELINE  esc back  ↵ open │ w warnings only  t time window │ / filter │ tab expand/collapse normal          ? help  

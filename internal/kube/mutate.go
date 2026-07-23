@@ -2,12 +2,14 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +44,15 @@ type Mutator interface {
 	// `helm` binary rather than reading the watch cache (docs/design
 	// README.md §18a).
 	HelmRollback(ctx context.Context, namespace, name string, toRevision int) error
+	// RolloutUndo rolls a Deployment back to toRevision by copying that
+	// revision's owned ReplicaSet pod template onto the Deployment's own
+	// spec.template — the same client-side mechanism modern kubectl uses
+	// since the apps/v1 rollback subresource was removed. The deployment
+	// controller recognizes the restored template's hash against the
+	// existing (scaled-down) ReplicaSet and reuses it rather than creating
+	// a new one, then bumps the revision annotation itself (16b's 'R',
+	// docs/design README.md §16b).
+	RolloutUndo(ctx context.Context, namespace, name string, toRevision int) error
 	// Scale patches kind's spec.replicas to replicas — 17b's +/− inline
 	// prompt. Deployment and StatefulSet are the only kinds with a
 	// spec.replicas field browse exposes.
@@ -225,6 +236,59 @@ func (c *Cluster) Drain(ctx context.Context, node string) (int, error) {
 // Helm's own storage/rollback logic isn't reproduced here.
 func (c *Cluster) HelmRollback(ctx context.Context, namespace, name string, toRevision int) error {
 	return HelmRollback(ctx, namespace, name, toRevision)
+}
+
+// RolloutUndo finds the ReplicaSet owned by name whose
+// "deployment.kubernetes.io/revision" annotation equals toRevision and
+// strategic-merge-patches the Deployment's spec.template to match it — see
+// the Mutator interface doc comment for why this (rather than a dedicated
+// rollback API call) is the correct mechanism.
+func (c *Cluster) RolloutUndo(ctx context.Context, namespace, name string, toRevision int) error {
+	if name == "" {
+		return fmt.Errorf("cannot roll back: empty deployment name")
+	}
+	rsList, err := c.clientset.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("list replicasets for %s: %w", name, err)
+	}
+	target, ok := replicaSetForRevision(rsList.Items, name, toRevision)
+	if !ok {
+		return fmt.Errorf("deployment %q has no revision %d to roll back to", name, toRevision)
+	}
+	templateJSON, err := json.Marshal(target.Spec.Template)
+	if err != nil {
+		return fmt.Errorf("encode revision %d template: %w", toRevision, err)
+	}
+	patch := []byte(fmt.Sprintf(`{"spec":{"template":%s}}`, templateJSON))
+	_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+// replicaSetForRevision finds the ReplicaSet owned by deploymentName whose
+// revision annotation equals toRevision — shared by Cluster.RolloutUndo and
+// fake.Cluster's own lookup would duplicate this, but the fake cluster
+// works over its own in-memory []runtime.Object slice rather than a
+// clientset List result, so it keeps its own copy per the repo's
+// package-local-seam convention.
+func replicaSetForRevision(items []appsv1.ReplicaSet, deploymentName string, toRevision int) (*appsv1.ReplicaSet, bool) {
+	for i := range items {
+		rs := &items[i]
+		if len(rs.OwnerReferences) == 0 || rs.OwnerReferences[0].Kind != "Deployment" || rs.OwnerReferences[0].Name != deploymentName {
+			continue
+		}
+		rev, _ := strconv.Atoi(rs.Annotations["deployment.kubernetes.io/revision"])
+		if rev == toRevision {
+			return rs, true
+		}
+	}
+	return nil, false
+}
+
+// RolloutUndoCommandString renders the exact `kubectl rollout undo`
+// invocation RolloutUndo runs — 16b's "will run" documentation line (the
+// same copyable-command idiom as 10a/13a/17b/18a).
+func RolloutUndoCommandString(namespace, name string, toRevision int) string {
+	return fmt.Sprintf("kubectl rollout undo %s/%s --to-revision=%d -n %s", workloadResourceArg(KindDeployment), name, toRevision, namespace)
 }
 
 // Scale patches kind's spec.replicas via the same strategic-merge-patch

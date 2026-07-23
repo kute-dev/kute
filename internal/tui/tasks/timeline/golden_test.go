@@ -14,17 +14,14 @@ import (
 )
 
 // goldenNow is a fixed reference instant — not time.Now() — that every feed
-// row's timestamp is built from. Unlike every other screen's rows (9b's
-// events, 5a's EVENTS grid), timeline's renderRow (view.go) prints e.Time
-// via an ABSOLUTE local-clock format ("15:04:05"), not a relative "Nm ago"
-// bucket, so a time.Now()-relative offset would print a different
-// wall-clock string on every separate `go test` invocation — the plain
-// AGE-fixture trick documented on browse's goldenPod/poddetail's
-// goldenCrashLoopPod doesn't apply to this one column. Pinning to a fixed
-// instant, and forcing the model's window to "all time" once loaded (see
-// loadFixedFeed below, since Now()-relative window cutoffs would eventually
-// exclude any fixed past instant), is what keeps the feed rows' printed
-// text byte-identical no matter when the suite runs.
+// row's timestamp is built from. renderRow's WHEN column (like 9b's events,
+// 5a's EVENTS grid) prints a relative age, computed against m.fetchedAt —
+// loadFixedFeed pins fetchedAt to this same goldenNow rather than the real
+// time.Now() applyLoaded would otherwise stamp, so the age (and the
+// +CHANGE column's own rollout-relative offsets) stay byte-identical no
+// matter when the suite runs. Forcing the model's window to "all time"
+// once loaded (see loadFixedFeed below) keeps Now()-relative window
+// cutoffs from eventually excluding any fixed past instant.
 var goldenNow = time.Date(2025, 6, 10, 14, 30, 0, 0, time.Local)
 
 // loadFixedFeed feeds m a hand-built loadedMsg directly (bypassing the real
@@ -34,11 +31,18 @@ var goldenNow = time.Date(2025, 6, 10, 14, 30, 0, 0, time.Local)
 // Now()-relative cutoff never filters out goldenFixedNow's fixed-past
 // entries. The header/strip then read "all time" rather than the usual
 // default "last 30m" tag — an honest reflection of the window being
-// deliberately bypassed for this fixture, not a bug.
+// deliberately bypassed for this fixture, not a bug. m.fetchedAt is then
+// pinned to goldenNow (applyLoaded would otherwise stamp the real
+// time.Now()) since the feed's WHEN column and +CHANGE column render
+// relative to it — pinning keeps both byte-identical no matter when the
+// suite runs, the same reasoning that motivates goldenNow itself.
 func loadFixedFeed(m Model, entries, rail []kube.TimelineEntry, railDeployment string) Model {
 	m.window = 0
 	updated, _ := m.Update(loadedMsg{entries: entries, rail: rail, railDeployment: railDeployment})
-	return *updated.(*Model)
+	next := *updated.(*Model)
+	next.fetchedAt = goldenNow
+	next.recomputeVisible()
+	return next
 }
 
 // goldenNamespaceModel builds a deterministic §16a namespace-scoped screen:
@@ -65,15 +69,12 @@ func goldenNamespaceModel(width, height int) Model {
 // goldenObjectModel builds a deterministic §16b object-scoped screen: a Pod
 // owned (via its ReplicaSet) by Deployment "checkout-api", with a merged
 // feed of its own restart, two Events, and its rollout entry, plus a
-// 3-revision rail (revision 5 current, highlighted). The rail's own entries
-// deliberately use time.Now()-relative offsets rather than goldenNow: rail
-// rows render via shortAge's relative "Nm ago"/"Nh ago" text (view.go's
-// railLines), which — like every other screen's AGE column — stays stable
-// because both the offset and the shortAge computation it feeds are
-// (re)computed together, microseconds apart, on every test run; pinning
-// them to goldenNow instead would make the rail's "ago" text drift by a
-// calendar day every day the fixture ages, which is the opposite of what
-// browse/poddetail's own goldenPod comments call out for that pattern.
+// 3-revision rail (revision 5 current, highlighted). Every entry —
+// including the rail's — is goldenNow-relative: railLines' own "Nm ago"
+// text is computed against m.fetchedAt (loadFixedFeed pins it to goldenNow
+// too), so anchoring the rail's fixture times to the real time.Now()
+// instead would drift the rail's "ago" text further from the feed's own
+// ages every day the fixture ages.
 func goldenObjectModel(width, height int) Model {
 	feed := []kube.TimelineEntry{
 		{Time: goldenNow.Add(-90 * time.Second), Kind: kube.TimelineEvent, Object: "Pod/checkout-api-7d9f6c8b95-k2m9x", Namespace: "default", Severity: "Warning", Reason: "BackOff", Message: "back-off restarting failed container"},
@@ -82,9 +83,9 @@ func goldenObjectModel(width, height int) Model {
 		{Time: goldenNow.Add(-5 * time.Minute), Kind: kube.TimelineEvent, Object: "Pod/checkout-api-7d9f6c8b95-k2m9x", Namespace: "default", Severity: "Normal", Reason: "Started", Message: "Started container checkout-api"},
 	}
 	rail := []kube.TimelineEntry{
-		{Time: time.Now().Add(-2 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 5 · checkout-api:1.9.0", Revision: 5, Image: "checkout-api:1.9.0"},
-		{Time: time.Now().Add(-45 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 4 · checkout-api:1.8.2", Revision: 4, Image: "checkout-api:1.8.2"},
-		{Time: time.Now().Add(-3 * time.Hour), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 3 · checkout-api:1.8.0", Revision: 3, Image: "checkout-api:1.8.0"},
+		{Time: goldenNow.Add(-2 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 5 · checkout-api:1.9.0", Revision: 5, Image: "checkout-api:1.9.0"},
+		{Time: goldenNow.Add(-45 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 4 · checkout-api:1.8.2", Revision: 4, Image: "checkout-api:1.8.2"},
+		{Time: goldenNow.Add(-3 * time.Hour), Kind: kube.TimelineRollout, Object: "Deployment/checkout-api", Namespace: "default", Reason: "Rollout", Message: "revision 3 · checkout-api:1.8.0", Revision: 3, Image: "checkout-api:1.8.0"},
 	}
 	m := New(Config{
 		Session: newSession(), Events: fakeEvents{}, Namespace: "default",

@@ -103,6 +103,7 @@ func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	return 2, nil
 }
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error { return f.err }
+func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error  { return f.err }
 func (f *fakeMutator) Scale(_ context.Context, _ kube.ResourceKind, _, _ string, replicas int32) error {
 	if f.err != nil {
 		return f.err

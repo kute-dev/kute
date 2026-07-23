@@ -14,6 +14,7 @@ import (
 	"io"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -504,6 +505,63 @@ func (c *Cluster) HelmRollback(_ context.Context, namespace, name string, toRevi
 	c.objects[kube.KindSecret] = append(objs, kube.EncodeHelmReleaseSecret(next))
 
 	c.notify(kube.KindSecret)
+	return nil
+}
+
+// RolloutUndo mirrors HelmRollback's "rollback creates a new revision"
+// shape against the fake cluster: it patches the Deployment's own template
+// to the target revision's, then appends a synthesized new-highest-
+// revision ReplicaSet carrying that same template — so 16b's rail visibly
+// gains a new top entry in --demo mode, matching how a real rollback
+// behaves (the deployment controller would bump the revision annotation
+// itself; nothing here reads that back from a real controller).
+func (c *Cluster) RolloutUndo(_ context.Context, namespace, name string, toRevision int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var dep *appsv1.Deployment
+	for _, obj := range c.objects[kube.KindDeployment] {
+		d, ok := obj.(*appsv1.Deployment)
+		if ok && d.Name == name && d.Namespace == namespace {
+			dep = d
+			break
+		}
+	}
+	if dep == nil {
+		return fmt.Errorf("deployment %q not found in namespace %q", name, namespace)
+	}
+
+	var target *appsv1.ReplicaSet
+	maxRevision := 0
+	for _, obj := range c.objects[kube.KindReplicaSet] {
+		rs, ok := obj.(*appsv1.ReplicaSet)
+		if !ok || rs.Namespace != namespace || len(rs.OwnerReferences) == 0 ||
+			rs.OwnerReferences[0].Kind != "Deployment" || rs.OwnerReferences[0].Name != name {
+			continue
+		}
+		rev, _ := strconv.Atoi(rs.Annotations["deployment.kubernetes.io/revision"])
+		if rev > maxRevision {
+			maxRevision = rev
+		}
+		if rev == toRevision {
+			target = rs
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("deployment %q has no revision %d to roll back to", name, toRevision)
+	}
+
+	dep.Spec.Template = *target.Spec.Template.DeepCopy()
+
+	next := target.DeepCopy()
+	next.Name = fmt.Sprintf("%s-%x", name, time.Now().UnixNano())
+	next.ResourceVersion = ""
+	next.CreationTimestamp = metav1.NewTime(time.Now())
+	next.Annotations = map[string]string{"deployment.kubernetes.io/revision": strconv.Itoa(maxRevision + 1)}
+	c.objects[kube.KindReplicaSet] = append(c.objects[kube.KindReplicaSet], next)
+
+	c.notify(kube.KindDeployment)
+	c.notify(kube.KindReplicaSet)
 	return nil
 }
 

@@ -319,6 +319,76 @@ func TestEKeyOpensNamespaceScopedEvents(t *testing.T) {
 	}
 }
 
+// TestTKeyOpensObjectScopedTimelineOnDeploymentRow covers 16b's newly-added
+// direct entry point from browse: pressing 't' with the cursor on a
+// Deployment row must push 16b object-scoped to that Deployment (the
+// mockup's own "t on a selected deployment" caption, docs/design
+// README.md §16b) rather than 16a namespace-scoped.
+func TestTKeyOpensObjectScopedTimelineOnDeploymentRow(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api")},
+	}}
+	var gotKind kube.ResourceKind
+	var gotNamespace, gotName string
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{
+		Session: session, Lister: lister,
+		OpenTimeline: func(namespace string, w, h int) (tea.Model, tea.Cmd) {
+			t.Fatal("expected the object-scoped opener, not the namespace-scoped one")
+			return nil, nil
+		},
+		OpenObjectTimeline: func(kind kube.ResourceKind, namespace, name string, w, h int) (tea.Model, tea.Cmd) {
+			gotKind, gotNamespace, gotName = kind, namespace, name
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "t"})
+	if gotKind != kube.KindDeployment || gotNamespace != "default" || gotName != "api" {
+		t.Fatalf("expected object-scoped timeline for Deployment/default/api, got kind=%q namespace=%q name=%q", gotKind, gotNamespace, gotName)
+	}
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected Update to return the pushed stub task, got %T", updated)
+	}
+}
+
+// TestTKeyOpensNamespaceScopedTimelineOnOtherKinds covers the fallback:
+// browse's 't' stays 16a namespace-scoped for kinds tasks/timeline's own
+// load.go has no object-scope concept for (docs/design README.md §16a) —
+// Service here, mirroring the existing namespace-scoped 'e' behavior.
+func TestTKeyOpensNamespaceScopedTimelineOnOtherKinds(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindService: {},
+	}}
+	var openedNamespace string
+	session := newSession()
+	session.Location.Kind = kube.KindService
+	m := New(Config{
+		Session: session, Lister: lister,
+		OpenTimeline: func(namespace string, w, h int) (tea.Model, tea.Cmd) {
+			openedNamespace = namespace
+			return stubTask{}, nil
+		},
+		OpenObjectTimeline: func(kind kube.ResourceKind, namespace, name string, w, h int) (tea.Model, tea.Cmd) {
+			t.Fatal("expected the namespace-scoped opener for a Service row, not object-scoped")
+			return nil, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "t"})
+	if openedNamespace != "default" {
+		t.Fatalf("expected namespace-scoped timeline for default, got %q", openedNamespace)
+	}
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected Update to return the pushed stub task, got %T", updated)
+	}
+}
+
 // TestGotoKindMsgEventPushesEventsTask covers the goto palette's Events
 // entry (kind alias "e", internal/tui/goto.go's gotoAliases): unlike
 // KindWhoCan/KindOverview, Event has a real resources.Descriptor and could

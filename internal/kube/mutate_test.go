@@ -76,6 +76,69 @@ func TestRolloutRestartRejectsEmptyName(t *testing.T) {
 	}
 }
 
+// TestRolloutUndoPatchesTemplateToTargetRevision covers 16b's 'R' rollback
+// (docs/design README.md §16b): RolloutUndo finds the ReplicaSet carrying
+// the target revision annotation and copies its pod template onto the
+// Deployment's own spec.template.
+func TestRolloutUndoPatchesTemplateToTargetRevision(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "api:2.0.0"}},
+		}}},
+	}
+	rsOld := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "api-old", Namespace: "default",
+			Annotations:     map[string]string{"deployment.kubernetes.io/revision": "4"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "api:1.0.0"}},
+		}}},
+	}
+	rsCurrent := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "api-current", Namespace: "default",
+			Annotations:     map[string]string{"deployment.kubernetes.io/revision": "5"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "api:2.0.0"}},
+		}}},
+	}
+	c, cs := newTestCluster(deploy, rsOld, rsCurrent)
+
+	if err := c.RolloutUndo(context.Background(), "default", "api", 4); err != nil {
+		t.Fatalf("RolloutUndo: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.Spec.Template.Spec.Containers) != 1 || got.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
+		t.Fatalf("expected the deployment's template to match revision 4's image, got %+v", got.Spec.Template.Spec.Containers)
+	}
+}
+
+func TestRolloutUndoRejectsUnknownRevision(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
+	c, _ := newTestCluster(deploy)
+	if err := c.RolloutUndo(context.Background(), "default", "api", 99); err == nil {
+		t.Fatalf("expected an error for a revision with no matching ReplicaSet")
+	}
+}
+
+func TestRolloutUndoRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.RolloutUndo(context.Background(), "default", "", 1); err == nil {
+		t.Fatalf("expected an error for an empty name")
+	}
+}
+
 func TestCordonSetsUnschedulable(t *testing.T) {
 	t.Parallel()
 	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}

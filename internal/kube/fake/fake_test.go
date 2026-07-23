@@ -49,6 +49,81 @@ func TestSetImageRejectsUnknownContainer(t *testing.T) {
 	}
 }
 
+// TestRolloutUndoPatchesTemplateAndAppendsNewRevision covers 16b's 'R'
+// rollback against the fake cluster (--demo mode): RolloutUndo patches the
+// Deployment's template to the target revision's, and — mirroring
+// HelmRollback's own "rollback creates a new revision" shape — appends a
+// synthesized new-highest-revision ReplicaSet so the rail visibly gains a
+// new top entry.
+func TestRolloutUndoPatchesTemplateAndAppendsNewRevision(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindDeployment, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "api:2.0.0"}},
+		}}},
+	})
+	c.Seed(kube.KindReplicaSet,
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "api-old", Namespace: "default",
+				Annotations:     map[string]string{"deployment.kubernetes.io/revision": "4"},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+			},
+			Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "api:1.0.0"}},
+			}}},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "api-current", Namespace: "default",
+				Annotations:     map[string]string{"deployment.kubernetes.io/revision": "5"},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+			},
+			Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "app", Image: "api:2.0.0"}},
+			}}},
+		},
+	)
+
+	if err := c.RolloutUndo(context.Background(), "default", "api", 4); err != nil {
+		t.Fatalf("RolloutUndo: %v", err)
+	}
+
+	deployObjs, _ := c.ListRaw(context.Background(), kube.KindDeployment, "default")
+	deploy := deployObjs[0].(*appsv1.Deployment)
+	if deploy.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
+		t.Fatalf("expected the deployment's template patched to revision 4's image, got %q", deploy.Spec.Template.Spec.Containers[0].Image)
+	}
+
+	rsObjs, _ := c.ListRaw(context.Background(), kube.KindReplicaSet, "default")
+	if len(rsObjs) != 3 {
+		t.Fatalf("expected a new synthesized ReplicaSet appended (3 total), got %d", len(rsObjs))
+	}
+	found := false
+	for _, obj := range rsObjs {
+		rs := obj.(*appsv1.ReplicaSet)
+		if rs.Annotations["deployment.kubernetes.io/revision"] == "6" {
+			found = true
+			if rs.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
+				t.Fatalf("expected the new revision's template to carry the rolled-back image, got %q", rs.Spec.Template.Spec.Containers[0].Image)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a new revision 6 ReplicaSet among %+v", rsObjs)
+	}
+}
+
+func TestRolloutUndoRejectsUnknownDeployment(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	if err := c.RolloutUndo(context.Background(), "default", "missing", 1); err == nil {
+		t.Fatalf("expected an error for an unknown deployment")
+	}
+}
+
 func TestListRawFiltersByNamespace(t *testing.T) {
 	t.Parallel()
 	c := New("default", "dev")

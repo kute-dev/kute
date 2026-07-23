@@ -64,6 +64,7 @@ func (f *fakeMutator) HelmRollback(_ context.Context, namespace, name string, re
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return f.err
 }
+func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error { return nil }
 
 func newSession() *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "test-cluster"}}

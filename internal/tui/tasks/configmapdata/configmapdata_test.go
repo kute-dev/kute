@@ -51,6 +51,9 @@ func (f *fakeMutator) RolloutRestart(_ context.Context, kind kube.ResourceKind, 
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error {
 	return nil
 }
+func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error {
+	return nil
+}
 func (f *fakeMutator) Cordon(context.Context, string, bool) error { return nil }
 func (f *fakeMutator) Drain(context.Context, string) (int, error) { return 0, nil }
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {

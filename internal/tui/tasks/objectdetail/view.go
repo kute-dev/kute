@@ -293,7 +293,7 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), "delete", m.isProd(), styles, width, height)
 }
 
 func padTo(s string, width int) string {

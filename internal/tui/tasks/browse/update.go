@@ -775,16 +775,36 @@ func (m Model) openSelectedEvents() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
-// openSelectedTimeline pushes 16a namespace-scoped (docs/design README.md
-// §16a) — same "no selected row needed, namespace already carries the
-// all-namespaces ” case" shape as openSelectedEvents, including the same
-// TaskStateEmpty carve-out.
+// openSelectedTimeline pushes 16b object-scoped when the cursor sits on a
+// Deployment/Pod/Node row (the mockup's own "t on a selected deployment"
+// caption, docs/design README.md §16b — previously only reachable via
+// poddetail/nodedetail's own 't'), falling back to 16a namespace-scoped
+// (§16a) otherwise — same "no selected row needed, namespace already
+// carries the all-namespaces case" shape openSelectedEvents uses, including
+// the same TaskStateEmpty carve-out.
 func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
-	if m.openTimeline == nil || (m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty) {
+	if m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty {
+		return nil, nil, false
+	}
+	if m.openObjectTimeline != nil && isObjectTimelineKind(m.kind) {
+		if row, ok := m.selectedRow(); ok {
+			task, cmd := m.openObjectTimeline(m.kind, row.Namespace, row.Name, m.width, m.height)
+			return task, cmd, task != nil
+		}
+	}
+	if m.openTimeline == nil {
 		return nil, nil, false
 	}
 	task, cmd := m.openTimeline(m.namespace, m.width, m.height)
 	return task, cmd, task != nil
+}
+
+// isObjectTimelineKind reports whether kind resolves to a real 16b scope —
+// the same three kinds tasks/timeline's own load.go (restartsForScope/
+// resolveOwningDeployment) knows how to scope a merged feed + revision rail
+// to.
+func isObjectTimelineKind(kind kube.ResourceKind) bool {
+	return kind == kube.KindDeployment || kind == kube.KindPod || kind == kube.KindNode
 }
 
 // openSelectedExec resolves 'x' for the selected Pod row (docs/design

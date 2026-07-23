@@ -77,8 +77,11 @@ type TypeModalStyles struct {
 // (grace period / force-delete hint), the type-ahead prompt with a trailing
 // cursor and "N/M" progress count, and the key row. ↵ only executes once
 // typed == target — screens gate that via actions.Controller.Confirm, this
-// component is purely presentational.
-func TypeNameModal(title, ownerLine, detailLine, target, typed string, prod bool, styles TypeModalStyles, width, height int) string {
+// component is purely presentational. actionVerb names the key row's verb
+// ("delete", "rollback", …) — 16b's rollout-undo reuses this same modal for
+// its own PROD confirm (docs/design README.md §16b) rather than "delete"
+// being hardcoded there.
+func TypeNameModal(title, ownerLine, detailLine, target, typed, actionVerb string, prod bool, styles TypeModalStyles, width, height int) string {
 	titleLine := styles.Title.Render(title)
 
 	body := []string{}
@@ -90,7 +93,7 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed string, prod bool
 	}
 	body = append(body, "", styles.Detail.Render("type \""+target+"\" to confirm"))
 	body = append(body, styles.Input.Render(typed+"█")+"  "+styles.Progress.Render(fmt.Sprintf("%d/%d", len(typed), len(target))))
-	keyLine := styles.Key.Render("↵") + styles.Label.Render(" delete (when name matches)") + "   " +
+	keyLine := styles.Key.Render("↵") + styles.Label.Render(" "+actionVerb+" (when name matches)") + "   " +
 		styles.Key.Render("esc") + styles.Label.Render(" cancel")
 
 	if prod {

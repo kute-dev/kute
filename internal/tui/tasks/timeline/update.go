@@ -1,6 +1,7 @@
 package timeline
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -21,6 +24,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+		m.actionsCtl.SetOffline(m.conn.Offline())
 	case loadedMsg:
 		return m.applyLoaded(msg)
 	case components.SpinnerTickMsg:
@@ -29,6 +33,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.spinner = m.spinner.Advance()
 		return m, components.SpinnerTick()
+	case actions.ResultMsg:
+		m.actionsCtl.HandleResult(msg)
+		if msg.Err == nil {
+			return m, m.load()
+		}
+		m.feedback = "rollback failed: " + msg.Err.Error()
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -43,6 +53,11 @@ func isTimelineSource(kind kube.ResourceKind) bool {
 }
 
 func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
+	// firstLoad is read before m.state is overwritten below — only the very
+	// first loadedMsg (Init's own load(), while m.state is still Loading)
+	// should default focus onto the rail; a later watch-triggered refresh
+	// must never yank focus away from wherever the user already moved it.
+	firstLoad := m.state == tui.TaskStateLoading
 	if msg.err != nil {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
@@ -63,37 +78,88 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		// truly nothing on screen.
 		m.state = tui.TaskStateEmpty
 	}
+	if firstLoad && len(m.rail) > 0 {
+		// 16b opens with focus already on the rail — it's the reason you
+		// pressed 't' on a workload, and the rail cursor's own default
+		// (index 0, the current revision) needs a live sync too so the feed
+		// isn't left pointing at whatever recomputeVisible defaulted it to.
+		m.railFocused = true
+		m.syncFeedToRailSelection()
+	}
 	m.feedback = ""
 	return m, nil
 }
 
-// recomputeVisible rebuilds m.rows from m.entries: window + filter-query
-// applied — the one place the feed is windowed/filtered, so the summary
-// strip's counts (view.go) and Body's row walk can never disagree about
-// what's currently shown (mirrors tasks/events' own recomputeVisible).
+// recomputeVisible rebuilds m.rows from m.entries: window, then 16a's
+// warningsOnly hard-filter, then filter-query applied — the one place the
+// feed is windowed/filtered, so the summary strip's counts (view.go) and
+// Body's row walk can never disagree about what's currently shown (mirrors
+// tasks/events' own recomputeVisible). The survivors are then partitioned
+// into "significant" (rollouts/restarts/warning-severity events — always
+// shown) and "normal" (Normal-severity events) exactly like tasks/events'
+// own warnings/normal split: 16a folds normal entries into one footer line
+// unless normalExpanded; 16b (objectScoped) never folds — its feed is
+// small and the mockup never shows a folded row there.
 func (m *Model) recomputeVisible() {
 	cutoff := time.Time{}
 	if m.window > 0 {
 		cutoff = m.fetchedAt.Add(-m.window)
 	}
 
+	var significant, normal []kube.TimelineEntry
 	baseline := 0
-	rows := make([]kube.TimelineEntry, 0, len(m.entries))
 	for _, e := range m.entries {
 		if !cutoff.IsZero() && e.Time.Before(cutoff) {
+			continue
+		}
+		if isNormalEvent(e) && m.warningsOnly {
 			continue
 		}
 		baseline++
 		if m.filterQuery != "" && !matchesQuery(e, m.filterQuery) {
 			continue
 		}
-		rows = append(rows, e)
+		if isNormalEvent(e) {
+			normal = append(normal, e)
+		} else {
+			significant = append(significant, e)
+		}
 	}
 	m.filterBaselineRows = baseline
-	m.rows = rows
+	m.normalPresent = len(normal) > 0
+
+	if m.objectScoped() {
+		// 16b never folds — merge back and keep newest-first.
+		m.rows = mergeTimelineSorted(significant, normal)
+		m.foldedNormal = nil
+	} else if m.normalExpanded {
+		m.rows = mergeTimelineSorted(significant, normal)
+		m.foldedNormal = nil
+	} else {
+		m.rows = significant
+		m.foldedNormal = normal
+	}
 	if m.selected >= len(m.rows) {
 		m.selected = max(len(m.rows)-1, 0)
 	}
+}
+
+// isNormalEvent reports whether e is a Normal-severity Event — the only
+// entry kind 16a's warningsOnly/fold-into-one-line treatment ever hides;
+// restarts and rollouts always count as "significant" regardless of
+// severity (they're never mere chatter).
+func isNormalEvent(e kube.TimelineEntry) bool {
+	return e.Kind == kube.TimelineEvent && e.Severity != "Warning"
+}
+
+// mergeTimelineSorted concatenates a and b (each already newest-first) and
+// re-sorts newest-first — used when 16a's fold is expanded, or in 16b where
+// significant/normal are never split apart for display.
+func mergeTimelineSorted(a, b []kube.TimelineEntry) []kube.TimelineEntry {
+	if len(b) == 0 {
+		return a
+	}
+	return kube.MergeTimeline(a, b)
 }
 
 func matchesQuery(e kube.TimelineEntry, query string) bool {
@@ -104,6 +170,9 @@ func matchesQuery(e kube.TimelineEntry, query string) bool {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.actionsCtl.Active() {
+		return m.updateConfirmKey(msg)
+	}
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
@@ -113,9 +182,24 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
 	case "up", "k":
-		m.moveSelection(-1)
+		if m.railFocused {
+			m.moveRailSelection(-1)
+		} else {
+			m.moveSelection(-1)
+		}
 	case "down", "j":
-		m.moveSelection(1)
+		if m.railFocused {
+			m.moveRailSelection(1)
+		} else {
+			m.moveSelection(1)
+		}
+	case "tab":
+		if len(m.rail) > 0 {
+			m.railFocused = !m.railFocused
+		} else if !m.objectScoped() {
+			m.normalExpanded = !m.normalExpanded
+			m.recomputeVisible()
+		}
 	case "enter":
 		if cmd, ok := m.openSelectedObject(); ok {
 			return m, cmd
@@ -126,12 +210,153 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "t":
 		m.cycleWindow()
+	case "w":
+		if !m.objectScoped() {
+			m.warningsOnly = !m.warningsOnly
+			m.recomputeVisible()
+		}
 	case "/":
-		if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
+		if !m.objectScoped() && (m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty) {
 			m.filterActive = true
+		}
+	case "R":
+		if m.railFocused && m.mutator != nil {
+			if rev, ok := m.selectedRevision(); ok {
+				return m, m.beginRollback(rev)
+			}
 		}
 	}
 	return m, nil
+}
+
+// updateConfirmKey routes keys while 'R' rollback's confirmation is
+// showing: TierModal (the PROD type-the-name modal) gets typing/backspace/
+// enter-when-matched, TierInline stays the simple y/n/esc prompt — mirrors
+// tasks/poddetail's own updateConfirmKey/updateModalConfirmKey split.
+func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.actionsCtl.Tier() == actions.TierModal {
+		switch msg.String() {
+		case "esc":
+			m.actionsCtl.Cancel()
+		case "enter":
+			return m, m.actionsCtl.Confirm()
+		case "backspace":
+			m.actionsCtl.Backspace()
+		default:
+			if msg.Text != "" {
+				m.actionsCtl.TypeRune(msg.Text)
+			}
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "y":
+		return m, m.actionsCtl.Confirm()
+	case "n", "esc":
+		m.actionsCtl.Cancel()
+	}
+	return m, nil
+}
+
+// beginRollback confirms rolling deploy/m.railDeployment back to rev — the
+// same tier/friction helmhistory's own beginRollback uses for Helm releases
+// (docs/design README.md §16b: "inherits the same two-tier friction"),
+// duplicated here per the repo's package-local-seam convention.
+func (m *Model) beginRollback(rev kube.TimelineEntry) tea.Cmd {
+	tier := verbs.TierFor(verbs.RolloutUndo, m.isProd())
+	return m.actionsCtl.Begin(tier, tui.TaskAction{
+		ID:    fmt.Sprintf("rollout-undo-%s/%s-r%d", m.namespace, m.railDeployment, rev.Revision),
+		Label: fmt.Sprintf("Roll %s back to revision %d?", m.railDeployment, rev.Revision),
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindDeployment),
+			ResourceName: m.railDeployment,
+			Namespace:    m.namespace,
+			Verb:         "rollout-undo",
+			IsMutating:   true,
+			Revision:     rev.Revision,
+		},
+	})
+}
+
+func (m *Model) moveRailSelection(delta int) {
+	if len(m.rail) == 0 {
+		m.railSelected = 0
+		return
+	}
+	m.railSelected = clamp(m.railSelected+delta, 0, len(m.rail)-1)
+	m.syncFeedToRailSelection()
+}
+
+// syncFeedToRailSelection moves the feed cursor live, as the rail cursor
+// moves — no '↵' needed — onto the most recent entry from the selected
+// revision's own lifetime (its own rollout up to whenever it was superseded,
+// or "now" for the current revision): usually a restart or event that
+// happened under that revision, falling back to the revision's own ROLLOUT
+// row when nothing else did. Widens the window to "all time" first when the
+// target isn't in the currently windowed feed (an older revision's history
+// almost always falls outside the default 30m/1h/6h/24h windows) rather than
+// silently no-opping. Reports whether the sync landed, purely for tests.
+func (m *Model) syncFeedToRailSelection() bool {
+	target, ok := m.railSelectionTarget()
+	if !ok {
+		return false
+	}
+	if idx := m.indexOfEntry(target); idx >= 0 {
+		m.selected = idx
+		return true
+	}
+	m.window = 0
+	m.recomputeVisible()
+	idx := m.indexOfEntry(target)
+	if idx < 0 {
+		return false
+	}
+	m.selected = idx
+	return true
+}
+
+// railSelectionTarget resolves the entry syncFeedToRailSelection should
+// point the feed cursor at for the currently rail-selected revision — the
+// newest entry (by time, scanning the unwindowed m.entries) inside that
+// revision's own lifetime window, or the revision's own ROLLOUT entry itself
+// when nothing else happened during it.
+func (m Model) railSelectionTarget() (kube.TimelineEntry, bool) {
+	rev, ok := m.selectedRevision()
+	if !ok {
+		return kube.TimelineEntry{}, false
+	}
+	start := m.rail[m.railSelected].Time
+	end := m.fetchedAt
+	if m.railSelected > 0 {
+		end = m.rail[m.railSelected-1].Time
+	}
+	var latest *kube.TimelineEntry
+	for i := range m.entries {
+		e := &m.entries[i]
+		if e.Time.Before(start) || !e.Time.Before(end) {
+			continue
+		}
+		if latest == nil || e.Time.After(latest.Time) {
+			latest = e
+		}
+	}
+	if latest != nil {
+		return *latest, true
+	}
+	return rev, true
+}
+
+// indexOfEntry finds target in m.rows by (Kind, Object, Time, Reason) —
+// enough to disambiguate the merged feed's entries without a dedicated ID
+// field, since target always comes from m.entries (the same slice m.rows is
+// filtered from) rather than being freshly constructed.
+func (m Model) indexOfEntry(target kube.TimelineEntry) int {
+	for i, e := range m.rows {
+		if e.Kind == target.Kind && e.Object == target.Object && e.Reason == target.Reason && e.Time.Equal(target.Time) {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -193,9 +418,11 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// CapturingInput reports whether the filter box is open, so the root shell
-// lets every keystroke reach timeline's own key handling (mirrors
-// browse.CapturingInput).
+// CapturingInput reports whether the filter box or 16b's rollback confirm
+// (y/N, or PROD's type-the-name modal) is open, so the root shell lets every
+// keystroke reach timeline's own key handling instead of letting a bare 'n'
+// get hijacked into the global namespace palette mid-confirm (mirrors
+// poddetail.CapturingInput).
 func (m Model) CapturingInput() bool {
-	return m.filterActive
+	return m.filterActive || m.actionsCtl.Active()
 }

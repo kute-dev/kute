@@ -30,13 +30,7 @@ func (m Model) load() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
-		var rawEvents []kube.Event
-		var err error
-		if objectKind != "" {
-			rawEvents, err = src.ObjectEvents(ctx, namespace, objectKind, objectName)
-		} else {
-			rawEvents, err = src.NamespaceEvents(ctx, namespace)
-		}
+		rawEvents, err := eventsForScope(ctx, src, lister, namespace, objectKind, objectName)
 		if err != nil {
 			return loadedMsg{err: err}
 		}
@@ -44,19 +38,58 @@ func (m Model) load() tea.Cmd {
 		eventEntries := kube.TimelineFromEvents(kube.DedupeEvents(rawEvents))
 		restartEntries := restartsForScope(ctx, lister, namespace, objectKind, objectName)
 		rolloutEntries, rail, railDeployment := rolloutsForScope(ctx, lister, namespace, objectKind, objectName)
+		attachChangeCause(ctx, lister, namespace, rolloutEntries)
+		attachChangeCause(ctx, lister, namespace, rail)
 
 		merged := kube.MergeTimeline(eventEntries, restartEntries, rolloutEntries)
 		return loadedMsg{entries: merged, rail: rail, railDeployment: railDeployment}
 	}
 }
 
+// eventsForScope fetches every event relevant to the screen's scope: the
+// primary object's own events (ObjectEvents), plus — for scopes that own
+// pods (Node, Deployment, StatefulSet, DaemonSet) — events on each of "its
+// pods" too, the same promise feedHeader's own "WHAT — <kind>/<name> + its
+// pods" text already makes. A container-level event like
+// CreateContainerError/BackOff/Unhealthy is always emitted with
+// involvedObject == the Pod, never the owning Deployment, so ObjectEvents on
+// the Deployment alone silently drops it — exactly the gap this closes.
+func eventsForScope(ctx context.Context, src EventsReader, lister resources.RawLister, namespace string, objectKind kube.ResourceKind, objectName string) ([]kube.Event, error) {
+	if objectKind == "" {
+		return src.NamespaceEvents(ctx, namespace)
+	}
+	primary, err := src.ObjectEvents(ctx, namespace, objectKind, objectName)
+	if err != nil {
+		return nil, err
+	}
+	podNames := podsOwnedByScope(ctx, lister, namespace, objectKind, objectName)
+	if len(podNames) == 0 {
+		return primary, nil
+	}
+	all, err := src.NamespaceEvents(ctx, namespace)
+	if err != nil {
+		// Best-effort: still show the primary object's own events rather
+		// than failing the whole load over the owned-pods lookup.
+		return primary, nil
+	}
+	out := append([]kube.Event(nil), primary...)
+	for _, e := range all {
+		kind, name := splitObject(e.Object)
+		if kind == kube.KindPod && podNames[name] {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 // restartsForScope reads container-restart entries for the screen's scope:
-// every pod in namespace (16a), the one pod (16b on a Pod), or every pod
-// scheduled on the node (16b on a Node) — nil (best-effort, matching
-// tasks/events' own failingPods degrade-gracefully precedent) when lister
-// isn't wired, and skipped entirely for object kinds restarts aren't
-// meaningful for (a Deployment, say — its pods' restarts still surface via
-// each pod's own namespace-scoped entry).
+// every pod in namespace (16a), the one pod (16b on a Pod), every pod
+// scheduled on the node (16b on a Node), or every pod owned by the
+// Deployment/StatefulSet/DaemonSet (16b on one of those, via
+// podsOwnedByScope) — nil (best-effort, matching tasks/events' own
+// failingPods degrade-gracefully precedent) when lister isn't wired, and
+// skipped entirely for object kinds with no pod-ownership concept at all
+// (a Service, say).
 func restartsForScope(ctx context.Context, lister resources.RawLister, namespace string, objectKind kube.ResourceKind, objectName string) []kube.TimelineEntry {
 	if lister == nil {
 		return nil
@@ -64,6 +97,11 @@ func restartsForScope(ctx context.Context, lister resources.RawLister, namespace
 	objs, err := lister.ListRaw(ctx, kube.KindPod, namespace)
 	if err != nil {
 		return nil
+	}
+	var scopedNames map[string]bool
+	switch objectKind {
+	case kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet:
+		scopedNames = podsOwnedByScope(ctx, lister, namespace, objectKind, objectName)
 	}
 	var pods []kube.Pod
 	for _, obj := range objs {
@@ -82,12 +120,85 @@ func restartsForScope(ctx context.Context, lister resources.RawLister, namespace
 			if pod.Spec.NodeName != objectName {
 				continue
 			}
+		case kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet:
+			if !scopedNames[pod.Name] {
+				continue
+			}
 		default:
 			continue
 		}
 		pods = append(pods, kube.PodFromObject(pod))
 	}
 	return kube.TimelineFromRestarts(pods)
+}
+
+// podsOwnedByScope resolves the pod names "owned" by objectKind/objectName
+// for scopes where that concept applies: scheduled there (Node), or owned
+// directly (StatefulSet/DaemonSet) or via an intermediate ReplicaSet
+// (Deployment). nil for every other kind, including Pod itself — a Pod's
+// own scope needs no separate resolution, it already is the one pod.
+func podsOwnedByScope(ctx context.Context, lister resources.RawLister, namespace string, objectKind kube.ResourceKind, objectName string) map[string]bool {
+	if lister == nil {
+		return nil
+	}
+	switch objectKind {
+	case kube.KindNode, kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet:
+	default:
+		return nil
+	}
+
+	podObjs, err := lister.ListRaw(ctx, kube.KindPod, namespace)
+	if err != nil {
+		return nil
+	}
+	var rsToDeployment map[string]string
+	if objectKind == kube.KindDeployment {
+		rsToDeployment = replicaSetOwners(ctx, lister, namespace)
+	}
+
+	names := make(map[string]bool)
+	for _, obj := range podObjs {
+		pod, ok := obj.(*corev1.Pod)
+		if !ok {
+			continue
+		}
+		switch objectKind {
+		case kube.KindNode:
+			if pod.Spec.NodeName == objectName {
+				names[pod.Name] = true
+			}
+		case kube.KindStatefulSet, kube.KindDaemonSet:
+			if ownerKind, ownerName, ok := splitOwner(ownerRef(pod.OwnerReferences)); ok && ownerKind == objectKind && ownerName == objectName {
+				names[pod.Name] = true
+			}
+		case kube.KindDeployment:
+			if ownerKind, ownerName, ok := splitOwner(ownerRef(pod.OwnerReferences)); ok && ownerKind == kube.KindReplicaSet && rsToDeployment[ownerName] == objectName {
+				names[pod.Name] = true
+			}
+		}
+	}
+	return names
+}
+
+// replicaSetOwners maps every ReplicaSet name in namespace to its owning
+// Deployment name (when any) — built once so podsOwnedByScope's Deployment
+// case doesn't re-list/re-walk ReplicaSets per pod.
+func replicaSetOwners(ctx context.Context, lister resources.RawLister, namespace string) map[string]string {
+	objs, err := lister.ListRaw(ctx, kube.KindReplicaSet, namespace)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(objs))
+	for _, obj := range objs {
+		rs, ok := obj.(*appsv1.ReplicaSet)
+		if !ok {
+			continue
+		}
+		if depKind, depName, ok := splitOwner(ownerRef(rs.OwnerReferences)); ok && depKind == kube.KindDeployment {
+			out[rs.Name] = depName
+		}
+	}
+	return out
 }
 
 // rolloutsForScope reads Deployment rollout-revision entries: every
@@ -125,6 +236,43 @@ func rolloutsForScope(ctx context.Context, lister resources.RawLister, namespace
 	revisionRail := append([]kube.TimelineEntry(nil), scoped...)
 	sort.Slice(revisionRail, func(i, j int) bool { return revisionRail[i].Revision > revisionRail[j].Revision })
 	return scoped, revisionRail, depName
+}
+
+// changeCauseAnnotation is the standard `kubectl rollout history` /
+// `--record` annotation key ("kubectl.kubernetes.io/change-cause") — 16a's
+// optional "· by ci@github" attribution (docs/design README.md §16a) reads
+// it straight off the Deployment; never fabricated when absent.
+const changeCauseAnnotation = "kubectl.kubernetes.io/change-cause"
+
+// attachChangeCause sets entries' By field from each entry's own Deployment
+// object's change-cause annotation, in place — best-effort (nil lister or a
+// list error just leaves every By empty, the same degrade-gracefully
+// precedent restartsForScope/rolloutsForScope already follow).
+func attachChangeCause(ctx context.Context, lister resources.RawLister, namespace string, entries []kube.TimelineEntry) {
+	if lister == nil || len(entries) == 0 {
+		return
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindDeployment, namespace)
+	if err != nil {
+		return
+	}
+	causes := make(map[string]string, len(objs))
+	for _, obj := range objs {
+		dep, ok := obj.(*appsv1.Deployment)
+		if !ok {
+			continue
+		}
+		if cause := dep.Annotations[changeCauseAnnotation]; cause != "" {
+			causes[dep.Namespace+"/"+dep.Name] = cause
+		}
+	}
+	for i, e := range entries {
+		kind, name := splitObject(e.Object)
+		if kind != kube.KindDeployment {
+			continue
+		}
+		entries[i].By = causes[e.Namespace+"/"+name]
+	}
 }
 
 // resolveOwningDeployment resolves objectKind/objectName to an owning

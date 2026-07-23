@@ -1,36 +1,36 @@
-  kute │ microk8s-cluster › Pod/checkout-api-7d9f6c8b95-k2m9x › Timeline · all time                        ● connected  
+  kute │ microk8s-cluster › default › Pod/checkout-api-7d9f6c8b95-k2m9x › Timeline                         ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ⇅ 1 rollout   ↺ 1 restarts   ▲ 1 warnings                                                         all time · merged feed
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-REVISIONS · checkout-api                                                                                                
-      REV             IMAGE                                                                                    UPDATED  
-  ●   5 (current)     checkout-api:1.9.0                                                                        2m ago  
-  ○   4               checkout-api:1.8.2                                                                       45m ago  
-  ○   3               checkout-api:1.8.0                                                                        3h ago  
+  ROLLOUT HISTORY                │  WHEN       WHAT — pod/checkout-api-7d9f6c8b95-k2m9x + its pods                      
+▎ rev 5                       2m │  1m      ▲  BackOff · back-off restarting failed container                           
+▎ checkout-api:1.9.0             │  2m      ⇅  ROLLOUT deploy/checkout-api · rev 5 · image checkout-api:1.9.0           
+▎ ● stable 2m                    │  4m      ↺  Restarted · app · OOMKilled · exit 137                                   
+                                 │  5m      ○  Started · Started container checkout-api                                 
+  rev 4                      45m │                                                                                      
+  checkout-api:1.8.2             │                                                                                      
+  ▲ 1 restart                    │                                                                                      
+                                 │                                                                                      
+  rev 3                       3h │                                                                                      
+  checkout-api:1.8.0             │                                                                                      
+  ● stable 2h                    │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
+                                 │                                                                                      
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  14:28:30  ▲  Pod/checkout-api-7d9f6c8b95-k…  BackOff · back-off restarting failed container                           
-  14:28:00  ⇅  Deployment/checkout-api  Rollout · revision 5 · checkout-api:1.9.0                                       
-  14:26:00  ↺  Pod/checkout-api-7d9f6c8b95-k…  Restarted · app · OOMKilled · exit 137                                   
-  14:25:00  ○  Pod/checkout-api-7d9f6c8b95-k…  Started · Started container checkout-api                                 
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   TIMELINE  esc back  ↵ open │ t time window                                                                   ? help  
+   TIMELINE  esc back  ↵ open │ t time window │ tab focus rail/feed │ ↑↓ select revision                        ? help  

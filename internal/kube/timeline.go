@@ -35,6 +35,13 @@ type TimelineEntry struct {
 	// revision rail reads them directly rather than re-parsing Message.
 	Revision int
 	Image    string
+	// By is a TimelineRollout entry's optional attribution — the owning
+	// Deployment's own "kubectl.kubernetes.io/change-cause" annotation,
+	// when present (16a's "· by ci@github", docs/design README.md §16a).
+	// Left empty otherwise; never fabricated. Populated by
+	// tasks/timeline's own load.go, not here — TimelineFromRollouts only
+	// sees ReplicaSets, not their owning Deployment.
+	By string
 }
 
 // TimelineFromEvents projects deduped EventGroups (DedupeEvents) into

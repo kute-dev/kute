@@ -148,10 +148,12 @@ func (c *Controller) Confirm() tea.Cmd {
 }
 
 // requiresTypedName reports whether verb's TierModal confirmation needs the
-// typed-name match — just the delete family; Drain's TierModal confirm
-// stays the simple y/N ConfirmCard.
+// typed-name match — the delete family, plus 16b's rollout-undo (docs/design
+// README.md §16b: "type-the-deployment-name modal in PROD"). Drain's
+// TierModal confirm, and 18a's Helm rollback (a different Scope.Verb,
+// "rollback"), both stay the simple y/N ConfirmCard.
 func requiresTypedName(verb string) bool {
-	return verb == "delete" || verb == "force-delete"
+	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo"
 }
 
 // Cancel abandons the pending confirmation.
@@ -288,6 +290,8 @@ func (c *Controller) execute() tea.Cmd {
 			_, err = mutator.Drain(context.Background(), action.Scope.ResourceName)
 		case "rollback":
 			err = mutator.HelmRollback(context.Background(), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Revision)
+		case "rollout-undo":
+			err = mutator.RolloutUndo(context.Background(), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Revision)
 		case "scale":
 			err = mutator.Scale(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Replicas)
