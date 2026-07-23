@@ -235,7 +235,40 @@ func rolloutsForScope(ctx context.Context, lister resources.RawLister, namespace
 	}
 	revisionRail := append([]kube.TimelineEntry(nil), scoped...)
 	sort.Slice(revisionRail, func(i, j int) bool { return revisionRail[i].Revision > revisionRail[j].Revision })
+	attachLiveRolloutStatus(ctx, lister, namespace, depName, revisionRail)
 	return scoped, revisionRail, depName
+}
+
+// attachLiveRolloutStatus sets rail[0]'s LiveStatusText/LiveStatusBad from
+// depName's own live Deployment object — the same resources.DeploymentRollout
+// classification the browse table's ROLLOUT column uses — so the revision
+// rail's current-revision card doesn't call a rollout "stable" while the
+// Deployment itself is still progressing (new pods starting/being pulled) or
+// degraded (stalled past its progress deadline). Best-effort, matching every
+// other load.go helper: a nil lister, a list error, or no matching Deployment
+// just leaves the fields at their zero value, falling back to the rail's
+// restart-based stable/restarts-since text.
+func attachLiveRolloutStatus(ctx context.Context, lister resources.RawLister, namespace, depName string, rail []kube.TimelineEntry) {
+	if lister == nil || len(rail) == 0 {
+		return
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindDeployment, namespace)
+	if err != nil {
+		return
+	}
+	for _, obj := range objs {
+		dep, ok := obj.(*appsv1.Deployment)
+		if !ok || dep.Name != depName {
+			continue
+		}
+		text, status := resources.DeploymentRollout(dep)
+		if status == resources.StatusOK {
+			return
+		}
+		rail[0].LiveStatusText = text
+		rail[0].LiveStatusBad = status == resources.StatusFail
+		return
+	}
 }
 
 // changeCauseAnnotation is the standard `kubectl rollout history` /

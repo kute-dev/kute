@@ -223,7 +223,7 @@ func projectDeployment(lister RawLister) func(obj runtime.Object) Row {
 		}
 		ns, name, age := metaOf(obj)
 		readyLabel, readyStatus := readyRatio(d.Status.ReadyReplicas, int32ptr(d.Spec.Replicas))
-		rolloutText, rolloutStatus := deploymentRollout(d)
+		rolloutText, rolloutStatus := DeploymentRollout(d)
 		status := rolloutStatus
 		if readyStatus == StatusFail {
 			// Zero ready replicas is an outage even if the rollout's own
@@ -241,12 +241,14 @@ func projectDeployment(lister RawLister) func(obj runtime.Object) Row {
 	}
 }
 
-// deploymentRollout derives 9a's ROLLOUT cell (docs/design README.md §9a:
+// DeploymentRollout derives 9a's ROLLOUT cell (docs/design README.md §9a:
 // "stable dim · 2m 14s ▸ yellow while progressing · degraded red") from the
 // deployment's generation/observedGeneration and its Progressing condition —
 // the same signals `kubectl rollout status` uses, simplified for a
-// single-line summary rather than a live poll loop.
-func deploymentRollout(d *appsv1.Deployment) (string, StatusClass) {
+// single-line summary rather than a live poll loop. Exported so
+// tasks/timeline's 16b revision rail can reuse the exact same classification
+// for its current-revision status line rather than re-deriving it.
+func DeploymentRollout(d *appsv1.Deployment) (string, StatusClass) {
 	if d.Generation > d.Status.ObservedGeneration {
 		return "progressing " + rolloutArrow, StatusWarn
 	}

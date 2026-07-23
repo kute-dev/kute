@@ -459,9 +459,13 @@ func (m Model) railCardLines(theme tui.Theme, e kube.TimelineEntry, idx, w int) 
 // revisionStatus computes rail idx's status line: a red "▲ N restart(s)
 // since" if a container restart landed inside this revision's own lifetime
 // window (its own rollout up to whenever it was superseded — or "now" for
-// the current revision), else a green "● stable <duration>" — scanning
-// m.entries (unwindowed) since a stale revision's window can fall well
-// outside the feed's current time window.
+// the current revision) — scanning m.entries (unwindowed) since a stale
+// revision's window can fall well outside the feed's current time window.
+// Otherwise, for the current revision only (idx == 0), a live rollout-progress
+// override (load.go's attachLiveRolloutStatus) takes over when the owning
+// Deployment itself isn't done rolling out yet: yellow "progressing ▸" or red
+// "degraded" — so a still-pulling image never reads as "stable" just because
+// nothing has restarted yet. Failing that, a green "● stable <duration>".
 func (m Model) revisionStatus(theme tui.Theme, idx int) (glyph, text string, style lipgloss.Style) {
 	start := m.rail[idx].Time
 	end := m.fetchedAt
@@ -480,6 +484,12 @@ func (m Model) revisionStatus(theme tui.Theme, idx int) (glyph, text string, sty
 			suffix = " since"
 		}
 		return tui.GlyphWarning, fmt.Sprintf("%d %s%s", restarts, pluralize(restarts, "restart"), suffix), lipgloss.NewStyle().Foreground(theme.Bad)
+	}
+	if idx == 0 && m.rail[idx].LiveStatusText != "" {
+		if m.rail[idx].LiveStatusBad {
+			return tui.GlyphFailed, m.rail[idx].LiveStatusText, lipgloss.NewStyle().Foreground(theme.Bad)
+		}
+		return tui.GlyphPending, m.rail[idx].LiveStatusText, lipgloss.NewStyle().Foreground(theme.Warn)
 	}
 	return tui.GlyphRunning, "stable " + shortAge(end.Sub(start)), lipgloss.NewStyle().Foreground(theme.Good)
 }

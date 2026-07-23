@@ -194,6 +194,115 @@ func TestObjectScopedPodResolvesRevisionRail(t *testing.T) {
 	}
 }
 
+// TestRevisionRailShowsProgressingWhileDeploymentRollsOut is the regression
+// test for the bug report "rollout history always shows 'stable'": a
+// Deployment whose Generation hasn't been observed yet (a just-applied image
+// tag change, still pulling — the same "generation not yet observed" case
+// resources.TestProjectDeploymentClassifiesRollout covers for the browse
+// ROLLOUT column) must not have its current-revision rail card say "stable"
+// just because no container has restarted yet.
+func TestRevisionRailShowsProgressingWhileDeploymentRollsOut(t *testing.T) {
+	lister, podName := railFixture()
+	replicas := int32(3)
+	lister.objs[kube.KindDeployment] = []runtime.Object{&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default", Generation: 6},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status: appsv1.DeploymentStatus{
+			Replicas: 3, ReadyReplicas: 3, UpdatedReplicas: 3, AvailableReplicas: 3, ObservedGeneration: 5,
+		},
+	}}
+
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: lister,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: podName,
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if len(m.rail) == 0 || m.rail[0].LiveStatusText == "" || m.rail[0].LiveStatusBad {
+		t.Fatalf("expected rail[0] to carry a non-bad live progressing override, got %+v", safeRail0(m.rail))
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "progressing") {
+		t.Fatalf("expected the rail's current-revision card to show 'progressing':\n%s", view)
+	}
+	if strings.Contains(view, "stable 2m") {
+		t.Fatalf("did not expect the mid-rollout current revision to still say 'stable':\n%s", view)
+	}
+}
+
+// TestRevisionRailShowsDegradedWhenRolloutStalled covers the companion
+// stalled-rollout case (ProgressDeadlineExceeded) — the rail should read
+// "degraded" (red), matching the browse ROLLOUT column, not "stable".
+func TestRevisionRailShowsDegradedWhenRolloutStalled(t *testing.T) {
+	lister, podName := railFixture()
+	replicas := int32(3)
+	lister.objs[kube.KindDeployment] = []runtime.Object{&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default", Generation: 6},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status: appsv1.DeploymentStatus{
+			Replicas: 3, ReadyReplicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1, ObservedGeneration: 6,
+			Conditions: []appsv1.DeploymentCondition{
+				{Type: appsv1.DeploymentProgressing, Status: corev1.ConditionFalse, Reason: "ProgressDeadlineExceeded"},
+			},
+		},
+	}}
+
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: lister,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: podName,
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if len(m.rail) == 0 || m.rail[0].LiveStatusText == "" || !m.rail[0].LiveStatusBad {
+		t.Fatalf("expected rail[0] to carry a bad (degraded) live override, got %+v", safeRail0(m.rail))
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "degraded") {
+		t.Fatalf("expected the rail's current-revision card to show 'degraded':\n%s", view)
+	}
+}
+
+// TestRevisionRailKeepsRestartsOverLiveStatus asserts restarts still win over
+// the live rollout-progress override: a crashlooping pod during a rollout is
+// the more specific/urgent signal (view.go's revisionStatus checks restarts
+// first).
+func TestRevisionRailKeepsRestartsOverLiveStatus(t *testing.T) {
+	lister, podName := railFixture()
+	replicas := int32(3)
+	lister.objs[kube.KindDeployment] = []runtime.Object{&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default", Generation: 6},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Status: appsv1.DeploymentStatus{
+			Replicas: 3, ReadyReplicas: 3, UpdatedReplicas: 3, AvailableReplicas: 3, ObservedGeneration: 5,
+		},
+	}}
+	pods := lister.objs[kube.KindPod]
+	crashingPod := testPod("nva-worker-9k2ss", "node-a", 30*time.Second)
+	crashingPod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "nva-worker-abc123"}}
+	lister.objs[kube.KindPod] = append(pods[:0:0], crashingPod)
+
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: lister,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: podName,
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "1 restart") {
+		t.Fatalf("expected the restart to still take priority over the progressing override:\n%s", view)
+	}
+}
+
+func safeRail0(rail []kube.TimelineEntry) kube.TimelineEntry {
+	if len(rail) == 0 {
+		return kube.TimelineEntry{}
+	}
+	return rail[0]
+}
+
 func TestObjectScopedNodeFiltersRestartsByNodeName(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {

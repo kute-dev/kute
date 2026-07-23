@@ -42,6 +42,16 @@ type TimelineEntry struct {
 	// tasks/timeline's own load.go, not here — TimelineFromRollouts only
 	// sees ReplicaSets, not their owning Deployment.
 	By string
+	// LiveStatusText/LiveStatusBad are the 16b revision rail's
+	// current-revision (index 0 only) live rollout-progress override — set
+	// when the owning Deployment's own resources.DeploymentRollout status
+	// isn't "stable" (still progressing, or degraded/stalled), so the rail
+	// doesn't call a rollout "stable" while new pods are still starting.
+	// Empty/false means "use the restart-based stable/restarts-since text
+	// instead." Populated by tasks/timeline's own load.go, not here (same
+	// reasoning as By); never set on any entry but rail[0].
+	LiveStatusText string
+	LiveStatusBad  bool
 }
 
 // TimelineFromEvents projects deduped EventGroups (DedupeEvents) into
