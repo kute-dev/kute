@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,41 @@ func TestDedupeEventsOrdersNewestFirst(t *testing.T) {
 	groups := DedupeEvents(events)
 	if len(groups) != 2 || groups[0].Reason != "New" {
 		t.Fatalf("expected New first (newest), got %+v", groups)
+	}
+}
+
+// TestDedupeEventsFoldsDespiteDifferingMessage is the real-world case a live
+// cluster surfaced: a ReplicaSet's FailedCreate quota rejection, retried a
+// few minutes apart, each attempt naming a freshly-generated pod suffix in
+// its message ("...pods \"checkout-api-bc9cbfdc-r5z84\" is forbidden..." vs
+// "...-t7pr9..."). Same reason+object, different message — these must still
+// collapse into one ×2 group (docs/design README.md's `Kute Spec.dc.html
+// #9b` caption: "deduped by reason+object"), keeping the most recent
+// message rather than the message becoming part of the dedupe key.
+func TestDedupeEventsFoldsDespiteDifferingMessage(t *testing.T) {
+	t.Parallel()
+	older := time.Now().Add(-16 * time.Minute)
+	newer := time.Now()
+	events := []Event{
+		mkEvent("FailedCreate", "ReplicaSet/checkout-api-bc9cbfdc",
+			`Error creating: pods "checkout-api-bc9cbfdc-r5z84" is forbidden: exceeded quota: compute-quota, requested: requests.memory=21Gi, used: requests.memory=31488Mi, limited: requests.memory=48Gi`,
+			1, older, "Warning"),
+		mkEvent("FailedCreate", "ReplicaSet/checkout-api-bc9cbfdc",
+			`Error creating: pods "checkout-api-bc9cbfdc-t7pr9" is forbidden: exceeded quota: compute-quota, requested: requests.memory=21Gi, used: requests.memory=31488Mi, limited: requests.memory=48Gi`,
+			1, newer, "Warning"),
+	}
+	groups := DedupeEvents(events)
+	if len(groups) != 1 {
+		t.Fatalf("got %d groups, want 1 (same reason+object should fold despite differing message), groups=%+v", len(groups), groups)
+	}
+	if groups[0].Count != 2 {
+		t.Fatalf("Count = %d, want 2 (summed)", groups[0].Count)
+	}
+	if !groups[0].LastSeen.Equal(newer) {
+		t.Fatalf("LastSeen = %v, want the most recent %v", groups[0].LastSeen, newer)
+	}
+	if !strings.Contains(groups[0].Message, "t7pr9") {
+		t.Fatalf("Message = %q, want the most recent occurrence's message (t7pr9)", groups[0].Message)
 	}
 }
 

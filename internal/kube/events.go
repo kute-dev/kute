@@ -110,18 +110,24 @@ func eventFromObject(ev *corev1.Event) Event {
 	}
 }
 
-// DedupeEvents folds events sharing the same reason+object+message into one
-// EventGroup per key, summing Count and keeping the latest LastSeen (and
-// that occurrence's Type, in case it changed across occurrences). Results
-// are ordered newest-first; screens partition warnings-first or otherwise
-// re-sort on top of this base order.
+// DedupeEvents folds events sharing the same reason+object into one
+// EventGroup per key (docs/design README.md's `Kute Spec.dc.html#9b`
+// caption: "deduped by reason+object" — message is deliberately left out of
+// the key, since retries of the same failure routinely generate a fresh
+// message each attempt, e.g. a ReplicaSet's FailedCreate quota rejection
+// naming a newly-generated pod suffix every time; keying on message too
+// would silently defeat the dedupe for exactly the bursty-retry case 9b
+// exists to collapse), summing Count and keeping the latest LastSeen (and
+// that occurrence's Type/Message, in case either changed across
+// occurrences). Results are ordered newest-first; screens partition
+// warnings-first or otherwise re-sort on top of this base order.
 func DedupeEvents(events []Event) []EventGroup {
-	type key struct{ reason, object, message string }
+	type key struct{ reason, object string }
 	groups := make(map[key]*EventGroup, len(events))
 	order := make([]key, 0, len(events))
 
 	for _, e := range events {
-		k := key{e.Reason, e.Object, e.Message}
+		k := key{e.Reason, e.Object}
 		g, ok := groups[k]
 		if !ok {
 			g = &EventGroup{Reason: e.Reason, Message: e.Message, Object: e.Object, Namespace: e.Namespace}
@@ -132,6 +138,7 @@ func DedupeEvents(events []Event) []EventGroup {
 		if e.LastSeen.After(g.LastSeen) {
 			g.LastSeen = e.LastSeen
 			g.Type = e.Type
+			g.Message = e.Message
 		}
 	}
 
