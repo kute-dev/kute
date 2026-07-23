@@ -3,6 +3,7 @@
 ⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                                       
 ────────────────────────────────────────────────────────────────────────────────
   WHEN       +CHANGE  WHAT                                                OBJECT
+────────────────────────────────────────────────────────────────────────────────
 ▎ 1m      ▲  +4m      BackOff · back-off restarting failed  Pod/api-gateway-9x2…
 ▎                     container                                                 
   3m      ↺  +3m      Restarted · app · OOMKilled · exit    Pod/api-gateway-9x2…
@@ -15,7 +16,6 @@
   18m     ↺  before   Restarted · app · OOMKilled · exit    Pod/worker-77f9c-ab…
                       137                                                       
 ▸ normal 1 normal events — Pulled…                                      ↹ expand
-                                                                                
                                                                                 
                                                                                 
                                                                                 

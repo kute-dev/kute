@@ -3,6 +3,7 @@
 ⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                                first Restarted 3m after rollout of api-gateway
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   WHEN       +CHANGE  WHAT                                                                                        OBJECT
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▎ 1m      ▲  +4m      BackOff · back-off restarting failed container                                Pod/api-gateway-9x2…
   3m      ↺  +3m      Restarted · app · OOMKilled · exit 137                                        Pod/api-gateway-9x2…
   6m      ⇅  ROLLOUT deploy/api-gateway · rev 5 · image api-gateway:2.3.1                                               
@@ -10,7 +11,6 @@
   11m     ▲  before   FailedScheduling · 0/3 nodes are available: insufficient cpu                  Pod/worker-77f9c-ab…
   18m     ↺  before   Restarted · app · OOMKilled · exit 137                                        Pod/worker-77f9c-ab…
 ▸ normal 1 normal events — Pulled…                                                                              ↹ expand
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

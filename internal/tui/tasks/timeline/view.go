@@ -298,7 +298,7 @@ func (m Model) emptyMessage() string {
 // stacked above it.
 func (m Model) timelineBody(theme tui.Theme, width, height int) string {
 	if len(m.rail) == 0 {
-		lines := []string{m.feedHeader(theme, width)}
+		lines := []string{m.feedHeader(theme, width), headerRule(theme, width)}
 		feedHeight := max(height-len(lines), 1)
 		lines = append(lines, m.feedLines(theme, width, feedHeight)...)
 		return strings.Join(lines, "\n")
@@ -312,7 +312,8 @@ func (m Model) timelineBody(theme tui.Theme, width, height int) string {
 	// state's components.CenterLines embeds newlines in a single returned
 	// element) — split on "\n" to flatten before pairing index-for-index
 	// with rail, or an empty feed shifts every card line out of alignment.
-	feedText := m.feedHeader(theme, feedWidth) + "\n" + strings.Join(m.feedLines(theme, feedWidth, max(height-1, 1)), "\n")
+	feedText := m.feedHeader(theme, feedWidth) + "\n" + headerRule(theme, feedWidth) + "\n" +
+		strings.Join(m.feedLines(theme, feedWidth, max(height-2, 1)), "\n")
 	feed := strings.Split(feedText, "\n")
 	for len(feed) < height {
 		feed = append(feed, fillLine("", feedWidth, false, theme))
@@ -349,6 +350,15 @@ func (m Model) feedWhatWidth(width int) int {
 	return max(width-used, 8)
 }
 
+// headerRule is a full-width divider under a column header — the same
+// ShowHeaderRule/RuleStyle idiom components.Table already draws for
+// browse/nodedetail's own tables (theme.TextGhost2, quieter than the row
+// grid's own BorderSubtle), reused here since the feed header and the rail's
+// "ROLLOUT HISTORY" label aren't rendered through components.Table.
+func headerRule(theme tui.Theme, width int) string {
+	return lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(strings.Repeat("─", width))
+}
+
 // feedHeader is 16a's "WHEN │ │ +CHANGE │ WHAT │ OBJECT" column header row,
 // or 16b's narrower "WHEN │ │ WHAT — <kind>/<name> + its pods" (no
 // +CHANGE/OBJECT — the mockup drops both once the feed is already scoped to
@@ -379,7 +389,8 @@ func (m Model) railWidth(width int) int {
 }
 
 // railColumnLines renders 16b's revision rail as a left sidebar — a
-// "ROLLOUT HISTORY" label over one 3-line card per revision (rev + age,
+// "ROLLOUT HISTORY" label (headerRule underneath it, matching the feed
+// header's own divider) over one 3-line card per revision (rev + age,
 // image, restarts-since/stable-for), newest first, a blank line between
 // cards — padded/truncated to exactly w×height so it composes edge-to-edge
 // with the feed column in timelineBody. The selected card (m.railSelected)
@@ -389,7 +400,7 @@ func (m Model) railWidth(width int) int {
 // update.go's moveRailSelection/syncFeedToRailSelection).
 func (m Model) railColumnLines(theme tui.Theme, w, height int) []string {
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
-	lines := []string{fillLine("  "+label.Render("ROLLOUT HISTORY"), w, false, theme)}
+	lines := []string{fillLine("  "+label.Render("ROLLOUT HISTORY"), w, false, theme), headerRule(theme, w)}
 	for i, e := range m.rail {
 		if i > 0 {
 			lines = append(lines, fillLine("", w, false, theme))
