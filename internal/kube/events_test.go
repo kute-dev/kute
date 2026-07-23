@@ -93,6 +93,25 @@ func TestDedupeEventsFoldsDespiteDifferingMessage(t *testing.T) {
 	}
 }
 
+// TestDedupeEventsSameReasonAndObjectDifferentNamespaceStaySeparate covers
+// 9b's all-namespaces mode (browse's 'e' with namespace == "", mirroring
+// 6b): two different namespaces can each have their own identically-named
+// object (e.g. "Pod/cache-0" in both shop-checkout and shop-payments)
+// hitting the same reason independently — Namespace must be part of the
+// dedupe key, or these would wrongly fold into one row.
+func TestDedupeEventsSameReasonAndObjectDifferentNamespaceStaySeparate(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	events := []Event{
+		{Type: "Warning", Reason: "FailedScheduling", Object: "Pod/cache-0", Namespace: "shop-checkout", Message: "0/5 nodes available", Count: 1, LastSeen: now},
+		{Type: "Warning", Reason: "FailedScheduling", Object: "Pod/cache-0", Namespace: "shop-payments", Message: "0/5 nodes available", Count: 1, LastSeen: now},
+	}
+	groups := DedupeEvents(events)
+	if len(groups) != 2 {
+		t.Fatalf("got %d groups, want 2 (same reason+object but different namespaces), groups=%+v", len(groups), groups)
+	}
+}
+
 func TestDedupeEventsDifferentObjectsSameReasonStaySeparate(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -155,5 +174,58 @@ func TestEventFromObjectFallsBackThroughTimestamps(t *testing.T) {
 	}
 	if got.Object != "Pod/api" {
 		t.Fatalf("Object = %q, want Pod/api", got.Object)
+	}
+}
+
+// TestEventFromObjectPrefersSeriesOverEventTime is a live-cluster
+// regression: events.k8s.io/v1-native events (kube-scheduler and most
+// controllers on modern Kubernetes) never populate the legacy
+// LastTimestamp/Count fields — repeats update Series instead, so
+// LastTimestamp/Count stay at their zero value for the object's whole
+// lifetime. EventTime only ever records the *first* occurrence. A pod that
+// fails scheduling for hours has EventTime hours in the past while
+// Series.LastObservedTime keeps advancing — without reading Series, 9b's
+// "last hour" default window (and any other time-windowed view) would
+// silently drop an actively-recurring warning as if it were stale.
+func TestEventFromObjectPrefersSeriesOverEventTime(t *testing.T) {
+	t.Parallel()
+	firstOccurrence := time.Now().Add(-4 * time.Hour)
+	lastObserved := time.Now().Add(-2 * time.Minute)
+	ev := &corev1.Event{
+		ObjectMeta:     metav1.ObjectMeta{CreationTimestamp: metav1.NewTime(firstOccurrence)},
+		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "llm-inference-74ccb94c66-msk8n"},
+		Reason:         "FailedScheduling",
+		Type:           "Warning",
+		Message:        "0/9 nodes are available",
+		EventTime:      metav1.NewMicroTime(firstOccurrence),
+		Series:         &corev1.EventSeries{Count: 42, LastObservedTime: metav1.NewMicroTime(lastObserved)},
+	}
+	got := eventFromObject(ev)
+	if !got.LastSeen.Equal(lastObserved) {
+		t.Fatalf("LastSeen = %v, want Series.LastObservedTime %v (not EventTime's first-occurrence %v)", got.LastSeen, lastObserved, firstOccurrence)
+	}
+	if got.Count != 42 {
+		t.Fatalf("Count = %d, want Series.Count 42", got.Count)
+	}
+}
+
+// TestEventFromObjectSeriesNilKeepsLegacyFields covers a singleton event
+// (no Series at all) still working exactly as before this fix.
+func TestEventFromObjectSeriesNilKeepsLegacyFields(t *testing.T) {
+	t.Parallel()
+	last := time.Now().Add(-time.Minute)
+	ev := &corev1.Event{
+		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: "api"},
+		Reason:         "Pulled",
+		Type:           "Normal",
+		LastTimestamp:  metav1.NewTime(last),
+		Count:          3,
+	}
+	got := eventFromObject(ev)
+	if !got.LastSeen.Equal(last) {
+		t.Fatalf("LastSeen = %v, want LastTimestamp %v", got.LastSeen, last)
+	}
+	if got.Count != 3 {
+		t.Fatalf("Count = %d, want the legacy Count field 3", got.Count)
 	}
 }

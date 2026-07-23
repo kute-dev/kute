@@ -95,6 +95,26 @@ func eventFromObject(ev *corev1.Event) Event {
 		first = last
 	}
 	count := ev.Count
+	// events.k8s.io/v1-native events (emitted by kube-scheduler and most
+	// controllers on modern Kubernetes) never populate the legacy
+	// LastTimestamp/Count fields at all — repeats instead update Series,
+	// leaving LastTimestamp/Count at their zero value for the object's
+	// entire lifetime. Without this, "last" above falls back to EventTime
+	// (the *first* occurrence), which can be hours old for a long-running
+	// series — silently expelling an actively-recurring warning from every
+	// time-windowed view (9b's own "last hour" default, poddetail/
+	// nodedetail's EVENTS grid, the 16a/16b timeline) even though it's
+	// still happening right now. Series.LastObservedTime/Count are the
+	// authoritative "last seen"/"how many times" for these events, so they
+	// take priority over whatever the legacy-field fallback above computed.
+	if ev.Series != nil {
+		if !ev.Series.LastObservedTime.IsZero() {
+			last = ev.Series.LastObservedTime.Time
+		}
+		if ev.Series.Count > 0 {
+			count = ev.Series.Count
+		}
+	}
 	if count == 0 {
 		count = 1
 	}
@@ -119,15 +139,21 @@ func eventFromObject(ev *corev1.Event) Event {
 // would silently defeat the dedupe for exactly the bursty-retry case 9b
 // exists to collapse), summing Count and keeping the latest LastSeen (and
 // that occurrence's Type/Message, in case either changed across
-// occurrences). Results are ordered newest-first; screens partition
-// warnings-first or otherwise re-sort on top of this base order.
+// occurrences). Namespace is part of the key even though Object ("Kind/Name")
+// doesn't carry it — 9b's all-namespaces mode (browse's 'e' with
+// namespace == "", mirroring 6b) would otherwise fold together two
+// same-named, same-kind objects with the same reason in different
+// namespaces (e.g. "FailedScheduling" on "Pod/cache-0" in both
+// shop-checkout and shop-payments) into one wrongly-merged row. Results are
+// ordered newest-first; screens partition warnings-first or otherwise
+// re-sort on top of this base order.
 func DedupeEvents(events []Event) []EventGroup {
-	type key struct{ reason, object string }
+	type key struct{ reason, namespace, object string }
 	groups := make(map[key]*EventGroup, len(events))
 	order := make([]key, 0, len(events))
 
 	for _, e := range events {
-		k := key{e.Reason, e.Object}
+		k := key{e.Reason, e.Namespace, e.Object}
 		g, ok := groups[k]
 		if !ok {
 			g = &EventGroup{Reason: e.Reason, Message: e.Message, Object: e.Object, Namespace: e.Namespace}
