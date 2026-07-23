@@ -469,6 +469,36 @@ func TestRolloutDividerChangeOffsetAndCallout(t *testing.T) {
 	}
 }
 
+// TestObjectScopedRolloutDividerIsCompact covers 16b's own abbreviation of
+// the rollout divider: unlike 16a's "ROLLOUT deploy/x · rev A → B · image a
+// → b [· by author]" (the object isn't named since many Deployments are
+// interleaved there), 16b already names the object in the header/breadcrumb
+// — so its divider drops "deploy/x", the "image" label, and any "by"
+// attribution, and abbreviates the image transition down to tag-only on
+// both sides ("ROLLOUT rev A → B · :a → :b").
+func TestObjectScopedRolloutDividerIsCompact(t *testing.T) {
+	now := time.Now()
+	entries := []kube.TimelineEntry{
+		{Time: now.Add(-2 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/nva-worker", Namespace: "default", Reason: "Rollout", Message: "revision 43", Revision: 43, Image: "nva-worker:3.4.1", By: "ci@github"},
+		{Time: now.Add(-2 * time.Hour), Kind: kube.TimelineRollout, Object: "Deployment/nva-worker", Namespace: "default", Reason: "Rollout", Message: "revision 42", Revision: 42, Image: "nva-worker:3.4.0"},
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Namespace: "default",
+		ObjectKind: kube.KindDeployment, ObjectName: "nva-worker",
+	})
+	m.SetSize(120, 36)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "ROLLOUT rev 42 → 43 · :3.4.0 → :3.4.1") {
+		t.Fatalf("expected the compact 16b rollout divider text:\n%s", view)
+	}
+	if strings.Contains(view, "deploy/nva-worker") || strings.Contains(view, "image ") || strings.Contains(view, "by ci@github") {
+		t.Fatalf("expected the 16b divider to drop deploy/name, the 'image' label, and 'by' attribution:\n%s", view)
+	}
+}
+
 // TestWarningsOnlyDropsNormalEventsKeepsRestartsAndRollouts covers 16a's
 // 'w' toggle (docs/design README.md §16a) — Normal-severity events are
 // hard-excluded, but a restart and a rollout (never "normal" chatter)

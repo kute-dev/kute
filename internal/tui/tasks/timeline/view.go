@@ -688,17 +688,22 @@ func (m Model) changeOffset(e kube.TimelineEntry) (text string, warn bool) {
 	return "+" + shortAge(e.Time.Sub(nearest.Time)), warn
 }
 
-// renderRolloutDivider is 16a's full-width rollout anchor row: a quieter
+// renderRolloutDivider is the full-width rollout anchor row: a quieter
 // background + thin rule (theme.MarkBg/theme.Accent, reusing 20a's own
 // "quieter than SelBg" tint rather than a new token), spanning WHEN/glyph/
-// message with no +CHANGE/OBJECT columns — "ROLLOUT deploy/x · rev A → B ·
-// image a → b [· by author]" (docs/design README.md §16a). selected swaps
-// the background to theme.SelBg (the one selection color everywhere else in
-// the app) instead of MarkBg — otherwise a rollout row selected via 16b's
-// rail-cursor live sync (point 2: "the very last event from it" is often
-// the rollout itself, for a revision nothing else happened under) would
-// carry no visible cursor at all, since MarkBg is already a permanent,
-// selection-independent tint on every rollout row.
+// message with no +CHANGE/OBJECT columns. 16a's namespace-scoped feed spells
+// out the object since rows from many Deployments are interleaved —
+// "ROLLOUT deploy/x · rev A → B · image a → b [· by author]" (docs/design
+// README.md §16a). 16b's object-scoped feed already names the object in the
+// header/breadcrumb, so it drops the "deploy/x"/"image"/"by" context and
+// keeps just the transition itself, tag-only on both sides since the repo
+// name is redundant there too — "ROLLOUT rev A → B · :a → :b". selected
+// swaps the background to theme.SelBg (the one selection color everywhere
+// else in the app) instead of MarkBg — otherwise a rollout row selected via
+// 16b's rail-cursor live sync (point 2: "the very last event from it" is
+// often the rollout itself, for a revision nothing else happened under)
+// would carry no visible cursor at all, since MarkBg is already a
+// permanent, selection-independent tint on every rollout row.
 func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) string {
 	markBg := theme.MarkBg
 	if selected {
@@ -717,13 +722,21 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 	_, name := splitObject(e.Object)
 	revText := fmt.Sprintf("rev %d", e.Revision)
 	imageText := shortImage(e.Image)
+	compactImageText := imageText
 	if prev, ok := m.previousRollout(e); ok {
 		revText = fmt.Sprintf("rev %d → %d", prev.Revision, e.Revision)
 		imageText = imageTransition(shortImage(prev.Image), shortImage(e.Image))
+		compactImageText = compactImageTransition(shortImage(prev.Image), shortImage(e.Image))
 	}
-	body := fmt.Sprintf("ROLLOUT deploy/%s · %s · image %s", name, revText, imageText)
-	if e.By != "" {
-		body += " · by " + e.By
+
+	var body string
+	if m.objectScoped() {
+		body = fmt.Sprintf("ROLLOUT %s · %s", revText, compactImageText)
+	} else {
+		body = fmt.Sprintf("ROLLOUT deploy/%s · %s · image %s", name, revText, imageText)
+		if e.By != "" {
+			body += " · by " + e.By
+		}
 	}
 	body = components.Truncate(body, m.feedWhatWidth(width))
 	line := "  " + when.Render(padRight(whenText, feedWhenW)) + "  " + glyphStyle.Render(tui.GlyphRollout) + "  " + text.Render(body)
@@ -776,6 +789,25 @@ func imageTransition(prev, next string) string {
 	nextRepo, nextTag, nextOk := strings.Cut(next, ":")
 	if prevOk && nextOk && prevRepo == nextRepo {
 		return prev + " → :" + nextTag
+	}
+	return prev + " → " + next
+}
+
+// compactImageTransition is 16b's own abbreviation of imageTransition: the
+// object-scoped feed already names the object (and so its repo) in the
+// header/breadcrumb, so — unlike 16a's divider — neither side needs the
+// repo name at all, just the tags ("nva-worker:3.4.0" → "nva-worker:3.4.1"
+// renders as ":3.4.0 → :3.4.1"). Falls back to imageTransition's own
+// plain "a → b" when the repos differ or either side lacks a tag, same as
+// imageTransition.
+func compactImageTransition(prev, next string) string {
+	if prev == "" || prev == next {
+		return next
+	}
+	prevRepo, prevTag, prevOk := strings.Cut(prev, ":")
+	nextRepo, nextTag, nextOk := strings.Cut(next, ":")
+	if prevOk && nextOk && prevRepo == nextRepo {
+		return ":" + prevTag + " → :" + nextTag
 	}
 	return prev + " → " + next
 }
