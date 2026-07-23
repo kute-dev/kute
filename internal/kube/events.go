@@ -63,7 +63,7 @@ func (c *Cluster) NamespaceEvents(ctx context.Context, namespace string) ([]Even
 			out = append(out, eventFromObject(ev))
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	sortEventsNewestFirst(out)
 	return out, nil
 }
 
@@ -78,8 +78,28 @@ func filterEventsByInvolvedObject(events []*corev1.Event, kind, name string) []E
 		}
 		out = append(out, eventFromObject(ev))
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	sortEventsNewestFirst(out)
 	return out
+}
+
+// sortEventsNewestFirst orders by LastSeen descending, the informer cache's
+// list order (map-backed, so not deterministic across reloads) otherwise
+// leaving ties to sort.Slice's unstable ordering — which visibly "glitched"
+// 9b, flipping two same-second events (e.g. a container's Pulling/Started
+// pair) back and forth on every reload. FirstSeen desc as a tiebreak both
+// fixes that and, for causally-linked events like Pulling→Started, surfaces
+// the one that actually happened later; Reason is the final, fully
+// deterministic fallback.
+func sortEventsNewestFirst(events []Event) {
+	sort.Slice(events, func(i, j int) bool {
+		if !events[i].LastSeen.Equal(events[j].LastSeen) {
+			return events[i].LastSeen.After(events[j].LastSeen)
+		}
+		if !events[i].FirstSeen.Equal(events[j].FirstSeen) {
+			return events[i].FirstSeen.After(events[j].FirstSeen)
+		}
+		return events[i].Reason < events[j].Reason
+	})
 }
 
 func eventFromObject(ev *corev1.Event) Event {
@@ -172,6 +192,17 @@ func DedupeEvents(events []Event) []EventGroup {
 	for _, k := range order {
 		out = append(out, *groups[k])
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	// LastSeen-tied groups need a deterministic tiebreak too, same reasoning
+	// as sortEventsNewestFirst — EventGroup has no FirstSeen to fall back on
+	// (it folds many occurrences), so Reason/Object is the best available.
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].LastSeen.Equal(out[j].LastSeen) {
+			return out[i].LastSeen.After(out[j].LastSeen)
+		}
+		if out[i].Reason != out[j].Reason {
+			return out[i].Reason < out[j].Reason
+		}
+		return out[i].Object < out[j].Object
+	})
 	return out
 }
