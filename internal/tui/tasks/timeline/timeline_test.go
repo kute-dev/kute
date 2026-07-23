@@ -923,6 +923,136 @@ func TestUnselectedRolloutRowHasNoPermanentBackground(t *testing.T) {
 	}
 }
 
+// TestSelectedFeedRowShowsAccentBar covers the app-wide "1-cell accent bar
+// + SelBg row background — the bar is the primary cue" selection rule
+// (docs/design README.md's Mapping HTML → terminal section): the timeline
+// feed used to mark selection with background tint alone, unlike every
+// other list in the app (components.Table's own SelBarStyle). A selected
+// row's marker slot must now render the same "▎" bar every other list
+// uses; an unselected row's marker slot must stay blank.
+func TestSelectedFeedRowShowsAccentBar(t *testing.T) {
+	entries := []kube.TimelineEntry{
+		{Time: time.Now(), Kind: kube.TimelineEvent, Object: "Pod/worker-0", Namespace: "default", Severity: "Warning", Reason: "BackOff", Message: "m"},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "default"})
+	m.SetSize(80, 24)
+	updated, _ := m.Update(loadedMsg{entries: entries})
+	m = *updated.(*Model)
+
+	selected := plain(m.renderRow(m.Theme(), m.rows[0], true, 80)[0])
+	if !strings.HasPrefix(selected, tui.GlyphSelBar) {
+		t.Fatalf("expected a selected feed row to start with the %q selection bar, got %q", tui.GlyphSelBar, selected)
+	}
+	unselected := plain(m.renderRow(m.Theme(), m.rows[0], false, 80)[0])
+	if strings.HasPrefix(unselected, tui.GlyphSelBar) {
+		t.Fatalf("expected an unselected feed row to carry no selection bar, got %q", unselected)
+	}
+}
+
+// lineHasUnstyledSpace parses line's raw SGR escapes and reports whether any
+// space character renders with no background color active — a bare `"  "`
+// (or even a single un-styled `" "`) string literal concatenated between two
+// rendered spans, rather than routed through gap()/gapStyle.Render, punches
+// exactly this kind of hole in an otherwise-solid selected background.
+// Every span this package renders is a single self-contained
+// Style.Render() call (opens the codes it needs, ends with a full "\x1b[0m"
+// reset — never a partial/cumulative escape spanning multiple concatenated
+// pieces), so tracking "is some `48;` background code currently open"
+// sequentially across the whole line is accurate for this codebase's own
+// rendering pattern.
+func lineHasUnstyledSpace(line string) bool {
+	bgActive := false
+	for i := 0; i < len(line); i++ {
+		if line[i] == 0x1b && i+1 < len(line) && line[i+1] == '[' {
+			j := i + 2
+			for j < len(line) && line[j] != 'm' {
+				j++
+			}
+			if j >= len(line) {
+				break
+			}
+			codes := line[i+2 : j]
+			if codes == "" || codes == "0" {
+				bgActive = false
+			} else if strings.Contains(codes, "48;") {
+				bgActive = true
+			}
+			i = j
+			continue
+		}
+		if line[i] == ' ' && !bgActive {
+			return true
+		}
+	}
+	return false
+}
+
+// TestSelectedRowsHaveNoUnstyledBackgroundGap covers the "solid background"
+// requirement for both panes: every gap between styled spans on a selected
+// row — including the marker slot, the WHEN/glyph/+CHANGE/OBJECT
+// separators, and the rail card's own gutter — must be routed through a
+// style carrying SelBg, never left as a bare literal that would punch an
+// unstyled notch in an otherwise-solid selected background.
+func TestSelectedRowsHaveNoUnstyledBackgroundGap(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nva-worker-abc123", Namespace: "default",
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-2 * time.Minute)),
+			Annotations:       map[string]string{"deployment.kubernetes.io/revision": "5"},
+			OwnerReferences:   []metav1.OwnerReference{{Kind: "Deployment", Name: "nva-worker"}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Image: "nginx:1.27"}},
+		}}},
+	}
+	pod := testPod("nva-worker-9k2ss", "node-a", 0)
+	pod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "nva-worker-abc123"}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:        {pod},
+		kube.KindReplicaSet: {rs},
+	}}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: lister,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: "nva-worker-9k2ss",
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if len(m.rail) == 0 {
+		t.Fatal("expected a resolved revision rail for this fixture")
+	}
+
+	theme := m.Theme()
+	// The last line is renderRolloutDivider's own trailing rule (a
+	// theme.BorderSubtle foreground-only "─" run, unconditional regardless
+	// of selection) — correctly has no background at all, so it's excluded
+	// from this check.
+	dividerLines := m.renderRolloutDivider(theme, m.rail[0], true, 100)
+	for _, line := range dividerLines[:len(dividerLines)-1] {
+		if lineHasUnstyledSpace(line) {
+			t.Fatalf("selected ROLLOUT divider has an unstyled background gap:\n%q", line)
+		}
+	}
+	entries := []kube.TimelineEntry{
+		{Time: time.Now(), Kind: kube.TimelineEvent, Object: "Pod/worker-0", Namespace: "default", Severity: "Warning", Reason: "BackOff", Message: "m"},
+	}
+	loaded, _ := m.Update(loadedMsg{entries: entries, rail: m.rail, railDeployment: m.railDeployment})
+	m = *loaded.(*Model)
+	for _, line := range m.renderRow(theme, m.rows[0], true, 100) {
+		if lineHasUnstyledSpace(line) {
+			t.Fatalf("selected feed row has an unstyled background gap:\n%q", line)
+		}
+	}
+	for _, line := range m.railCardLines(theme, m.rail[0], 0, 30) {
+		if lineHasUnstyledSpace(line) {
+			t.Fatalf("selected rail card has an unstyled background gap:\n%q", line)
+		}
+	}
+}
+
 func TestShortImageDropsRegistryPrefix(t *testing.T) {
 	cases := map[string]string{
 		"r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108": "aim.bp.app:5.31.0.58108",

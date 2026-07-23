@@ -428,9 +428,14 @@ func (m Model) railCardLines(theme tui.Theme, e kube.TimelineEntry, idx, w int) 
 		gapStyle = gapStyle.Background(theme.SelBg)
 	}
 
-	gutter := "  "
+	// Routed through gapStyle even for the plain "  " case (never a bare
+	// literal) so a selected card's background reaches this 2-cell marker
+	// slot with no unstyled notch at the left edge — components.Table's own
+	// renderRowV2 documents the same "never a bare literal" rule for its
+	// identical "▎ "/"  " marker slot.
+	gutter := gapStyle.Render("  ")
 	if selected {
-		gutter = bar.Render(tui.GlyphSelBar) + " "
+		gutter = bar.Render(tui.GlyphSelBar) + gapStyle.Render(" ")
 	}
 	contentW := max(w-3, 4)
 
@@ -650,6 +655,19 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 	}
 }
 
+// feedSelBarStyle is the timeline feed/rail's own "▎" selection-bar style —
+// Foreground(Accent)/Background(SelBg), the exact convention
+// components.Table's own SelBarStyle uses everywhere else the app shows a
+// list (docs/design README.md: "Selection cue = 1-cell accent bar + SelBg
+// row background — the bar is the primary cue"). The feed and ROLLOUT
+// divider don't go through components.Table (their layout — +CHANGE/
+// OBJECT columns, the rail sidebar — isn't what Table renders), so they
+// render this bar by hand rather than inheriting a shared SelBarStyle
+// field.
+func feedSelBarStyle(theme tui.Theme) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg)
+}
+
 // renderRow renders one feed entry as one or more physical lines — a
 // full-width purple divider (renderRolloutDivider; rollouts are visual
 // anchors, not ordinary rows, docs/design README.md §16a) for a
@@ -657,10 +675,13 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 // layout for everything else. WHAT text that doesn't fit the column wraps
 // onto continuation lines (wrapText) rather than ellipsizing — the WHEN/
 // glyph/+CHANGE/OBJECT columns stay blank on those so the wrapped text
-// reads as a continuation of the same row, not a new one. Every returned
-// line carries the same background as the first (fillLine/the styles below
-// already thread `selected` through consistently), so a wrapped row's
-// background never looks patchy.
+// reads as a continuation of the same row, not a new one. A selected row
+// gets the app-wide "▎" bar (feedSelBarStyle) in its 2-cell left marker
+// slot, and every gap between columns — including that marker slot and the
+// trailing slack fillLine adds — is rendered through gap()/fillLine rather
+// than a bare literal, so the SelBg background reads as one solid fill with
+// no unstyled notches, the same "never a bare literal" rule
+// components.Table's renderRowV2 documents for its identical marker slot.
 func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) []string {
 	if e.Kind == kube.TimelineRollout {
 		return m.renderRolloutDivider(theme, e, selected, width)
@@ -671,20 +692,27 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	object := lipgloss.NewStyle().Foreground(theme.TextDim)
 	warnTone := lipgloss.NewStyle().Foreground(theme.Warn)
+	gapStyle := lipgloss.NewStyle()
 	if selected {
 		glyphStyle = glyphStyle.Background(theme.SelBg)
 		dim = dim.Background(theme.SelBg)
 		secondary = secondary.Background(theme.SelBg)
 		object = object.Background(theme.SelBg)
 		warnTone = warnTone.Background(theme.SelBg)
+		gapStyle = gapStyle.Background(theme.SelBg)
 	}
+	gap := func(n int) string { return gapStyle.Render(strings.Repeat(" ", n)) }
 
 	when := "–"
 	if !e.Time.IsZero() {
 		when = shortAge(m.fetchedAt.Sub(e.Time))
 	}
-	left := "  " + dim.Render(padRight(when, feedWhenW)) + "  " + glyphStyle.Render(glyph)
-	blankLeft := "  " + dim.Render(padRight("", feedWhenW)) + "  " + dim.Render(padRight("", feedGlyphW))
+	marker := gap(2)
+	if selected {
+		marker = feedSelBarStyle(theme).Render(tui.GlyphSelBar) + gap(1)
+	}
+	left := marker + dim.Render(padRight(when, feedWhenW)) + gap(2) + glyphStyle.Render(glyph)
+	blankLeft := gap(2) + dim.Render(padRight("", feedWhenW)) + gap(2) + dim.Render(padRight("", feedGlyphW))
 
 	whatW := m.feedWhatWidth(width)
 	whatLines := wrapText(entrySummary(e), whatW)
@@ -696,7 +724,7 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 			if i > 0 {
 				prefix = blankLeft
 			}
-			line := prefix + "  " + secondary.Render(wl)
+			line := prefix + gap(2) + secondary.Render(wl)
 			lines[i] = fillLine(line, width, selected, theme)
 		}
 		return lines
@@ -714,8 +742,8 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 		if i == 0 {
 			prefix, change, obj = left, padRight(changeText, feedChangeW), objText
 		}
-		line := prefix + "  " + changeStyle.Render(change) + "  " +
-			secondary.Render(wl) + "  " +
+		line := prefix + gap(2) + changeStyle.Render(change) + gap(2) +
+			secondary.Render(wl) + gap(2) +
 			object.Render(obj)
 		lines[i] = fillLine(line, width, selected, theme)
 	}
@@ -789,14 +817,18 @@ func (m Model) rolloutBodyText(e kube.TimelineEntry) string {
 // theme.SelBg) background every other feed row uses — rollouts are called
 // out by their bold purple ⇅/text and a full-width rule on the line right
 // below them, not by a permanent background tint of their own, so every row
-// in the feed reads on one consistent surface. Long bodies wrap onto
-// continuation lines (wrapText) the same way renderRow's WHAT column does,
-// rather than ellipsizing.
+// in the feed reads on one consistent surface. Selection uses the same
+// "▎" bar (feedSelBarStyle) + gap()-routed backgrounds renderRow uses, so
+// the bar color and the solidness of the selected background match every
+// other row in the feed (and every other list in the app). Long bodies
+// wrap onto continuation lines (wrapText) the same way renderRow's WHAT
+// column does, rather than ellipsizing.
 func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) []string {
 	bg := lipgloss.NewStyle()
 	if selected {
 		bg = bg.Background(theme.SelBg)
 	}
+	gap := func(n int) string { return bg.Render(strings.Repeat(" ", n)) }
 	when := bg.Foreground(theme.TextFaint)
 	glyphStyle := bg.Foreground(theme.Accent).Bold(true)
 	text := bg.Foreground(theme.TextPrimary)
@@ -805,15 +837,19 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 	if !e.Time.IsZero() {
 		whenText = shortAge(m.fetchedAt.Sub(e.Time))
 	}
+	marker := gap(2)
+	if selected {
+		marker = feedSelBarStyle(theme).Render(tui.GlyphSelBar) + gap(1)
+	}
 
 	bodyLines := wrapText(m.rolloutBodyText(e), m.feedWhatWidth(width))
 	lines := make([]string, 0, len(bodyLines)+1)
 	for i, bl := range bodyLines {
-		prefix := "  " + when.Render(padRight("", feedWhenW)) + "  " + bg.Render(padRight("", feedGlyphW))
+		prefix := gap(2) + when.Render(padRight("", feedWhenW)) + gap(2) + bg.Render(padRight("", feedGlyphW))
 		if i == 0 {
-			prefix = "  " + when.Render(padRight(whenText, feedWhenW)) + "  " + glyphStyle.Render(tui.GlyphRollout)
+			prefix = marker + when.Render(padRight(whenText, feedWhenW)) + gap(2) + glyphStyle.Render(tui.GlyphRollout)
 		}
-		line := prefix + "  " + text.Render(bl)
+		line := prefix + gap(2) + text.Render(bl)
 		lines = append(lines, fillLine(line, width, selected, theme))
 	}
 	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))
