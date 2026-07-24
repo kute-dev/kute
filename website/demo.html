@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Demo — kute, the incident console for Kubernetes</title>
-<meta name="description" content="Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, and the namespace palette's alt-tab and digit-recall gestures — both recorded straight from kute --demo.">
+<meta name="description" content="Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, the namespace palette's alt-tab and digit-recall gestures, and the goto palette's alias switch and jump-to-pod — all recorded straight from kute --demo.">
 <link rel="canonical" href="https://kute.dev/demo.html">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/styles.css">
@@ -56,7 +56,7 @@
   <div class="wrap">
     <span class="eyebrow">● see it in action</span>
     <h1>Watch it work,<br>not just read about it.</h1>
-    <p class="sub">Both recordings below are captured straight from <code style="white-space:nowrap">kute --demo</code>'s built-in fake cluster — the exact same one-command experience you get, unedited.</p>
+    <p class="sub">All three recordings below are captured straight from <code style="white-space:nowrap">kute --demo</code>'s built-in fake cluster — the exact same one-command experience you get, unedited.</p>
   </div>
 </header>
 
@@ -72,6 +72,21 @@
       <img src="assets/incident-walkthrough-all-namespaces.gif" alt="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-all-namespaces.tape</code></p>
+  </div>
+</section>
+
+<!-- ================= GOTO PALETTE ================= -->
+<section class="demo-page" id="goto-palette">
+  <div class="wrap">
+    <div class="demo-copy reveal">
+      <span class="eyebrow">goto palette</span>
+      <h2>One palette jumps to anything.</h2>
+      <p>Typing a kind's alias letter pins it to rank 1 — still requires <code>↵</code> to jump, never fires instantly. Bare <code>g</code> + <code>↵</code> alt-tabs between kinds the same way the namespace palette alt-tabs between namespaces. And the fuzzy corpus searches resource names too: typing a specific pod's name jumps straight to it, switching kind as a side effect.</p>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="assets/goto-palette-demo.gif" alt="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail" loading="lazy">
+    </div>
+    <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-goto-palette.tape</code></p>
   </div>
 </section>
 

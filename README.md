@@ -31,6 +31,7 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 - **Deliberate friction on destructive actions** — reversible verbs like cordon execute immediately; delete and rollout-restart are tiered, with inline y/N confirmation normally and a type-the-name modal when the context is explicitly tagged as production (via kubeconfig annotation, never guessed from a name). Drain and force-delete always require the modal.
 - **CRDs work without a configuration project** — kinds discovered from the API automatically get columns, status, and detail views. No plugins, no per-CRD setup.
 - **Alt-tab namespace/context switching** — the same palette that jumps to any resource kind also toggles between your last two namespaces or contexts with no typing, and recalls recent ones by number.
+- **One palette jumps to anything** — a kind's alias letter, a fuzzy kind name, or a specific resource by name all live in the same `g` palette; typing a pod's name jumps straight to it, switching kind and namespace as a side effect.
 
 <details>
 <summary>See it: namespace palette alt-tab + digit recall</summary>
@@ -38,6 +39,15 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 ![kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit](docs/assets/namespace-palette-demo.gif)
 
 *Recorded against `kute --demo` — regenerate with `scripts/record-demo.sh docs/assets/demo-namespace-palette.tape`.*
+
+</details>
+
+<details>
+<summary>See it: goto palette alias switch, alt-tab, and jump-to-pod</summary>
+
+![kute: the goto palette pinning Deployments to rank 1 with the "d" alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing "cache" to jump straight to the cache-0 pod and open its detail](docs/assets/goto-palette-demo.gif)
+
+*Recorded against `kute --demo` — regenerate with `scripts/record-demo.sh docs/assets/demo-goto-palette.tape`.*
 
 </details>
 
