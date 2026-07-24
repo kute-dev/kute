@@ -29,7 +29,7 @@ Set Framerate 24
 Set TypingSpeed 140ms
 
 Hide
-Type "kute --demo"
+Type "kute --demo --keycast"
 Enter
 Sleep 900ms
 Type "n"
