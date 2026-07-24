@@ -802,7 +802,23 @@ p { margin: 0; }
 .flagship-copy .deepdive-list { margin-top: 20px; }
 
 .flagship-dual { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.flagship-dual .term-caption { margin-top: 10px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
+.term-caption { margin-top: 10px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
+
+/* ---------- demo page: real recorded GIFs, framed like a product screenshot ---------- */
+.demo-page { padding: calc(var(--section-gap) - 24px) 0; border-top: 1px solid var(--border-subtle); }
+.demo-page:first-of-type { border-top: none; }
+.demo-copy { max-width: 720px; margin: 0 auto 32px; text-align: center; }
+.demo-copy h2 { margin-bottom: 12px; }
+.demo-copy p { color: var(--text-secondary); font-size: 16px; line-height: 1.6; }
+.demo-shot {
+  max-width: 980px;
+  margin: 0 auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-term);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+.demo-shot img { display: block; width: 100%; }
 
 .feature-more { margin: 48px auto 0; max-width: 880px; }
 .feature-more-label {

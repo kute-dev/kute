@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo — kute, the incident console for Kubernetes</title>
+<meta name="description" content="Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, and the namespace palette's alt-tab and digit-recall gestures — both recorded straight from kute --demo.">
+<link rel="canonical" href="https://kute.dev/demo.html">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/styles.css">
+<meta name="theme-color" content="#0b0b10" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f7fa" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="Demo — kute, the incident console for Kubernetes">
+<meta property="og:description" content="Watch kute in motion — recorded straight from kute --demo, no cluster needed.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://kute.dev/demo.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Demo — kute, the incident console for Kubernetes">
+<meta name="twitter:description" content="Watch kute in motion — recorded straight from kute --demo, no cluster needed.">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="mark">❯</span>kute</a>
+    <div class="nav-links">
+      <a href="index.html#problem">Problem</a>
+      <a href="index.html#approach">Approach</a>
+      <a href="index.html#principles">Principles</a>
+      <a href="index.html#surface">Surface</a>
+      <a href="index.html#trust">Trust</a>
+      <a href="features.html">Features</a>
+      <a href="demo.html">Demo</a>
+    </div>
+    <div class="nav-cta">
+      <button class="nav-star" data-theme-toggle aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        theme
+      </button>
+      <a class="nav-star" href="https://github.com/kute-tui/kute" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.79-.25.79-.55v-2.1c-3.2.7-3.87-1.36-3.87-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.58.24 2.75.12 3.04.74.81 1.18 1.84 1.18 3.1 0 4.41-2.69 5.39-5.25 5.67.41.36.78 1.07.78 2.15v3.19c0 .3.21.66.8.55A11.51 11.51 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z"/></svg>
+        Star
+      </a>
+      <a class="btn btn-primary btn-sm" href="index.html#install">Install</a>
+    </div>
+    <button class="nav-toggle" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+</nav>
+
+<!-- ================= PAGE HEADER ================= -->
+<header class="page-header">
+  <div class="hero-aurora" aria-hidden="true"></div>
+  <div class="hero-sunburst" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="eyebrow">● see it in action</span>
+    <h1>Watch it work,<br>not just read about it.</h1>
+    <p class="sub">Both recordings below are captured straight from <code style="white-space:nowrap">kute --demo</code>'s built-in fake cluster — the exact same one-command experience you get, unedited.</p>
+  </div>
+</header>
+
+<!-- ================= INCIDENT WALKTHROUGH ================= -->
+<section class="demo-page" id="incident">
+  <div class="wrap">
+    <div class="demo-copy reveal">
+      <span class="eyebrow">incident walkthrough</span>
+      <h2>From a clean namespace to root cause in one flow.</h2>
+      <p>A clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod. Pod detail and logs show the actual cause, delete asks for explicit confirmation, and the incident timeline correlates the crash to a rollout ten minutes earlier.</p>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="assets/incident-walkthrough-all-namespaces.gif" alt="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier" loading="lazy">
+    </div>
+    <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-all-namespaces.tape</code></p>
+  </div>
+</section>
+
+<!-- ================= NAMESPACE PALETTE ================= -->
+<section class="demo-page" id="namespace-palette">
+  <div class="wrap">
+    <div class="demo-copy reveal">
+      <span class="eyebrow">namespace palette</span>
+      <h2>Alt-tab between namespaces with no typing.</h2>
+      <p>The same palette that jumps to any resource kind also toggles between your last two namespaces — bare <code>n</code> + <code>↵</code> switches back and forth with nothing typed — and recalls older ones from the RECENT row by number as the digit assignments shift with what you've visited most recently.</p>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="assets/namespace-palette-demo.gif" alt="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit" loading="lazy">
+    </div>
+    <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-namespace-palette.tape</code></p>
+  </div>
+</section>
+
+<!-- ================= CLOSING CTA ================= -->
+<section class="install">
+  <div class="wrap">
+    <div class="install-panel reveal">
+      <span class="eyebrow">SINGLE BINARY</span>
+      <h2>Install kute.</h2>
+      <p>Explore the full Kute experience with <code style="white-space:nowrap">kute --demo</code>—a built-in fake cluster with no setup or configuration.</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | sh</div>
+        <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | sh" aria-label="Copy command">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <p class="code-or">Or install with Homebrew</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">brew install</span> kute-dev/tap/kute</div>
+        <button class="copy-btn" data-copy="brew install kute-dev/tap/kute" aria-label="Copy command">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <div class="install-ctas">
+        <a class="btn btn-ghost" href="https://github.com/kute-tui/kute" target="_blank" rel="noopener">View on GitHub</a>
+        <a class="btn btn-ghost" href="features.html">See what's inside</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-row">
+      <div>
+        <a href="index.html" class="footer-brand"><span class="mark">❯</span>kute</a>
+        <p class="footer-tag">Your cluster, in plain sight. Every pixel visible, navigation only when you ask.</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/kute-tui/kute" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/kute-tui/kute/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="features.html">Features</a>
+        <a href="demo.html">Demo</a>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <span>Apache License 2.0</span>
+      <span>Built with Bubble Tea &amp; Lip Gloss</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/script.js"></script>
+</body>
+</html>

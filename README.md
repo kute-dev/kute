@@ -30,6 +30,16 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 - **Every mutating action shows its command first** — exec, port-forward, scale, image/resource changes, label edits, rollout restarts, and Helm rollbacks all print the exact command that's about to run before it runs. Copyable documentation, not a black box.
 - **Deliberate friction on destructive actions** — reversible verbs like cordon execute immediately; delete and rollout-restart are tiered, with inline y/N confirmation normally and a type-the-name modal when the context is explicitly tagged as production (via kubeconfig annotation, never guessed from a name). Drain and force-delete always require the modal.
 - **CRDs work without a configuration project** — kinds discovered from the API automatically get columns, status, and detail views. No plugins, no per-CRD setup.
+- **Alt-tab namespace/context switching** — the same palette that jumps to any resource kind also toggles between your last two namespaces or contexts with no typing, and recalls recent ones by number.
+
+<details>
+<summary>See it: namespace palette alt-tab + digit recall</summary>
+
+![kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit](docs/assets/namespace-palette-demo.gif)
+
+*Recorded against `kute --demo` — regenerate with `scripts/record-demo.sh docs/assets/demo-namespace-palette.tape`.*
+
+</details>
 
 ## Resilience & safety
 

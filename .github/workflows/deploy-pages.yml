@@ -2,7 +2,10 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: ["main"]
-    paths: ["website/**"]
+    paths:
+      - "website/**"
+      - "docs/assets/incident-walkthrough-all-namespaces.gif"
+      - "docs/assets/namespace-palette-demo.gif"
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,10 +25,18 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Stage site with demo GIFs
+        # website/demo.html references these under assets/ — kept only in
+        # docs/assets/ (the recording pipeline's output) to avoid committing
+        # duplicate binary copies, and merged in here at deploy time instead.
+        run: |
+          mkdir -p _site/assets
+          cp -r website/. _site/
+          cp docs/assets/incident-walkthrough-all-namespaces.gif docs/assets/namespace-palette-demo.gif _site/assets/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: "./website"
+          path: "./_site"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
