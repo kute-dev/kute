@@ -109,7 +109,7 @@ func TestFilteredEntriesMatchesSubstringAndKeepsBoundaries(t *testing.T) {
 	model.buffer.Append(LogEntry{Message: "request failed: boom"})
 	model.buffer.Append(LogEntry{Boundary: true, Message: "container restarted · restart 1"})
 
-	model.filterQuery = "failed"
+	model.filterInput.SetValue("failed")
 	filtered := model.filteredEntries()
 	if len(filtered) != 2 {
 		t.Fatalf("filtered = %+v, want message match + boundary", filtered)

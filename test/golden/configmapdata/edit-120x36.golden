@@ -4,7 +4,7 @@
   deploy/aim-worker ↗ env · sts/aim-gateway ↗ volume                         pods don't reload configmaps on their own  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   KEY                         VALUE                                                                               SIZE  
-› FEATURE_X                   was on · debug▎                                                                      2 B  
+› FEATURE_X                   was on · debug                                                                       2 B  
   LOG_LEVEL                   info                                                                                 4 B  
 + a add key                                                                                                             
                                                                                                                         

@@ -282,7 +282,7 @@ func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
 	if m.adding == nil {
 		t.Fatal("expected a failed add to restore the add row")
 	}
-	if m.adding.key != "TOKEN" || m.adding.value != "secretvalue" {
+	if m.adding.keyInput.Value() != "TOKEN" || m.adding.valueInput.Value() != "secretvalue" {
 		t.Fatalf("expected the attempted key/value intact, got %+v", m.adding)
 	}
 	if m.lastError == "" {
@@ -327,13 +327,13 @@ func TestCtrlXTogglesMaskAndPlainXStaysTypeable(t *testing.T) {
 	if m.adding.masked {
 		t.Fatal("expected 'x' on the key buffer to type a literal character, not toggle mask")
 	}
-	if m.adding.key != "x" {
-		t.Fatalf("key = %q, want the literal 'x' inserted", m.adding.key)
+	if m.adding.keyInput.Value() != "x" {
+		t.Fatalf("key = %q, want the literal 'x' inserted", m.adding.keyInput.Value())
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
 	m = step(t, m, tea.KeyPressMsg{Text: "x"})
-	if m.adding.masked || m.adding.value != "x" {
-		t.Fatalf("expected 'x' on the value buffer to type literally too, got value=%q masked=%v", m.adding.value, m.adding.masked)
+	if m.adding.masked || m.adding.valueInput.Value() != "x" {
+		t.Fatalf("expected 'x' on the value buffer to type literally too, got value=%q masked=%v", m.adding.valueInput.Value(), m.adding.masked)
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+x"})
 	if !m.adding.masked {
@@ -350,8 +350,8 @@ func TestEnterOnExistingRowDecodesAndEditsNonProdAppliesImmediately(t *testing.T
 	if m.editing == nil {
 		t.Fatal("expected '↵' to open the decode-then-edit row")
 	}
-	if m.editing.value != "postgres://old" {
-		t.Fatalf("expected the buffer pre-filled with the real decoded value, got %q", m.editing.value)
+	if m.editing.valueInput.Value() != "postgres://old" {
+		t.Fatalf("expected the buffer pre-filled with the real decoded value, got %q", m.editing.valueInput.Value())
 	}
 	// Clear the pre-filled buffer and type a new value.
 	for range "postgres://old" {
@@ -441,7 +441,7 @@ func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
 	if m.editing == nil {
 		t.Fatal("expected a failed edit to restore the edit row")
 	}
-	if m.editing.value != "postgres://new" || m.editing.original != "postgres://old" {
+	if m.editing.valueInput.Value() != "postgres://new" || m.editing.original != "postgres://old" {
 		t.Fatalf("expected the attempted value intact against the real original, got %+v", m.editing)
 	}
 	if m.lastError == "" {

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
@@ -29,10 +30,10 @@ type scaleTarget struct {
 	kind      kube.ResourceKind
 	namespace string
 	name      string
-	// value is the typed-ahead replica count, pre-filled to current±1 by
+	// input is the typed-ahead replica count, pre-filled to current±1 by
 	// beginScale.
-	value string
-	// typed is true once a digit or backspace has touched value, so the
+	input textinput.Model
+	// typed is true once a digit or backspace has touched input, so the
 	// next digit appends instead of replacing the prefill (docs/design
 	// README.md §17b: "typing a number replaces it").
 	typed bool
@@ -114,9 +115,15 @@ func (m *Model) beginScale(delta int32) bool {
 		return false
 	}
 	value := max(currentReplicas(row)+delta, 0)
+	input := textinput.New()
+	input.SetStyles(tui.TextInputStyles(m.Theme()))
+	input.Prompt = ""
+	input.SetValue(strconv.Itoa(int(value)))
+	input.CursorEnd()
+	input.Focus()
 	m.pendingScale = &scaleTarget{
 		kind: m.kind, namespace: row.Namespace, name: row.Name,
-		value:   strconv.Itoa(int(value)),
+		input:   input,
 		hpaName: hpaManaging(m.lister, m.kind, row.Namespace, row.Name),
 	}
 	return true
@@ -132,25 +139,38 @@ func (m *Model) updateScaleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.pendingScale = nil
 		return m, m.commitScale(*t)
 	case "backspace":
-		if n := len(t.value); n > 0 {
-			t.value = t.value[:n-1]
-		}
 		t.typed = true
+		var cmd tea.Cmd
+		t.input, cmd = t.input.Update(msg)
+		return m, cmd
 	case "+":
-		t.value = strconv.Itoa(int(scaleValue(t.value) + 1))
+		t.input.SetValue(strconv.Itoa(int(scaleValue(t.input.Value()) + 1)))
+		t.input.CursorEnd()
 		t.typed = true
 	case "-":
-		t.value = strconv.Itoa(int(max(scaleValue(t.value)-1, 0)))
+		t.input.SetValue(strconv.Itoa(int(max(scaleValue(t.input.Value())-1, 0))))
+		t.input.CursorEnd()
 		t.typed = true
 	default:
-		if len(msg.Text) == 1 && msg.Text[0] >= '0' && msg.Text[0] <= '9' {
-			if t.typed {
-				t.value += msg.Text
-			} else {
-				t.value = msg.Text
+		if msg.Text != "" {
+			// Digits only, matching this field's replica-count semantics —
+			// any keypress whose Text carries a non-digit rune is dropped.
+			if len(msg.Text) != 1 || msg.Text[0] < '0' || msg.Text[0] > '9' {
+				return m, nil
+			}
+			if !t.typed {
+				// docs/design README.md §17b: "typing a number replaces it"
+				// — the first digit after opening replaces the whole
+				// pre-filled value rather than inserting into it.
+				t.input.SetValue(msg.Text)
+				t.input.CursorEnd()
 				t.typed = true
+				return m, nil
 			}
 		}
+		var cmd tea.Cmd
+		t.input, cmd = t.input.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -159,7 +179,7 @@ func (m *Model) updateScaleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // TierNone, so Begin runs it immediately with no separate confirm, the same
 // "reversible, no confirm" path RolloutRestart/Cordon already take.
 func (m *Model) commitScale(t scaleTarget) tea.Cmd {
-	replicas := scaleValue(t.value)
+	replicas := scaleValue(t.input.Value())
 	return m.actions.Begin(verbs.Scale.Tier, tui.TaskAction{
 		ID:    "scale-" + t.namespace + "/" + t.name,
 		Label: fmt.Sprintf("Scale %s to %d", t.name, replicas),
@@ -180,5 +200,5 @@ func (m *Model) commitScale(t scaleTarget) tea.Cmd {
 // value changes.
 func (m Model) scaleWillRunLine() string {
 	t := m.pendingScale
-	return "will run: " + kube.ScaleCommandString(t.kind, t.namespace, t.name, scaleValue(t.value))
+	return "will run: " + kube.ScaleCommandString(t.kind, t.namespace, t.name, scaleValue(t.input.Value()))
 }

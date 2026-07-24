@@ -1,6 +1,7 @@
 package forwardpicker
 
 import (
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -76,8 +77,15 @@ func (m Model) editing() bool {
 }
 
 func (m *Model) beginEdit(firstDigit string) {
-	m.rows[m.selected].editing = true
-	m.rows[m.selected].editBuf = firstDigit
+	row := &m.rows[m.selected]
+	row.editing = true
+	row.editInput = textinput.New()
+	row.editInput.SetStyles(tui.TextInputStyles(m.Theme()))
+	row.editInput.Prompt = ""
+	row.editInput.CharLimit = 5
+	row.editInput.SetValue(firstDigit)
+	row.editInput.CursorEnd()
+	row.editInput.Focus()
 }
 
 func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -85,18 +93,23 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		row.editing = false
-		row.editBuf = ""
+		row.editInput.Blur()
 	case "enter":
 		m.commitEdit()
 		return m, m.startSelected()
-	case "backspace":
-		if len(row.editBuf) > 0 {
-			row.editBuf = row.editBuf[:len(row.editBuf)-1]
-		}
 	default:
-		if len(msg.Text) == 1 && msg.Text[0] >= '0' && msg.Text[0] <= '9' && len(row.editBuf) < 5 {
-			row.editBuf += msg.Text
+		// Digits only, matching this field's port-number semantics — any
+		// keypress whose Text carries a non-digit rune (typed or pasted) is
+		// dropped rather than forwarded, everything else (backspace, left/
+		// right, Home/End, Ctrl-arrow word-jump) reaches the textinput.
+		for _, r := range msg.Text {
+			if r < '0' || r > '9' {
+				return m, nil
+			}
 		}
+		var cmd tea.Cmd
+		row.editInput, cmd = row.editInput.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -106,12 +119,12 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // and clears editing state.
 func (m *Model) commitEdit() {
 	row := &m.rows[m.selected]
-	if n := parsePort(row.editBuf); n > 0 {
+	if n := parsePort(row.editInput.Value()); n > 0 {
 		row.localPort = n
 		row.busyFrom = 0
 	}
 	row.editing = false
-	row.editBuf = ""
+	row.editInput.Blur()
 }
 
 func parsePort(s string) int {

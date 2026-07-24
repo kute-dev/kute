@@ -6,7 +6,7 @@
   API_TOKEN             ••••••••••••••••                                  38 B  
   DATABASE_URL          ••••••••••••••••                                  46 B  
   SMTP_USER             ••••••••••••••••                                  16 B  
-+ SMTP_PASSWORD         hunter2-staging▎ · visible while typing · ctr…     new  
++ SMTP_PASSWORD         hunter2-staging  · visible while typing · ctr…     new  
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
   will run kubectl patch secret/aim-secrets --type merge -p '{"stringData":{"SM…

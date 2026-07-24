@@ -16,7 +16,7 @@ func (m *Model) recomputeVisible() {
 		name = m.pendingSelect
 		m.pendingSelect = ""
 	}
-	m.visible = applyFilter(m.rows, m.filterQuery)
+	m.visible = applyFilter(m.rows, m.filterInput.Value())
 	m.rebuildDisplay()
 	m.restoreSelection(name)
 }

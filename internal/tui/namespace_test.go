@@ -3,6 +3,7 @@ package tui_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -533,14 +534,21 @@ func TestRootModelNamespaceSecondNTypesIntoQuery(t *testing.T) {
 	task := &screenTask{name: "browse"}
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.KeyPressMsg{Text: "n"})
-	updated, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
+	// The typed keystroke now routes through the palette's embedded
+	// textinput.Model, whose Update legitimately returns a non-nil cursor-
+	// blink tea.Cmd on every keystroke — cmd != nil is no longer a valid
+	// proxy for "no toggle happened" (see inputstyles.go), so the assertion
+	// below checks the actual query text and that the palette stayed open
+	// instead.
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
 	m := updated.(tui.Model)
 
-	if cmd != nil {
-		t.Fatalf("expected no toggle cmd — double-tap is gone, the second 'n' just filters")
-	}
 	if !m.PaletteOpen() {
 		t.Fatalf("expected the palette to stay open and the 'n' typed into the query")
+	}
+	view := ansi.Strip(m.View().Content)
+	if !regexp.MustCompile(`›\s*n\b`).MatchString(view) {
+		t.Fatalf("expected the second 'n' to be typed into the query box, not consumed as a toggle:\n%s", view)
 	}
 }
 

@@ -40,6 +40,8 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -77,57 +79,65 @@ type configMapKeyRow struct {
 // line keys show a folded summary ... e opens the buffer editor").
 func (r configMapKeyRow) multiline() bool { return strings.Contains(r.value, "\n") }
 
+// configMapInputStyles builds the add/edit buffers' textinput.Styles: bold
+// text on a SelBg background, matching this screen's own fill :=
+// ...SelBg used throughout view.go for both the add row and the in-place
+// edit row.
+func configMapInputStyles(theme tui.Theme) textinput.Styles {
+	styles := tui.TextInputStyles(theme)
+	styles.Focused.Text = styles.Focused.Text.Bold(true).Background(theme.SelBg)
+	styles.Blurred.Text = styles.Blurred.Text.Bold(true).Background(theme.SelBg)
+	return styles
+}
+
 // addKeyState is 27a's line-insert add row — nil on Model when not showing.
 // No masked field: unlike 27b's Secret add row, a ConfigMap value is never
 // sensitive, so there's nothing to hide while typing.
 type addKeyState struct {
-	key         string
-	keyCursor   int
-	value       string
-	valueCursor int
-	onValue     bool
+	keyInput   textinput.Model
+	valueInput textinput.Model
+	onValue    bool
 }
 
 // editKeyState is '↵' on an existing single-line row: an in-place rewrite,
 // value buffer pre-filled with the row's real (already-visible) value.
 // original is kept alongside for the "unchanged → no-op" check.
 type editKeyState struct {
-	key         string
-	original    string
-	value       string
-	valueCursor int
+	key        string
+	original   string
+	valueInput textinput.Model
 }
 
-func (e editKeyState) changed() bool { return e.value != e.original }
+func (e editKeyState) changed() bool { return e.valueInput.Value() != e.original }
 
 // multilineEditState is the "simpler solution" 27a's own plan substitutes
-// for 17a's shared buffer editor (which doesn't exist yet): a small,
-// self-contained textarea scoped to one key's value, opened by 'e' (or '↵')
-// on a row whose value contains a newline. lines holds the buffer split on
-// '\n'; row/col is the cursor position. ctrl+o applies (moved off ctrl+s,
-// which is the terminal's own XOFF flow-control key in some environments and
-// can read as a frozen app), ctrl+r applies and restarts every consumer, esc
-// cancels back to navigation without applying.
+// for 17a's shared buffer editor (which doesn't exist yet): a bubbles/v2
+// textarea.Model scoped to one key's value, opened by 'e' (or '↵') on a row
+// whose value contains a newline — its own soft-wrap/scrolling/line-number
+// gutter replace what used to be this package's hand-rolled lines/row/col +
+// scrollWindow. ctrl+o applies (moved off ctrl+s, which is the terminal's
+// own XOFF flow-control key in some environments and can read as a frozen
+// app), ctrl+r applies and restarts every consumer, esc cancels back to
+// navigation without applying.
 type multilineEditState struct {
 	key      string
-	original []string
-	lines    []string
-	row, col int
+	original string
+	textarea textarea.Model
 }
 
-func newMultilineEditState(key, value string) *multilineEditState {
-	lines := strings.Split(value, "\n")
-	orig := make([]string, len(lines))
-	copy(orig, lines)
-	row := len(lines) - 1
-	col := len([]rune(lines[row]))
-	return &multilineEditState{key: key, original: orig, lines: lines, row: row, col: col}
+func newMultilineEditState(key, value string, theme tui.Theme) *multilineEditState {
+	ta := textarea.New()
+	ta.Prompt = ""
+	ta.SetStyles(tui.TextAreaStyles(theme))
+	ta.SetValue(value)
+	ta.Focus()
+	return &multilineEditState{key: key, original: value, textarea: ta}
 }
 
-func (m multilineEditState) value() string { return strings.Join(m.lines, "\n") }
+func (m multilineEditState) value() string { return m.textarea.Value() }
 
 func (m multilineEditState) changed() bool {
-	return m.value() != strings.Join(m.original, "\n")
+	return m.value() != m.original
 }
 
 // configMapConsumer is one workload referencing the ConfigMap from its pod

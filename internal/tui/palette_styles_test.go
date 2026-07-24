@@ -30,8 +30,7 @@ func TestPaletteStylesMapsEveryFieldToItsDesignToken(t *testing.T) {
 			assertBg(t, "Body", s.Body, theme.BgPalette)
 			assertBg(t, "Input", s.Input, theme.BgInput)
 			for field, style := range map[string]lipgloss.Style{
-				"Prompt": s.Prompt, "Cursor": s.Cursor, "Placeholder": s.Placeholder,
-				"Query": s.Query, "Hint": s.Hint,
+				"Prompt": s.Prompt, "Placeholder": s.Placeholder, "Hint": s.Hint,
 			} {
 				assertBg(t, field, style, theme.BgInput)
 			}
@@ -47,9 +46,7 @@ func TestPaletteStylesMapsEveryFieldToItsDesignToken(t *testing.T) {
 			}
 
 			assertFg(t, "Prompt", s.Prompt, theme.Accent)
-			assertFg(t, "Cursor", s.Cursor, theme.Accent)
 			assertFg(t, "Placeholder", s.Placeholder, theme.TextFaint)
-			assertFg(t, "Query", s.Query, theme.Text)
 			assertFg(t, "Hint", s.Hint, theme.TextFaint)
 			assertFg(t, "Match", s.Match, theme.AccentHi)
 			assertFg(t, "Normal", s.Normal, theme.TextPrimary)

@@ -9,7 +9,7 @@
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ container   worker   metrics-sidecar                                                          ↹ switch container │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │ image › registry.aim.dev/aim-worker:3.4.2▎                                    editing tag · ctrl-u edit full ref │  
+  │ image › registry.aim.dev/aim-worker:3.4.2                                     editing tag · ctrl-u edit full ref │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │ TAG         SEEN           FROM                                                                                  │  
   │   3.4.3     40m ago        deploy/aim-worker · aim-prod                                                          │  

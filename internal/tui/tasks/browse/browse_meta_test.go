@@ -76,7 +76,7 @@ func TestBeginMetaBuildsSortedRowsFromCurrentValues(t *testing.T) {
 	if len(t2.labels) != 2 || t2.labels[0].key != "app" || t2.labels[1].key != "team" {
 		t.Fatalf("labels = %+v, want sorted [app team]", t2.labels)
 	}
-	if t2.labels[0].current != "aim-worker" || t2.labels[0].buffer != "aim-worker" {
+	if t2.labels[0].current != "aim-worker" || t2.labels[0].input.Value() != "aim-worker" {
 		t.Errorf("app row = %+v, want current/buffer aim-worker", t2.labels[0])
 	}
 	if len(t2.annotations) != 1 || t2.annotations[0].key != "kute.dev/owner" {
@@ -161,8 +161,8 @@ func TestNavigationModeIgnoresPrintableCharacters(t *testing.T) {
 	if cmd != nil || m2.pendingMeta == nil || m2.pendingMeta.adding != metaAddNone {
 		t.Error("'z' in navigation mode should be a plain no-op")
 	}
-	if m2.pendingMeta.labels[0].buffer != "platform" {
-		t.Errorf("typing in navigation mode changed the row buffer: %q", m2.pendingMeta.labels[0].buffer)
+	if m2.pendingMeta.labels[0].input.Value() != "platform" {
+		t.Errorf("typing in navigation mode changed the row buffer: %q", m2.pendingMeta.labels[0].input.Value())
 	}
 }
 
@@ -184,8 +184,8 @@ func TestAddHotkeyStartsAddModeAndShiftTabReturnsToKey(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "k"})
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
 	m = step(t, m, tea.KeyPressMsg{Text: "v"})
-	if m.pendingMeta.addKey != "k" || m.pendingMeta.addValue != "v" || !m.pendingMeta.addOnValue {
-		t.Fatalf("after tab, key/value = %q/%q, addOnValue = %v", m.pendingMeta.addKey, m.pendingMeta.addValue, m.pendingMeta.addOnValue)
+	if m.pendingMeta.addKeyInput.Value() != "k" || m.pendingMeta.addValueInput.Value() != "v" || !m.pendingMeta.addOnValue {
+		t.Fatalf("after tab, key/value = %q/%q, addOnValue = %v", m.pendingMeta.addKeyInput.Value(), m.pendingMeta.addValueInput.Value(), m.pendingMeta.addOnValue)
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "shift+tab"})
@@ -193,8 +193,8 @@ func TestAddHotkeyStartsAddModeAndShiftTabReturnsToKey(t *testing.T) {
 		t.Fatal("shift+tab should move focus back to the key buffer")
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
-	if m.pendingMeta.addKey != "k2" || m.pendingMeta.addValue != "v" {
-		t.Fatalf("after shift+tab, key/value = %q/%q, want k2/v", m.pendingMeta.addKey, m.pendingMeta.addValue)
+	if m.pendingMeta.addKeyInput.Value() != "k2" || m.pendingMeta.addValueInput.Value() != "v" {
+		t.Fatalf("after shift+tab, key/value = %q/%q, want k2/v", m.pendingMeta.addKeyInput.Value(), m.pendingMeta.addValueInput.Value())
 	}
 }
 
@@ -426,7 +426,7 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	if m.pendingMeta.editing {
 		t.Error("editing should end once input hands off to the confirm")
 	}
-	if got := m.pendingMeta.labels[0].buffer; got != "aim-worker2" {
+	if got := m.pendingMeta.labels[0].input.Value(); got != "aim-worker2" {
 		t.Errorf("buffer while confirming = %q, want aim-worker2", got)
 	}
 
@@ -434,7 +434,7 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	if m.pendingMeta == nil {
 		t.Fatal("cancelling should leave the panel open")
 	}
-	if got := m.pendingMeta.labels[0].buffer; got != "aim-worker" {
+	if got := m.pendingMeta.labels[0].input.Value(); got != "aim-worker" {
 		t.Errorf("buffer after cancel = %q, want reverted to aim-worker", got)
 	}
 	if len(mut.metaPatches) != 0 {
@@ -552,7 +552,7 @@ func TestEditingModeInsertsReservedLettersLiterally(t *testing.T) {
 	for _, r := range "aAy" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}
-	if got := m.pendingMeta.labels[0].buffer; got != "platformaAy" {
+	if got := m.pendingMeta.labels[0].input.Value(); got != "platformaAy" {
 		t.Errorf("buffer after typing aAy in editing mode = %q, want platformaAy", got)
 	}
 	if m.pendingMeta.adding != metaAddNone {
@@ -575,8 +575,8 @@ func TestEditingModeEscRevertsBufferAndReturnsToNavigation(t *testing.T) {
 	if m.pendingMeta.editing {
 		t.Error("esc while editing should leave editing mode")
 	}
-	if m.pendingMeta.labels[0].buffer != "platform" {
-		t.Errorf("buffer after esc = %q, want reverted to platform", m.pendingMeta.labels[0].buffer)
+	if m.pendingMeta.labels[0].input.Value() != "platform" {
+		t.Errorf("buffer after esc = %q, want reverted to platform", m.pendingMeta.labels[0].input.Value())
 	}
 }
 
@@ -624,7 +624,7 @@ func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
 	if !m.pendingMeta.editing {
 		t.Error("a failed edit should re-enter editing mode, not fall back to navigation")
 	}
-	if got := m.pendingMeta.labels[0].buffer; got != "stageg" {
+	if got := m.pendingMeta.labels[0].input.Value(); got != "stageg" {
 		t.Errorf("buffer after failure = %q, want the attempted stageg intact", got)
 	}
 	if got := m.pendingMeta.labels[0].current; got != "stage" {
@@ -662,8 +662,8 @@ func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
 	if m.pendingMeta.adding != metaAddLabel {
 		t.Error("a failed add should re-enter add-mode, not fall back to navigation")
 	}
-	if m.pendingMeta.addKey != "tier" || m.pendingMeta.addValue != "gold" {
-		t.Errorf("add buffers after failure = %q/%q, want tier/gold intact", m.pendingMeta.addKey, m.pendingMeta.addValue)
+	if m.pendingMeta.addKeyInput.Value() != "tier" || m.pendingMeta.addValueInput.Value() != "gold" {
+		t.Errorf("add buffers after failure = %q/%q, want tier/gold intact", m.pendingMeta.addKeyInput.Value(), m.pendingMeta.addValueInput.Value())
 	}
 	if len(m.pendingMeta.labels) != 1 {
 		t.Errorf("labels = %+v, want no new row added on failure", m.pendingMeta.labels)

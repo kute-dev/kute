@@ -19,6 +19,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -124,7 +125,7 @@ type Model struct {
 
 	window       time.Duration
 	filterActive bool
-	filterQuery  string
+	filterInput  textinput.Model
 
 	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
 	// header badge's real connection state (never a hardcoded "connected").

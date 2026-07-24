@@ -5,12 +5,24 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/kute-dev/kute/internal/tui/components"
 )
+
+// testInput builds a focused textinput.Model with value pre-filled — the
+// test-only equivalent of what NewInput + SetStyles + typing would produce,
+// since Model.Input replaced the plain Query string field.
+func testInput(value string) textinput.Model {
+	ti := textinput.New()
+	ti.SetValue(value)
+	ti.CursorEnd()
+	ti.Focus()
+	return ti
+}
 
 // testStyles builds a Styles value with distinct (if arbitrary) colors —
 // tests only assert on text content and layout, never on color. lipgloss
@@ -24,9 +36,7 @@ func testStyles() Styles {
 		Body:         lipgloss.NewStyle(),
 		Input:        lipgloss.NewStyle(),
 		Prompt:       lipgloss.NewStyle(),
-		Cursor:       lipgloss.NewStyle(),
 		Placeholder:  lipgloss.NewStyle(),
-		Query:        lipgloss.NewStyle(),
 		Hint:         lipgloss.NewStyle(),
 		Match:        lipgloss.NewStyle(),
 		Normal:       lipgloss.NewStyle(),
@@ -157,7 +167,7 @@ func TestRenderFuzzyShowsPromptQueryAndResults(t *testing.T) {
 	m := Model{
 		Scope:  ScopeGoto,
 		Prompt: "›",
-		Query:  "pod",
+		Input:  testInput("pod"),
 		Hint:   "jump anywhere",
 		Items: []Item{
 			{Label: "Pods", Detail: "kind · Workloads", Right: "12"},
@@ -215,7 +225,7 @@ func TestRenderPinnedAliasKeyRow(t *testing.T) {
 	t.Parallel()
 	m := Model{
 		Scope: ScopeGoto,
-		Query: "d",
+		Input: testInput("d"),
 		Items: []Item{
 			{Label: "Deployments", Right: "3", Matches: []int{0}, AliasMatch: true},
 			{Label: "DaemonSets", Right: "2"},
@@ -236,7 +246,7 @@ func TestRenderShowsAliasMatchOnPinnedRow(t *testing.T) {
 	t.Parallel()
 	m := Model{
 		Scope: ScopeGoto,
-		Query: "d",
+		Input: testInput("d"),
 		Items: []Item{
 			{Label: "Deployments", Right: "3", Matches: []int{0}, AliasMatch: true},
 			{Label: "DaemonSets", Right: "2"},
@@ -397,7 +407,7 @@ func TestRenderRecentNumGutterOnUnselectedRowOnly(t *testing.T) {
 func TestRenderInputRowTruncatesHintInsteadOfDropping(t *testing.T) {
 	t.Parallel()
 	m := Model{
-		Query: "",
+		Input: testInput(""),
 		Hint:  "a very long right-hand hint that will not fit in a narrow panel at all",
 		Items: []Item{{Label: "Pods"}},
 	}
@@ -441,7 +451,7 @@ func TestRenderRecentReservesSpaceForHint(t *testing.T) {
 
 func TestRenderNoMatchesFuzzy(t *testing.T) {
 	t.Parallel()
-	m := Model{Query: "zzz"}
+	m := Model{Input: testInput("zzz")}
 	got := m.Render(testStyles(), 120)
 	if !strings.Contains(got, "no matches") {
 		t.Fatalf("expected empty-state text, got:\n%s", got)

@@ -26,6 +26,7 @@ import (
 	"sort"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
 
@@ -35,6 +36,26 @@ import (
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
+
+// secretInputStyles builds the add/edit buffers' textinput.Styles: bold text
+// on a SelBg background, matching this screen's own fill := ...SelBg used
+// throughout view.go for both the add row and the decode-then-edit row.
+func secretInputStyles(theme tui.Theme) textinput.Styles {
+	styles := tui.TextInputStyles(theme)
+	styles.Focused.Text = styles.Focused.Text.Bold(true).Background(theme.SelBg)
+	styles.Blurred.Text = styles.Blurred.Text.Bold(true).Background(theme.SelBg)
+	return styles
+}
+
+// newSecretInput builds one of this screen's add/edit buffers — styled,
+// prompt-less (this screen renders its own "+ "/key= prefixes), unfocused
+// until the caller calls Focus() on whichever buffer has it.
+func newSecretInput(theme tui.Theme) textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = ""
+	ti.SetStyles(secretInputStyles(theme))
+	return ti
+}
 
 // Config are secretdata's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values).
@@ -63,12 +84,10 @@ type secretKeyRow struct {
 // (the default, mockup's own "visible while typing · ctrl-x re-mask") and a
 // fixed mask glyph once ctrl-x hides it.
 type addKeyState struct {
-	key         string
-	keyCursor   int
-	value       string
-	valueCursor int
-	onValue     bool
-	masked      bool
+	keyInput   textinput.Model
+	valueInput textinput.Model
+	onValue    bool
+	masked     bool
 }
 
 // editKeyState is '↵' on an existing row: a decode-then-edit flow, not a
@@ -79,14 +98,13 @@ type addKeyState struct {
 // editing has to actually show what's being changed. The key itself isn't
 // editable here — only 27b's own add flow types a key.
 type editKeyState struct {
-	key         string
-	original    string
-	value       string
-	valueCursor int
-	masked      bool
+	key        string
+	original   string
+	valueInput textinput.Model
+	masked     bool
 }
 
-func (e editKeyState) changed() bool { return e.value != e.original }
+func (e editKeyState) changed() bool { return e.valueInput.Value() != e.original }
 
 // secretPendingCommit remembers what an in-flight add/edit/remove is trying
 // to write, the same shape meta.go's metaPendingCommit uses — cleared once

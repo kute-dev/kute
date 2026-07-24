@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,26 +56,23 @@ type setImageTarget struct {
 	// repo is the active container's image repo, the dim prefix in
 	// non-fullRef mode.
 	repo string
-	// buffer is the type-ahead value: just the tag outside fullRef mode, the
-	// whole repo:tag ref once ctrl-u unlocks it.
-	buffer string
-	// cursor is a rune index into buffer (0..len(runes(buffer))) — ←/→ move
-	// it, backspace/typing act at it. Every wholesale buffer replacement
-	// (container switch, ctrl-u toggle, a history pick) resets it to the
-	// end, same as scale.go's prompt always leaving the cursor ready to
-	// append/backspace.
-	cursor     int
+	// input is the type-ahead value: just the tag outside fullRef mode, the
+	// whole repo:tag ref once ctrl-u unlocks it. Every wholesale buffer
+	// replacement (container switch, ctrl-u toggle, a history pick) parks
+	// the cursor at the end via setBuffer, same as scale.go's prompt always
+	// leaving the cursor ready to append/backspace.
+	input      textinput.Model
 	fullRef    bool
 	history    []imageHistoryEntry
 	historyIdx int // -1 = nothing picked/matched
 }
 
-// setBuffer replaces t.buffer wholesale and parks the cursor at its end —
-// the shared tail of every place buffer changes as a whole rather than by a
-// single keystroke (selectSetImageContainer, ctrl-u, a history pick).
+// setBuffer replaces t.input's value wholesale and parks the cursor at its
+// end — the shared tail of every place buffer changes as a whole rather than
+// by a single keystroke (selectSetImageContainer, ctrl-u, a history pick).
 func (t *setImageTarget) setBuffer(s string) {
-	t.buffer = s
-	t.cursor = len([]rune(s))
+	t.input.SetValue(s)
+	t.input.CursorEnd()
 }
 
 // activeContainer is the container the panel is currently editing.
@@ -85,9 +83,9 @@ func (t setImageTarget) activeContainer() kube.ContainerInfo {
 // composedImage is the full image ref the buffer currently represents.
 func (t setImageTarget) composedImage() string {
 	if t.fullRef {
-		return t.buffer
+		return t.input.Value()
 	}
-	return t.repo + ":" + t.buffer
+	return t.repo + ":" + t.input.Value()
 }
 
 // unchanged reports whether composedImage equals the active container's
@@ -129,10 +127,17 @@ func (m *Model) beginSetImage() bool {
 	if err == nil {
 		created = acc.GetCreationTimestamp().Time
 	}
+	input := textinput.New()
+	input.Prompt = ""
+	styles := tui.TextInputStyles(m.Theme())
+	styles.Focused.Text = styles.Focused.Text.Bold(true)
+	styles.Blurred.Text = styles.Blurred.Text.Bold(true)
+	input.SetStyles(styles)
+	input.Focus()
 	t := &setImageTarget{
 		kind: m.kind, namespace: row.Namespace, name: row.Name,
 		created: created, desiredCount: currentReplicas(row),
-		containers: containers,
+		containers: containers, input: input,
 	}
 	m.pendingSetImage = t
 	m.selectSetImageContainer(0)
@@ -171,13 +176,13 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+u":
 		if t.fullRef {
-			repo := imageRepo(t.buffer)
-			tag := tagOf(t.buffer)
+			repo := imageRepo(t.input.Value())
+			tag := tagOf(t.input.Value())
 			t.repo = repo
 			t.setBuffer(tag)
 			t.fullRef = false
 		} else {
-			t.setBuffer(t.repo + ":" + t.buffer)
+			t.setBuffer(t.repo + ":" + t.input.Value())
 			t.fullRef = true
 		}
 		t.historyIdx = matchHistoryIndex(t)
@@ -185,25 +190,14 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.stepSetImageHistory(-1)
 	case "down":
 		m.stepSetImageHistory(1)
-	case "left":
-		t.cursor = max(t.cursor-1, 0)
-	case "right":
-		t.cursor = min(t.cursor+1, len([]rune(t.buffer)))
-	case "backspace":
-		if t.cursor > 0 {
-			r := []rune(t.buffer)
-			t.buffer = string(r[:t.cursor-1]) + string(r[t.cursor:])
-			t.cursor--
-			t.historyIdx = matchHistoryIndex(t)
-		}
 	default:
-		if msg.Text != "" {
-			r := []rune(t.buffer)
-			ins := []rune(msg.Text)
-			t.buffer = string(r[:t.cursor]) + string(ins) + string(r[t.cursor:])
-			t.cursor += len(ins)
+		var cmd tea.Cmd
+		before := t.input.Value()
+		t.input, cmd = t.input.Update(msg)
+		if t.input.Value() != before {
 			t.historyIdx = matchHistoryIndex(t)
 		}
+		return m, cmd
 	}
 	return m, nil
 }
@@ -232,12 +226,12 @@ func (m *Model) stepSetImageHistory(delta int) {
 // that no longer names the same repo can't match any entry (history was
 // built against the original repo).
 func matchHistoryIndex(t *setImageTarget) int {
-	tag := t.buffer
+	tag := t.input.Value()
 	if t.fullRef {
-		if imageRepo(t.buffer) != t.repo {
+		if imageRepo(t.input.Value()) != t.repo {
 			return -1
 		}
-		tag = tagOf(t.buffer)
+		tag = tagOf(t.input.Value())
 	}
 	for i, e := range t.history {
 		if e.tag == tag {

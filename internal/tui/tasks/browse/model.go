@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
 
@@ -359,7 +360,7 @@ type Model struct {
 	sortAsc    bool
 
 	filterActive bool
-	filterQuery  string
+	filterInput  textinput.Model
 	// filterListFocused is true once a live filter has been committed
 	// (enter, unconditionally — see updateFilterKey) without clearing it:
 	// the query/chrome stay exactly as filterActive left them, but keys
@@ -488,6 +489,14 @@ func New(cfg Config) Model {
 		}
 	}
 
+	theme := tui.Dark()
+	if cfg.Session != nil {
+		theme = cfg.Session.Theme
+	}
+	filterInput := textinput.New()
+	filterInput.SetStyles(tui.TextInputStyles(theme))
+	filterInput.Prompt = ""
+
 	state := tui.TaskStateLoading
 	feedback := "Loading " + desc.Display + "..."
 	if cfg.Lister == nil {
@@ -534,6 +543,7 @@ func New(cfg Config) Model {
 		feedback:           feedback,
 		now:                time.Now(),
 		loadStartedAt:      time.Now(),
+		filterInput:        filterInput,
 	}
 }
 
@@ -697,7 +707,7 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	if m.session != nil {
 		m.session.Location.Namespace = namespace
 	}
-	query, active, focused := m.filterQuery, m.filterActive, m.filterListFocused
+	query, active, focused := m.filterInput.Value(), m.filterActive, m.filterListFocused
 	cmd := m.resetAndLoad()
 	m.filterActive = active
 	m.filterListFocused = focused
@@ -712,7 +722,8 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 // filterQuery mutation goes through this instead of assigning the field
 // directly.
 func (m *Model) setFilter(query string) {
-	m.filterQuery = query
+	m.filterInput.SetValue(query)
+	m.filterInput.CursorEnd()
 	if m.session != nil {
 		m.session.Location.Filter = query
 	}
@@ -821,6 +832,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.filterActive = false
 	m.filterListFocused = false
 	m.setFilter("")
+	m.filterInput.Blur()
 	m.nodeCount = 0
 	m.podMetrics = nil
 	m.nodeMetrics = nil

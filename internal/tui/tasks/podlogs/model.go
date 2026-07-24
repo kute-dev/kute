@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -132,7 +133,7 @@ type Model struct {
 	streamID     int
 
 	filterActive bool
-	filterQuery  string
+	filterInput  textinput.Model
 
 	rateGen        int
 	linesSinceTick int
@@ -242,10 +243,10 @@ func (m *Model) appendEntry(entry LogEntry) {
 // log text than fuzzy-matching short names). Boundary markers always pass,
 // so a restart's context isn't hidden by an unrelated filter.
 func (m Model) filteredEntries() []LogEntry {
-	if m.filterQuery == "" {
+	if m.filterInput.Value() == "" {
 		return m.buffer.Entries
 	}
-	query := strings.ToLower(m.filterQuery)
+	query := strings.ToLower(m.filterInput.Value())
 	out := make([]LogEntry, 0, len(m.buffer.Entries))
 	for _, e := range m.buffer.Entries {
 		if e.Boundary || strings.Contains(strings.ToLower(e.Message), query) {

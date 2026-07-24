@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 
@@ -43,9 +44,9 @@ type portRow struct {
 	// busyFrom is the originally pre-filled port when it turned out to be
 	// bound already and localPort got bumped past it (docs/design
 	// README.md §13a: "8080 busy → 18080") — 0 when no bump was needed.
-	busyFrom int
-	editing  bool
-	editBuf  string
+	busyFrom  int
+	editing   bool
+	editInput textinput.Model
 }
 
 type Model struct {

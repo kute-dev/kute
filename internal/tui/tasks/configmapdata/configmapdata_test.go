@@ -296,8 +296,8 @@ func TestEnterOnSingleLineRowEditsInPlaceNonProdAppliesImmediately(t *testing.T)
 	if m.editing == nil {
 		t.Fatal("expected '↵' to open the in-place edit row")
 	}
-	if m.editing.value != "info" {
-		t.Fatalf("expected the buffer pre-filled with the current value, got %q", m.editing.value)
+	if m.editing.valueInput.Value() != "info" {
+		t.Fatalf("expected the buffer pre-filled with the current value, got %q", m.editing.valueInput.Value())
 	}
 	for range "info" {
 		m = step(t, m, tea.KeyPressMsg{Text: "backspace"})
@@ -400,8 +400,8 @@ func TestFailedEditRestoresEditModeWithErrorAndAttemptedValue(t *testing.T) {
 	if m.editing == nil {
 		t.Fatal("expected a failed edit to restore the edit row")
 	}
-	if m.editing.value != "debug" {
-		t.Fatalf("expected the attempted value intact, got %q", m.editing.value)
+	if m.editing.valueInput.Value() != "debug" {
+		t.Fatalf("expected the attempted value intact, got %q", m.editing.valueInput.Value())
 	}
 	if m.lastError == "" {
 		t.Fatal("expected the server error to be surfaced")
@@ -433,8 +433,9 @@ func TestMultilineRowFoldsAndEOpensBufferEditor(t *testing.T) {
 	if m.multiline == nil {
 		t.Fatal("expected 'e' to open the buffer editor on a multi-line row")
 	}
-	if len(m.multiline.lines) != 3 || m.multiline.lines[1] != "  listen 80;" {
-		t.Fatalf("expected the buffer split into 3 lines, got %+v", m.multiline.lines)
+	lines := strings.Split(m.multiline.value(), "\n")
+	if len(lines) != 3 || lines[1] != "  listen 80;" {
+		t.Fatalf("expected the buffer split into 3 lines, got %+v", lines)
 	}
 }
 
@@ -477,8 +478,8 @@ func TestMultilineBufferEditorEnterInsertsNewline(t *testing.T) {
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "e"})
-	if m.multiline.row != 1 || m.multiline.col != 2 {
-		t.Fatalf("expected the cursor to start at the end of the last line (row=1 col=2), got row=%d col=%d", m.multiline.row, m.multiline.col)
+	if m.multiline.textarea.Line() != 1 || m.multiline.textarea.Column() != 2 {
+		t.Fatalf("expected the cursor to start at the end of the last line (row=1 col=2), got row=%d col=%d", m.multiline.textarea.Line(), m.multiline.textarea.Column())
 	}
 	// Move up onto "ab" (cursor col preserved, capped to line length), then
 	// left once so the split lands between 'a' and 'b'.
@@ -486,11 +487,12 @@ func TestMultilineBufferEditorEnterInsertsNewline(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "left"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
-	if len(m.multiline.lines) != 3 || m.multiline.lines[0] != "a" || m.multiline.lines[1] != "b" || m.multiline.lines[2] != "cd" {
-		t.Fatalf("expected enter to split \"ab\" into [a b cd], got %+v", m.multiline.lines)
+	lines := strings.Split(m.multiline.value(), "\n")
+	if len(lines) != 3 || lines[0] != "a" || lines[1] != "b" || lines[2] != "cd" {
+		t.Fatalf("expected enter to split \"ab\" into [a b cd], got %+v", lines)
 	}
-	if m.multiline.row != 1 || m.multiline.col != 0 {
-		t.Fatalf("expected cursor at row=1 col=0, got row=%d col=%d", m.multiline.row, m.multiline.col)
+	if m.multiline.textarea.Line() != 1 || m.multiline.textarea.Column() != 0 {
+		t.Fatalf("expected cursor at row=1 col=0, got row=%d col=%d", m.multiline.textarea.Line(), m.multiline.textarea.Column())
 	}
 }
 

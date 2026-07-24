@@ -124,8 +124,7 @@ func (m Model) portLine(theme tui.Theme, i int, row portRow) string {
 	local := m.localPortText(row)
 	localText := localStyle.Render(local)
 	if row.editing {
-		cursor := lipgloss.NewStyle().Foreground(theme.Accent).Render(tui.GlyphSelBar)
-		localText = lipgloss.NewStyle().Foreground(theme.Text).Render("localhost:"+row.editBuf) + cursor
+		localText = lipgloss.NewStyle().Foreground(theme.Text).Render("localhost:") + row.editInput.View()
 	}
 
 	left := marker + glyphStyle.Render("●") + " " + name

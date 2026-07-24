@@ -87,8 +87,8 @@ func TestFilterNarrowsAndEscClears(t *testing.T) {
 
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = *updated.(*Model)
-	if m.filterActive || m.filterQuery != "" {
-		t.Fatalf("esc should clear filter, got active=%v query=%q", m.filterActive, m.filterQuery)
+	if m.filterActive || m.filterInput.Value() != "" {
+		t.Fatalf("esc should clear filter, got active=%v query=%q", m.filterActive, m.filterInput.Value())
 	}
 	if len(m.visible) != 2 {
 		t.Fatalf("visible after clear = %d, want 2", len(m.visible))
@@ -109,8 +109,8 @@ func TestFilterTypingAcceptsJAndK(t *testing.T) {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = *updated.(*Model)
 	}
-	if m.filterQuery != "work" {
-		t.Fatalf("filterQuery = %q, want %q ('k' must type, not move selection)", m.filterQuery, "work")
+	if m.filterInput.Value() != "work" {
+		t.Fatalf("filterQuery = %q, want %q ('k' must type, not move selection)", m.filterInput.Value(), "work")
 	}
 	if len(m.visible) != 1 || m.visible[0].row.Name != "worker-2" {
 		t.Fatalf("filtered visible = %+v, want just worker-2", m.visible)
@@ -136,8 +136,8 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 	if m.selected != 1 {
 		t.Fatalf("selected = %d, want 1 after alt+j", m.selected)
 	}
-	if m.filterQuery != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterQuery)
+	if m.filterInput.Value() != "" {
+		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterInput.Value())
 	}
 
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
@@ -145,8 +145,8 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 	if m.selected != 0 {
 		t.Fatalf("selected = %d, want 0 after alt+k", m.selected)
 	}
-	if m.filterQuery != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterQuery)
+	if m.filterInput.Value() != "" {
+		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterInput.Value())
 	}
 }
 
@@ -179,8 +179,8 @@ func TestEnterCommitsFilterForKindWithNoDestination(t *testing.T) {
 	if !m.filterActive || !m.filterListFocused {
 		t.Fatalf("filterActive=%v filterListFocused=%v, want both true after enter", m.filterActive, m.filterListFocused)
 	}
-	if m.filterQuery != "app-" || len(m.visible) != 1 {
-		t.Fatalf("expected the filter to stay committed: query=%q visible=%+v", m.filterQuery, m.visible)
+	if m.filterInput.Value() != "app-" || len(m.visible) != 1 {
+		t.Fatalf("expected the filter to stay committed: query=%q visible=%+v", m.filterInput.Value(), m.visible)
 	}
 	if m.CapturingInput() {
 		t.Fatal("expected CapturingInput to release once the filter is list-focused")

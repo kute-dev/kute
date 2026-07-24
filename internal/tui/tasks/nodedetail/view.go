@@ -100,11 +100,10 @@ func (m Model) Strips(width int) []string {
 // system-wide interactions: "items never silently disappear").
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
+	left := accent.Render("/ ") + m.filterInput.View()
 
 	total, matched := len(m.allPods), len(m.pods)
 	right := dim.Render(fmt.Sprintf("%d/%d pods", matched, total))

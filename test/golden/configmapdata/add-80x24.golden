@@ -6,7 +6,7 @@
   KEY                   VALUE                                             SIZE  
   FEATURE_X             on                                                 2 B  
   LOG_LEVEL             info                                               4 B  
-+ RETRIES               3▎                                                 new  
++ RETRIES               3                                                  new  
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
   will run kubectl patch cm/aim-config --type merge -p '{"data":{"RETRIES":"3"}…

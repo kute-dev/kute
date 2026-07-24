@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -219,10 +220,8 @@ func (m Model) configMapRowLine(theme tui.Theme, idx int, width int) string {
 func (m Model) editValueCell(theme tui.Theme, fill lipgloss.Style) string {
 	e := m.editing
 	dim := fill.Foreground(theme.TextDim)
-	bold := fill.Foreground(theme.Text).Bold(true)
-	accent := fill.Foreground(theme.Accent)
 	was := dim.Render("was " + components.Truncate(oneLine(e.original), 20) + " · ")
-	return was + addBufferCell(e.value, e.valueCursor, true, bold, accent, dim)
+	return was + e.valueInput.View()
 }
 
 // pendingEditConfirm reports whether an existing key's PROD y/N is currently
@@ -257,35 +256,26 @@ func (m Model) pendingRemove() (bool, string) {
 func (m Model) addRowLine(theme tui.Theme, width int) string {
 	a := m.adding
 	fill := lipgloss.NewStyle().Background(theme.SelBg)
-	bold := fill.Foreground(theme.Text).Bold(true)
-	accent := fill.Foreground(theme.Accent)
 	dim := fill.Foreground(theme.TextDim)
 	good := fill.Foreground(theme.Good)
 
 	marker := good.Render("+") + fill.Render(" ")
-	key := addBufferCell(a.key, a.keyCursor, !a.onValue, bold, accent, dim)
-	value := addBufferCell(a.value, a.valueCursor, a.onValue, bold, accent, dim)
+	key := addBufferCell(a.keyInput, dim)
+	value := addBufferCell(a.valueInput, dim)
 	size := dim.Render("new")
 	return configMapRowColumns(marker, key, value, size, width, fill)
 }
 
-// addBufferCell renders one of the add/edit row's buffers, with the cursor
-// glyph only in the currently focused one — mirrors secretdata's own helper.
-func addBufferCell(buffer string, cursor int, focused bool, textStyle, accent, dim lipgloss.Style) string {
-	if !focused {
-		if buffer == "" {
-			return dim.Render("…")
-		}
-		return textStyle.Render(buffer)
+// addBufferCell renders one of the add/edit row's buffers via its own View
+// (which embeds the cursor only while Focused) — mirrors secretdata's own
+// secretBufferCell. The one case View() doesn't already cover is an
+// unfocused, empty buffer, which old code showed as a dim "…" rather than
+// nothing.
+func addBufferCell(input textinput.Model, dim lipgloss.Style) string {
+	if !input.Focused() && input.Value() == "" {
+		return dim.Render("…")
 	}
-	runes := []rune(buffer)
-	pos := min(max(cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
-	rendered := textStyle.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		rendered += textStyle.Render(post)
-	}
-	return rendered
+	return input.View()
 }
 
 // pendingAddRowLine renders the in-flight add row while its own PROD y/N
@@ -315,56 +305,36 @@ func (m Model) multilineBody(theme tui.Theme, width, height int) string {
 	willRun := m.willRunStrip(theme, width)
 	budget := height - 2 // header + blank line
 	if willRun != "" {
-		budget -= 2 // blank + strip line
+		// blank line + however many lines willRunStrip actually returned
+		// (the rule + the primary line, plus one more per restart
+		// consumer) — e.textarea.SetHeight below always renders exactly
+		// this many rows (padding short content with blank lines itself,
+		// unlike the hand-rolled loop it replaced, which only emitted as
+		// many rows as the buffer actually had), so under-reserving here
+		// pushes willRun past the bottom of the frame instead of just
+		// leaving trailing blank space.
+		budget -= 1 + strings.Count(willRun, "\n") + 1
 	}
 	budget = max(budget, 1)
 
-	lineNoStyle := lipgloss.NewStyle().Foreground(theme.TextGhost)
-	textStyle := lipgloss.NewStyle().Foreground(theme.Text)
-	accent := lipgloss.NewStyle().Foreground(theme.Accent)
+	// e.textarea owns its own soft-wrap/scrolling/line-number gutter now —
+	// no more hand-rolled scrollWindow or "… N of M lines shown" hint (the
+	// component doesn't expose an equivalent "currently scrolled" signal to
+	// reproduce it, and its own scrollbar-less viewport is the accepted
+	// trade for adopting a real, tested textarea). Sized to the buffer's
+	// actual line count (capped at budget so a long buffer still scrolls,
+	// not the full budget outright) — SetHeight(budget) would instead pad
+	// every short buffer out to budget with blank rows *inside* the
+	// textarea's own View(), pushing the will-run strip below them instead
+	// of directly under the real content.
+	e.textarea.SetWidth(width)
+	e.textarea.SetHeight(max(min(e.textarea.LineCount(), budget), 1))
 
-	start, end := scrollWindow(e.row, len(e.lines), budget)
-	var body []string
-	for i := start; i < end; i++ {
-		lineNo := lineNoStyle.Render(fmt.Sprintf("%4d  ", i+1))
-		var content string
-		if i == e.row {
-			runes := []rune(e.lines[i])
-			pos := min(max(e.col, 0), len(runes))
-			content = textStyle.Render(string(runes[:pos])) + accent.Render(tui.GlyphSelBar) + textStyle.Render(string(runes[pos:]))
-		} else {
-			content = textStyle.Render(e.lines[i])
-		}
-		body = append(body, lineNo+content)
-	}
-	if start > 0 || end < len(e.lines) {
-		body = append(body, hintStyle.Render(fmt.Sprintf("… %d of %d lines shown", end-start, len(e.lines))))
-	}
-
-	lines := append([]string{header, ""}, body...)
+	lines := []string{header, "", e.textarea.View()}
 	if willRun != "" {
 		lines = append(lines, "", willRun)
 	}
 	return components.Pad(strings.Join(lines, "\n"), width)
-}
-
-// scrollWindow picks a [start, end) line range of size at most budget,
-// keeping cursorRow inside it — centers the window on the cursor once the
-// buffer is taller than the budget.
-func scrollWindow(cursorRow, total, budget int) (int, int) {
-	if total <= budget {
-		return 0, total
-	}
-	start := cursorRow - budget/2
-	if start < 0 {
-		start = 0
-	}
-	end := start + budget
-	if end > total {
-		end = total
-		start = end - budget
-	}
-	return start, end
 }
 
 // willRunStrip is the screen's own "will run" line(s), styled like
@@ -394,11 +364,11 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 		primary = label.Render("will run") + fill.Render(" ") + cmd.Render(m.commandForKey(editConfirmKey))
 		restart = m.pendingCommit != nil && m.pendingCommit.restartConsumers
 	case m.adding != nil:
-		key := strings.TrimSpace(m.adding.key)
+		key := strings.TrimSpace(m.adding.keyInput.Value())
 		if key == "" {
 			primary = label.Render("will run") + fill.Render(" ") + cmd.Render("type a key to add")
 		} else {
-			primary = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.ConfigMapDataCommandString(m.namespace, m.name, key, m.adding.value, false))
+			primary = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.ConfigMapDataCommandString(m.namespace, m.name, key, m.adding.valueInput.Value(), false))
 		}
 	case m.pendingCommit != nil && !m.pendingCommit.remove && !m.pendingCommit.isEdit:
 		primary = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.ConfigMapDataCommandString(m.namespace, m.name, m.pendingCommit.key, m.pendingCommit.value, false))
@@ -407,7 +377,7 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 		if !m.editing.changed() {
 			primary = label.Render("will run") + fill.Render(" ") + cmd.Render("no changes — ↵ has nothing to apply")
 		} else {
-			primary = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.ConfigMapDataCommandString(m.namespace, m.name, m.editing.key, m.editing.value, false))
+			primary = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.ConfigMapDataCommandString(m.namespace, m.name, m.editing.key, m.editing.valueInput.Value(), false))
 		}
 	case m.multiline != nil:
 		if !m.multiline.changed() {
@@ -439,10 +409,11 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 // whole escaped buffer in the preview.
 func (m Model) commandForKey(key string) string {
 	if m.multiline != nil && m.multiline.key == key {
-		return fmt.Sprintf("kubectl patch cm/%s --type merge -p '{\"data\":{%q:\"<%d lines>\"}}' -n %s", m.name, key, len(m.multiline.lines), m.namespace)
+		lines := strings.Count(m.multiline.value(), "\n") + 1
+		return fmt.Sprintf("kubectl patch cm/%s --type merge -p '{\"data\":{%q:\"<%d lines>\"}}' -n %s", m.name, key, lines, m.namespace)
 	}
 	if m.editing != nil && m.editing.key == key {
-		return kube.ConfigMapDataCommandString(m.namespace, m.name, key, m.editing.value, false)
+		return kube.ConfigMapDataCommandString(m.namespace, m.name, key, m.editing.valueInput.Value(), false)
 	}
 	if m.pendingCommit != nil && m.pendingCommit.key == key {
 		if strings.Contains(m.pendingCommit.value, "\n") {

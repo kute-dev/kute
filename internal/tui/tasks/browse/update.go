@@ -72,6 +72,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// arrives with its own destination filter already chosen.
 			m.filterActive = true
 			m.setFilter(msg.Filter)
+			m.filterInput.Focus()
 		}
 		return m, cmd
 	case tui.GotoResourceMsg:
@@ -298,6 +299,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.filterActive = false
 			m.filterListFocused = false
 			m.setFilter("")
+			m.filterInput.Blur()
 			m.clearOrigin()
 			m.recomputeVisible()
 			return m, nil
@@ -326,6 +328,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
 			m.filterListFocused = false
+			m.filterInput.Focus()
 		}
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
@@ -600,14 +603,10 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.actions.Cancel()
 	case "enter":
 		return m, m.actions.Confirm()
-	case "backspace":
-		m.actions.Backspace()
 	case "ctrl+k":
 		m.actions.Escalate()
 	default:
-		if msg.Text != "" {
-			m.actions.TypeRune(msg.Text)
-		}
+		return m, m.actions.HandleTypeKey(msg)
 	}
 	return m, nil
 }
@@ -618,6 +617,7 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.filterActive = false
 		m.filterListFocused = false
 		m.setFilter("")
+		m.filterInput.Blur()
 		m.clearOrigin()
 		m.recomputeVisible()
 	case "enter":
@@ -629,12 +629,7 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// query; a second enter (now routed through updateKey, unfiltered)
 		// opens the selected row's destination same as it always has.
 		m.filterListFocused = true
-	case "backspace":
-		if len(m.filterQuery) > 0 {
-			m.setFilter(m.filterQuery[:len(m.filterQuery)-1])
-			m.clearOrigin()
-			m.recomputeVisible()
-		}
+		m.filterInput.Blur()
 	// Only the arrow keys (plus alt+j/alt+k, which never carry Text) move
 	// selection while filtering — plain "j"/"k" must stay typeable into the
 	// query (mvp-plan.md's "j/k ≡ ↑↓ everywhere" is for browse mode; a live
@@ -652,11 +647,22 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// 6a's "a", which stays typeable for exactly that reason).
 		m.markAllFiltered()
 	default:
-		if msg.Text != "" {
-			m.setFilter(m.filterQuery + msg.Text)
+		var cmd tea.Cmd
+		before := m.filterInput.Value()
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		if after := m.filterInput.Value(); after != before {
+			// Sync Session.Location.Filter directly rather than going
+			// through setFilter, which forces the cursor to the end —
+			// right for a wholesale replace (setFilter's other callers) but
+			// wrong here, where the edit that just landed may have been a
+			// mid-string insert/delete.
+			if m.session != nil {
+				m.session.Location.Filter = after
+			}
 			m.clearOrigin()
 			m.recomputeVisible()
 		}
+		return m, cmd
 	}
 	return m, nil
 }

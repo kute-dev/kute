@@ -175,11 +175,10 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 // own doing.
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
+	left := accent.Render("/ ") + m.filterInput.View()
 
 	total, matched := m.filterBaselineGroups, m.filterMatchedGroups
 	right := dim.Render(fmt.Sprintf("%d matched", matched))

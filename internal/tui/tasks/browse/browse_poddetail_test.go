@@ -80,8 +80,8 @@ func TestEnterCommitsFilterThenOpensPodDetail(t *testing.T) {
 	if openedName != "" {
 		t.Fatalf("expected the first enter to commit the filter, not open api-0's detail, got %q", openedName)
 	}
-	if !m.filterActive || !m.filterListFocused || m.filterQuery != "api" {
-		t.Fatalf("filterActive=%v filterListFocused=%v filterQuery=%q, want all committed", m.filterActive, m.filterListFocused, m.filterQuery)
+	if !m.filterActive || !m.filterListFocused || m.filterInput.Value() != "api" {
+		t.Fatalf("filterActive=%v filterListFocused=%v filterQuery=%q, want all committed", m.filterActive, m.filterListFocused, m.filterInput.Value())
 	}
 
 	final, _ := m.Update(tea.KeyPressMsg{Text: "enter"})

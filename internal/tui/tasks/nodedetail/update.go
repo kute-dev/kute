@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -113,7 +114,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 // list has no grouping.
 func (m *Model) recomputeFiltered() {
 	name := m.selectedPodName()
-	m.pods = applyPodFilter(m.allPods, m.filterQuery)
+	m.pods = applyPodFilter(m.allPods, m.filterInput.Value())
 	m.restoreSelection(name)
 }
 
@@ -163,6 +164,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
+			m.filterInput = textinput.New()
+			m.filterInput.SetStyles(tui.TextInputStyles(m.Theme()))
+			m.filterInput.Prompt = ""
+			m.filterInput.Focus()
 		}
 	case "enter":
 		if task, cmd, ok := m.openSelectedPod(); ok {
@@ -227,22 +232,18 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.filterActive = false
-		m.filterQuery = ""
+		m.filterInput.SetValue("")
+		m.filterInput.Blur()
 		m.recomputeFiltered()
-	case "backspace":
-		if len(m.filterQuery) > 0 {
-			m.filterQuery = m.filterQuery[:len(m.filterQuery)-1]
-			m.recomputeFiltered()
-		}
 	case "up":
 		m.moveSelection(-1)
 	case "down":
 		m.moveSelection(1)
 	default:
-		if msg.Text != "" {
-			m.filterQuery += msg.Text
-			m.recomputeFiltered()
-		}
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		m.recomputeFiltered()
+		return m, cmd
 	}
 	return m, nil
 }

@@ -215,14 +215,10 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.actions.Cancel()
 	case "enter":
 		return m, m.actions.Confirm()
-	case "backspace":
-		m.actions.Backspace()
 	case "ctrl+k":
 		m.actions.Escalate()
 	default:
-		if msg.Text != "" {
-			m.actions.TypeRune(msg.Text)
-		}
+		return m, m.actions.HandleTypeKey(msg)
 	}
 	return m, nil
 }

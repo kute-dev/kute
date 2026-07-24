@@ -1,7 +1,7 @@
 browse                                                                                                                  
                                                                                                                         
                    ╭────────────────────────────────────────────────────────────────────────────────╮                   
-                   │ ns › type to filter namespaces▎                microk8s-cluster · 3 namespaces │                   
+                   │ ns › type to filter namespaces                 microk8s-cluster · 3 namespaces │                   
                    │────────────────────────────────────────────────────────────────────────────────│                   
                    │   NAMESPACE                                        PODS   HEALTH         CPU   │                   
                    │────────────────────────────────────────────────────────────────────────────────│                   

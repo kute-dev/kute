@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,17 +53,15 @@ type resourceField struct {
 	// at all (current == "" in that case).
 	hasCurrent bool
 	current    string
-	// buffer is the editable NEW value, pre-filled to current. Editing is
+	// input is the editable NEW value, pre-filled to current. Editing is
 	// cursor-anchored throughout — no replace-on-first-keystroke gate — the
 	// same continuous text-field model setImageTarget's own buffer uses
 	// (scale.go's pendingScale is the one bespoke gate with a different,
-	// whole-value-replaces model, since it has no cursor at all).
-	buffer string
-	// cursor is a rune index into buffer (0..len(runes(buffer))) — ←/→ move
-	// it, backspace/typing act at it. Every wholesale buffer replacement
-	// (prefill, nudge, unset) resets it to the end via setBuffer — the same
-	// convention setImageTarget.setBuffer uses.
-	cursor int
+	// whole-value-replaces model, since it has no cursor at all). Every
+	// wholesale buffer replacement (prefill, nudge, unset) parks the cursor
+	// at the end via setBuffer — the same convention setImageTarget.setBuffer
+	// uses.
+	input textinput.Model
 	// unset is true after 'u' — an explicit removal (buffer is "" in this
 	// state too, but unset renders "— none" in yellow rather than blocking
 	// as an empty/invalid quantity would).
@@ -80,16 +79,16 @@ func (f resourceField) changed() bool {
 	if f.unset {
 		return f.hasCurrent // unsetting an already-unset field is a no-op
 	}
-	return f.buffer != f.current
+	return f.input.Value() != f.current
 }
 
-// setBuffer replaces f.buffer wholesale and parks the cursor at its end —
-// the shared tail of every place buffer changes as a whole rather than by a
-// single keystroke (prefill, nudge, unset), the same convention
+// setBuffer replaces f.input's value wholesale and parks the cursor at its
+// end — the shared tail of every place buffer changes as a whole rather than
+// by a single keystroke (prefill, nudge, unset), the same convention
 // setImageTarget.setBuffer uses.
 func (f *resourceField) setBuffer(s string) {
-	f.buffer = s
-	f.cursor = len([]rune(s))
+	f.input.SetValue(s)
+	f.input.CursorEnd()
 }
 
 // setResourcesTarget is the state pendingSetResources gates on while 25a's
@@ -155,7 +154,7 @@ func (t setResourcesTarget) edits() kube.ResourceEdits {
 		if !f.changed() {
 			return
 		}
-		v := f.buffer
+		v := f.input.Value()
 		if f.unset {
 			v = ""
 		}
@@ -228,8 +227,9 @@ func (m *Model) selectSetResourcesContainer(idx int) {
 	t := m.pendingSetResources
 	t.containerIdx = idx
 	c := t.activeContainer()
-	t.fields = newResourceFields(workloadContainerResources(t.obj, c.Name))
+	t.fields = newResourceFields(workloadContainerResources(t.obj, c.Name), m.Theme())
 	t.fieldIdx = 0
+	t.fields[0].input.Focus()
 	t.cpuMilli, t.memBytes, t.usageOK = containerUsage(t.containerMetrics, t.pods, c.Name)
 	t.oomAge, t.oomOK = containerOOMFact(t.pods, c.Name)
 	t.dryRunErr = ""
@@ -237,7 +237,8 @@ func (m *Model) selectSetResourcesContainer(idx int) {
 
 // newResourceFields builds the four FIELD rows from container's own raw
 // resources.requests/limits.
-func newResourceFields(res corev1.ResourceRequirements) [4]resourceField {
+func newResourceFields(res corev1.ResourceRequirements, theme tui.Theme) [4]resourceField {
+	styles := tui.TextInputStyles(theme)
 	field := func(label string, isCPU, isLimit bool, list corev1.ResourceList, name corev1.ResourceName) resourceField {
 		q, has := list[name]
 		current := ""
@@ -245,6 +246,9 @@ func newResourceFields(res corev1.ResourceRequirements) [4]resourceField {
 			current = q.String()
 		}
 		f := resourceField{label: label, isCPU: isCPU, isLimit: isLimit, hasCurrent: has, current: current}
+		f.input = textinput.New()
+		f.input.Prompt = ""
+		f.input.SetStyles(styles)
 		f.setBuffer(current)
 		return f
 	}
@@ -420,9 +424,17 @@ func (m *Model) updateSetResourcesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		}
 		return m, m.commitSetResources(*t)
 	case "up":
-		t.fieldIdx = max(t.fieldIdx-1, 0)
+		if t.fieldIdx > 0 {
+			t.fields[t.fieldIdx].input.Blur()
+			t.fieldIdx--
+			t.fields[t.fieldIdx].input.Focus()
+		}
 	case "down":
-		t.fieldIdx = min(t.fieldIdx+1, len(t.fields)-1)
+		if t.fieldIdx < len(t.fields)-1 {
+			t.fields[t.fieldIdx].input.Blur()
+			t.fieldIdx++
+			t.fields[t.fieldIdx].input.Focus()
+		}
 	case "tab":
 		if len(t.containers) > 1 {
 			m.selectSetResourcesContainer((t.containerIdx + 1) % len(t.containers))
@@ -435,29 +447,15 @@ func (m *Model) updateSetResourcesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		f := &t.fields[t.fieldIdx]
 		f.setBuffer("")
 		f.unset, f.invalid = true, false
-	case "left":
-		f := &t.fields[t.fieldIdx]
-		f.cursor = max(f.cursor-1, 0)
-	case "right":
-		f := &t.fields[t.fieldIdx]
-		f.cursor = min(f.cursor+1, len([]rune(f.buffer)))
-	case "backspace":
-		f := &t.fields[t.fieldIdx]
-		if f.cursor > 0 {
-			r := []rune(f.buffer)
-			f.buffer = string(r[:f.cursor-1]) + string(r[f.cursor:])
-			f.cursor--
-		}
-		f.unset, f.invalid = false, false
 	default:
-		if msg.Text != "" {
-			f := &t.fields[t.fieldIdx]
-			r := []rune(f.buffer)
-			ins := []rune(msg.Text)
-			f.buffer = string(r[:f.cursor]) + string(ins) + string(r[f.cursor:])
-			f.cursor += len(ins)
+		f := &t.fields[t.fieldIdx]
+		before := f.input.Value()
+		var cmd tea.Cmd
+		f.input, cmd = f.input.Update(msg)
+		if f.input.Value() != before {
 			f.unset, f.invalid = false, false
 		}
+		return m, cmd
 	}
 	return m, nil
 }
@@ -473,7 +471,7 @@ func (t *setResourcesTarget) nudge(sign int) {
 		stepStr = memNudgeStep
 	}
 	step := resource.MustParse(stepStr)
-	cur, err := resource.ParseQuantity(f.buffer)
+	cur, err := resource.ParseQuantity(f.input.Value())
 	if err != nil {
 		cur = resource.MustParse("0")
 	}
@@ -502,7 +500,7 @@ func (t *setResourcesTarget) validate() bool {
 		if f.unset || !f.changed() {
 			continue
 		}
-		if _, err := resource.ParseQuantity(f.buffer); err != nil {
+		if _, err := resource.ParseQuantity(f.input.Value()); err != nil {
 			f.invalid = true
 			ok = false
 		}
@@ -530,11 +528,11 @@ func (t *setResourcesTarget) checkRequestLimit(isCPU bool) bool {
 		reqIdx, limIdx = fieldMEMRequest, fieldMEMLimit
 	}
 	req, limit := &t.fields[reqIdx], &t.fields[limIdx]
-	if req.unset || limit.unset || req.buffer == "" || limit.buffer == "" {
+	if req.unset || limit.unset || req.input.Value() == "" || limit.input.Value() == "" {
 		return true
 	}
-	reqQ, err1 := resource.ParseQuantity(req.buffer)
-	limQ, err2 := resource.ParseQuantity(limit.buffer)
+	reqQ, err1 := resource.ParseQuantity(req.input.Value())
+	limQ, err2 := resource.ParseQuantity(limit.input.Value())
 	if err1 != nil || err2 != nil {
 		return true // already flagged invalid by validate()'s parse pass
 	}

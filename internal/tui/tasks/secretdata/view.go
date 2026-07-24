@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -204,7 +205,7 @@ func (m Model) editValueCell(theme tui.Theme) string {
 	if e.masked {
 		return bold.Render(secretDataMaskGlyph) + accent.Render(tui.GlyphSelBar) + dim.Render(" · masked · ctrl-x reveal")
 	}
-	return addBufferCell(e.value, e.valueCursor, true, bold, accent, dim) + dim.Render(" · visible while editing · ctrl-x re-mask")
+	return e.valueInput.View() + dim.Render(" · visible while editing · ctrl-x re-mask")
 }
 
 // pendingEditConfirm reports whether an existing key's PROD y/N is
@@ -233,7 +234,7 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 	good := lipgloss.NewStyle().Foreground(theme.Good).Background(theme.SelBg)
 
 	marker := good.Render("+") + fill.Render(" ")
-	key := addBufferCell(a.key, a.keyCursor, !a.onValue, bold, accent, dim)
+	key := secretBufferCell(a.keyInput, dim)
 
 	var valueCell string
 	var note string
@@ -245,31 +246,23 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 		}
 		note = dim.Render(" · masked · ctrl-x reveal")
 	default:
-		valueCell = addBufferCell(a.value, a.valueCursor, a.onValue, bold, accent, dim)
+		valueCell = secretBufferCell(a.valueInput, dim)
 		note = dim.Render(" · visible while typing · ctrl-x re-mask")
 	}
 	size := dim.Render("new")
 	return secretRowColumns(marker, key, valueCell+note, size, width, fill)
 }
 
-// addBufferCell renders one of the add row's two buffers, with the cursor
-// glyph only in the currently focused one — mirrors meta.go's
-// metaAddBufferCell.
-func addBufferCell(buffer string, cursor int, focused bool, textStyle, accent, dim lipgloss.Style) string {
-	if !focused {
-		if buffer == "" {
-			return dim.Render("…")
-		}
-		return textStyle.Render(buffer)
+// secretBufferCell renders one of the add row's two buffers via its own
+// View (which embeds the cursor only while Focused) — mirrors meta.go's
+// metaAddBufferCell. The one case View() doesn't already cover is an
+// unfocused, empty buffer, which old code showed as a dim "…" rather than
+// nothing.
+func secretBufferCell(input textinput.Model, dim lipgloss.Style) string {
+	if !input.Focused() && input.Value() == "" {
+		return dim.Render("…")
 	}
-	runes := []rune(buffer)
-	pos := min(max(cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
-	rendered := textStyle.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		rendered += textStyle.Render(post)
-	}
-	return rendered
+	return input.View()
 }
 
 // pendingAddRowLine renders the in-flight add row while its own PROD y/N
@@ -336,7 +329,7 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 		left += cmd.Render(kube.SecretDataCommandString(m.namespace, m.name, editConfirmKey, false))
 		right = rightNote.Render("value masked here · sent verbatim")
 	case m.adding != nil:
-		key := strings.TrimSpace(m.adding.key)
+		key := strings.TrimSpace(m.adding.keyInput.Value())
 		if key == "" {
 			left += cmd.Render("type a key to add")
 		} else {

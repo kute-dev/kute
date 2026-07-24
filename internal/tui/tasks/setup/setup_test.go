@@ -255,20 +255,20 @@ func TestEditKubeconfigPathFlow(t *testing.T) {
 		Reconnect:      func(p string) tea.Cmd { gotPath = p; return nil },
 	})
 	m = step(t, m, tea.KeyPressMsg{Text: "k"})
-	if !m.editing || m.pathInput != "/old/path" {
-		t.Fatalf("editing=%v pathInput=%q after 'k', want editing with the current path prefilled", m.editing, m.pathInput)
+	if !m.editing || m.pathInput.Value() != "/old/path" {
+		t.Fatalf("editing=%v pathInput=%q after 'k', want editing with the current path prefilled", m.editing, m.pathInput.Value())
 	}
 	if !m.CapturingInput() {
 		t.Fatalf("CapturingInput() = false while editing")
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "", Code: tea.KeyBackspace})
-	if m.pathInput != "/old/pat" {
-		t.Fatalf("pathInput after backspace = %q, want %q", m.pathInput, "/old/pat")
+	if m.pathInput.Value() != "/old/pat" {
+		t.Fatalf("pathInput after backspace = %q, want %q", m.pathInput.Value(), "/old/pat")
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "h2"})
-	if m.pathInput != "/old/path2" {
-		t.Fatalf("pathInput after typing = %q, want %q", m.pathInput, "/old/path2")
+	if m.pathInput.Value() != "/old/path2" {
+		t.Fatalf("pathInput after typing = %q, want %q", m.pathInput.Value(), "/old/path2")
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})

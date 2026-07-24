@@ -6,9 +6,23 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 )
+
+// typeRune feeds a single character into the type-ahead buffer via
+// HandleTypeKey — the test-only equivalent of the old TypeRune(string(r)).
+func typeRune(c *Controller, r rune) {
+	c.HandleTypeKey(tea.KeyPressMsg{Text: string(r)})
+}
+
+// backspace feeds a backspace keypress into the type-ahead buffer via
+// HandleTypeKey — the test-only equivalent of the old Backspace().
+func backspace(c *Controller) {
+	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyBackspace})
+}
 
 type fakeMutator struct {
 	deleted              []string
@@ -373,7 +387,7 @@ func TestBeginTierModalRequiresNameMatch(t *testing.T) {
 		t.Fatal("expected Confirm to no-op before any name is typed")
 	}
 	for _, r := range "ap" {
-		c.TypeRune(string(r))
+		typeRune(&c, r)
 	}
 	if cmd := c.Confirm(); cmd != nil {
 		t.Fatal("expected Confirm to no-op on a partial match")
@@ -382,7 +396,7 @@ func TestBeginTierModalRequiresNameMatch(t *testing.T) {
 		t.Fatalf("expected no delete yet, got %v", mut.deleted)
 	}
 
-	c.TypeRune("i")
+	typeRune(&c, 'i')
 	if !c.NameMatches() {
 		t.Fatalf("expected NameMatches once typed == %q, got typed %q", "api", c.TypedName())
 	}
@@ -403,12 +417,12 @@ func TestBackspaceRemovesLastRuneUnicodeSafe(t *testing.T) {
 	c := New(&fakeMutator{})
 	c.Begin(TierModal, deleteAction())
 	for _, r := range "aβc" {
-		c.TypeRune(string(r))
+		typeRune(&c, r)
 	}
 	if c.TypedName() != "aβc" {
 		t.Fatalf("TypedName() = %q, want %q", c.TypedName(), "aβc")
 	}
-	c.Backspace()
+	backspace(&c)
 	if c.TypedName() != "aβ" {
 		t.Fatalf("TypedName() after Backspace = %q, want %q", c.TypedName(), "aβ")
 	}
@@ -417,7 +431,7 @@ func TestBackspaceRemovesLastRuneUnicodeSafe(t *testing.T) {
 func TestTypeRuneAndBackspaceNoOpOutsideTierModal(t *testing.T) {
 	c := New(&fakeMutator{})
 	c.Begin(TierInline, deleteAction())
-	c.TypeRune("x")
+	typeRune(&c, 'x')
 	if c.TypedName() != "" {
 		t.Fatalf("expected TypeRune to no-op for TierInline, got %q", c.TypedName())
 	}
@@ -429,7 +443,7 @@ func TestEscalateSwitchesToForceDelete(t *testing.T) {
 	c.Begin(TierModal, deleteAction())
 	c.Escalate()
 	for _, r := range "api" {
-		c.TypeRune(string(r))
+		typeRune(&c, r)
 	}
 	cmd := c.Confirm()
 	if cmd == nil {

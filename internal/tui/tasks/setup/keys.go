@@ -1,6 +1,11 @@
 package setup
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/tui"
+)
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.editing {
@@ -48,7 +53,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) startEdit() {
 	m.editing = true
-	m.pathInput = m.kubeconfigPath
+	m.pathInput = textinput.New()
+	m.pathInput.SetStyles(tui.TextInputStyles(m.Theme()))
+	m.pathInput.Prompt = ""
+	m.pathInput.SetValue(m.kubeconfigPath)
+	m.pathInput.CursorEnd()
+	m.pathInput.Focus()
 	m.retryErr = nil
 }
 
@@ -73,17 +83,15 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.editing = false
+		m.pathInput.Blur()
 	case "enter":
 		m.editing = false
-		return m.doRetry(m.pathInput)
-	case "backspace":
-		if len(m.pathInput) > 0 {
-			m.pathInput = m.pathInput[:len(m.pathInput)-1]
-		}
+		m.pathInput.Blur()
+		return m.doRetry(m.pathInput.Value())
 	default:
-		if msg.Text != "" {
-			m.pathInput += msg.Text
-		}
+		var cmd tea.Cmd
+		m.pathInput, cmd = m.pathInput.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }

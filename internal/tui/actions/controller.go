@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -36,10 +37,16 @@ type Controller struct {
 	mutator kube.Mutator
 	pending *tui.TaskAction
 	tier    Tier
-	// typedName is the type-ahead buffer for a TierModal confirmation
+	// typedInput is the type-ahead buffer for a TierModal confirmation
 	// (mvp-plan.md §8b: "type the name to confirm") — unused for
-	// TierNone/TierInline.
-	typedName string
+	// TierNone/TierInline. Never rendered via its own View(): components/
+	// confirmmodal.go's TypeNameModal/TypeCountModal keep their own bespoke
+	// "N/M" progress-counter + "█" cursor look (a deliberate departure from
+	// every other text-entry site in the app), reading TypedName() as a
+	// plain string — this exists purely so HandleTypeKey gets Home/End/
+	// Ctrl-arrow word-jump/paste for free instead of hand-rolling a 10th
+	// implementation.
+	typedInput textinput.Model
 	// forceArmed stages a pending TierInline Pod "delete" for force-delete
 	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
 	// escalation: staged rather than immediate, so a second "y" is still
@@ -88,12 +95,12 @@ func (c Controller) Pending() *tui.TaskAction { return c.pending }
 func (c Controller) Tier() Tier { return c.tier }
 
 // TypedName is the current type-ahead buffer for a TierModal confirmation.
-func (c Controller) TypedName() string { return c.typedName }
+func (c Controller) TypedName() string { return c.typedInput.Value() }
 
 // NameMatches reports whether TypedName equals the pending action's target
 // resource name — the gate Confirm() checks for TierModal.
 func (c Controller) NameMatches() bool {
-	return c.pending != nil && c.typedName == c.pending.Scope.ResourceName
+	return c.pending != nil && c.typedInput.Value() == c.pending.Scope.ResourceName
 }
 
 // Begin starts an action at the given tier (resolved by the caller via
@@ -117,7 +124,8 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 	}
 	c.pending = &action
 	c.tier = tier
-	c.typedName = ""
+	c.typedInput = textinput.New()
+	c.typedInput.Focus()
 	c.forceArmed = false
 	c.message = ""
 	if tier == TierNone {
@@ -167,29 +175,24 @@ func (c *Controller) Cancel() {
 	}
 	c.pending = nil
 	c.tier = TierNone
-	c.typedName = ""
+	c.typedInput.Blur()
 	c.forceArmed = false
 	c.state = tui.TaskStateCancelled
 	c.message = "Cancelled " + label + "."
 }
 
-// TypeRune appends s to the type-ahead buffer — a no-op unless a TierModal
-// confirmation is active.
-func (c *Controller) TypeRune(s string) {
-	if c.state != tui.TaskStateConfirming || c.tier != TierModal || s == "" {
-		return
+// HandleTypeKey routes a keypress that isn't one of the type-the-name
+// modal's own chords (esc/enter/ctrl-k, intercepted by the caller first)
+// into the type-ahead buffer — this is where Home/End, Ctrl-arrow word-jump,
+// and paste all arrive for free. A no-op unless a TierModal confirmation is
+// active.
+func (c *Controller) HandleTypeKey(msg tea.KeyPressMsg) tea.Cmd {
+	if c.state != tui.TaskStateConfirming || c.tier != TierModal {
+		return nil
 	}
-	c.typedName += s
-}
-
-// Backspace removes the last rune from the type-ahead buffer (rune-safe) —
-// a no-op unless a TierModal confirmation is active.
-func (c *Controller) Backspace() {
-	if c.state != tui.TaskStateConfirming || c.tier != TierModal || c.typedName == "" {
-		return
-	}
-	r := []rune(c.typedName)
-	c.typedName = string(r[:len(r)-1])
+	var cmd tea.Cmd
+	c.typedInput, cmd = c.typedInput.Update(msg)
+	return cmd
 }
 
 // Escalate switches a pending Pod "delete" into a "force-delete" (ctrl-k,
@@ -238,7 +241,7 @@ func (c Controller) ForceArmed() bool { return c.forceArmed }
 func (c *Controller) HandleResult(msg ResultMsg) {
 	c.pending = nil
 	c.tier = TierNone
-	c.typedName = ""
+	c.typedInput.Blur()
 	c.forceArmed = false
 	if msg.Err != nil {
 		c.state = tui.TaskStateError

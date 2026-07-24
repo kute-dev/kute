@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -30,9 +31,13 @@ import (
 type bulkDeleteTarget struct {
 	rows []resources.Row
 	tier actions.Tier
-	// typedCount is the type-ahead buffer for a TierModal (PROD) confirm —
-	// unused for TierInline.
-	typedCount string
+	// typedInput is the type-ahead buffer for a TierModal (PROD) confirm —
+	// unused for TierInline. Never rendered via its own View() (components.
+	// TypeCountModal keeps its own bespoke progress-counter look, reading
+	// Value() as a plain string), so it's never styled — this exists purely
+	// for HandleTypeKey-equivalent input handling (Home/End/paste), matching
+	// actions.Controller's own typedInput.
+	typedInput textinput.Model
 }
 
 // bulkDeleteResultMsg carries a bulk delete's outcome — count is how many
@@ -139,7 +144,12 @@ func (m *Model) beginBulkDelete() tea.Cmd {
 	if m.kind == kube.KindCustomResourceDefinition {
 		tier = actions.TierModal
 	}
-	m.pendingBulkDelete = &bulkDeleteTarget{rows: rows, tier: tier}
+	input := textinput.New()
+	input.Prompt = ""
+	if tier == actions.TierModal {
+		input.Focus()
+	}
+	m.pendingBulkDelete = &bulkDeleteTarget{rows: rows, tier: tier, typedInput: input}
 	return nil
 }
 
@@ -154,17 +164,22 @@ func (m *Model) updateBulkDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.pendingBulkDelete = nil
 		case "enter":
-			if t.typedCount == strconv.Itoa(len(t.rows)) {
+			if t.typedInput.Value() == strconv.Itoa(len(t.rows)) {
 				return m, m.executeBulkDelete()
 			}
-		case "backspace":
-			if n := len(t.typedCount); n > 0 {
-				t.typedCount = t.typedCount[:n-1]
-			}
 		default:
-			if msg.Text != "" {
-				t.typedCount += msg.Text
+			// Digits only, matching this field's count semantics — any
+			// keypress whose Text carries a non-digit rune is dropped,
+			// everything else (backspace, left/right, Home/End) reaches
+			// the textinput.
+			for _, r := range msg.Text {
+				if r < '0' || r > '9' {
+					return m, nil
+				}
 			}
+			var cmd tea.Cmd
+			t.typedInput, cmd = t.typedInput.Update(msg)
+			return m, cmd
 		}
 		return m, nil
 	}
@@ -297,5 +312,5 @@ func (m Model) bulkDeleteConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedCount, m.isProd(), styles, width, height)
+	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedInput.Value(), m.isProd(), styles, width, height)
 }

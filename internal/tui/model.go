@@ -294,6 +294,16 @@ func (m Model) Conn() kube.ConnState { return m.conn }
 // built with one.
 func (m Model) Session() *Session { return m.session }
 
+// Theme returns the session's active theme, or Dark() before a session is
+// wired in (openPalette and friends need a Theme to style their embedded
+// textinput.Model even in that window).
+func (m Model) Theme() Theme {
+	if m.session == nil {
+		return Dark()
+	}
+	return m.session.Theme
+}
+
 // PaletteOpen reports whether the jump/namespace/context palette overlay is
 // showing.
 func (m Model) PaletteOpen() bool { return m.palette != nil }
@@ -660,18 +670,13 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		m.movePalette(-1)
 	case "down", "alt+j":
 		m.movePalette(1)
-	case "backspace":
-		if q := m.palette.Query; len(q) > 0 {
-			m.palette.Query = q[:len(q)-1]
-		}
-		m.palette.Browse = m.palette.Scope == palette.ScopeGoto && m.palette.Query == ""
-		m.refreshPalette()
 	case "tab":
 		// docs/design README.md §2b: "tab complete" fills the query in to the
 		// highlighted result's own label, so a fuzzy match can be completed
 		// then narrowed further rather than jumped to immediately.
 		if item, ok := m.palette.Selected(); ok {
-			m.palette.Query = item.Label
+			m.palette.Input.SetValue(item.Label)
+			m.palette.Input.CursorEnd()
 			m.palette.Browse = false
 			m.refreshPalette()
 		}
@@ -679,7 +684,7 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		if m.palette.Scope == palette.ScopeContext {
 			return true, m, m.startContextProbe()
 		}
-		m.typeChar(msg)
+		return true, m, m.typeKey(msg)
 	case "ctrl+p":
 		// Ctrl-chorded (like browse's ctrl-d/ctrl-k) rather than a bare
 		// letter: "p"/"P" are common leading characters for prod context
@@ -688,7 +693,7 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 			m.toggleSelectedContextProd()
 		}
 	default:
-		m.typeChar(msg)
+		return true, m, m.typeKey(msg)
 	}
 	return true, m, nil
 }
@@ -828,15 +833,16 @@ func recentPickHint() []palette.FooterSpan {
 	}
 }
 
-// typeChar appends a printable keypress to the palette's query and
-// re-filters, common to every scope's default typing path.
-func (m *Model) typeChar(msg tea.KeyPressMsg) {
-	if msg.Text == "" {
-		return
-	}
-	m.palette.Query += msg.Text
-	m.palette.Browse = false
+// typeKey routes a keypress that isn't one of the palette's own chords into
+// the query box's textinput.Model — this is where backspace, left/right,
+// Home/End, Ctrl-arrow word-jump, and paste all arrive for free — then
+// re-filters, common to every scope's default typing/editing path.
+func (m *Model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
+	var cmd tea.Cmd
+	m.palette.Input, cmd = m.palette.Input.Update(msg)
+	m.palette.Browse = m.palette.Scope == palette.ScopeGoto && m.palette.Query() == ""
 	m.refreshPalette()
+	return cmd
 }
 
 // startContextProbe (re)opens the 7a context palette's data: reset probe
@@ -914,10 +920,10 @@ func (m *Model) refreshGotoPalette() {
 		m.palette.Footer = gotoAliasFooter()
 		return
 	}
-	m.palette.Items = gotoFuzzyItems(m.session, m.palette.Query)
+	m.palette.Items = gotoFuzzyItems(m.session, m.palette.Query())
 	m.palette.Recent = gotoRecentKindLabels(m.session)
 	m.palette.Sel = 0
-	m.palette.Footer = gotoAliasMatchFooter(m.session, m.palette.Query)
+	m.palette.Footer = gotoAliasMatchFooter(m.session, m.palette.Query())
 }
 
 // refreshNamespacePalette re-filters the 6a namespace list against the
@@ -934,7 +940,7 @@ func (m *Model) refreshNamespacePalette() {
 	// digitRecentTarget's lookup with no further filtering.
 	recents := namespaceRecentLabels(m.session)
 	capped := capNamespaceItems(m.namespaceItemsCache)
-	if target, ok := digitRecentTarget(m.palette.Query, recents); ok {
+	if target, ok := digitRecentTarget(m.palette.Query(), recents); ok {
 		if i, ok := namespaceItemIndex(capped, target); ok {
 			m.palette.Items = capped
 			m.palette.Recent = recents
@@ -944,12 +950,12 @@ func (m *Model) refreshNamespacePalette() {
 		}
 	}
 	items := m.namespaceItemsCache
-	if m.palette.Query != "" {
-		items = palette.Filter(items, m.palette.Query)
+	if m.palette.Query() != "" {
+		items = palette.Filter(items, m.palette.Query())
 	}
 	m.palette.Items = capNamespaceItems(items)
 	m.palette.Recent = recents
-	m.palette.Sel = namespacePaletteSelection(m.session, m.palette.Items, m.palette.Query)
+	m.palette.Sel = namespacePaletteSelection(m.session, m.palette.Items, m.palette.Query())
 	m.palette.Footer = nil
 }
 
@@ -963,7 +969,7 @@ func (m *Model) refreshContextPalette() {
 	// digitRecentTarget's lookup with no further filtering.
 	recents := contextRecentLabels(m.session)
 	items := contextItems(m.session, m.probes)
-	if target, ok := digitRecentTarget(m.palette.Query, recents); ok {
+	if target, ok := digitRecentTarget(m.palette.Query(), recents); ok {
 		if i, ok := contextItemIndex(items, target); ok {
 			m.palette.Items = items
 			m.palette.Recent = recents
@@ -972,12 +978,12 @@ func (m *Model) refreshContextPalette() {
 			return
 		}
 	}
-	if m.palette.Query != "" {
-		items = palette.Filter(items, m.palette.Query)
+	if m.palette.Query() != "" {
+		items = palette.Filter(items, m.palette.Query())
 	}
 	m.palette.Items = items
 	m.palette.Recent = recents
-	m.palette.Sel = contextPaletteSelection(m.session, m.palette.Items, m.palette.Query)
+	m.palette.Sel = contextPaletteSelection(m.session, m.palette.Items, m.palette.Query())
 	m.palette.Footer = nil
 }
 
@@ -988,6 +994,8 @@ func (m *Model) refreshContextPalette() {
 // namespace/context are always plain lists.
 func (m *Model) openPalette(scope palette.Scope, prompt, hint string) tea.Cmd {
 	m.palette = &palette.Model{Scope: scope, Prompt: prompt, Hint: hint, Browse: scope == palette.ScopeGoto}
+	m.palette.Input = palette.NewInput(scope)
+	m.palette.Input.SetStyles(TextInputStyles(m.Theme()))
 	m.mode = ModeGoto
 	if m.session == nil {
 		return nil

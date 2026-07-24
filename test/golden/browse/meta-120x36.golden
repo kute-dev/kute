@@ -10,7 +10,7 @@
   │ LABELS · 4                                                                                                       │  
   │   app=                                aim-worker                                     ⚠ selector · svc/aim-worker │  
   │   app.kubernetes.io/managed-by=       Helm                                        helm-owned · edits survive un… │  
-  │ › env=                                was stage · staging▎                                         editing value │  
+  │ › env=                                was stage · staging                                          editing value │  
   │   team=                               platform                                                                   │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │ ANNOTATIONS · 2                                                                                                  │  

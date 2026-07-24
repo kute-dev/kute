@@ -267,8 +267,8 @@ func TestFilterOpensNarrowsAndClears(t *testing.T) {
 	}
 
 	press(&model, "esc")
-	if model.filterActive || model.filterQuery != "" {
-		t.Fatalf("esc did not clear filter: active=%v query=%q", model.filterActive, model.filterQuery)
+	if model.filterActive || model.filterInput.Value() != "" {
+		t.Fatalf("esc did not clear filter: active=%v query=%q", model.filterActive, model.filterInput.Value())
 	}
 }
 
@@ -303,8 +303,8 @@ func TestFilterAltJKHLMoveWithoutTyping(t *testing.T) {
 	if model.view.HorizontalOffset != 0 {
 		t.Fatalf("HorizontalOffset = %d, want 0 after alt+h", model.view.HorizontalOffset)
 	}
-	if model.filterQuery != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j/k/h/l must move, not type)", model.filterQuery)
+	if model.filterInput.Value() != "" {
+		t.Fatalf("filterQuery = %q, want empty (alt+j/k/h/l must move, not type)", model.filterInput.Value())
 	}
 }
 

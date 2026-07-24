@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -80,7 +81,7 @@ func (m *Model) recomputeVisible() {
 			continue
 		}
 		baseline++
-		if m.filterQuery != "" && !matchesQuery(g, m.filterQuery) {
+		if m.filterInput.Value() != "" && !matchesQuery(g, m.filterInput.Value()) {
 			continue
 		}
 		matched++
@@ -175,6 +176,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
 			m.filterActive = true
+			m.filterInput = textinput.New()
+			m.filterInput.SetStyles(tui.TextInputStyles(m.Theme()))
+			m.filterInput.Prompt = ""
+			m.filterInput.Focus()
 		}
 	}
 	return m, nil
@@ -184,13 +189,9 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.filterActive = false
-		m.filterQuery = ""
+		m.filterInput.SetValue("")
+		m.filterInput.Blur()
 		m.recomputeVisible()
-	case "backspace":
-		if len(m.filterQuery) > 0 {
-			m.filterQuery = m.filterQuery[:len(m.filterQuery)-1]
-			m.recomputeVisible()
-		}
 	// alt+j/alt+k are safe alongside plain j/k typing into the query — an
 	// alt-modified key never carries Text (charm.land/bubbletea/v2's
 	// Key.Text doc), so it can't reach the default typing branch below.
@@ -199,10 +200,10 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "alt+j":
 		m.moveSelection(1)
 	default:
-		if msg.Text != "" {
-			m.filterQuery += msg.Text
-			m.recomputeVisible()
-		}
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		m.recomputeVisible()
+		return m, cmd
 	}
 	return m, nil
 }

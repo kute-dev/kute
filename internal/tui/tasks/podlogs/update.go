@@ -3,6 +3,7 @@ package podlogs
 import (
 	"fmt"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -131,6 +132,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		if m.stream != StreamLoading {
 			m.filterActive = true
+			m.filterInput = textinput.New()
+			m.filterInput.SetStyles(tui.TextInputStyles(m.Theme()))
+			m.filterInput.Prompt = ""
+			m.filterInput.Focus()
 		}
 	case "ctrl+y":
 		return m, tea.SetClipboard(m.visibleViewText())
@@ -143,13 +148,9 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.filterActive = false
-		m.filterQuery = ""
+		m.filterInput.SetValue("")
+		m.filterInput.Blur()
 		m.clampOffsets()
-	case "backspace":
-		if len(m.filterQuery) > 0 {
-			m.filterQuery = m.filterQuery[:len(m.filterQuery)-1]
-			m.clampOffsets()
-		}
 	// alt+j/k/h/l are safe alongside plain j/k/h/l typing into the query —
 	// an alt-modified key never carries Text (charm.land/bubbletea/v2's
 	// Key.Text doc), so it can't reach the default typing branch below.
@@ -162,10 +163,10 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "alt+l":
 		m.moveHorizontal(1)
 	default:
-		if msg.Text != "" {
-			m.filterQuery += msg.Text
-			m.clampOffsets()
-		}
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		m.clampOffsets()
+		return m, cmd
 	}
 	return m, nil
 }

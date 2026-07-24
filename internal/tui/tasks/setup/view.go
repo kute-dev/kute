@@ -450,12 +450,8 @@ func (m Model) editLines(theme tui.Theme, bw int) []string {
 		return nil
 	}
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("kubeconfig path")
-	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
-	cursor := accent.Render(tui.GlyphSelBar)
 	hint := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("enter connect · esc cancel")
-	line := text.Render(m.pathInput) + cursor
-	return []string{label, "  " + line, components.Pad(hint, bw)}
+	return []string{label, "  " + m.pathInput.View(), components.Pad(hint, bw)}
 }
 
 // retryCountdown formats 4c's "retrying in Ns · attempt N" from conn as of

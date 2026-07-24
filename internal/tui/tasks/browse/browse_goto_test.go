@@ -141,8 +141,8 @@ func TestGotoKindMsgWithFilterAppliesQuery(t *testing.T) {
 	if m.kind != kube.KindConfigMap {
 		t.Fatalf("kind = %s, want ConfigMap", m.kind)
 	}
-	if !m.filterActive || m.filterQuery != "app-" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want true/\"app-\"", m.filterActive, m.filterQuery)
+	if !m.filterActive || m.filterInput.Value() != "app-" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want true/\"app-\"", m.filterActive, m.filterInput.Value())
 	}
 	view := plain(m.Render())
 	if !strings.Contains(view, "app-config") {
@@ -201,8 +201,8 @@ func TestSwitchNamespaceMsgPreservesFilter(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = step(t, m, tea.KeyPressMsg{Code: 'a', Text: "api"})
-	if !m.filterActive || m.filterQuery != "api" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterQuery)
+	if !m.filterActive || m.filterInput.Value() != "api" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterInput.Value())
 	}
 
 	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: "nva-stage"})
@@ -210,8 +210,8 @@ func TestSwitchNamespaceMsgPreservesFilter(t *testing.T) {
 	if m.namespace != "nva-stage" {
 		t.Fatalf("namespace = %q, want nva-stage", m.namespace)
 	}
-	if !m.filterActive || m.filterQuery != "api" {
-		t.Fatalf("filter not preserved across namespace switch: filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterQuery)
+	if !m.filterActive || m.filterInput.Value() != "api" {
+		t.Fatalf("filter not preserved across namespace switch: filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterInput.Value())
 	}
 	if len(m.visible) != 1 || m.visible[0].row.Name != "api-2" {
 		t.Fatalf("visible = %+v, want just api-2 (nva-stage's row matching 'api')", m.visible)
@@ -236,14 +236,14 @@ func TestSwitchContextMsgRestoresMsgFilter(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = step(t, m, tea.KeyPressMsg{Code: 'a', Text: "api"})
-	if !m.filterActive || m.filterQuery != "api" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterQuery)
+	if !m.filterActive || m.filterInput.Value() != "api" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want active with 'api'", m.filterActive, m.filterInput.Value())
 	}
 
 	m = step(t, m, tui.SwitchContextMsg{Context: "other-cluster", Namespace: "default", Kind: kube.KindPod})
 
-	if m.filterActive || m.filterQuery != "" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want cleared (target context has no remembered filter)", m.filterActive, m.filterQuery)
+	if m.filterActive || m.filterInput.Value() != "" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want cleared (target context has no remembered filter)", m.filterActive, m.filterInput.Value())
 	}
 }
 
@@ -261,8 +261,8 @@ func TestSwitchContextMsgAppliesRestoredFilter(t *testing.T) {
 
 	m = step(t, m, tui.SwitchContextMsg{Context: "other-cluster", Namespace: "default", Kind: kube.KindPod, Filter: "api"})
 
-	if !m.filterActive || m.filterQuery != "api" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want active with the restored 'api' filter", m.filterActive, m.filterQuery)
+	if !m.filterActive || m.filterInput.Value() != "api" {
+		t.Fatalf("filterActive=%v filterQuery=%q, want active with the restored 'api' filter", m.filterActive, m.filterInput.Value())
 	}
 	if len(m.visible) != 1 || m.visible[0].row.Name != "api-1" {
 		t.Fatalf("visible = %+v, want just api-1", m.visible)

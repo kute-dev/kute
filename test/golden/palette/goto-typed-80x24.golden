@@ -1,7 +1,7 @@
 browse                                                                          
                                                                                 
             ╭─────────────────────────────────────────────────────╮             
-            │ › d▎                        jump anywhere · default │             
+            │ › d                         jump anywhere · default │             
             │─────────────────────────────────────────────────────│             
             │▎Deployments  alias match                          0 │             
             │ DaemonSets  kind · Workloads                      0 │             

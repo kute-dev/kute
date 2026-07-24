@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -12,6 +13,16 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
+
+// focusedInput returns whichever of the add row's two buffers currently has
+// focus, per a.onValue — shared by the tea.PasteMsg router and
+// updateAddKey's own default case.
+func (a *addKeyState) focusedInput() *textinput.Model {
+	if a.onValue {
+		return &a.valueInput
+	}
+	return &a.keyInput
+}
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -41,21 +52,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.actions.HandleResult(msg)
 		return m, m.handleResult(msg)
 	case tea.PasteMsg:
-		if msg.Content == "" {
-			return m, nil
-		}
+		// textinput/textarea.Update already handle tea.PasteMsg internally
+		// (both this bracketed-paste path and their own ctrl+v OS-clipboard
+		// read), so this case only needs to route to the right buffer.
 		switch {
 		case m.adding != nil:
-			a := m.adding
-			if a.onValue {
-				insertInto(&a.value, &a.valueCursor, msg.Content)
-			} else {
-				insertInto(&a.key, &a.keyCursor, msg.Content)
-			}
+			input := m.adding.focusedInput()
+			*input, _ = input.Update(msg)
 		case m.editing != nil:
-			insertInto(&m.editing.value, &m.editing.valueCursor, msg.Content)
+			m.editing.valueInput, _ = m.editing.valueInput.Update(msg)
 		case m.multiline != nil:
-			insertMultiline(m.multiline, msg.Content)
+			m.multiline.textarea, _ = m.multiline.textarea.Update(msg)
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -129,7 +136,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(1)
 	case "a", "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
-			m.adding = &addKeyState{}
+			theme := m.Theme()
+			keyInput := textinput.New()
+			keyInput.Prompt = ""
+			keyInput.SetStyles(configMapInputStyles(theme))
+			keyInput.Focus()
+			valueInput := textinput.New()
+			valueInput.Prompt = ""
+			valueInput.SetStyles(configMapInputStyles(theme))
+			m.adding = &addKeyState{keyInput: keyInput, valueInput: valueInput}
 		}
 	case "enter":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
@@ -143,7 +158,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// it's already reachable via '↵'.
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok && row.multiline() {
-				m.multiline = newMultilineEditState(row.key, row.value)
+				m.multiline = newMultilineEditState(row.key, row.value, m.Theme())
 			}
 		}
 	case "ctrl+d":
@@ -163,10 +178,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // rather than leaving multi-line rows with a dead Enter key.
 func (m *Model) beginEditRow(row configMapKeyRow) {
 	if row.multiline() {
-		m.multiline = newMultilineEditState(row.key, row.value)
+		m.multiline = newMultilineEditState(row.key, row.value, m.Theme())
 		return
 	}
-	m.editing = &editKeyState{key: row.key, original: row.value, value: row.value, valueCursor: len([]rune(row.value))}
+	valueInput := textinput.New()
+	valueInput.Prompt = ""
+	valueInput.SetStyles(configMapInputStyles(m.Theme()))
+	valueInput.SetValue(row.value)
+	valueInput.CursorEnd()
+	valueInput.Focus()
+	m.editing = &editKeyState{key: row.key, original: row.value, valueInput: valueInput}
 }
 
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -190,38 +211,21 @@ func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.adding = nil
 	case "tab":
 		a.onValue = true
+		a.keyInput.Blur()
+		a.valueInput.Focus()
 	case "shift+tab":
 		a.onValue = false
-	case "left":
-		if a.onValue {
-			a.valueCursor = max(a.valueCursor-1, 0)
-		} else {
-			a.keyCursor = max(a.keyCursor-1, 0)
-		}
-	case "right":
-		if a.onValue {
-			a.valueCursor = min(a.valueCursor+1, len([]rune(a.value)))
-		} else {
-			a.keyCursor = min(a.keyCursor+1, len([]rune(a.key)))
-		}
-	case "backspace":
-		if a.onValue {
-			deleteBefore(&a.value, &a.valueCursor)
-		} else {
-			deleteBefore(&a.key, &a.keyCursor)
-		}
+		a.valueInput.Blur()
+		a.keyInput.Focus()
 	case "enter":
 		return m, m.commitAdd(false)
 	case "ctrl+r":
 		return m, m.commitAdd(true)
 	default:
-		if msg.Text != "" {
-			if a.onValue {
-				insertInto(&a.value, &a.valueCursor, msg.Text)
-			} else {
-				insertInto(&a.key, &a.keyCursor, msg.Text)
-			}
-		}
+		var cmd tea.Cmd
+		input := a.focusedInput()
+		*input, cmd = input.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -236,20 +240,14 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.editing = nil
-	case "left":
-		e.valueCursor = max(e.valueCursor-1, 0)
-	case "right":
-		e.valueCursor = min(e.valueCursor+1, len([]rune(e.value)))
-	case "backspace":
-		deleteBefore(&e.value, &e.valueCursor)
 	case "enter":
 		return m, m.commitEdit(false)
 	case "ctrl+r":
 		return m, m.commitEdit(true)
 	default:
-		if msg.Text != "" {
-			insertInto(&e.value, &e.valueCursor, msg.Text)
-		}
+		var cmd tea.Cmd
+		e.valueInput, cmd = e.valueInput.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -267,59 +265,14 @@ func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.multiline = nil
-	case "up":
-		if e.row > 0 {
-			e.row--
-			e.col = min(e.col, len([]rune(e.lines[e.row])))
-		}
-	case "down":
-		if e.row < len(e.lines)-1 {
-			e.row++
-			e.col = min(e.col, len([]rune(e.lines[e.row])))
-		}
-	case "left":
-		switch {
-		case e.col > 0:
-			e.col--
-		case e.row > 0:
-			e.row--
-			e.col = len([]rune(e.lines[e.row]))
-		}
-	case "right":
-		switch {
-		case e.col < len([]rune(e.lines[e.row])):
-			e.col++
-		case e.row < len(e.lines)-1:
-			e.row++
-			e.col = 0
-		}
-	case "enter":
-		line := []rune(e.lines[e.row])
-		before, after := string(line[:e.col]), string(line[e.col:])
-		e.lines[e.row] = before
-		tail := append([]string{after}, e.lines[e.row+1:]...)
-		e.lines = append(e.lines[:e.row+1], tail...)
-		e.row++
-		e.col = 0
-	case "backspace":
-		switch {
-		case e.col > 0:
-			deleteBefore(&e.lines[e.row], &e.col)
-		case e.row > 0:
-			prevLen := len([]rune(e.lines[e.row-1]))
-			e.lines[e.row-1] += e.lines[e.row]
-			e.lines = append(e.lines[:e.row], e.lines[e.row+1:]...)
-			e.row--
-			e.col = prevLen
-		}
 	case "ctrl+o":
 		return m, m.commitMultiline(false)
 	case "ctrl+r":
 		return m, m.commitMultiline(true)
 	default:
-		if msg.Text != "" {
-			insertInto(&e.lines[e.row], &e.col, msg.Text)
-		}
+		var cmd tea.Cmd
+		e.textarea, cmd = e.textarea.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -366,11 +319,11 @@ func (m *Model) beginCommit(key, value string, isEdit bool, original string, res
 // is blank.
 func (m *Model) commitAdd(restart bool) tea.Cmd {
 	a := m.adding
-	key := strings.TrimSpace(a.key)
+	key := strings.TrimSpace(a.keyInput.Value())
 	if key == "" {
 		return nil
 	}
-	value := a.value
+	value := a.valueInput.Value()
 	m.adding = nil
 	return m.beginCommit(key, value, false, "", restart)
 }
@@ -383,7 +336,7 @@ func (m *Model) commitEdit(restart bool) tea.Cmd {
 		m.editing = nil
 		return nil
 	}
-	key, value, original := e.key, e.value, e.original
+	key, value, original := e.key, e.valueInput.Value(), e.original
 	m.editing = nil
 	return m.beginCommit(key, value, true, original, restart)
 }
@@ -396,7 +349,7 @@ func (m *Model) commitMultiline(restart bool) tea.Cmd {
 		m.multiline = nil
 		return nil
 	}
-	key, value, original := e.key, e.value(), strings.Join(e.original, "\n")
+	key, value, original := e.key, e.value(), e.original
 	m.multiline = nil
 	return m.beginCommit(key, value, true, original, restart)
 }
@@ -438,16 +391,30 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 			// right there, unmoved.
 		case pc.isEdit:
 			if strings.Contains(pc.value, "\n") || strings.Contains(pc.original, "\n") {
-				m.multiline = newMultilineEditState(pc.key, pc.value)
+				m.multiline = newMultilineEditState(pc.key, pc.value, m.Theme())
 			} else {
-				m.editing = &editKeyState{key: pc.key, original: pc.original, value: pc.value, valueCursor: len([]rune(pc.value))}
+				valueInput := textinput.New()
+				valueInput.Prompt = ""
+				valueInput.SetStyles(configMapInputStyles(m.Theme()))
+				valueInput.SetValue(pc.value)
+				valueInput.CursorEnd()
+				valueInput.Focus()
+				m.editing = &editKeyState{key: pc.key, original: pc.original, valueInput: valueInput}
 			}
 		default:
-			m.adding = &addKeyState{
-				key: pc.key, keyCursor: len([]rune(pc.key)),
-				value: pc.value, valueCursor: len([]rune(pc.value)),
-				onValue: true,
-			}
+			theme := m.Theme()
+			keyInput := textinput.New()
+			keyInput.Prompt = ""
+			keyInput.SetStyles(configMapInputStyles(theme))
+			keyInput.SetValue(pc.key)
+			keyInput.CursorEnd()
+			valueInput := textinput.New()
+			valueInput.Prompt = ""
+			valueInput.SetStyles(configMapInputStyles(theme))
+			valueInput.SetValue(pc.value)
+			valueInput.CursorEnd()
+			valueInput.Focus()
+			m.adding = &addKeyState{keyInput: keyInput, valueInput: valueInput, onValue: true}
 		}
 		return nil
 	}
@@ -485,50 +452,6 @@ func consumerRefs(consumers []configMapConsumer) []kube.ConfigMapConsumerRef {
 		out[i] = c.ConfigMapConsumerRef
 	}
 	return out
-}
-
-// insertInto inserts text into buf at cursor (rune-safe), advancing cursor
-// past the inserted text.
-func insertInto(buf *string, cursor *int, text string) {
-	r := []rune(*buf)
-	ins := []rune(text)
-	pos := min(max(*cursor, 0), len(r))
-	*buf = string(r[:pos]) + string(ins) + string(r[pos:])
-	*cursor = pos + len(ins)
-}
-
-// insertMultiline pastes text into the buffer editor at the cursor,
-// splitting on any newlines the pasted content carries so a multi-line
-// paste lands as multiple lines rather than one line with literal '\n's.
-func insertMultiline(e *multilineEditState, text string) {
-	parts := strings.Split(text, "\n")
-	line := []rune(e.lines[e.row])
-	before, after := string(line[:e.col]), string(line[e.col:])
-	if len(parts) == 1 {
-		insertInto(&e.lines[e.row], &e.col, text)
-		return
-	}
-	newLines := make([]string, 0, len(parts))
-	newLines = append(newLines, before+parts[0])
-	newLines = append(newLines, parts[1:len(parts)-1]...)
-	last := parts[len(parts)-1]
-	newLines = append(newLines, last+after)
-	tail := append([]string{}, e.lines[e.row+1:]...)
-	e.lines = append(e.lines[:e.row], newLines...)
-	e.lines = append(e.lines, tail...)
-	e.row += len(parts) - 1
-	e.col = len([]rune(last))
-}
-
-// deleteBefore removes the rune immediately before cursor in buf, if any.
-func deleteBefore(buf *string, cursor *int) {
-	if *cursor <= 0 {
-		return
-	}
-	r := []rune(*buf)
-	pos := min(*cursor, len(r))
-	*buf = string(r[:pos-1]) + string(r[pos:])
-	*cursor = pos - 1
 }
 
 func clamp(v, lo, hi int) int {

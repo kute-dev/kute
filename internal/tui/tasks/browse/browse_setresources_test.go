@@ -84,7 +84,7 @@ func TestBeginSetResourcesPrefillsFieldsFromContainerSpec(t *testing.T) {
 		t.Fatal("beginSetResources returned false")
 	}
 	f := m.pendingSetResources.fields
-	if f[fieldCPURequest].current != "250m" || f[fieldCPURequest].buffer != "250m" {
+	if f[fieldCPURequest].current != "250m" || f[fieldCPURequest].input.Value() != "250m" {
 		t.Errorf("cpu request = %+v, want current/buffer 250m", f[fieldCPURequest])
 	}
 	if f[fieldCPULimit].current != "1" {
@@ -111,12 +111,12 @@ func TestNudgeAdjustsBySaneStepsAndClampsAtZero(t *testing.T) {
 
 	// cpu request field is selected by default (fieldIdx 0): +50m from 250m.
 	m = step(t, m, tea.KeyPressMsg{Text: "+"})
-	if got := m.pendingSetResources.fields[fieldCPURequest].buffer; got != "300m" {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "300m" {
 		t.Fatalf("cpu request after +: %q, want 300m", got)
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "-"})
 	m = step(t, m, tea.KeyPressMsg{Text: "-"})
-	if got := m.pendingSetResources.fields[fieldCPURequest].buffer; got != "200m" {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "200m" {
 		t.Fatalf("cpu request after +/--: %q, want 200m", got)
 	}
 
@@ -124,7 +124,7 @@ func TestNudgeAdjustsBySaneStepsAndClampsAtZero(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	m = step(t, m, tea.KeyPressMsg{Text: "+"})
-	if got := m.pendingSetResources.fields[fieldMEMRequest].buffer; got != "576Mi" {
+	if got := m.pendingSetResources.fields[fieldMEMRequest].input.Value(); got != "576Mi" {
 		t.Fatalf("mem request after +: %q, want 576Mi", got)
 	}
 
@@ -134,7 +134,7 @@ func TestNudgeAdjustsBySaneStepsAndClampsAtZero(t *testing.T) {
 	for range 6 {
 		m = step(t, m, tea.KeyPressMsg{Text: "-"})
 	}
-	if got := m.pendingSetResources.fields[fieldCPURequest].buffer; got != "0" {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "0" {
 		t.Fatalf("cpu request after repeated -: %q, want clamped to 0", got)
 	}
 }
@@ -151,11 +151,11 @@ func TestUnsetFieldThenTypingClearsUnset(t *testing.T) {
 	m.beginSetResources()
 
 	m = step(t, m, tea.KeyPressMsg{Text: "u"})
-	if f := m.pendingSetResources.fields[fieldCPURequest]; !f.unset || f.buffer != "" {
+	if f := m.pendingSetResources.fields[fieldCPURequest]; !f.unset || f.input.Value() != "" {
 		t.Fatalf("after u: %+v, want unset with empty buffer", f)
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "1"})
-	if f := m.pendingSetResources.fields[fieldCPURequest]; f.unset || f.buffer != "1" {
+	if f := m.pendingSetResources.fields[fieldCPURequest]; f.unset || f.input.Value() != "1" {
 		t.Fatalf("after typing post-unset: %+v, want unset cleared, buffer '1'", f)
 	}
 }
@@ -173,7 +173,7 @@ func TestLeftRightArrowsMoveCursorForMidStringEdits(t *testing.T) {
 
 	// cpu request prefilled to "250m", cursor parked at the end (len 4).
 	f := m.pendingSetResources.fields[fieldCPURequest]
-	if f.buffer != "250m" || f.cursor != 4 {
+	if f.input.Value() != "250m" || f.input.Position() != 4 {
 		t.Fatalf("prefill = %+v, want buffer 250m cursor 4", f)
 	}
 
@@ -181,16 +181,16 @@ func TestLeftRightArrowsMoveCursorForMidStringEdits(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyLeft})
-	if got := m.pendingSetResources.fields[fieldCPURequest].cursor; got != 1 {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Position(); got != 1 {
 		t.Fatalf("cursor after 3x left = %d, want 1", got)
 	}
 
 	// Typing "9" inserts at the cursor rather than appending at the end.
 	m = step(t, m, tea.KeyPressMsg{Text: "9"})
-	if got := m.pendingSetResources.fields[fieldCPURequest].buffer; got != "2950m" {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "2950m" {
 		t.Fatalf("buffer after mid-string insert = %q, want 2950m", got)
 	}
-	if got := m.pendingSetResources.fields[fieldCPURequest].cursor; got != 2 {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Position(); got != 2 {
 		t.Fatalf("cursor after insert = %d, want 2", got)
 	}
 
@@ -199,7 +199,7 @@ func TestLeftRightArrowsMoveCursorForMidStringEdits(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyRight})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyRight})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyBackspace})
-	if got := m.pendingSetResources.fields[fieldCPURequest].buffer; got != "295m" {
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "295m" {
 		t.Fatalf("buffer after right,right,backspace = %q, want 295m", got)
 	}
 }

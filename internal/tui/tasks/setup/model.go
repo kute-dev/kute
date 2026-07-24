@@ -9,6 +9,7 @@ package setup
 import (
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -97,7 +98,7 @@ type Model struct {
 	// editing/pathInput back 'e'/'k''s inline kubeconfig-path input —
 	// browse's "/" filter query uses the same free-text-capture pattern.
 	editing   bool
-	pathInput string
+	pathInput textinput.Model
 
 	retrying bool
 	retryErr error

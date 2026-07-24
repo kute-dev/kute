@@ -214,27 +214,24 @@ func (m Model) setResourcesNewCell(f resourceField, selected bool, theme tui.The
 	}
 
 	if !selected {
-		text := f.buffer
+		text := f.input.Value()
 		if text == "" {
 			text = "—"
 		}
 		return style.Render(text)
 	}
 
-	// Selected: split at the cursor so the glyph lands where editing would
-	// actually happen (←/→ move it, backspace/typing act at it) — the same
-	// pre/post split setImageFieldLine uses for its own cursor.
-	runes := []rune(f.buffer)
-	pos := min(max(f.cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
-	if pre == "" && post == "" {
-		pre = "—" // an empty, untouched buffer still needs a placeholder before the cursor
-	}
-	rendered := style.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		rendered += style.Render(post)
-	}
-	return rendered
+	// Selected: f.input carries the real cursor position (←/→ move it,
+	// backspace/typing act at it) — style/Placeholder are set fresh on a
+	// local copy each render since they depend on invalid/changed, computed
+	// above, not on construction-time state.
+	input := f.input
+	styles := input.Styles()
+	styles.Focused.Text = style
+	styles.Focused.Placeholder = style
+	input.SetStyles(styles)
+	input.Placeholder = "—" // an empty, untouched buffer still needs a placeholder before the cursor
+	return input.View()
 }
 
 // usageCell renders the P95 USAGE column: a MiniBar + compact usage value

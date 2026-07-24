@@ -245,8 +245,8 @@ func (m *Model) toggleSelectedContextProd() {
 	_ = m.session.Config.SetProd(target.name, !m.session.Config.IsProd(target.name))
 
 	items := contextItems(m.session, m.probes)
-	if m.palette.Query != "" {
-		items = palette.Filter(items, m.palette.Query)
+	if m.palette.Query() != "" {
+		items = palette.Filter(items, m.palette.Query())
 	}
 	m.palette.Items = items
 	if i, ok := contextItemIndex(items, target.name); ok {

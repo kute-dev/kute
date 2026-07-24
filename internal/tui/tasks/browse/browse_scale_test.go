@@ -68,8 +68,8 @@ func TestPlusOpensScalePromptPrefilledCurrentPlusOne(t *testing.T) {
 	if m.pendingScale == nil {
 		t.Fatal("expected pendingScale set after '+'")
 	}
-	if m.pendingScale.value != "4" {
-		t.Fatalf("pendingScale.value = %q, want %q", m.pendingScale.value, "4")
+	if m.pendingScale.input.Value() != "4" {
+		t.Fatalf("pendingScale.value = %q, want %q", m.pendingScale.input.Value(), "4")
 	}
 	if !m.CapturingInput() {
 		t.Fatal("expected CapturingInput true while the scale prompt is open")
@@ -80,7 +80,7 @@ func TestMinusPrefillsCurrentMinusOneClampedAtZero(t *testing.T) {
 	m := newDeploymentModel(t, &fakeMutator{}, 0)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "-"})
-	if m.pendingScale == nil || m.pendingScale.value != "0" {
+	if m.pendingScale == nil || m.pendingScale.input.Value() != "0" {
 		t.Fatalf("expected clamped prefill of 0, got %+v", m.pendingScale)
 	}
 }
@@ -90,12 +90,12 @@ func TestDigitReplacesPrefillThenAppends(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "+"}) // prefill "4"
 
 	m = step(t, m, tea.KeyPressMsg{Text: "5"})
-	if m.pendingScale.value != "5" {
-		t.Fatalf("first digit should replace the prefill: value = %q, want %q", m.pendingScale.value, "5")
+	if m.pendingScale.input.Value() != "5" {
+		t.Fatalf("first digit should replace the prefill: value = %q, want %q", m.pendingScale.input.Value(), "5")
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "0"})
-	if m.pendingScale.value != "50" {
-		t.Fatalf("second digit should append: value = %q, want %q", m.pendingScale.value, "50")
+	if m.pendingScale.input.Value() != "50" {
+		t.Fatalf("second digit should append: value = %q, want %q", m.pendingScale.input.Value(), "50")
 	}
 }
 
@@ -104,13 +104,13 @@ func TestNudgeAfterPrefillIncrementsAndDecrements(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "+"}) // prefill "4"
 
 	m = step(t, m, tea.KeyPressMsg{Text: "+"})
-	if m.pendingScale.value != "5" {
-		t.Fatalf("nudge up: value = %q, want %q", m.pendingScale.value, "5")
+	if m.pendingScale.input.Value() != "5" {
+		t.Fatalf("nudge up: value = %q, want %q", m.pendingScale.input.Value(), "5")
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "-"})
 	m = step(t, m, tea.KeyPressMsg{Text: "-"})
-	if m.pendingScale.value != "3" {
-		t.Fatalf("nudge down: value = %q, want %q", m.pendingScale.value, "3")
+	if m.pendingScale.input.Value() != "3" {
+		t.Fatalf("nudge down: value = %q, want %q", m.pendingScale.input.Value(), "3")
 	}
 }
 
@@ -118,8 +118,8 @@ func TestBackspaceEditsScaleBuffer(t *testing.T) {
 	m := newDeploymentModel(t, &fakeMutator{}, 3)
 	m = step(t, m, tea.KeyPressMsg{Text: "+"}) // prefill "4"
 	m = step(t, m, tea.KeyPressMsg{Text: "backspace"})
-	if m.pendingScale.value != "" {
-		t.Fatalf("expected buffer cleared after backspace, got %q", m.pendingScale.value)
+	if m.pendingScale.input.Value() != "" {
+		t.Fatalf("expected buffer cleared after backspace, got %q", m.pendingScale.input.Value())
 	}
 }
 

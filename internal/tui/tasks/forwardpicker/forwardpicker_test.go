@@ -198,8 +198,8 @@ func TestDigitBeginsLocalPortEdit(t *testing.T) {
 	}
 	updated, _ = next.Update(tea.KeyPressMsg{Text: "0"})
 	next = updated.(*Model)
-	if next.rows[0].editBuf != "90" {
-		t.Fatalf("editBuf = %q, want %q", next.rows[0].editBuf, "90")
+	if next.rows[0].editInput.Value() != "90" {
+		t.Fatalf("editBuf = %q, want %q", next.rows[0].editInput.Value(), "90")
 	}
 
 	updated, _ = next.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})

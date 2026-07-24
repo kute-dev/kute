@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -107,7 +108,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		m.searchActive = true
-		m.searchQuery = ""
+		m.searchInput = textinput.New()
+		m.searchInput.SetStyles(tui.TextInputStyles(m.Theme()))
+		m.searchInput.Prompt = ""
+		m.searchInput.Focus()
 	case "Y":
 		return m, tea.SetClipboard(strings.Join(m.lines, "\n"))
 	case "x":
@@ -200,24 +204,18 @@ func (m Model) copyDecodedSecretValue() tea.Cmd {
 
 func (m *Model) updateSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
+	case "esc", "enter":
 		m.searchActive = false
-	case "enter":
-		m.searchActive = false
-	case "backspace":
-		if len(m.searchQuery) > 0 {
-			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
-			m.jumpToMatch()
-		}
+		m.searchInput.Blur()
 	case "up":
 		m.moveCursor(-1)
 	case "down":
 		m.moveCursor(1)
 	default:
-		if msg.Text != "" {
-			m.searchQuery += msg.Text
-			m.jumpToMatch()
-		}
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.jumpToMatch()
+		return m, cmd
 	}
 	return m, nil
 }
@@ -227,10 +225,10 @@ func (m *Model) updateSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // mirrors browse's "/" filter UX (docs/design README.md §8a: "/ searches
 // (jump + highlight)").
 func (m *Model) jumpToMatch() {
-	if m.searchQuery == "" {
+	if m.searchInput.Value() == "" {
 		return
 	}
-	query := strings.ToLower(m.searchQuery)
+	query := strings.ToLower(m.searchInput.Value())
 	rendered := m.rendered()
 	for i := m.cursor; i < len(rendered); i++ {
 		if strings.Contains(strings.ToLower(rendered[i].Text), query) {

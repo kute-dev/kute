@@ -152,21 +152,13 @@ func (m Model) setImageContainerTabLine(t *setImageTarget, theme tui.Theme, widt
 func (m Model) setImageFieldLine(t *setImageTarget, theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
-	bold := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
-
-	runes := []rune(t.buffer)
-	pos := min(max(t.cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
 
 	left := accent.Render("image ›") + " "
 	if !t.fullRef {
 		left += dim.Render(t.repo + ":")
 	}
-	left += bold.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		left += bold.Render(post)
-	}
+	left += t.input.View()
 
 	// §24a's "same image" message belongs to the will-run strip below (the
 	// surface that normally names the exact kubectl command) — this field

@@ -88,8 +88,8 @@ func TestEnterOnHelmReleaseOpensFilteredPods(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod || m.filterQuery != "postgresql" {
-		t.Fatalf("expected Pods filtered by postgresql, got kind=%s filter=%q", m.kind, m.filterQuery)
+	if m.kind != kube.KindPod || m.filterInput.Value() != "postgresql" {
+		t.Fatalf("expected Pods filtered by postgresql, got kind=%s filter=%q", m.kind, m.filterInput.Value())
 	}
 	if m.originName != "postgresql" || m.originKind != kube.KindHelmRelease {
 		t.Fatalf("expected origin set to the release, got kind=%s name=%q", m.originKind, m.originName)

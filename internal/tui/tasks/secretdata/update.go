@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -12,6 +13,16 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
+
+// focusedAddInput returns whichever of the add row's two buffers currently
+// has focus, per a.onValue — shared by the tea.PasteMsg router and
+// updateAddKey's own default case.
+func (a *addKeyState) focusedInput() *textinput.Model {
+	if a.onValue {
+		return &a.valueInput
+	}
+	return &a.keyInput
+}
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -42,19 +53,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// sets AltScreen), so nothing a real terminal's bracketed-paste
 		// delivers here ever touches scrollback regardless; this just
 		// routes the pasted text into whichever add/edit buffer has focus.
-		if msg.Content == "" {
-			return m, nil
-		}
+		// textinput.Update already handles tea.PasteMsg internally (both
+		// this bracketed-paste path and its own ctrl+v OS-clipboard read),
+		// so this case only needs to route to the right buffer, not
+		// re-implement insertion.
 		switch {
 		case m.adding != nil:
-			a := m.adding
-			if a.onValue {
-				insertInto(&a.value, &a.valueCursor, msg.Content)
-			} else {
-				insertInto(&a.key, &a.keyCursor, msg.Content)
-			}
+			input := m.adding.focusedInput()
+			*input, _ = input.Update(msg)
 		case m.editing != nil:
-			insertInto(&m.editing.value, &m.editing.valueCursor, msg.Content)
+			m.editing.valueInput, _ = m.editing.valueInput.Update(msg)
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -125,12 +133,19 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(1)
 	case "a", "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
-			m.adding = &addKeyState{}
+			theme := m.Theme()
+			keyInput := newSecretInput(theme)
+			keyInput.Focus()
+			m.adding = &addKeyState{keyInput: keyInput, valueInput: newSecretInput(theme)}
 		}
 	case "enter":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {
-				m.editing = &editKeyState{key: row.key, original: row.value, value: row.value, valueCursor: len([]rune(row.value))}
+				valueInput := newSecretInput(m.Theme())
+				valueInput.SetValue(row.value)
+				valueInput.CursorEnd()
+				valueInput.Focus()
+				m.editing = &editKeyState{key: row.key, original: row.value, valueInput: valueInput}
 			}
 		}
 	case "ctrl+d":
@@ -168,38 +183,21 @@ func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.adding = nil
 	case "tab":
 		a.onValue = true
+		a.keyInput.Blur()
+		a.valueInput.Focus()
 	case "shift+tab":
 		a.onValue = false
-	case "left":
-		if a.onValue {
-			a.valueCursor = max(a.valueCursor-1, 0)
-		} else {
-			a.keyCursor = max(a.keyCursor-1, 0)
-		}
-	case "right":
-		if a.onValue {
-			a.valueCursor = min(a.valueCursor+1, len([]rune(a.value)))
-		} else {
-			a.keyCursor = min(a.keyCursor+1, len([]rune(a.key)))
-		}
-	case "backspace":
-		if a.onValue {
-			deleteBefore(&a.value, &a.valueCursor)
-		} else {
-			deleteBefore(&a.key, &a.keyCursor)
-		}
+		a.valueInput.Blur()
+		a.keyInput.Focus()
 	case "enter":
 		return m, m.commitAdd()
 	case "ctrl+x":
 		a.masked = !a.masked
 	default:
-		if msg.Text != "" {
-			if a.onValue {
-				insertInto(&a.value, &a.valueCursor, msg.Text)
-			} else {
-				insertInto(&a.key, &a.keyCursor, msg.Text)
-			}
-		}
+		var cmd tea.Cmd
+		input := a.focusedInput()
+		*input, cmd = input.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -214,20 +212,14 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.editing = nil
-	case "left":
-		e.valueCursor = max(e.valueCursor-1, 0)
-	case "right":
-		e.valueCursor = min(e.valueCursor+1, len([]rune(e.value)))
-	case "backspace":
-		deleteBefore(&e.value, &e.valueCursor)
 	case "enter":
 		return m, m.commitEdit()
 	case "ctrl+x":
 		e.masked = !e.masked
 	default:
-		if msg.Text != "" {
-			insertInto(&e.value, &e.valueCursor, msg.Text)
-		}
+		var cmd tea.Cmd
+		e.valueInput, cmd = e.valueInput.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -246,11 +238,11 @@ func (m *Model) moveSelection(delta int) {
 // while the key buffer is blank.
 func (m *Model) commitAdd() tea.Cmd {
 	a := m.adding
-	key := strings.TrimSpace(a.key)
+	key := strings.TrimSpace(a.keyInput.Value())
 	if key == "" {
 		return nil
 	}
-	value := a.value
+	value := a.valueInput.Value()
 	m.adding = nil
 	m.pendingCommit = &secretPendingCommit{key: key, value: value}
 	m.message, m.lastError = "", ""
@@ -277,7 +269,7 @@ func (m *Model) commitEdit() tea.Cmd {
 		m.editing = nil
 		return nil
 	}
-	key, value, original := e.key, e.value, e.original
+	key, value, original := e.key, e.valueInput.Value(), e.original
 	m.editing = nil
 	m.pendingCommit = &secretPendingCommit{key: key, value: value, isEdit: true, original: original}
 	m.message, m.lastError = "", ""
@@ -333,13 +325,21 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 			// A failed removal has no buffer to restore — the row is still
 			// right there, unmoved.
 		case pc.isEdit:
-			m.editing = &editKeyState{key: pc.key, original: pc.original, value: pc.value, valueCursor: len([]rune(pc.value))}
+			valueInput := newSecretInput(m.Theme())
+			valueInput.SetValue(pc.value)
+			valueInput.CursorEnd()
+			valueInput.Focus()
+			m.editing = &editKeyState{key: pc.key, original: pc.original, valueInput: valueInput}
 		default:
-			m.adding = &addKeyState{
-				key: pc.key, keyCursor: len([]rune(pc.key)),
-				value: pc.value, valueCursor: len([]rune(pc.value)),
-				onValue: true,
-			}
+			theme := m.Theme()
+			keyInput := newSecretInput(theme)
+			keyInput.SetValue(pc.key)
+			keyInput.CursorEnd()
+			valueInput := newSecretInput(theme)
+			valueInput.SetValue(pc.value)
+			valueInput.CursorEnd()
+			valueInput.Focus()
+			m.adding = &addKeyState{keyInput: keyInput, valueInput: valueInput, onValue: true}
 		}
 		return nil
 	}
@@ -358,27 +358,6 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 	m.focusKey = pc.key
 	m.reloadEpoch++
 	return m.load()
-}
-
-// insertInto inserts text into buf at cursor (rune-safe), advancing cursor
-// past the inserted text.
-func insertInto(buf *string, cursor *int, text string) {
-	r := []rune(*buf)
-	ins := []rune(text)
-	pos := min(max(*cursor, 0), len(r))
-	*buf = string(r[:pos]) + string(ins) + string(r[pos:])
-	*cursor = pos + len(ins)
-}
-
-// deleteBefore removes the rune immediately before cursor in buf, if any.
-func deleteBefore(buf *string, cursor *int) {
-	if *cursor <= 0 {
-		return
-	}
-	r := []rune(*buf)
-	pos := min(*cursor, len(r))
-	*buf = string(r[:pos-1]) + string(r[pos:])
-	*cursor = pos - 1
 }
 
 func clamp(v, lo, hi int) int {

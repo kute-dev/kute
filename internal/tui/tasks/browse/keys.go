@@ -36,7 +36,7 @@ func (m Model) Keybar() tui.Keybar {
 			Pill:     tui.ModeBrowse,
 			PillText: "SCALE",
 			Groups: [][]tui.KeyHint{{
-				{Key: m.pendingScale.value + tui.GlyphSelBar, Label: "replicas"},
+				{Key: m.pendingScale.input.Value() + tui.GlyphSelBar, Label: "replicas"},
 				{Key: "+/−", Label: "nudge"},
 				{Key: "↵", Label: "apply"},
 				{Key: "esc", Label: "cancel"},

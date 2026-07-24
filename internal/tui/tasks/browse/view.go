@@ -357,14 +357,14 @@ func distinctCRDGroups(rows []resources.Row) int {
 // interactions: "items never silently disappear").
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.filterQuery)
-	if !m.filterListFocused {
-		left += accent.Render(tui.GlyphSelBar)
-	}
+	// m.filterInput is blurred once filterListFocused commits the query
+	// (updateFilterKey's "enter" case), which is what actually hides its
+	// cursor overlay here — matching the old code's explicit
+	// !m.filterListFocused gate on appending the cursor glyph.
+	left := accent.Render("/ ") + m.filterInput.View()
 
 	total, matched := len(m.rows), len(m.visible)
 	right := dim.Render(fmt.Sprintf("%d/%d", matched, total))

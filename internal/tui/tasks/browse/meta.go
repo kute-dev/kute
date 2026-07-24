@@ -41,6 +41,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,11 +70,12 @@ type metaRow struct {
 	isAnnotation bool
 	key          string
 	current      string
-	// buffer is the editable value, pre-filled to current, cursor-anchored
+	// input is the editable value, pre-filled to current, cursor-anchored
 	// throughout — no replace-on-first-keystroke gate, the same continuous
-	// text-field model resourceField's own buffer uses.
-	buffer string
-	cursor int
+	// text-field model resourceField's own buffer uses. Its Placeholder is
+	// "—" (metaInputStyles), so an emptied buffer shows the same dash
+	// displayOrDash renders for a non-editing empty value.
+	input textinput.Model
 
 	// readOnly rows (a controller-managed annotation, or a workload's own
 	// immutable spec.selector.matchLabels key) can be navigated to but never
@@ -95,13 +97,38 @@ type metaRow struct {
 }
 
 // changed reports whether r differs from its prefilled current value.
-func (r metaRow) changed() bool { return r.buffer != r.current }
+func (r metaRow) changed() bool { return r.input.Value() != r.current }
 
-// setBuffer replaces r.buffer wholesale and parks the cursor at its end —
-// the same convention resourceField.setBuffer/setImageTarget.setBuffer use.
+// setBuffer replaces r.input's value wholesale and parks the cursor at its
+// end — the same convention resourceField.setBuffer/setImageTarget.setBuffer
+// use.
 func (r *metaRow) setBuffer(s string) {
-	r.buffer = s
-	r.cursor = len([]rune(s))
+	r.input.SetValue(s)
+	r.input.CursorEnd()
+}
+
+// metaInputStyles builds the row-edit buffer's textinput.Styles: SelBg
+// background baked in since metaValueCell (the only caller of r.input.View)
+// only ever renders the selected+editing row, and a "—" placeholder so an
+// emptied buffer shows the same dash displayOrDash renders elsewhere.
+func metaInputStyles(theme tui.Theme) textinput.Styles {
+	styles := tui.TextInputStyles(theme)
+	styles.Focused.Text = styles.Focused.Text.Background(theme.SelBg)
+	styles.Blurred.Text = styles.Blurred.Text.Background(theme.SelBg)
+	styles.Focused.Placeholder = styles.Focused.Placeholder.Background(theme.SelBg)
+	styles.Blurred.Placeholder = styles.Blurred.Placeholder.Background(theme.SelBg)
+	return styles
+}
+
+// metaAddInputStyles builds the add-row's two buffers' textinput.Styles —
+// unlike metaInputStyles, no SelBg background (metaAddRowLine never draws
+// one) and bold text (metaAddBufferCell's old textStyle for both focused and
+// unfocused non-empty content).
+func metaAddInputStyles(theme tui.Theme) textinput.Styles {
+	styles := tui.TextInputStyles(theme)
+	styles.Focused.Text = styles.Focused.Text.Bold(true)
+	styles.Blurred.Text = styles.Blurred.Text.Bold(true)
+	return styles
 }
 
 // metaSection is which grid — LABELS or ANNOTATIONS — navigation, 'a'/insert,
@@ -150,12 +177,10 @@ type metaTarget struct {
 	editing bool
 
 	// adding is metaAddNone unless 'a'/insert's insert row is showing.
-	adding         metaAddKind
-	addKey         string
-	addKeyCursor   int
-	addValue       string
-	addValueCursor int
-	addOnValue     bool // tab moves focus from key to value
+	adding        metaAddKind
+	addKeyInput   textinput.Model
+	addValueInput textinput.Model
+	addOnValue    bool // tab moves focus from key to value
 
 	// pendingCommit is set the instant a commit starts (TierNone's
 	// synchronous apply, or a TierInline confirm) and cleared once
@@ -243,9 +268,10 @@ func (m *Model) buildMetaTarget(kind kube.ResourceKind, namespace, name string) 
 	}
 	objLabels := acc.GetLabels()
 
+	theme := m.Theme()
 	t := &metaTarget{kind: kind, namespace: namespace, name: name}
-	t.labels = buildMetaRows(objLabels, false)
-	t.annotations = buildMetaRows(acc.GetAnnotations(), true)
+	t.labels = buildMetaRows(objLabels, false, theme)
+	t.annotations = buildMetaRows(acc.GetAnnotations(), true, theme)
 
 	joins := serviceLabelJoins(m.lister, namespace, objLabels)
 	immutable := immutableSelectorKeys(obj)
@@ -274,15 +300,20 @@ func (m *Model) buildMetaTarget(kind kube.ResourceKind, namespace, name string) 
 // buildMetaRows sorts values by key (for stable, deterministic display —
 // metadata maps carry no meaningful iteration order of their own) and
 // prefills each row's buffer to its current value.
-func buildMetaRows(values map[string]string, isAnnotation bool) []metaRow {
+func buildMetaRows(values map[string]string, isAnnotation bool, theme tui.Theme) []metaRow {
 	keys := make([]string, 0, len(values))
 	for k := range values {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	styles := metaInputStyles(theme)
 	rows := make([]metaRow, 0, len(keys))
 	for _, k := range keys {
 		r := metaRow{isAnnotation: isAnnotation, key: k, current: values[k]}
+		r.input = textinput.New()
+		r.input.SetStyles(styles)
+		r.input.Prompt = ""
+		r.input.Placeholder = "—"
 		r.setBuffer(values[k])
 		rows = append(rows, r)
 	}
@@ -454,6 +485,7 @@ func (m *Model) updateMetaKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		r.setBuffer(r.current)
+		r.input.Focus()
 		t.editing = true
 	case "ctrl+d":
 		r := t.selectedRow()
@@ -468,8 +500,15 @@ func (m *Model) updateMetaKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if t.section == metaSectionAnnotations {
 			t.adding = metaAddAnnotation
 		}
-		t.addKey, t.addValue, t.addOnValue = "", "", false
-		t.addKeyCursor, t.addValueCursor = 0, 0
+		addStyles := metaAddInputStyles(m.Theme())
+		t.addKeyInput = textinput.New()
+		t.addKeyInput.SetStyles(addStyles)
+		t.addKeyInput.Prompt = ""
+		t.addKeyInput.Focus()
+		t.addValueInput = textinput.New()
+		t.addValueInput.SetStyles(addStyles)
+		t.addValueInput.Prompt = ""
+		t.addOnValue = false
 	case "y":
 		if r := t.selectedRow(); r != nil {
 			return m, tea.SetClipboard(r.key + "=" + r.current)
@@ -508,33 +547,23 @@ func (m *Model) updateMetaEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		r.setBuffer(r.current)
+		r.input.Blur()
 		t.editing = false
 	case "enter":
 		if !r.changed() {
 			t.editing = false
+			r.input.Blur()
 			return m, nil
 		}
 		row := *r
 		target := *t
 		t.editing = false
+		r.input.Blur()
 		return m, m.commitMeta(target, row, true, false)
-	case "left":
-		r.cursor = max(r.cursor-1, 0)
-	case "right":
-		r.cursor = min(r.cursor+1, len([]rune(r.buffer)))
-	case "backspace":
-		if r.cursor > 0 {
-			rr := []rune(r.buffer)
-			r.buffer = string(rr[:r.cursor-1]) + string(rr[r.cursor:])
-			r.cursor--
-		}
 	default:
-		if msg.Text != "" {
-			rr := []rune(r.buffer)
-			ins := []rune(msg.Text)
-			r.buffer = string(rr[:r.cursor]) + string(ins) + string(rr[r.cursor:])
-			r.cursor += len(ins)
-		}
+		var cmd tea.Cmd
+		r.input, cmd = r.input.Update(msg)
+		return m, cmd
 	}
 	return m, nil
 }
@@ -549,59 +578,37 @@ func (m *Model) updateMetaAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		t.adding = metaAddNone
+		t.addKeyInput.Blur()
+		t.addValueInput.Blur()
 	case "tab":
 		t.addOnValue = true
+		t.addKeyInput.Blur()
+		t.addValueInput.Focus()
 	case "shift+tab":
 		t.addOnValue = false
+		t.addValueInput.Blur()
+		t.addKeyInput.Focus()
 	case "enter":
-		key := strings.TrimSpace(t.addKey)
+		key := strings.TrimSpace(t.addKeyInput.Value())
 		if key == "" {
 			return m, nil
 		}
 		isAnnotation := t.adding == metaAddAnnotation
-		row := metaRow{isAnnotation: isAnnotation, key: key, buffer: t.addValue}
+		row := metaRow{isAnnotation: isAnnotation, key: key, input: t.addValueInput}
 		overwrite := metaKeyExists(t, isAnnotation, key)
 		target := *t
 		t.adding = metaAddNone
+		t.addKeyInput.Blur()
+		t.addValueInput.Blur()
 		return m, m.commitMeta(target, row, overwrite, true)
-	case "left":
-		if t.addOnValue {
-			t.addValueCursor = max(t.addValueCursor-1, 0)
-		} else {
-			t.addKeyCursor = max(t.addKeyCursor-1, 0)
-		}
-	case "right":
-		if t.addOnValue {
-			t.addValueCursor = min(t.addValueCursor+1, len([]rune(t.addValue)))
-		} else {
-			t.addKeyCursor = min(t.addKeyCursor+1, len([]rune(t.addKey)))
-		}
-	case "backspace":
-		if t.addOnValue {
-			if t.addValueCursor > 0 {
-				r := []rune(t.addValue)
-				t.addValue = string(r[:t.addValueCursor-1]) + string(r[t.addValueCursor:])
-				t.addValueCursor--
-			}
-		} else if t.addKeyCursor > 0 {
-			r := []rune(t.addKey)
-			t.addKey = string(r[:t.addKeyCursor-1]) + string(r[t.addKeyCursor:])
-			t.addKeyCursor--
-		}
 	default:
-		if msg.Text != "" {
-			if t.addOnValue {
-				r := []rune(t.addValue)
-				ins := []rune(msg.Text)
-				t.addValue = string(r[:t.addValueCursor]) + string(ins) + string(r[t.addValueCursor:])
-				t.addValueCursor += len(ins)
-			} else {
-				r := []rune(t.addKey)
-				ins := []rune(msg.Text)
-				t.addKey = string(r[:t.addKeyCursor]) + string(ins) + string(r[t.addKeyCursor:])
-				t.addKeyCursor += len(ins)
-			}
+		var cmd tea.Cmd
+		if t.addOnValue {
+			t.addValueInput, cmd = t.addValueInput.Update(msg)
+		} else {
+			t.addKeyInput, cmd = t.addKeyInput.Update(msg)
 		}
+		return m, cmd
 	}
 	return m, nil
 }
@@ -621,7 +628,7 @@ func (m *Model) commitMeta(t metaTarget, row metaRow, overwrite, isAdd bool) tea
 	scope := tui.TaskScope{
 		ResourceKind: string(t.kind), ResourceName: t.name, Namespace: t.namespace,
 		Verb: "set-meta", IsMutating: true,
-		MetaKey: row.key, MetaValue: row.buffer, MetaIsAnnotation: row.isAnnotation, MetaOverwrite: overwrite,
+		MetaKey: row.key, MetaValue: row.input.Value(), MetaIsAnnotation: row.isAnnotation, MetaOverwrite: overwrite,
 	}
 	if row.joinService != "" {
 		tier = actions.TierInline
@@ -633,7 +640,7 @@ func (m *Model) commitMeta(t metaTarget, row metaRow, overwrite, isAdd bool) tea
 	}
 	m.armMetaCommit(&metaPendingCommit{
 		isAdd: isAdd, section: sectionOf(row.isAnnotation),
-		key: row.key, isAnnotation: row.isAnnotation, value: row.buffer,
+		key: row.key, isAnnotation: row.isAnnotation, value: row.input.Value(),
 	})
 	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    "set-meta-" + t.namespace + "/" + t.name + "/" + row.key,
@@ -723,9 +730,13 @@ func (m *Model) handleMetaResult(msg actions.ResultMsg) tea.Cmd {
 			if pc.isAnnotation {
 				t.adding = metaAddAnnotation
 			}
-			t.addKey, t.addValue = pc.key, pc.value
-			t.addKeyCursor, t.addValueCursor = len([]rune(pc.key)), len([]rune(pc.value))
+			t.addKeyInput.SetValue(pc.key)
+			t.addKeyInput.CursorEnd()
+			t.addValueInput.SetValue(pc.value)
+			t.addValueInput.CursorEnd()
 			t.addOnValue = true
+			t.addKeyInput.Blur()
+			t.addValueInput.Focus()
 			return nil
 		}
 		rows, idx := t.rowsFor(pc.section)
@@ -736,6 +747,7 @@ func (m *Model) handleMetaResult(msg actions.ResultMsg) tea.Cmd {
 			*idx = i
 			if !pc.isRemove {
 				rows[i].setBuffer(pc.value)
+				rows[i].input.Focus()
 				t.editing = true
 			}
 			break

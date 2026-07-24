@@ -141,8 +141,8 @@ func TestEnterOnDeploymentSwitchesToPodsFilteredByName(t *testing.T) {
 	if next.kind != kube.KindPod {
 		t.Fatalf("expected kind switched to Pod, got %s", next.kind)
 	}
-	if next.filterQuery != "api" {
-		t.Fatalf("filterQuery = %q, want %q", next.filterQuery, "api")
+	if next.filterInput.Value() != "api" {
+		t.Fatalf("filterQuery = %q, want %q", next.filterInput.Value(), "api")
 	}
 	view := plain(next.Render())
 	if !strings.Contains(view, "api-abc123") {
@@ -246,6 +246,7 @@ func TestDeploymentOriginClearsOnUnrelatedNavigation(t *testing.T) {
 	t.Run("filterCleared", func(t *testing.T) {
 		m := newAtDeploymentPods(t)
 		m.filterActive = true
+		m.filterInput.Focus()
 		m = step(t, m, tea.KeyPressMsg{Text: "esc"})
 		if m.originName != "" {
 			t.Fatalf("expected originName cleared after clearing the filter, got %q", m.originName)
@@ -255,6 +256,7 @@ func TestDeploymentOriginClearsOnUnrelatedNavigation(t *testing.T) {
 	t.Run("filterEdited", func(t *testing.T) {
 		m := newAtDeploymentPods(t)
 		m.filterActive = true
+		m.filterInput.Focus()
 		m = step(t, m, tea.KeyPressMsg{Text: "x"})
 		if m.originName != "" {
 			t.Fatalf("expected originName cleared after editing the filter, got %q", m.originName)

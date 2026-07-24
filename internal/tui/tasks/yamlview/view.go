@@ -106,11 +106,10 @@ func (m Model) secretStripLine(theme tui.Theme, width int) string {
 
 func (m Model) searchStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.searchQuery) + accent.Render(tui.GlyphSelBar)
-	right := dim.Render(strconv.Itoa(searchMatchCount(m.rendered(), m.searchQuery)) + " matches")
+	left := accent.Render("/ ") + m.searchInput.View()
+	right := dim.Render(strconv.Itoa(searchMatchCount(m.rendered(), m.searchInput.Value())) + " matches")
 	return padBetween(left, right, width)
 }
 
@@ -161,7 +160,7 @@ func (m Model) readyBody(width, height int) string {
 	rows := min(height, max(len(rendered)-m.offset, 0))
 
 	gutterWidth := len(strconv.Itoa(len(m.lines))) + 1
-	query := strings.ToLower(m.searchQuery)
+	query := strings.ToLower(m.searchInput.Value())
 
 	lines := make([]string, 0, rows)
 	for i := m.offset; i < m.offset+rows && i < len(rendered); i++ {

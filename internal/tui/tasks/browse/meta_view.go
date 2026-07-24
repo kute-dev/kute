@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -206,10 +207,13 @@ func displayOrDash(s string) string {
 	return s
 }
 
-// metaValueCell renders the selected, editable row's value: cursor-anchored
-// like resourceField/setImageTarget's own buffers, prefixed with "was
+// metaValueCell renders the selected, editable row's value via r.input's own
+// cursor-anchored View (SelBg background and "—" empty-placeholder already
+// baked into its Styles by metaInputStyles), bolded and prefixed with "was
 // <current> · " once touched — docs/design README.md §26a's own mockup
-// example ("was stage · staging▎").
+// example ("was stage · staging▎"). selected is always true in practice
+// (metaRowLine only calls this for the selected+editing row) — kept as a
+// parameter so the withBg fallback below stays explicit rather than assumed.
 func metaValueCell(r metaRow, theme tui.Theme, selected bool) string {
 	withBg := func(s lipgloss.Style) lipgloss.Style {
 		if selected {
@@ -217,23 +221,16 @@ func metaValueCell(r metaRow, theme tui.Theme, selected bool) string {
 		}
 		return s
 	}
-	style := withBg(lipgloss.NewStyle().Foreground(theme.Text))
-	if r.changed() {
-		style = withBg(lipgloss.NewStyle().Foreground(theme.Text).Bold(true))
-	}
-	accent := withBg(lipgloss.NewStyle().Foreground(theme.Accent))
 	was := withBg(lipgloss.NewStyle().Foreground(theme.TextFaint))
 
-	runes := []rune(r.buffer)
-	pos := min(max(r.cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
-	if pre == "" && post == "" {
-		pre = "—"
+	input := r.input
+	if r.changed() {
+		styles := input.Styles()
+		styles.Focused.Text = styles.Focused.Text.Bold(true)
+		styles.Blurred.Text = styles.Blurred.Text.Bold(true)
+		input.SetStyles(styles)
 	}
-	rendered := style.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		rendered += style.Render(post)
-	}
+	rendered := input.View()
 	if r.changed() {
 		rendered = was.Render("was "+displayOrDash(r.current)+" · ") + rendered
 	}
@@ -253,7 +250,7 @@ func metaPendingValueCell(r metaRow, theme tui.Theme, selected bool) string {
 	}
 	style := withBg(lipgloss.NewStyle().Foreground(theme.Text).Bold(true))
 	was := withBg(lipgloss.NewStyle().Foreground(theme.TextFaint))
-	return was.Render("was "+displayOrDash(r.current)+" · ") + style.Render(displayOrDash(r.buffer))
+	return was.Render("was "+displayOrDash(r.current)+" · ") + style.Render(displayOrDash(r.input.Value()))
 }
 
 // metaNoteText renders the right-note column: the read-only explanation
@@ -288,10 +285,9 @@ func metaNoteText(r metaRow, editing, pendingConfirm bool, theme tui.Theme, with
 func (m Model) metaAddRowLine(t *metaTarget, theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
-	bold := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
-	keyCell := metaAddBufferCell(t.addKey, t.addKeyCursor, !t.addOnValue, bold, accent, dim)
-	valueCell := metaAddBufferCell(t.addValue, t.addValueCursor, t.addOnValue, bold, accent, dim)
+	keyCell := metaAddBufferCell(t.addKeyInput, dim)
+	valueCell := metaAddBufferCell(t.addValueInput, dim)
 
 	marker := accent.Render("+ ")
 	kind := "label"
@@ -303,23 +299,15 @@ func (m Model) metaAddRowLine(t *metaTarget, theme tui.Theme, width int) string 
 	return metaRowColumns("", left, "", note, width, lipgloss.NewStyle())
 }
 
-// metaAddBufferCell renders one of the add-row's two buffers, with the
-// cursor glyph only in the currently focused one.
-func metaAddBufferCell(buffer string, cursor int, focused bool, textStyle, accent, dim lipgloss.Style) string {
-	if !focused {
-		if buffer == "" {
-			return dim.Render("…")
-		}
-		return textStyle.Render(buffer)
+// metaAddBufferCell renders one of the add-row's two buffers via its own
+// View (which embeds the cursor only while Focused) — the one case View()
+// doesn't already cover is an unfocused, empty buffer, which old code showed
+// as a dim "…" rather than nothing.
+func metaAddBufferCell(input textinput.Model, dim lipgloss.Style) string {
+	if !input.Focused() && input.Value() == "" {
+		return dim.Render("…")
 	}
-	runes := []rune(buffer)
-	pos := min(max(cursor, 0), len(runes))
-	pre, post := string(runes[:pos]), string(runes[pos:])
-	rendered := textStyle.Render(pre) + accent.Render(tui.GlyphSelBar)
-	if post != "" {
-		rendered += textStyle.Render(post)
-	}
-	return rendered
+	return input.View()
 }
 
 // metaWillRunStrip is the panel's own "will run" line, styled like
@@ -364,13 +352,13 @@ func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
 		// just happened."
 		left = fill.Foreground(theme.Good).Render(t.message)
 	case t.adding != metaAddNone:
-		key := strings.TrimSpace(t.addKey)
+		key := strings.TrimSpace(t.addKeyInput.Value())
 		if key == "" {
 			left += cmd.Render("type a key to add a " + addKindLabel(t.adding))
 		} else {
 			isAnnotation := t.adding == metaAddAnnotation
 			overwrite := metaKeyExists(t, isAnnotation, key)
-			left += cmd.Render(kube.MetaCommandString(t.kind, t.namespace, t.name, isAnnotation, key, t.addValue, false, overwrite))
+			left += cmd.Render(kube.MetaCommandString(t.kind, t.namespace, t.name, isAnnotation, key, t.addValueInput.Value(), false, overwrite))
 			right = rightNote.Render("metadata only — no rollout")
 		}
 	default:
@@ -394,7 +382,7 @@ func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
 		case !r.changed():
 			left += cmd.Render("no changes — ↵ has nothing to apply")
 		default:
-			left += joinPrefix(r) + cmd.Render(kube.MetaCommandString(t.kind, t.namespace, t.name, r.isAnnotation, r.key, r.buffer, false, true))
+			left += joinPrefix(r) + cmd.Render(kube.MetaCommandString(t.kind, t.namespace, t.name, r.isAnnotation, r.key, r.input.Value(), false, true))
 			right = rightNote.Render("metadata only — no rollout")
 		}
 	}

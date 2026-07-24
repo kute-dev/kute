@@ -3,6 +3,7 @@ module github.com/kute-dev/kute
 go 1.26.0
 
 require (
+	charm.land/bubbles/v2 v2.1.1
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/charmbracelet/colorprofile v0.4.3
@@ -19,6 +20,7 @@ require (
 )
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260713092251-4bee1914c0cf // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect

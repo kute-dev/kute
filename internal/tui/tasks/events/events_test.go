@@ -381,16 +381,16 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 	if m.selected != 1 {
 		t.Fatalf("selected = %d, want 1 after alt+j", m.selected)
 	}
-	if m.filterQuery != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterQuery)
+	if m.filterInput.Value() != "" {
+		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterInput.Value())
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
 	if m.selected != 0 {
 		t.Fatalf("selected = %d, want 0 after alt+k", m.selected)
 	}
-	if m.filterQuery != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterQuery)
+	if m.filterInput.Value() != "" {
+		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterInput.Value())
 	}
 }
 

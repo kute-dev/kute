@@ -96,8 +96,8 @@ func TestIOpensSetImagePrefilledToCurrentTag(t *testing.T) {
 		t.Fatal("expected pendingSetImage set after 'i'")
 	}
 	t2 := m.pendingSetImage
-	if t2.repo != "registry.aim.dev/aim-worker" || t2.buffer != "3.4.1" {
-		t.Fatalf("repo/buffer = %q/%q, want registry.aim.dev/aim-worker/3.4.1", t2.repo, t2.buffer)
+	if t2.repo != "registry.aim.dev/aim-worker" || t2.input.Value() != "3.4.1" {
+		t.Fatalf("repo/buffer = %q/%q, want registry.aim.dev/aim-worker/3.4.1", t2.repo, t2.input.Value())
 	}
 	if !t2.unchanged() {
 		t.Fatal("expected the just-opened prefill to read as unchanged (same as current image)")
@@ -115,8 +115,8 @@ func TestTabCyclesContainersAndRecomputesHistory(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
 	t2 := m.pendingSetImage
-	if t2.containerIdx != 1 || t2.repo != "sidecar" || t2.buffer != "0.9.1" {
-		t.Fatalf("after tab: idx=%d repo=%q buffer=%q, want 1/sidecar/0.9.1", t2.containerIdx, t2.repo, t2.buffer)
+	if t2.containerIdx != 1 || t2.repo != "sidecar" || t2.input.Value() != "0.9.1" {
+		t.Fatalf("after tab: idx=%d repo=%q buffer=%q, want 1/sidecar/0.9.1", t2.containerIdx, t2.repo, t2.input.Value())
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
@@ -140,12 +140,12 @@ func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
 		t.Fatalf("history = %+v, want 2 entries (current + rollback target)", m.pendingSetImage.history)
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "down"})
-	if m.pendingSetImage.buffer != "3.4.1" {
-		t.Fatalf("buffer after down = %q, want 3.4.1", m.pendingSetImage.buffer)
+	if m.pendingSetImage.input.Value() != "3.4.1" {
+		t.Fatalf("buffer after down = %q, want 3.4.1", m.pendingSetImage.input.Value())
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "up"})
-	if m.pendingSetImage.buffer != "3.4.2" {
-		t.Fatalf("buffer after up = %q, want 3.4.2 (back to current)", m.pendingSetImage.buffer)
+	if m.pendingSetImage.input.Value() != "3.4.2" {
+		t.Fatalf("buffer after up = %q, want 3.4.2 (back to current)", m.pendingSetImage.input.Value())
 	}
 }
 
@@ -157,14 +157,14 @@ func TestCtrlUTogglesFullRefEditing(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
 	t2 := m.pendingSetImage
-	if !t2.fullRef || t2.buffer != "registry.aim.dev/aim-worker:3.4.1" {
-		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.aim.dev/aim-worker:3.4.1", t2.fullRef, t2.buffer)
+	if !t2.fullRef || t2.input.Value() != "registry.aim.dev/aim-worker:3.4.1" {
+		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.aim.dev/aim-worker:3.4.1", t2.fullRef, t2.input.Value())
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
 	t2 = m.pendingSetImage
-	if t2.fullRef || t2.buffer != "3.4.1" || t2.repo != "registry.aim.dev/aim-worker" {
-		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.aim.dev/aim-worker", t2.fullRef, t2.buffer, t2.repo)
+	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.aim.dev/aim-worker" {
+		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.aim.dev/aim-worker", t2.fullRef, t2.input.Value(), t2.repo)
 	}
 }
 
@@ -179,34 +179,34 @@ func TestLeftRightMoveCursorForMidBufferEditing(t *testing.T) {
 		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
-	if m.pendingSetImage.cursor != len("3.4.1") {
-		t.Fatalf("cursor = %d, want prefilled cursor at the end (%d)", m.pendingSetImage.cursor, len("3.4.1"))
+	if m.pendingSetImage.input.Position() != len("3.4.1") {
+		t.Fatalf("cursor = %d, want prefilled cursor at the end (%d)", m.pendingSetImage.input.Position(), len("3.4.1"))
 	}
 
 	for range 3 {
 		m = step(t, m, tea.KeyPressMsg{Text: "left"})
 	}
-	if m.pendingSetImage.cursor != 2 {
-		t.Fatalf("cursor after 3x left = %d, want 2", m.pendingSetImage.cursor)
+	if m.pendingSetImage.input.Position() != 2 {
+		t.Fatalf("cursor after 3x left = %d, want 2", m.pendingSetImage.input.Position())
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "9"})
-	if m.pendingSetImage.buffer != "3.94.1" {
-		t.Fatalf("buffer after mid-cursor insert = %q, want 3.94.1", m.pendingSetImage.buffer)
+	if m.pendingSetImage.input.Value() != "3.94.1" {
+		t.Fatalf("buffer after mid-cursor insert = %q, want 3.94.1", m.pendingSetImage.input.Value())
 	}
-	if m.pendingSetImage.cursor != 3 {
-		t.Fatalf("cursor after insert = %d, want 3 (advances past the inserted rune)", m.pendingSetImage.cursor)
+	if m.pendingSetImage.input.Position() != 3 {
+		t.Fatalf("cursor after insert = %d, want 3 (advances past the inserted rune)", m.pendingSetImage.input.Position())
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "backspace"})
-	if m.pendingSetImage.buffer != "3.4.1" || m.pendingSetImage.cursor != 2 {
-		t.Fatalf("after backspace: buffer=%q cursor=%d, want 3.4.1/2", m.pendingSetImage.buffer, m.pendingSetImage.cursor)
+	if m.pendingSetImage.input.Value() != "3.4.1" || m.pendingSetImage.input.Position() != 2 {
+		t.Fatalf("after backspace: buffer=%q cursor=%d, want 3.4.1/2", m.pendingSetImage.input.Value(), m.pendingSetImage.input.Position())
 	}
 
 	for range 5 {
 		m = step(t, m, tea.KeyPressMsg{Text: "right"})
 	}
-	if m.pendingSetImage.cursor != len("3.4.1") {
-		t.Fatalf("cursor after overshooting right = %d, want clamped at %d", m.pendingSetImage.cursor, len("3.4.1"))
+	if m.pendingSetImage.input.Position() != len("3.4.1") {
+		t.Fatalf("cursor after overshooting right = %d, want clamped at %d", m.pendingSetImage.input.Position(), len("3.4.1"))
 	}
 }
 
@@ -311,7 +311,7 @@ func TestIAppliesToStatefulSetsAndDaemonSets(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
-	if m.pendingSetImage == nil || m.pendingSetImage.buffer != "15" {
+	if m.pendingSetImage == nil || m.pendingSetImage.input.Value() != "15" {
 		t.Fatalf("expected StatefulSet's 'i' to open prefilled to tag 15, got %+v", m.pendingSetImage)
 	}
 	// No ControllerRevision fixtures seeded — the single-row "current"

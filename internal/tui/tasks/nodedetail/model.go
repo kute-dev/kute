@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
 
@@ -129,7 +130,7 @@ type Model struct {
 	offset      int
 
 	filterActive bool
-	filterQuery  string
+	filterInput  textinput.Model
 
 	// reloadEpoch guards a debounced reload-on-still-syncing retry (see
 	// CacheSyncChecker/scheduleReload in load.go) against a stale reply

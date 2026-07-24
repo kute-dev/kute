@@ -199,11 +199,10 @@ func pluralize(n int, word string) string {
 // (docs/design system-wide interactions: "items never silently disappear").
 func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	text := lipgloss.NewStyle().Foreground(theme.Text)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + text.Render(m.filterQuery) + accent.Render(tui.GlyphSelBar)
+	left := accent.Render("/ ") + m.filterInput.View()
 	total, matched := m.filterBaselineRows, len(m.rows)
 	right := dim.Render(fmt.Sprintf("%d matched", matched))
 	if matched < total {

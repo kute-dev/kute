@@ -106,6 +106,8 @@ func whoCanResourceDispatch(item palette.Item) tea.Cmd {
 // (read via WhoCanScoped before this is called).
 func (m *Model) openVerbPalette(current string) tea.Cmd {
 	m.palette = &palette.Model{Scope: palette.ScopeVerb, Prompt: "verb ›", Hint: "RBAC verb"}
+	m.palette.Input = palette.NewInput(palette.ScopeVerb)
+	m.palette.Input.SetStyles(TextInputStyles(m.Theme()))
 	m.mode = ModeGoto
 	m.whoCanVerbItemsCache = whoCanVerbItems(current)
 	m.palette.Items = m.whoCanVerbItemsCache
@@ -114,6 +116,8 @@ func (m *Model) openVerbPalette(current string) tea.Cmd {
 
 func (m *Model) openResourcePalette(current string) tea.Cmd {
 	m.palette = &palette.Model{Scope: palette.ScopeResource, Prompt: "resource ›", Hint: "RBAC resource"}
+	m.palette.Input = palette.NewInput(palette.ScopeResource)
+	m.palette.Input.SetStyles(TextInputStyles(m.Theme()))
 	m.mode = ModeGoto
 	m.whoCanResourceItemsCache = whoCanResourceItems(m.session, current)
 	m.palette.Items = m.whoCanResourceItemsCache
@@ -126,8 +130,8 @@ func (m *Model) openResourcePalette(current string) tea.Cmd {
 // per palette-open rather than needing a live refetch per keystroke.
 func (m *Model) refreshWhoCanVerbPalette() {
 	items := m.whoCanVerbItemsCache
-	if m.palette.Query != "" {
-		items = palette.Filter(items, m.palette.Query)
+	if m.palette.Query() != "" {
+		items = palette.Filter(items, m.palette.Query())
 	}
 	m.palette.Items = items
 	m.palette.Sel = 0
@@ -135,8 +139,8 @@ func (m *Model) refreshWhoCanVerbPalette() {
 
 func (m *Model) refreshWhoCanResourcePalette() {
 	items := m.whoCanResourceItemsCache
-	if m.palette.Query != "" {
-		items = palette.Filter(items, m.palette.Query)
+	if m.palette.Query() != "" {
+		items = palette.Filter(items, m.palette.Query())
 	}
 	m.palette.Items = items
 	m.palette.Sel = 0
