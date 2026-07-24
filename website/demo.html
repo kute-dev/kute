@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Demo — kute, the incident console for Kubernetes</title>
-<meta name="description" content="Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, the namespace palette's alt-tab and digit-recall gestures, and the goto palette's alias switch and jump-to-pod — all recorded straight from kute --demo.">
+<meta name="description" content="Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, the namespace and goto palettes' alt-tab gestures, everyday Deployment actions, and the Ingress/Gateway API routing table resolving a broken backend live — all recorded straight from kute --demo.">
 <link rel="canonical" href="https://kute.dev/demo.html">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/styles.css">
@@ -56,7 +56,7 @@
   <div class="wrap">
     <span class="eyebrow">● see it in action</span>
     <h1>Watch it work,<br>not just read about it.</h1>
-    <p class="sub">All three recordings below are captured straight from <code style="white-space:nowrap">kute --demo</code>'s built-in fake cluster — the exact same one-command experience you get, unedited.</p>
+    <p class="sub">All five recordings below are captured straight from <code style="white-space:nowrap">kute --demo</code>'s built-in fake cluster — the exact same one-command experience you get, unedited.</p>
   </div>
 </header>
 
@@ -102,6 +102,36 @@
       <img src="assets/namespace-palette-demo.gif" alt="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-namespace-palette.tape</code></p>
+  </div>
+</section>
+
+<!-- ================= EVERYDAY ACTIONS ================= -->
+<section class="demo-page" id="everyday-actions">
+  <div class="wrap">
+    <div class="demo-copy reveal">
+      <span class="eyebrow">everyday actions</span>
+      <h2>Every action shows its command first.</h2>
+      <p>One Deployment, one continuous flow: scale warns you it's HPA-managed before overriding a no-op, set image picks a tag straight from rollout history, resource limits nudge next to the live usage bars, and a label add/remove shows the exact <code>kubectl</code> command before it runs. Port-forward starts without suspending kute — the header's forward chip stays live while you keep browsing.</p>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="assets/demo-everyday-actions.gif" alt="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues" loading="lazy">
+    </div>
+    <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-everyday-actions.tape</code></p>
+  </div>
+</section>
+
+<!-- ================= ROUTING TABLE ================= -->
+<section class="demo-page" id="routing-table">
+  <div class="wrap">
+    <div class="demo-copy reveal">
+      <span class="eyebrow">routing table</span>
+      <h2>Ingress and Gateway API, resolved live.</h2>
+      <p>An Ingress with a healthy route sits right next to one whose Service was never created — red inline, not a silent failure discovered later. An HTTPRoute's weighted canary split resolves both backends' live endpoint counts, and <code>p</code> jumps straight to the parent Gateway that accepted it — resolving Gateway API's split ownership both ways.</p>
+    </div>
+    <div class="demo-shot reveal">
+      <img src="assets/demo-routing-table.gif" alt="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway" loading="lazy">
+    </div>
+    <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-routing-table.tape</code></p>
   </div>
 </section>
 
