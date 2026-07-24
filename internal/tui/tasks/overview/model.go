@@ -21,6 +21,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -118,7 +119,7 @@ type Model struct {
 	reloadEpoch int
 	state       tui.TaskState
 	feedback    string
-	spinner     components.Spinner
+	spinner     spinner.Model
 }
 
 // loadedMsg carries one load()'s result.
@@ -173,6 +174,7 @@ func New(cfg Config) Model {
 		timeout:        cfg.LoadTimeout,
 		state:          state,
 		feedback:       feedback,
+		spinner:        components.NewSpinner(),
 	}
 }
 
@@ -180,7 +182,7 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil {
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) SetSize(width, height int) {

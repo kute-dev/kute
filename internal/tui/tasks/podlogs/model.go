@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -139,7 +140,7 @@ type Model struct {
 	linesSinceTick int
 	lastRate       int
 
-	spinner components.Spinner
+	spinner spinner.Model
 }
 
 func New(cfg Config) Model {
@@ -171,6 +172,7 @@ func New(cfg Config) Model {
 		streamer:  cfg.Streamer,
 		tailLines: cfg.TailLines,
 		sinceIdx:  defaultSinceIndex,
+		spinner:   components.NewSpinner(),
 	}
 }
 

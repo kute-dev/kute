@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -28,13 +28,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.epoch == m.reloadEpoch {
 			return m, m.load()
 		}
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
 		m.now = time.Now()
-		return m, components.SpinnerTick()
+		return m, cmd
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
 		if msg.Err == nil {

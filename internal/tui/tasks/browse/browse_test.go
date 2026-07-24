@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +17,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 // fakeLister is namespace-aware (unlike the other tasks' fakeLister
@@ -249,7 +249,7 @@ func TestLoadingStateHeaderTimerAdvances(t *testing.T) {
 	m.SetSize(120, 36)
 	m.loadStartedAt = m.loadStartedAt.Add(-2 * time.Second)
 
-	updated, _ := m.Update(components.SpinnerTickMsg(time.Now()))
+	updated, _ := m.Update(spinner.TickMsg{Time: time.Now()})
 	view := plain(updated.(*Model).Render())
 	if !strings.Contains(view, "loading pods · 2.") {
 		t.Fatalf("expected header timer to show ~2s elapsed:\n%s", view)

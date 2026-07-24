@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -305,7 +305,7 @@ func TestLoadingStateHeaderTimerAdvances(t *testing.T) {
 	m.SetSize(120, 30)
 	m.loadStartedAt = m.loadStartedAt.Add(-2 * time.Second)
 
-	updated, _ := m.Update(components.SpinnerTickMsg(time.Now()))
+	updated, _ := m.Update(spinner.TickMsg{Time: time.Now()})
 	view := plain(updated.(*Model).Render())
 	if !strings.Contains(view, "loading node-a · 2.") {
 		t.Fatalf("expected header timer to show ~2s elapsed:\n%s", view)

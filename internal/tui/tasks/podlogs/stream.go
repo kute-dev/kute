@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
-	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 // reconnectDelay is the pause before re-opening a container's log stream
@@ -55,7 +54,7 @@ func (m *Model) restartStream(state StreamState) tea.Cmd {
 	streamID := m.streamID
 	model := *m
 	go model.runStream(ctx, streamID, m.streamCh)
-	return tea.Batch(waitForStream(m.streamCh), rateTickCmd(m.rateGen), components.SpinnerTick())
+	return tea.Batch(waitForStream(m.streamCh), rateTickCmd(m.rateGen), m.spinner.Tick)
 }
 
 func rateTickCmd(gen int) tea.Cmd {

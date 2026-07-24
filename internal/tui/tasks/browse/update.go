@@ -4,12 +4,12 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -89,13 +89,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case rowsLoadedMsg:
 		return m.applyRowsLoaded(msg)
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
 		m.now = time.Now()
-		return m, components.SpinnerTick()
+		return m, cmd
 	case emptyHintsMsg:
 		if msg.kind == m.kind && m.state == tui.TaskStateEmpty {
 			m.hints = msg.hints

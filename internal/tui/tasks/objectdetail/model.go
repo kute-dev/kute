@@ -13,6 +13,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -102,7 +103,7 @@ type Model struct {
 
 	state    tui.TaskState
 	feedback string
-	spinner  components.Spinner
+	spinner  spinner.Model
 }
 
 type loadedMsg struct {
@@ -153,6 +154,7 @@ func New(cfg Config) Model {
 		desc:         desc,
 		state:        state,
 		feedback:     feedback,
+		spinner:      components.NewSpinner(),
 	}
 }
 
@@ -160,7 +162,7 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil || m.state == tui.TaskStateError {
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) SetSize(width, height int) {

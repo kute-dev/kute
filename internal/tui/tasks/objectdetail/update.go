@@ -3,6 +3,7 @@ package objectdetail
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -27,12 +27,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.actions.SetOffline(m.conn.Offline())
 	case loadedMsg:
 		return m.applyLoaded(msg)
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
-		return m, components.SpinnerTick()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
 		if msg.Err == nil {
@@ -202,7 +203,7 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 		m.feedback = "no cluster connection"
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 // openSelectedYAML pushes 8a for the loaded object.

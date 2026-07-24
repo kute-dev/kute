@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -24,12 +24,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.conn = kube.ConnState(msg)
 	case loadedMsg:
 		return m.applyLoaded(msg)
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
-		return m, components.SpinnerTick()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}

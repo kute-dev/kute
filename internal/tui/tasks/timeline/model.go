@@ -19,6 +19,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -134,7 +135,7 @@ type Model struct {
 	fetchedAt time.Time
 	state     tui.TaskState
 	feedback  string
-	spinner   components.Spinner
+	spinner   spinner.Model
 }
 
 // loadedMsg carries one load()'s result.
@@ -171,6 +172,7 @@ func New(cfg Config) Model {
 		window:     windowSteps[0],
 		state:      state,
 		feedback:   feedback,
+		spinner:    components.NewSpinner(),
 	}
 }
 
@@ -178,7 +180,7 @@ func (m Model) Init() tea.Cmd {
 	if m.events == nil {
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) SetSize(width, height int) {

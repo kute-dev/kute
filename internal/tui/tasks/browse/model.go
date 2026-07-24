@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -389,7 +390,7 @@ type Model struct {
 
 	state    tui.TaskState
 	feedback string
-	spinner  components.Spinner
+	spinner  spinner.Model
 	// loadStartedAt is when the current TaskStateLoading spell began — 15a's
 	// header timer ("◐ loading pods · 0.4s") measures elapsed against this
 	// rather than reading the clock in Render (render must stay pure:
@@ -544,6 +545,7 @@ func New(cfg Config) Model {
 		now:                time.Now(),
 		loadStartedAt:      time.Now(),
 		filterInput:        filterInput,
+		spinner:            components.NewSpinner(),
 	}
 }
 
@@ -589,7 +591,7 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil {
 		return nil
 	}
-	cmds := []tea.Cmd{m.load(), components.SpinnerTick()}
+	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
 	}
@@ -868,7 +870,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 		m.feedback = "no cluster connection"
 		return nil
 	}
-	cmds := []tea.Cmd{m.load(), components.SpinnerTick()}
+	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
 	}

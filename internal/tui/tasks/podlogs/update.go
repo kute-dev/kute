@@ -3,12 +3,12 @@ package podlogs
 import (
 	"fmt"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -18,12 +18,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamStartedMsg:
 		m.stream = msg.state
 		m.feedback = ""
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.taskState() != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
-		return m, components.SpinnerTick()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case logLineMsg:
 		if msg.streamID != 0 && msg.streamID != m.streamID {
 			return m, m.nextStreamCmd()

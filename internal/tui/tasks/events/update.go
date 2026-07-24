@@ -4,12 +4,12 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -26,12 +26,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.switchNamespace(msg.Namespace)
 	case loadedMsg:
 		return m.applyLoaded(msg)
-	case components.SpinnerTickMsg:
+	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
-		m.spinner = m.spinner.Advance()
-		return m, components.SpinnerTick()
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -139,7 +140,7 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	m.selected = 0
 	m.state = tui.TaskStateLoading
 	m.feedback = "Loading events..."
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

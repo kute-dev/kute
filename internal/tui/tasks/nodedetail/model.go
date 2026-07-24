@@ -12,6 +12,7 @@ import (
 	"context"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -149,7 +150,7 @@ type Model struct {
 
 	state    tui.TaskState
 	feedback string
-	spinner  components.Spinner
+	spinner  spinner.Model
 	// loadStartedAt is when this screen's one-shot load() began — see now's
 	// doc comment (docs/design README.md §15a's loading-state pattern,
 	// applied here the same way browse.Model.loadStartedAt is).
@@ -206,6 +207,7 @@ func New(cfg Config) Model {
 		feedback:      feedback,
 		now:           time.Now(),
 		loadStartedAt: time.Now(),
+		spinner:       components.NewSpinner(),
 	}
 }
 
@@ -213,7 +215,7 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil {
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) SetSize(width, height int) {

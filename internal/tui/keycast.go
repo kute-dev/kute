@@ -24,7 +24,7 @@ const keycastCoalesceWindow = 700 * time.Millisecond
 const keycastIdleClear = 2500 * time.Millisecond
 
 // keycastTickInterval drives the idle-clear countdown — coarser than
-// components.SpinnerInterval since the chip only needs to notice the idle
+// spinner.MiniDot's own FPS since the chip only needs to notice the idle
 // deadline has passed, not animate.
 const keycastTickInterval = 250 * time.Millisecond
 
@@ -49,7 +49,8 @@ type keycastState struct {
 
 // KeycastTickMsg drives keycastState's idle-clear countdown — the tick loop
 // self-terminates once the buffer has emptied, the same self-terminating
-// shape components.SpinnerTickMsg documents.
+// shape bubbles/v2/spinner's own TickMsg loop follows (see e.g.
+// internal/tui/tasks/nodedetail/update.go's spinner.TickMsg case).
 type KeycastTickMsg time.Time
 
 // keycastTick starts (or continues) the idle-clear countdown.

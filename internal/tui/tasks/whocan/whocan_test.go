@@ -31,7 +31,7 @@ func newSession() *tui.Session {
 
 // step mirrors events_test.go's own helper: applies one message, draining
 // any resulting tea.BatchMsg fan-out, so Init()'s tea.Batch(load(),
-// SpinnerTick()) resolves synchronously in tests.
+// spinner.Tick) resolves synchronously in tests.
 func step(t *testing.T, m Model, msg tea.Msg) Model {
 	t.Helper()
 	if batch, ok := msg.(tea.BatchMsg); ok {

@@ -26,6 +26,7 @@ import (
 	"sort"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -169,7 +170,7 @@ type Model struct {
 
 	state    tui.TaskState
 	feedback string
-	spinner  components.Spinner
+	spinner  spinner.Model
 }
 
 // loadedMsg carries one load()'s result.
@@ -203,6 +204,7 @@ func New(cfg Config) Model {
 		name:      cfg.Name,
 		state:     state,
 		feedback:  feedback,
+		spinner:   components.NewSpinner(),
 	}
 }
 
@@ -210,7 +212,7 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil {
 		return nil
 	}
-	return tea.Batch(m.load(), components.SpinnerTick())
+	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
 func (m *Model) SetSize(width, height int) {
