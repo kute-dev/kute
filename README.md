@@ -8,7 +8,9 @@ See what broke. Understand why. Act safely.
 
 kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
 
-<!-- TODO: asciinema/GIF incident walkthrough goes here -->
+![kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier](docs/assets/incident-walkthrough-all-namespaces.gif)
+
+*Recorded against `kute --demo`'s built-in fake cluster — regenerate with `scripts/record-demo.sh docs/assets/demo-all-namespaces.tape`.*
 
 ## Try it
 
