@@ -540,6 +540,19 @@ func gotoRecentKindLabels(sess *Session) []string {
 	return labels
 }
 
+// pushRecentKind records kind as the most recently visited kind
+// (Session.State.RecentKinds), also seeding the kind being left
+// (sess.Location.Kind, still the outgoing value here since this always
+// runs before the GotoKindMsg/GotoResourceMsg that actually updates it) —
+// see pushRecentNamespace's identical note in namespace.go. Without it, a
+// kind only ever entered RecentKinds by being switched *to*, so the first
+// alt-tab away from whatever kind browse opened on had no "previous" to
+// resolve to.
+func pushRecentKind(sess *Session, kind kube.ResourceKind) {
+	sess.State.RecentKinds = state.PushRecent(sess.State.RecentKinds, string(sess.Location.Kind))
+	sess.State.RecentKinds = state.PushRecent(sess.State.RecentKinds, string(kind))
+}
+
 // gotoDispatch turns a selected item's gotoTarget into the tea.Cmd that
 // performs the actual navigation: the produced message flows through the
 // same path as BackMsg/ConnStateMsg (root Update updates Session.Location,
@@ -553,11 +566,11 @@ func gotoDispatch(sess *Session, item palette.Item) tea.Cmd {
 	}
 	switch target.action {
 	case gotoSwitchKind:
-		sess.State.RecentKinds = state.PushRecent(sess.State.RecentKinds, string(target.kind))
+		pushRecentKind(sess, target.kind)
 		kind := target.kind
 		return func() tea.Msg { return GotoKindMsg{Kind: kind} }
 	case gotoOpenResource:
-		sess.State.RecentKinds = state.PushRecent(sess.State.RecentKinds, string(target.kind))
+		pushRecentKind(sess, target.kind)
 		msg := GotoResourceMsg{Kind: target.kind, Namespace: target.namespace, Name: target.name}
 		return func() tea.Msg { return msg }
 	case gotoSwitchNamespace:

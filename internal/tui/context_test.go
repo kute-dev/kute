@@ -259,6 +259,41 @@ func TestRootModelContextSwitchPreservesOutgoingRecentNamespaces(t *testing.T) {
 	}
 }
 
+// TestRootModelContextSwitchSeedsOutgoingContext pins a companion bug to
+// TestRootModelContextSwitchPreservesOutgoingRecentNamespaces above:
+// switchContextCmd used to push only the destination context into
+// RecentContexts, never the context being left — so a context only ever
+// entered RecentContexts by being switched *to*. The context the app
+// launched into (RecentContexts starts empty) had no "previous" to
+// alt-tab back to on the very next "c <enter>". Confirms both the
+// destination and the outgoing context land in RecentContexts,
+// most-recent-first.
+func TestRootModelContextSwitchSeedsOutgoingContext(t *testing.T) {
+	writeContextTestKubeconfig(t)
+
+	sess := &tui.Session{
+		Theme:    tui.Dark(),
+		Location: tui.Location{Context: "dev", Namespace: "default"},
+		State:    state.State{PerContext: map[string]state.PerContext{}},
+	}
+	sess.Cluster = &kube.Cluster{}
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "c"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	_, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if cmd == nil {
+		t.Fatalf("expected a switch-context cmd for prod-eks")
+	}
+	want := []string{"prod-eks", "dev"}
+	got := sess.State.RecentContexts
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("RecentContexts = %v, want %v (must seed the outgoing context too)", got, want)
+	}
+}
+
 // TestRootModelContextDigitPicksRecent covers 7a's numbered RECENT-row
 // shortcut (digitRecentTarget/recentNumbers): current and the
 // immediately-previous context are both excluded from the numbering (each

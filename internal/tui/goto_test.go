@@ -271,6 +271,45 @@ func TestRootModelGEnterOnKindSwitchesBrowseKind(t *testing.T) {
 	}
 }
 
+// TestRootModelGotoDispatchSeedsOutgoingKind pins a companion bug to
+// TestRootModelContextSwitchPreservesOutgoingRecentNamespaces
+// (context_test.go): switching kind via the goto palette used to push
+// only the destination kind into RecentKinds, never the kind being left —
+// so a kind only ever entered RecentKinds by being switched *to*. The
+// kind browse opened on (RecentKinds starts empty) had no "previous" to
+// alt-tab back to on the very next "g <enter>". Confirms both the
+// destination and the outgoing kind land in RecentKinds, most-recent-first.
+func TestRootModelGotoDispatchSeedsOutgoingKind(t *testing.T) {
+	t.Parallel()
+	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:        {gotoTestPod("default", "api-1")},
+		kube.KindDeployment: {},
+	}}
+	sess := gotoTestSession(lister) // Location.Kind = KindPod, RecentKinds empty
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	for _, ch := range []string{"d", "e", "p"} {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: ch})
+	}
+	_, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected a navigation cmd for Deployments")
+	}
+	msg, ok := cmd().(tui.GotoKindMsg)
+	if !ok || msg.Kind != kube.KindDeployment {
+		t.Fatalf("expected a GotoKindMsg for Deployments, got %#v", msg)
+	}
+
+	want := []string{string(kube.KindDeployment), string(kube.KindPod)}
+	got := sess.State.RecentKinds
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("RecentKinds = %v, want %v (must seed the outgoing kind too)", got, want)
+	}
+}
+
 // TestRootModelGBrowseOpensWithLastOtherKindPreselected covers the alt-tab
 // grammar (docs/design README.md §2b: "g ↵ returns to the last kind"):
 // recentKinds[0] is always the current kind (only a completed jump ever

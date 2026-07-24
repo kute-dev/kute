@@ -449,6 +449,41 @@ func TestRootModelNamespaceRecentsPromotedToTop(t *testing.T) {
 	}
 }
 
+// TestRootModelNamespaceDispatchSeedsOutgoingNamespace pins a companion bug
+// to TestRootModelContextSwitchPreservesOutgoingRecentNamespaces
+// (context_test.go): switching namespace used to push only the
+// destination into PerContext[ctx].RecentNamespaces, never the namespace
+// being left — so a namespace only ever entered recents by being switched
+// *to*. The namespace the app launched into (RecentNamespaces starts
+// empty) had no "previous" to alt-tab back to on the very next
+// "n <enter>". Confirms both the destination and the outgoing namespace
+// land in RecentNamespaces, most-recent-first.
+func TestRootModelNamespaceDispatchSeedsOutgoingNamespace(t *testing.T) {
+	t.Parallel()
+	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNamespace: {namespaceObj("default"), namespaceObj("prod")},
+	}}
+	sess := gotoTestSession(lister) // Location.Namespace = "default", RecentNamespaces empty
+	sess.State = state.State{PerContext: map[string]state.PerContext{}}
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "n"})
+	for _, ch := range []string{"p", "r", "o", "d"} {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: ch})
+	}
+	_, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected a switch-namespace cmd for prod")
+	}
+
+	want := []string{"prod", "default"}
+	got := sess.State.PerContext["microk8s-cluster"].RecentNamespaces
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("RecentNamespaces = %v, want %v (must seed the outgoing namespace too)", got, want)
+	}
+}
+
 // TestRootModelNamespaceDigitNineReachesNinthRecent covers the full 1-9
 // range actually being reachable: state.MaxRecent must be large enough to
 // hold current + previous + 9 numbered recents (11 total) — with a full

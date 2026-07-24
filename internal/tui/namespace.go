@@ -446,12 +446,21 @@ func contextRecentNamespaces(sess *Session) []string {
 // namespace (state.PerContext[ctx].RecentNamespaces), leaving every other
 // PerContext field untouched. Shared by namespaceDispatch and goto.go's
 // gotoDispatch (its gotoSwitchNamespace case).
+//
+// Also seeds the namespace being left (sess.Location.Namespace, still the
+// outgoing value here since this always runs before the SwitchNamespaceMsg
+// that actually updates it) — otherwise a namespace only ever entered
+// RecentNamespaces by being switched *to*, so alt-tabbing away from a
+// namespace you only ever arrived at via launch or a context restore had no
+// "previous" to resolve to and silently no-op'd on the very next bare
+// "n <enter>".
 func pushRecentNamespace(sess *Session, ns string) {
 	if sess == nil || ns == "" {
 		return
 	}
 	ctx := sess.Location.Context
 	pc := sess.State.PerContext[ctx]
+	pc.RecentNamespaces = state.PushRecent(pc.RecentNamespaces, sess.Location.Namespace)
 	pc.RecentNamespaces = state.PushRecent(pc.RecentNamespaces, ns)
 	sess.State.PerContext[ctx] = pc
 }

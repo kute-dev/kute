@@ -288,6 +288,12 @@ func switchContextCmd(sess *Session, name string) tea.Cmd {
 		}
 		restoreFilter = pc.Filter
 	}
+	// Seed the outgoing context too (see pushRecentNamespace's identical
+	// note in namespace.go) — otherwise a context only ever entered
+	// RecentContexts by being switched *to*, so the first alt-tab away
+	// from whatever context the app launched into had no "previous" to
+	// resolve to.
+	sess.State.RecentContexts = state.PushRecent(sess.State.RecentContexts, sess.Location.Context)
 	sess.State.RecentContexts = state.PushRecent(sess.State.RecentContexts, name)
 
 	return func() tea.Msg {
