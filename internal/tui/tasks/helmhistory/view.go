@@ -122,6 +122,16 @@ func (m Model) confirmBody(width, height int) string {
 	return components.ConfirmCard(title, detail, styles, width, height)
 }
 
+// tableDataRows is how many data rows railBody's own Table renders — the
+// value update.go's clampOffset scrolls m.offset against, mirroring
+// nodedetail/routetable's own tableDataRows (Table.visibleRowCount(),
+// table.go: Height-1, no ShowHeaderRule here).
+func (m Model) tableDataRows() int {
+	height := tui.FrameBodyHeight(m.height, len(m.Strips(m.width)))
+	rows := max(height-2, 1) - 1
+	return max(rows, 1)
+}
+
 var railColumns = []components.Column{
 	{Title: "", Min: 2},
 	{Title: "REV", Min: 13},
@@ -177,7 +187,7 @@ func (m Model) railBody(theme tui.Theme, width, height int) string {
 		Columns:     railColumns,
 		Rows:        rows,
 		Selected:    m.selected,
-		Offset:      0,
+		Offset:      m.offset,
 		Width:       width,
 		Height:      max(height-2, 1),
 		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),

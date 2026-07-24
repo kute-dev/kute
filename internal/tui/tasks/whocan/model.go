@@ -75,6 +75,10 @@ type Model struct {
 	result   kube.WhoCanResult
 	rows     []whoCanRow
 	selected int
+	// offset keeps the selected row within the table's rendered viewport —
+	// mirrors nodedetail/routetable's own clampOffset/tableDataRows pattern
+	// (update.go's clampOffset).
+	offset int
 
 	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
 	// header badge's real connection state, same as every other screen.

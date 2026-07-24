@@ -2,6 +2,7 @@ package whocan
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -199,6 +200,42 @@ func TestRendersInBothThemes(t *testing.T) {
 		if !strings.Contains(view, "WHO CAN") || !strings.Contains(view, "bob") {
 			t.Fatalf("theme render missing expected content:\n%s", view)
 		}
+	}
+}
+
+// TestMoveSelectionScrollsOffset guards against the table's Offset staying
+// pinned at 0 while Selected scrolls off the bottom of the rendered
+// viewport — a real gap this screen had (unlike nodedetail/routetable,
+// which always tracked m.offset alongside m.selected).
+func TestMoveSelectionScrollsOffset(t *testing.T) {
+	subjects := make([]kube.WhoCanSubject, 40)
+	for i := range subjects {
+		subjects[i] = kube.WhoCanSubject{Name: fmt.Sprintf("user-%02d", i), Kind: "User"}
+	}
+	rbac := &fakeRBAC{result: kube.WhoCanResult{Subjects: subjects}}
+	m := New(Config{Session: newSession(), RBAC: rbac, Verb: "list", Resource: "pods", Namespace: "default"})
+	m.SetSize(120, 24)
+	m = step(t, m, m.Init()())
+
+	if m.offset != 0 {
+		t.Fatalf("initial offset = %d, want 0", m.offset)
+	}
+	rows := m.tableDataRows()
+	if rows >= len(m.rows) {
+		t.Fatalf("tableDataRows() = %d, want fewer than %d rows so scrolling is exercised", rows, len(m.rows))
+	}
+
+	for i := 0; i < len(m.rows)-1; i++ {
+		m.moveSelection(1)
+	}
+	if m.selected != len(m.rows)-1 {
+		t.Fatalf("selected = %d, want %d", m.selected, len(m.rows)-1)
+	}
+	if m.offset == 0 {
+		t.Fatalf("offset stayed 0 after scrolling selection to the last row (selected=%d, rows=%d) — the viewport never followed the cursor", m.selected, len(m.rows))
+	}
+	if m.selected < m.offset || m.selected >= m.offset+rows {
+		t.Fatalf("selected %d not within rendered viewport [%d, %d)", m.selected, m.offset, m.offset+rows)
 	}
 }
 

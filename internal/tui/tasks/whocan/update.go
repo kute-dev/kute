@@ -70,6 +70,7 @@ func (m *Model) reload() tea.Cmd {
 	m.feedback = "Resolving who can " + m.verb + " " + m.resource + "..."
 	m.rows = nil
 	m.selected = 0
+	m.offset = 0
 	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
@@ -105,6 +106,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if m.selected >= len(m.rows) {
 		m.selected = max(len(m.rows)-1, 0)
 	}
+	m.clampOffset()
 	return m, nil
 }
 
@@ -163,10 +165,26 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) moveSelection(delta int) {
 	if len(m.rows) == 0 {
-		m.selected = 0
+		m.selected, m.offset = 0, 0
 		return
 	}
 	m.selected = clamp(m.selected+delta, 0, len(m.rows)-1)
+	m.clampOffset()
+}
+
+// clampOffset keeps the selected row within the table's rendered viewport —
+// mirrors nodedetail/routetable's own clampOffset/tableDataRows pattern.
+func (m *Model) clampOffset() {
+	rows := m.tableDataRows()
+	if m.selected < m.offset {
+		m.offset = m.selected
+	}
+	if m.selected >= m.offset+rows {
+		m.offset = m.selected - rows + 1
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
 }
 
 // openSelectedBinding is 22a's "↵ opens the binding's YAML" — pushes 8a for

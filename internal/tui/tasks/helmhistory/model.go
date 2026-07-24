@@ -47,6 +47,10 @@ type Model struct {
 
 	revisions []kube.HelmRelease
 	selected  int
+	// offset keeps the selected revision within the table's rendered
+	// viewport — mirrors nodedetail/routetable's own clampOffset/
+	// tableDataRows pattern (update.go's clampOffset).
+	offset int
 
 	conn kube.ConnState
 

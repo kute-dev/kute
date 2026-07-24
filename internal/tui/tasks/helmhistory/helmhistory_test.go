@@ -199,3 +199,39 @@ func TestEscReturnsToPreviousTask(t *testing.T) {
 		t.Fatalf("expected esc to produce tui.BackMsg, got %T", cmd())
 	}
 }
+
+// TestMoveSelectionScrollsOffset guards against the rail's Offset staying
+// pinned at 0 while Selected scrolls off the bottom of the rendered
+// viewport — a real gap this screen had (unlike nodedetail/routetable,
+// which always tracked m.offset alongside m.selected).
+func TestMoveSelectionScrollsOffset(t *testing.T) {
+	objs := make([]runtime.Object, 40)
+	for i := range objs {
+		objs[i] = revisionSecret("production", "postgresql", "superseded", i+1)
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindSecret: objs}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 24)
+	m = step(t, m, m.Init()())
+
+	if m.offset != 0 {
+		t.Fatalf("initial offset = %d, want 0", m.offset)
+	}
+	rows := m.tableDataRows()
+	if rows >= len(m.revisions) {
+		t.Fatalf("tableDataRows() = %d, want fewer than %d revisions so scrolling is exercised", rows, len(m.revisions))
+	}
+
+	for i := 0; i < len(m.revisions)-1; i++ {
+		m.moveSelection(1)
+	}
+	if m.selected != len(m.revisions)-1 {
+		t.Fatalf("selected = %d, want %d", m.selected, len(m.revisions)-1)
+	}
+	if m.offset == 0 {
+		t.Fatalf("offset stayed 0 after scrolling selection to the last row (selected=%d, revisions=%d) — the viewport never followed the cursor", m.selected, len(m.revisions))
+	}
+	if m.selected < m.offset || m.selected >= m.offset+rows {
+		t.Fatalf("selected %d not within rendered viewport [%d, %d)", m.selected, m.offset, m.offset+rows)
+	}
+}

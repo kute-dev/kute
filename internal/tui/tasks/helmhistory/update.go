@@ -67,6 +67,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if m.selected >= len(m.revisions) {
 		m.selected = max(len(m.revisions)-1, 0)
 	}
+	m.clampOffset()
 	return m, nil
 }
 
@@ -105,10 +106,27 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) moveSelection(delta int) {
 	if len(m.revisions) == 0 {
-		m.selected = 0
+		m.selected, m.offset = 0, 0
 		return
 	}
 	m.selected = clamp(m.selected+delta, 0, len(m.revisions)-1)
+	m.clampOffset()
+}
+
+// clampOffset keeps the selected revision within the table's rendered
+// viewport — mirrors nodedetail/routetable's own clampOffset/tableDataRows
+// pattern.
+func (m *Model) clampOffset() {
+	rows := m.tableDataRows()
+	if m.selected < m.offset {
+		m.offset = m.selected
+	}
+	if m.selected >= m.offset+rows {
+		m.offset = m.selected - rows + 1
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
 }
 
 func clamp(v, lo, hi int) int {

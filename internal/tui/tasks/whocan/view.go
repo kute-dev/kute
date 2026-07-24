@@ -141,6 +141,16 @@ var whoCanColumns = []components.Column{
 	{Title: "SCOPE", Min: 9, Align: components.AlignRight},
 }
 
+// tableDataRows is how many data rows rowsBody's own Table renders — the
+// value update.go's clampOffset scrolls m.offset against, mirroring
+// nodedetail/routetable's own tableDataRows (Table.visibleRowCount(),
+// table.go: Height-1, no ShowHeaderRule here).
+func (m Model) tableDataRows() int {
+	height := tui.FrameBodyHeight(m.height, len(m.Strips(m.width)))
+	rows := max(height-2, 1) - 1
+	return max(rows, 1)
+}
+
 func (m Model) rowsBody(theme tui.Theme, width, height int) string {
 	rows := make([]components.Row, 0, len(m.rows))
 	for _, r := range m.rows {
@@ -150,7 +160,7 @@ func (m Model) rowsBody(theme tui.Theme, width, height int) string {
 		Columns:     whoCanColumns,
 		Rows:        rows,
 		Selected:    m.selected,
-		Offset:      0,
+		Offset:      m.offset,
 		Width:       width,
 		Height:      max(height-2, 1),
 		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),
