@@ -2,6 +2,8 @@
 
 **Modern Kubernetes TUI**
 
+[kute.dev](https://kute.dev)
+
 ### The incident console for Kubernetes.
 
 See what broke. Understand why. Act safely.
