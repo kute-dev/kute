@@ -50,6 +50,41 @@ func Compose(base, panel string, width, height, top int, dimStyle lipgloss.Style
 	return strings.Join(out, "\n")
 }
 
+// cornerMargin is ComposeCorner's fixed inset from the bottom-right edge —
+// matches FrameInset's spirit (chrome content never touches the terminal
+// edge) without importing tui just for the constant.
+const cornerMargin = 2
+
+// ComposeCorner splices panel onto base's bottom-right corner, ANSI-aware,
+// with no dimming of the rest of base — unlike Compose, which is built for a
+// dimmed backdrop + centered modal. The one caller today is the --keycast
+// chip (mvp-plan.md's keycast mode), which must stay visible over any other
+// overlay Compose already spliced in, so it composites last and never dims
+// what's underneath it.
+func ComposeCorner(base, panel string, width, height int) string {
+	if width <= 0 {
+		width = 80
+	}
+	if height <= 0 {
+		height = 1
+	}
+	if panel == "" {
+		return base
+	}
+
+	baseLines := fitLines(strings.Split(base, "\n"), width, height)
+	panelWidth := ansi.StringWidth(panel)
+
+	row := height - 1 - cornerMargin
+	if row < 0 || row >= height {
+		return strings.Join(baseLines, "\n")
+	}
+	left := max(width-cornerMargin-panelWidth, 0)
+
+	baseLines[row] = spliceLine(baseLines[row], panel, left, width)
+	return strings.Join(baseLines, "\n")
+}
+
 // fitLines pads/truncates lines to exactly height rows, each Pad-ed to
 // width, so Compose always returns a rectangular block.
 func fitLines(lines []string, width, height int) []string {

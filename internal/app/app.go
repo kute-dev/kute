@@ -180,7 +180,8 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		restoreNamespace, restoreToEvents := sess.Location.Namespace, sess.Location.Kind == kube.KindEvent
 		model := tui.NewWithSession(buildBrowseTask(cfg, sess, cluster), sess).
 			WithRootFactories(buildSetupFactory(cfg, sess, cluster), buildBrowseFactory(cfg, sess, cluster)).
-			WithUpdatePanel(buildUpdateFactory(sess, checker))
+			WithUpdatePanel(buildUpdateFactory(sess, checker)).
+			WithKeycast(cfg.Keycast)
 		if restoreToEvents {
 			// A persisted Location.Kind of "Event" (quitting from 9b) should
 			// land back on 9b, not the Pod-fallback browse task built above —
@@ -244,7 +245,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		// above): BuildSession returns before ever reading PerContext for
 		// cfg.Demo (session.go), so Session.Location.Kind is always "" at
 		// this point — Location.Kind == KindEvent can't happen in demo mode.
-		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
+		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker)).WithKeycast(cfg.Keycast)
 		return model, nil, demoCluster
 
 	default:
@@ -259,7 +260,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			KubeconfigPath: kubeconfigPathOrEmpty(),
 			Reconnect:      func(path string) tea.Cmd { return attemptReconnect(cfg, sess, path) },
 		})
-		model := tui.NewWithSession(&s, sess).WithUpdatePanel(buildUpdateFactory(sess, checker))
+		model := tui.NewWithSession(&s, sess).WithUpdatePanel(buildUpdateFactory(sess, checker)).WithKeycast(cfg.Keycast)
 		return model, nil, nil
 	}
 }

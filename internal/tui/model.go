@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
@@ -214,6 +215,14 @@ type Model struct {
 	// and no-cluster/setup mode alike, so app.NewModel's three branches all
 	// call WithUpdatePanel regardless of which of those they're building.
 	buildUpdate func() Task
+
+	// keycastEnabled/keycast back --keycast, a demo-recording aid: a small
+	// bottom-right chip echoing recent keypresses. Purely ephemeral shell UI
+	// state — nothing outside the root shell ever reads it — so it lives
+	// directly on Model next to helpOpen/quitConfirm/palette rather than on
+	// Session.
+	keycastEnabled bool
+	keycast        keycastState
 }
 
 // New creates a root TUI model for the provided task, with no Session (no
@@ -247,6 +256,14 @@ func (m Model) WithRootFactories(buildSetup func(kube.ConnState) Task, buildBrow
 // setter from WithRootFactories).
 func (m Model) WithUpdatePanel(build func() Task) Model {
 	m.buildUpdate = build
+	return m
+}
+
+// WithKeycast enables/disables the --keycast bottom-right keypress chip. A
+// no-op (false) call leaves it disabled — the default for every build that
+// doesn't pass --keycast.
+func (m Model) WithKeycast(enabled bool) Model {
+	m.keycastEnabled = enabled
 	return m
 }
 
@@ -484,12 +501,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.loadNamespacePalette(msg.gen)
+	case KeycastTickMsg:
+		if m.keycast.prune(time.Time(msg)) {
+			return m, keycastTick()
+		}
+		return m, nil
 	case tea.KeyPressMsg:
+		var keycastCmd tea.Cmd
+		if m.keycastEnabled {
+			keycastCmd = m.keycast.record(msg, time.Now())
+		}
 		if _, ok := m.task.(Screen); ok && !taskCapturingInput(m.task) {
 			if handled, next, cmd := m.handleShellKey(msg); handled {
-				return next, cmd
+				return next, tea.Batch(cmd, keycastCmd)
 			}
 		}
+		rewatch = tea.Batch(rewatch, keycastCmd)
 	}
 
 	updated, cmd := m.task.Update(msg)
@@ -1009,9 +1036,6 @@ func sameTask(a, b Task) bool {
 func (m Model) View() tea.View {
 	view := m.task.View()
 	view.AltScreen = true
-	if m.session == nil || (m.palette == nil && !m.helpOpen && !m.quitConfirm) {
-		return view
-	}
 
 	width, height := m.width, m.height
 	if width <= 0 {
@@ -1020,44 +1044,60 @@ func (m Model) View() tea.View {
 	if height <= 0 {
 		height = DefaultHeight
 	}
-	theme := m.session.Theme
-	dim := lipgloss.NewStyle().Foreground(theme.TextGhost)
 
-	var panel string
-	switch {
-	case m.quitConfirm:
-		panel = renderQuitConfirm(theme)
-	case m.palette != nil:
-		panel = m.palette.Render(paletteStyles(theme), width)
-	case m.helpOpen:
-		screen, ok := m.task.(Screen)
-		if !ok {
-			return view
-		}
-		panel = renderHelp(theme, screen, m.session.HelpScope, m.session.HelpGlobal, width)
-	}
-	view.Content = components.Compose(view.Content, panel, width, height, paletteTop, dim)
+	if m.session != nil && (m.palette != nil || m.helpOpen || m.quitConfirm) {
+		theme := m.session.Theme
+		dim := lipgloss.NewStyle().Foreground(theme.TextGhost)
 
-	// 2b: "Main keybar while open: GOTO mode pill + one-line explanation" —
-	// Compose dims the whole base uniformly (including the underlying
-	// screen's own keybar band, which still reads its own PillText), so the
-	// goto palette needs its own undimmed keybar line spliced in on top,
-	// the same way the palette panel itself stays undimmed. Scoped to goto
-	// only: 6a/7a's namespace/context palettes have no equivalent spec'd
-	// bullet, so inventing pill copy for them isn't a spec-driven fix.
-	if m.palette != nil && m.palette.Scope == palette.ScopeGoto {
-		panelHeight := len(strings.Split(panel, "\n"))
-		actualTop := max(min(paletteTop, height-panelHeight), 0)
-		if actualTop+panelHeight <= height-1 {
-			view.Content = replaceLastLine(view.Content, gotoKeybarLine(theme, width))
+		var panel string
+		switch {
+		case m.quitConfirm:
+			panel = renderQuitConfirm(theme)
+		case m.palette != nil:
+			panel = m.palette.Render(paletteStyles(theme), width)
+		case m.helpOpen:
+			screen, ok := m.task.(Screen)
+			if !ok {
+				return view
+			}
+			panel = renderHelp(theme, screen, m.session.HelpScope, m.session.HelpGlobal, width)
+		}
+		view.Content = components.Compose(view.Content, panel, width, height, paletteTop, dim)
+
+		// 2b: "Main keybar while open: GOTO mode pill + one-line explanation" —
+		// Compose dims the whole base uniformly (including the underlying
+		// screen's own keybar band, which still reads its own PillText), so the
+		// goto palette needs its own undimmed keybar line spliced in on top,
+		// the same way the palette panel itself stays undimmed. Scoped to goto
+		// only: 6a/7a's namespace/context palettes have no equivalent spec'd
+		// bullet, so inventing pill copy for them isn't a spec-driven fix.
+		if m.palette != nil && m.palette.Scope == palette.ScopeGoto {
+			panelHeight := len(strings.Split(panel, "\n"))
+			actualTop := max(min(paletteTop, height-panelHeight), 0)
+			if actualTop+panelHeight <= height-1 {
+				view.Content = replaceLastLine(view.Content, gotoKeybarLine(theme, width))
+			}
+		}
+		// 7b: "Keybar pill HELP" — same reasoning as goto's splice above: Compose
+		// dims the whole base uniformly, including the underlying screen's own
+		// keybar band, so the help overlay needs its own undimmed HELP-pilled
+		// line spliced in on top rather than inventing a new compose path.
+		if m.helpOpen {
+			view.Content = replaceLastLine(view.Content, helpKeybarLine(theme, width))
 		}
 	}
-	// 7b: "Keybar pill HELP" — same reasoning as goto's splice above: Compose
-	// dims the whole base uniformly, including the underlying screen's own
-	// keybar band, so the help overlay needs its own undimmed HELP-pilled
-	// line spliced in on top rather than inventing a new compose path.
-	if m.helpOpen {
-		view.Content = replaceLastLine(view.Content, helpKeybarLine(theme, width))
+
+	// --keycast's chip composites last, over any other overlay above (or
+	// none), so it stays visible while jumping through the palette/help —
+	// the whole point of a demo-recording key legend.
+	if m.keycastEnabled {
+		theme := Dark()
+		if m.session != nil {
+			theme = m.session.Theme
+		}
+		if chip := renderKeycastChip(m.keycast, theme); chip != "" {
+			view.Content = components.ComposeCorner(view.Content, chip, width, height)
+		}
 	}
 	return view
 }

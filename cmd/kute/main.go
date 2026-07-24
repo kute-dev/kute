@@ -18,6 +18,7 @@ func main() {
 	cfg := app.DefaultConfig()
 	cfg.Version = version
 	flag.BoolVar(&cfg.Demo, "demo", false, "run against an in-memory fake cluster instead of a real one")
+	flag.BoolVar(&cfg.Keycast, "keycast", false, "show a recent-keypresses chip (bottom-right) — for demo recording")
 	flag.StringVar(&cfg.Theme, "theme", "", "override theme selection: dark|light (default: auto-detect)")
 	showVersion := flag.Bool("version", false, "print version information and exit")
 	flag.Parse()

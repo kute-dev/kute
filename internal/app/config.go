@@ -11,6 +11,9 @@ type Config struct {
 	// Demo substitutes kube/fake for the real cluster behind the same
 	// seams (--demo flag).
 	Demo bool
+	// Keycast enables a bottom-right chip echoing recent keypresses, for
+	// demo recording (--keycast flag).
+	Keycast bool
 	// Theme overrides theme selection: "dark" or "light" (--theme flag).
 	// Empty defers to the config file's theme: key, then terminal
 	// background detection (decision #3, mvp-plan.md).
