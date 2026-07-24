@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,7 +70,10 @@ func TestRootModelGBrowseRankedListHasChipsCountsAndFooter(t *testing.T) {
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
-	view := updated.(tui.Model).View().Content
+	// ansi.Strip: the aliased first letter renders as its own styled span,
+	// so an un-stripped view would split "Pods"/"Deployments" across an
+	// escape boundary between the highlighted letter and the rest.
+	view := ansi.Strip(updated.(tui.Model).View().Content)
 
 	for _, want := range []string{
 		"Pods",        // kind row
@@ -124,7 +128,10 @@ func TestRootModelGThenTypeSwitchesToFuzzyResults(t *testing.T) {
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "a"})
-	view := updated.(tui.Model).View().Content
+	// ansi.Strip: fuzzy-matched characters render as their own styled
+	// spans, so an un-stripped view can split "api-1" across an escape
+	// boundary.
+	view := ansi.Strip(updated.(tui.Model).View().Content)
 
 	if !strings.Contains(view, "api-1") {
 		t.Fatalf("expected the current kind's resource name in fuzzy results:\n%s", view)
@@ -180,7 +187,10 @@ func TestRootModelGThenAliasLetterPinsMatchAndConfirmsFooter(t *testing.T) {
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "d"})
-	view := updated.(tui.Model).View().Content
+	// ansi.Strip: the pinned kind's aliased first letter renders as its
+	// own styled span, so an un-stripped view would split "Deployments"
+	// across an escape boundary.
+	view := ansi.Strip(updated.(tui.Model).View().Content)
 
 	if !strings.Contains(view, "alias match") {
 		t.Fatalf("expected the pinned row's 'alias match' label:\n%s", view)
@@ -210,7 +220,10 @@ func TestRootModelGAliasLettersMatchFirstLetterOfNodesAndConfigMaps(t *testing.T
 		updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: tc.key})
-		view := updated.(tui.Model).View().Content
+		// ansi.Strip: the pinned kind's aliased first letter renders as
+		// its own styled span, so an un-stripped view can split the
+		// destination footer's kind name across an escape boundary.
+		view := ansi.Strip(updated.(tui.Model).View().Content)
 
 		if !strings.Contains(view, tc.want) {
 			t.Fatalf("key %q: expected %q in the 12b destination footer:\n%s", tc.key, tc.want, view)
@@ -437,14 +450,17 @@ func TestRootModelGAltJKNavigateRankedListWithoutTyping(t *testing.T) {
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 
-	view := updated.(tui.Model).View().Content
+	// ansi.Strip: the aliased first letter renders as its own styled
+	// span, so an un-stripped view would split "Pods"/"Deployments"
+	// across an escape boundary.
+	view := ansi.Strip(updated.(tui.Model).View().Content)
 	if !isSelectedLine(view, "Pods") {
 		t.Fatalf("expected Pods pre-selected after 'g':\n%s", view)
 	}
 
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
 	m := updated.(tui.Model)
-	view = m.View().Content
+	view = ansi.Strip(m.View().Content)
 	if !isSelectedLine(view, "Deployments") {
 		t.Fatalf("expected alt+j to move selection to Deployments:\n%s", view)
 	}
@@ -454,7 +470,7 @@ func TestRootModelGAltJKNavigateRankedListWithoutTyping(t *testing.T) {
 
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
 	m = updated.(tui.Model)
-	view = m.View().Content
+	view = ansi.Strip(m.View().Content)
 	if !isSelectedLine(view, "Pods") {
 		t.Fatalf("expected alt+k to move selection back to Pods:\n%s", view)
 	}

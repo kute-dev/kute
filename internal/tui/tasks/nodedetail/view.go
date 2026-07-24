@@ -2,11 +2,12 @@ package nodedetail
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -380,7 +381,7 @@ type podRowStyles struct {
 }
 
 func newPodRowStyles(theme tui.Theme, selected bool) podRowStyles {
-	style := func(fg lipgloss.Color) lipgloss.Style {
+	style := func(fg color.Color) lipgloss.Style {
 		s := lipgloss.NewStyle().Foreground(fg)
 		if selected {
 			s = s.Background(theme.SelBg)
@@ -436,7 +437,7 @@ func podDefaultGlyph(class resources.StatusClass) string {
 	}
 }
 
-func podGlyphColor(theme tui.Theme, class resources.StatusClass) lipgloss.Color {
+func podGlyphColor(theme tui.Theme, class resources.StatusClass) color.Color {
 	switch class {
 	case resources.StatusOK:
 		return theme.Good

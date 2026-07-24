@@ -6,10 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -97,10 +95,10 @@ func goldenObjectModel(width, height int) Model {
 
 func goldenFixtures() map[string]string {
 	return map[string]string{
-		"namespace-120x36.golden": goldenNamespaceModel(120, 36).Render(),
-		"namespace-80x24.golden":  goldenNamespaceModel(80, 24).Render(),
-		"object-120x36.golden":    goldenObjectModel(120, 36).Render(),
-		"object-80x24.golden":     goldenObjectModel(80, 24).Render(),
+		"namespace-120x36.golden": goldentest.Plain(goldenNamespaceModel(120, 36).Render()),
+		"namespace-80x24.golden":  goldentest.Plain(goldenNamespaceModel(80, 24).Render()),
+		"object-120x36.golden":    goldentest.Plain(goldenObjectModel(120, 36).Render()),
+		"object-80x24.golden":     goldentest.Plain(goldenObjectModel(80, 24).Render()),
 	}
 }
 
@@ -144,18 +142,14 @@ func TestGoldenFixtures(t *testing.T) {
 // (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	loc := tui.Location{Context: "microk8s-cluster", Namespace: "default"}
 	dark := goldenObjectModel(120, 36)
 	dark.session = &tui.Session{Location: loc, Theme: tui.Dark()}
 	light := goldenObjectModel(120, 36)
 	light.session = &tui.Session{Location: loc, Theme: tui.Light()}
 	return map[string]string{
-		"object-120x36-dark.golden":  dark.Render(),
-		"object-120x36-light.golden": light.Render(),
+		"object-120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"object-120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

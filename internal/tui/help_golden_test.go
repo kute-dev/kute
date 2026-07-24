@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -74,8 +73,8 @@ func goldenHelpDir() string {
 
 func goldenHelpFixtures() map[string]string {
 	return map[string]string{
-		"120x36.golden": goldenHelpModel(120, 36).View().Content,
-		"80x24.golden":  goldenHelpModel(80, 24).View().Content,
+		"120x36.golden": goldentest.Plain(goldenHelpModel(120, 36).View().Content),
+		"80x24.golden":  goldentest.Plain(goldenHelpModel(80, 24).View().Content),
 	}
 }
 
@@ -116,16 +115,12 @@ func TestGoldenHelpFixtures(t *testing.T) {
 // (none in this file do; other _test.go files in package tui_test don't
 // render either).
 func truecolorGoldenHelpFixtures() map[string]string {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenHelpModel(120, 36)
 	light := goldenHelpModelWithTheme(tui.Light(), 120, 36)
 
 	return map[string]string{
-		"120x36-dark.golden":  dark.View().Content,
-		"120x36-light.golden": light.View().Content,
+		"120x36-dark.golden":  goldentest.Truecolor(dark.View().Content),
+		"120x36-light.golden": goldentest.Truecolor(light.View().Content),
 	}
 }
 

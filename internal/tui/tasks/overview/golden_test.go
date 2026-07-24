@@ -7,14 +7,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -165,8 +164,8 @@ func goldenOverviewModel(t *testing.T, width, height int) Model {
 func goldenOverviewFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden": goldenOverviewModel(t, 120, 36).Render(),
-		"80x24.golden":  goldenOverviewModel(t, 80, 24).Render(),
+		"120x36.golden": goldentest.Plain(goldenOverviewModel(t, 120, 36).Render()),
+		"80x24.golden":  goldentest.Plain(goldenOverviewModel(t, 80, 24).Render()),
 	}
 }
 
@@ -210,16 +209,12 @@ func TestGoldenFixtures(t *testing.T) {
 // not run parallel with other renders in this package (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenOverviewModel(t, 120, 36)
 	light := goldenOverviewModel(t, 120, 36)
 	light.session.Theme = tui.Light()
 	return map[string]string{
-		"120x36-dark.golden":  dark.Render(),
-		"120x36-light.golden": light.Render(),
+		"120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

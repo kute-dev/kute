@@ -7,9 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -931,10 +929,6 @@ func TestRolloutDividerFollowedByHorizontalRule(t *testing.T) {
 // selection (theme.SelBg) or the trailing rule (its own foreground-only
 // style) may add color.
 func TestUnselectedRolloutRowHasNoPermanentBackground(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	entries := []kube.TimelineEntry{
 		{Time: time.Now().Add(-time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/api-gateway", Namespace: "default", Reason: "Rollout", Revision: 5, Image: "api-gateway:2.3.1"},
 	}
@@ -1020,10 +1014,6 @@ func lineHasUnstyledSpace(line string) bool {
 // style carrying SelBg, never left as a bare literal that would punch an
 // unstyled notch in an otherwise-solid selected background.
 func TestSelectedRowsHaveNoUnstyledBackgroundGap(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "nva-worker-abc123", Namespace: "default",

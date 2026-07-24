@@ -4,8 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
@@ -37,7 +36,10 @@ func TestRenderStreamingShowsToolbarAndLogLines(t *testing.T) {
 	model.appendEntry(LogEntry{Container: "app", Message: "ready", Timestamp: "10:00:00"})
 	model.appendEntry(LogEntry{Container: "app", Message: "careful now", Severity: SeverityWarn})
 	model.appendEntry(LogEntry{Container: "app", Message: "boom", Severity: SeverityErr})
-	view := model.Render()
+	// ansi.Strip: the toolbar's "container "/"app" segments render as
+	// separately styled spans, so an un-stripped view can split
+	// "container app" across an escape boundary.
+	view := ansi.Strip(model.Render())
 	for _, want := range []string{"container app", "tab: sidecar", "since 15m", "wrap on", "timestamps", "ready", "WRN", "ERR", "in view"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
@@ -77,10 +79,6 @@ func TestFormatEntryTrimsHorizontalOffsetWhenWrapOff(t *testing.T) {
 // the extra full-width ErrBannerBg tint — a stale error scrolling further
 // up the buffer must lose the tint once a newer one arrives.
 func TestOnlyMostRecentErrLineGetsFullTint(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	model := testModel()
 	model.SetSize(120, 24)
 	model.appendEntry(LogEntry{Container: "app", Message: "first failure", Severity: SeverityErr})

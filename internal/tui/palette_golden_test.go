@@ -6,13 +6,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -135,14 +134,14 @@ func goldenPaletteDir() string {
 func goldenPaletteFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"goto-empty-120x36.golden": goldenGotoEmptyModel(t, 120, 36).View().Content,
-		"goto-empty-80x24.golden":  goldenGotoEmptyModel(t, 80, 24).View().Content,
-		"goto-typed-120x36.golden": goldenGotoTypedModel(t, 120, 36).View().Content,
-		"goto-typed-80x24.golden":  goldenGotoTypedModel(t, 80, 24).View().Content,
-		"namespace-120x36.golden":  goldenNamespaceModel(t, 120, 36).View().Content,
-		"namespace-80x24.golden":   goldenNamespaceModel(t, 80, 24).View().Content,
-		"context-120x36.golden":    goldenContextModel(t, 120, 36).View().Content,
-		"context-80x24.golden":     goldenContextModel(t, 80, 24).View().Content,
+		"goto-empty-120x36.golden": goldentest.Plain(goldenGotoEmptyModel(t, 120, 36).View().Content),
+		"goto-empty-80x24.golden":  goldentest.Plain(goldenGotoEmptyModel(t, 80, 24).View().Content),
+		"goto-typed-120x36.golden": goldentest.Plain(goldenGotoTypedModel(t, 120, 36).View().Content),
+		"goto-typed-80x24.golden":  goldentest.Plain(goldenGotoTypedModel(t, 80, 24).View().Content),
+		"namespace-120x36.golden":  goldentest.Plain(goldenNamespaceModel(t, 120, 36).View().Content),
+		"namespace-80x24.golden":   goldentest.Plain(goldenNamespaceModel(t, 80, 24).View().Content),
+		"context-120x36.golden":    goldentest.Plain(goldenContextModel(t, 120, 36).View().Content),
+		"context-80x24.golden":     goldentest.Plain(goldenContextModel(t, 80, 24).View().Content),
 	}
 }
 
@@ -183,10 +182,6 @@ func TestGoldenPaletteFixtures(t *testing.T) {
 // state rather than every one.
 func truecolorGoldenPaletteFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenGotoEmptyModel(t, 120, 36)
 
 	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
@@ -203,8 +198,8 @@ func truecolorGoldenPaletteFixtures(t *testing.T) map[string]string {
 	light := updated.(tui.Model)
 
 	return map[string]string{
-		"goto-empty-120x36-dark.golden":  dark.View().Content,
-		"goto-empty-120x36-light.golden": light.View().Content,
+		"goto-empty-120x36-dark.golden":  goldentest.Truecolor(dark.View().Content),
+		"goto-empty-120x36-light.golden": goldentest.Truecolor(light.View().Content),
 	}
 }
 

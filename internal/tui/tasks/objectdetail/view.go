@@ -2,11 +2,12 @@ package objectdetail
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
@@ -134,7 +135,7 @@ func padBetween(left, right string, width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-func statusColor(theme tui.Theme, class resources.StatusClass) lipgloss.Color {
+func statusColor(theme tui.Theme, class resources.StatusClass) color.Color {
 	switch class {
 	case resources.StatusOK:
 		return theme.Good

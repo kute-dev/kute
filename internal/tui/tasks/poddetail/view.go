@@ -2,11 +2,12 @@ package poddetail
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
@@ -172,7 +173,7 @@ func padBetween(left, right string, width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-func statusColor(theme tui.Theme, class string) lipgloss.Color {
+func statusColor(theme tui.Theme, class string) color.Color {
 	switch class {
 	case "ok":
 		return theme.Good
@@ -214,7 +215,7 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 		BorderForeground(theme.ErrBannerBorder).
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 1).
-		Width(width - 2) // + the border's own 2 columns = exactly width
+		Width(width) // lipgloss v2's Width already counts the border, so this is exactly width
 	return style.Render(content)
 }
 

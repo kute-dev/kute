@@ -2,12 +2,13 @@ package browse
 
 import (
 	"fmt"
+	"image/color"
 	"regexp"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -414,7 +415,7 @@ func defaultGlyphFor(class resources.StatusClass) string {
 	}
 }
 
-func glyphColor(theme tui.Theme, class resources.StatusClass) lipgloss.Color {
+func glyphColor(theme tui.Theme, class resources.StatusClass) color.Color {
 	switch class {
 	case resources.StatusOK:
 		return theme.Good
@@ -640,7 +641,7 @@ type rowCellStyles struct {
 // "cursor keeps the purple bar" wins when both apply (callers never pass
 // both true).
 func newRowCellStyles(theme tui.Theme, selected, muted, marked bool) rowCellStyles {
-	style := func(fg lipgloss.Color) lipgloss.Style {
+	style := func(fg color.Color) lipgloss.Style {
 		s := lipgloss.NewStyle().Foreground(fg)
 		switch {
 		case selected:

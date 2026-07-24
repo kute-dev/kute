@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -57,7 +57,11 @@ func (m Model) setResourcesPanelLines(theme tui.Theme, width int) []string {
 		content = append(content, setImageInset(m.setResourcesFieldLine(t, i, theme, contentWidth), contentWidth))
 	}
 
-	box := setImagePanelBorderStyle(theme).Border(lipgloss.RoundedBorder()).Width(innerWidth).Render(strings.Join(content, "\n"))
+	// +2: lipgloss v2's Width counts the border itself (v1 added it on top),
+	// and innerWidth is the pre-border content width the lines above are
+	// already padded to — so the box needs innerWidth+2 to render at the
+	// same outerWidth total as before.
+	box := setImagePanelBorderStyle(theme).Border(lipgloss.RoundedBorder()).Width(innerWidth + 2).Render(strings.Join(content, "\n"))
 	out := make([]string, 0)
 	for _, l := range strings.Split(box, "\n") {
 		out = append(out, strings.Repeat(" ", tui.FrameInset)+l)

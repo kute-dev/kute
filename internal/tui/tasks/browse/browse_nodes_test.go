@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -248,10 +246,6 @@ func TestNodeHealthColumnTalliesScheduledPods(t *testing.T) {
 // TextDim, matching the ROLLOUT column's own "healthy state renders dim,
 // not green" carve-out — NotReady still gets the usual Bad/red status color.
 func TestNodeStatusReadyRendersDimNotGreen(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {nodeObj("node-a", true, false), nodeObj("node-b", false, false)},
 	}}
@@ -281,7 +275,7 @@ func TestNodeStatusReadyRendersDimNotGreen(t *testing.T) {
 	readyCode := statusTextColorCode(t, readyLine, "Ready")
 	notReadyCode := statusTextColorCode(t, notReadyLine, "NotReady")
 	dim := "38;2;103;103;128" // theme.TextDim
-	bad := "38;2;239;105;105" // theme.Bad
+	bad := "38;2;239;106;106" // theme.Bad (#ef6a6a; 0x6a = 106 — lipgloss v1 rounded this channel down by 1, v2 renders the exact hex value)
 	if !strings.Contains(readyCode, dim) {
 		t.Errorf("Ready's STATUS cell color = %q, want to contain TextDim %q", readyCode, dim)
 	}

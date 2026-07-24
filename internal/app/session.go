@@ -1,9 +1,10 @@
 package app
 
 import (
+	"os"
 	"slices"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
@@ -129,7 +130,7 @@ func selectTheme(flagTheme, configTheme string) tui.Theme {
 			return tui.Light()
 		}
 	}
-	if lipgloss.HasDarkBackground() {
+	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 		return tui.Dark()
 	}
 	return tui.Light()

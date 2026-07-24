@@ -5,9 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -36,8 +34,8 @@ func goldenModel(width, height int) Model {
 
 func goldenFixtures() map[string]string {
 	return map[string]string{
-		"120x36.golden": goldenModel(120, 36).Render(),
-		"80x24.golden":  goldenModel(80, 24).Render(),
+		"120x36.golden": goldentest.Plain(goldenModel(120, 36).Render()),
+		"80x24.golden":  goldentest.Plain(goldenModel(80, 24).Render()),
 	}
 }
 
@@ -75,17 +73,13 @@ func TestGoldenFixtures(t *testing.T) {
 // must not run these in parallel with other renders (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenModel(120, 36)
 	dark.session = &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "prod-eks"}}
 	light := goldenModel(120, 36)
 	light.session = &tui.Session{Theme: tui.Light(), Location: tui.Location{Context: "prod-eks"}}
 	return map[string]string{
-		"120x36-dark.golden":  dark.Render(),
-		"120x36-light.golden": light.Render(),
+		"120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

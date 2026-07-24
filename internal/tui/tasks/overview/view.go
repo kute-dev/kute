@@ -2,10 +2,11 @@ package overview
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -305,7 +306,7 @@ func (m Model) nodeRow(theme tui.Theme, row resources.Row) components.Row {
 	}}
 }
 
-func glyphTone(theme tui.Theme, row resources.Row) lipgloss.Color {
+func glyphTone(theme tui.Theme, row resources.Row) color.Color {
 	switch {
 	case row.Cordoned:
 		return theme.Info

@@ -3,7 +3,7 @@ package browse
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/kute-dev/kute/internal/resources"

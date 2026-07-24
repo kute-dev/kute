@@ -7,11 +7,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -102,12 +101,12 @@ func goldenConfigMapDataMultilineModel(t *testing.T, width, height int) Model {
 func goldenConfigMapDataFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden":           goldenConfigMapDataModel(t, 120, 36).Render(),
-		"80x24.golden":            goldenConfigMapDataModel(t, 80, 24).Render(),
-		"add-120x36.golden":       goldenConfigMapDataAddModel(t, 120, 36).Render(),
-		"add-80x24.golden":        goldenConfigMapDataAddModel(t, 80, 24).Render(),
-		"edit-120x36.golden":      goldenConfigMapDataEditModel(t, 120, 36).Render(),
-		"multiline-120x36.golden": goldenConfigMapDataMultilineModel(t, 120, 36).Render(),
+		"120x36.golden":           goldentest.Plain(goldenConfigMapDataModel(t, 120, 36).Render()),
+		"80x24.golden":            goldentest.Plain(goldenConfigMapDataModel(t, 80, 24).Render()),
+		"add-120x36.golden":       goldentest.Plain(goldenConfigMapDataAddModel(t, 120, 36).Render()),
+		"add-80x24.golden":        goldentest.Plain(goldenConfigMapDataAddModel(t, 80, 24).Render()),
+		"edit-120x36.golden":      goldentest.Plain(goldenConfigMapDataEditModel(t, 120, 36).Render()),
+		"multiline-120x36.golden": goldentest.Plain(goldenConfigMapDataMultilineModel(t, 120, 36).Render()),
 	}
 }
 
@@ -148,16 +147,12 @@ func TestGoldenFixtures(t *testing.T) {
 // profile in both themes — see secretdata's own doc comment for why.
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenConfigMapDataModel(t, 120, 36)
 	light := goldenConfigMapDataModel(t, 120, 36)
 	light.session.Theme = tui.Light()
 	return map[string]string{
-		"120x36-dark.golden":  dark.Render(),
-		"120x36-light.golden": light.Render(),
+		"120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

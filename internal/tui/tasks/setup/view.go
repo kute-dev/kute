@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -149,10 +149,13 @@ func (m Model) unreachableBody(width, height int) string {
 	// stray dark patch against the terminal's own background, so this
 	// renders on the default background instead — border and text color
 	// stay per spec.
+	// bw-2: lipgloss v2's Width counts the border itself (v1 added it on
+	// top), so this now needs 2 less subtracted to render at the same
+	// total width as before.
 	errStyle := lipgloss.NewStyle().Foreground(theme.BadMuted).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ErrCardBorder).
-		Padding(0, 1).Width(bw - 4)
+		Padding(0, 1).Width(bw - 2)
 
 	ctx := m.clusterName
 	if ctx == "" {
@@ -249,11 +252,15 @@ func (m Model) switchContextLines(theme tui.Theme, bw int) []string {
 		lines = append(lines, line)
 	}
 
+	// bw-2: lipgloss v2's Width counts the border itself (v1 added it on
+	// top), so this now needs 2 less subtracted to render at the same
+	// total width as before; innerWidth above (bw-6) is unaffected — it's
+	// the content-only column, not this Width() argument.
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.BorderSubtle).
 		Padding(0, 1).
-		Width(bw - 4).
+		Width(bw - 2).
 		Render(strings.Join(lines, "\n"))
 	return append([]string{label}, strings.Split(box, "\n")...)
 }

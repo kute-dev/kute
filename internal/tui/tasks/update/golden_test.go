@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/update"
 )
@@ -95,16 +93,16 @@ func goldenLoadingModel(theme tui.Theme, width, height int) Model {
 
 func goldenFixtures() map[string]string {
 	return map[string]string{
-		"120x36-available.golden":   goldenAvailableModel(tui.Dark(), 120, 36).Render(),
-		"120x36-empty.golden":       goldenEmptyModel(tui.Dark(), 120, 36).Render(),
-		"120x36-loading.golden":     goldenLoadingModel(tui.Dark(), 120, 36).Render(),
-		"80x24-available.golden":    goldenAvailableModel(tui.Dark(), 80, 24).Render(),
-		"80x24-manyentries.golden":  goldenManyEntriesModel(tui.Dark(), 80, 24).Render(),
-		"120x36-manyentries.golden": goldenManyEntriesModel(tui.Dark(), 120, 36).Render(),
+		"120x36-available.golden":   goldentest.Plain(goldenAvailableModel(tui.Dark(), 120, 36).Render()),
+		"120x36-empty.golden":       goldentest.Plain(goldenEmptyModel(tui.Dark(), 120, 36).Render()),
+		"120x36-loading.golden":     goldentest.Plain(goldenLoadingModel(tui.Dark(), 120, 36).Render()),
+		"80x24-available.golden":    goldentest.Plain(goldenAvailableModel(tui.Dark(), 80, 24).Render()),
+		"80x24-manyentries.golden":  goldentest.Plain(goldenManyEntriesModel(tui.Dark(), 80, 24).Render()),
+		"120x36-manyentries.golden": goldentest.Plain(goldenManyEntriesModel(tui.Dark(), 120, 36).Render()),
 		// A short body actually forces the "… N more" trailer (all 12
 		// entries fit comfortably at 80x24/120x36 — that's the point of
 		// those two above) — pins the truncating branch itself.
-		"80x14-manyentries.golden": goldenManyEntriesModel(tui.Dark(), 80, 14).Render(),
+		"80x14-manyentries.golden": goldentest.Plain(goldenManyEntriesModel(tui.Dark(), 80, 14).Render()),
 	}
 }
 
@@ -142,13 +140,9 @@ func TestGoldenFixtures(t *testing.T) {
 // truecolor-rendering tests in parallel with each other.
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	return map[string]string{
-		"120x36-dark.golden":  goldenAvailableModel(tui.Dark(), 120, 36).Render(),
-		"120x36-light.golden": goldenAvailableModel(tui.Light(), 120, 36).Render(),
+		"120x36-dark.golden":  goldentest.Truecolor(goldenAvailableModel(tui.Dark(), 120, 36).Render()),
+		"120x36-light.golden": goldentest.Truecolor(goldenAvailableModel(tui.Light(), 120, 36).Render()),
 	}
 }
 

@@ -2,9 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/tui/components"
 )
@@ -36,7 +37,7 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	width := helpWidth(screenWidth)
 	frameWidth := max(width-2, 20)
 
-	fg := func(c lipgloss.Color) lipgloss.Style {
+	fg := func(c color.Color) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(c).Background(theme.BgPalette)
 	}
 	accent := fg(theme.Accent).Bold(true)
@@ -91,12 +92,15 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	closeGap := max(frameWidth-2-lipgloss.Width(closeHint), 0)
 	lines = append(lines, helpInset(helpFill(fill, closeGap)+closeHint, frameWidth, fill))
 
+	// +2: lipgloss v2's Width counts the border itself (v1 added it on
+	// top), and frameWidth is the pre-border content width the lines
+	// above are already wrapped to.
 	frame := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.BorderPalette).
 		BorderBackground(theme.BgPalette).
 		Background(theme.BgPalette).
-		Width(frameWidth)
+		Width(frameWidth + 2)
 	return frame.Render(strings.Join(lines, "\n"))
 }
 

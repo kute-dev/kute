@@ -14,8 +14,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -235,10 +234,10 @@ func goldenRouteModel(t *testing.T, width, height int) Model {
 func goldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"ingress-120x36.golden": goldenIngressModel(t, 120, 36).Render(),
-		"ingress-80x24.golden":  goldenIngressModel(t, 80, 24).Render(),
-		"route-120x36.golden":   goldenRouteModel(t, 120, 36).Render(),
-		"route-80x24.golden":    goldenRouteModel(t, 80, 24).Render(),
+		"ingress-120x36.golden": goldentest.Plain(goldenIngressModel(t, 120, 36).Render()),
+		"ingress-80x24.golden":  goldentest.Plain(goldenIngressModel(t, 80, 24).Render()),
+		"route-120x36.golden":   goldentest.Plain(goldenRouteModel(t, 120, 36).Render()),
+		"route-80x24.golden":    goldentest.Plain(goldenRouteModel(t, 80, 24).Render()),
 	}
 }
 
@@ -286,16 +285,12 @@ func TestGoldenFixtures(t *testing.T) {
 // with other renders (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenIngressModel(t, 120, 36)
 	light := goldenIngressModel(t, 120, 36)
 	light.session.Theme = tui.Light()
 	return map[string]string{
-		"ingress-120x36-dark.golden":  dark.Render(),
-		"ingress-120x36-light.golden": light.Render(),
+		"ingress-120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"ingress-120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

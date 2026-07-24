@@ -1,11 +1,12 @@
 package tui
 
 import (
+	"image/color"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // keycastMaxTokens caps how many key tokens the --keycast chip shows at
@@ -129,8 +130,8 @@ func humanizeKey(msg tea.KeyPressMsg) (string, bool) {
 // comment: "contrast descends from Text to TextGhost2") reused to age each
 // token — newest brightest, oldest faintest — with no new Theme tokens
 // needed.
-func keycastRamp(theme Theme) []lipgloss.Color {
-	return []lipgloss.Color{theme.Text, theme.TextSecondary, theme.TextDim, theme.TextFaint, theme.TextGhost, theme.TextGhost2}
+func keycastRamp(theme Theme) []color.Color {
+	return []color.Color{theme.Text, theme.TextSecondary, theme.TextDim, theme.TextFaint, theme.TextGhost, theme.TextGhost2}
 }
 
 // renderKeycastChip renders the current token list as a single dim line,

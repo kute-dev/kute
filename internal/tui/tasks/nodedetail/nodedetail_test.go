@@ -9,9 +9,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -149,10 +148,6 @@ func TestLoadRendersConditionsAllocationAndPods(t *testing.T) {
 // must render the same Bad/red color 11a's own nodes list uses for the
 // identical NotReady signal, not Warn/yellow.
 func TestNotReadyConditionRendersRedNotYellow(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "node-a"},
 		Status: corev1.NodeStatus{
@@ -234,10 +229,6 @@ func TestActiveConditionAppendsAgeWithoutDanglingSeparator(t *testing.T) {
 // bar's own fill segment already uses — previously only the bar changed
 // color.
 func TestAllocationTextTurnsYellowWhenHot(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	theme := tui.Dark()
 	// 8m / 10m = 80% ⇒ hot.
 	hot := allocationBarLine("cpu", 8, 10, theme, func(v int64) string { return fmt.Sprintf("%dm", v) })

@@ -6,10 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -56,10 +54,10 @@ func goldenNoConfigModel(width, height int) Model {
 
 func goldenFixtures() map[string]string {
 	return map[string]string{
-		"unreachable-120x36.golden": goldenUnreachableModel(120, 36).Render(),
-		"unreachable-80x24.golden":  goldenUnreachableModel(80, 24).Render(),
-		"noconfig-120x36.golden":    goldenNoConfigModel(120, 36).Render(),
-		"noconfig-80x24.golden":     goldenNoConfigModel(80, 24).Render(),
+		"unreachable-120x36.golden": goldentest.Plain(goldenUnreachableModel(120, 36).Render()),
+		"unreachable-80x24.golden":  goldentest.Plain(goldenUnreachableModel(80, 24).Render()),
+		"noconfig-120x36.golden":    goldentest.Plain(goldenNoConfigModel(120, 36).Render()),
+		"noconfig-80x24.golden":     goldentest.Plain(goldenNoConfigModel(80, 24).Render()),
 	}
 }
 
@@ -100,17 +98,13 @@ func TestGoldenFixtures(t *testing.T) {
 // run these in parallel with other renders (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	dark := goldenUnreachableModel(120, 36)
 	dark.session = &tui.Session{Theme: tui.Dark()}
 	light := goldenUnreachableModel(120, 36)
 	light.session = &tui.Session{Theme: tui.Light()}
 	return map[string]string{
-		"unreachable-120x36-dark.golden":  dark.Render(),
-		"unreachable-120x36-light.golden": light.Render(),
+		"unreachable-120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
+		"unreachable-120x36-light.golden": goldentest.Truecolor(light.Render()),
 	}
 }
 

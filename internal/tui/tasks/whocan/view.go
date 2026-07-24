@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -208,4 +208,3 @@ func padBetween(left, right string, width int) string {
 	}
 	return left + strings.Repeat(" ", gap) + right
 }
-

@@ -33,10 +33,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -184,10 +182,10 @@ func goldenSecretModel(t *testing.T, width, height int) Model {
 func goldenYamlviewFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"read-120x36.golden":   goldenReadModel(t, 120, 36).Render(),
-		"read-80x24.golden":    goldenReadModel(t, 80, 24).Render(),
-		"secret-120x36.golden": goldenSecretModel(t, 120, 36).Render(),
-		"secret-80x24.golden":  goldenSecretModel(t, 80, 24).Render(),
+		"read-120x36.golden":   goldentest.Plain(goldenReadModel(t, 120, 36).Render()),
+		"read-80x24.golden":    goldentest.Plain(goldenReadModel(t, 80, 24).Render()),
+		"secret-120x36.golden": goldentest.Plain(goldenSecretModel(t, 120, 36).Render()),
+		"secret-80x24.golden":  goldentest.Plain(goldenSecretModel(t, 80, 24).Render()),
 	}
 }
 
@@ -235,10 +233,6 @@ func TestGoldenFixtures(t *testing.T) {
 // other renders (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	darkRead := goldenReadModel(t, 120, 36)
 	lightRead := goldenReadModel(t, 120, 36)
 	lightRead.session.Theme = tui.Light()
@@ -248,10 +242,10 @@ func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	lightSecret.session.Theme = tui.Light()
 
 	return map[string]string{
-		"read-120x36-dark.golden":    darkRead.Render(),
-		"read-120x36-light.golden":   lightRead.Render(),
-		"secret-120x36-dark.golden":  darkSecret.Render(),
-		"secret-120x36-light.golden": lightSecret.Render(),
+		"read-120x36-dark.golden":    goldentest.Truecolor(darkRead.Render()),
+		"read-120x36-light.golden":   goldentest.Truecolor(lightRead.Render()),
+		"secret-120x36-dark.golden":  goldentest.Truecolor(darkSecret.Render()),
+		"secret-120x36-light.golden": goldentest.Truecolor(lightSecret.Render()),
 	}
 }
 

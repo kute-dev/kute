@@ -5,16 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 // testStyles builds a Styles value with distinct (if arbitrary) colors —
-// tests only assert on text content and layout, never on color, matching
-// the "golden comparisons run colorless" convention used throughout this
-// repo (no TTY ⇒ lipgloss emits no ANSI in tests anyway).
+// tests only assert on text content and layout, never on color. lipgloss
+// v2's Render() always emits ANSI now (no ambient no-TTY downsampling the
+// way v1 had), so any test whose target text can land inside a styled span
+// boundary (an aliased first letter, a fuzzy-matched rune, …) needs
+// ansi.Strip on the rendered output before comparing.
 func testStyles() Styles {
 	return Styles{
 		Frame:        lipgloss.NewStyle(),
@@ -193,7 +196,7 @@ func TestRenderBrowseHighlightsAliasFirstLetterAndNarrowKeyRow(t *testing.T) {
 			{Label: "Secrets", Right: "0", Dim: true},
 		},
 	}
-	got := m.Render(testStyles(), 120)
+	got := ansi.Strip(m.Render(testStyles(), 120))
 	if !strings.Contains(got, "type") || !strings.Contains(got, "to narrow") {
 		t.Fatalf("expected the 12a key row, got:\n%s", got)
 	}
@@ -448,7 +451,7 @@ func TestRenderNoMatchesFuzzy(t *testing.T) {
 func TestRenderRespectsWidth(t *testing.T) {
 	t.Parallel()
 	m := Model{Items: []Item{{Label: "Pods"}}}
-	got := m.Render(testStyles(), 100)
+	got := ansi.Strip(m.Render(testStyles(), 100))
 	lines := strings.Split(got, "\n")
 	want := Width(100)
 	for i, l := range lines {

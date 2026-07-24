@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -358,9 +358,9 @@ func Width(screenWidth int) int {
 // and rules run border to border.
 func (m Model) Render(styles Styles, screenWidth int) string {
 	width := Width(screenWidth)
-	// lipgloss.Style.Width sets the space between the borders; the border
-	// then adds 2 more, so frameWidth = width-2 makes the rendered block
-	// exactly width wide.
+	// frameWidth is the space between the borders — every row below is
+	// wrapped/ruled to this column width, then the frame style's own
+	// Width() (below) adds the border back to land on width overall.
 	frameWidth := max(width-2, 12)
 
 	rule := styles.Rule.Render(strings.Repeat("─", frameWidth))
@@ -375,7 +375,10 @@ func (m Model) Render(styles Styles, screenWidth int) string {
 	}
 	lines = append(lines, rule, m.renderKeyRow(styles, frameWidth))
 
-	frame := styles.Frame.Border(lipgloss.RoundedBorder()).Width(frameWidth)
+	// +2: lipgloss v2's Width now counts the border itself (v1 added it on
+	// top, hence frameWidth's own -2 above), so the style needs
+	// frameWidth+2 to render at exactly width again.
+	frame := styles.Frame.Border(lipgloss.RoundedBorder()).Width(frameWidth + 2)
 	return frame.Render(strings.Join(lines, "\n"))
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -607,7 +608,10 @@ func TestRootModelNamespaceDigitThenLetterFiltersNormally(t *testing.T) {
 	}
 
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "0"})
-	view = updated.(tui.Model).View().Content
+	// ansi.Strip: "10-legacy"'s fuzzy-matched digits render as their own
+	// styled spans, so an un-stripped view can split the name across an
+	// escape boundary.
+	view = ansi.Strip(updated.(tui.Model).View().Content)
 
 	if strings.Contains(view, "switches to") {
 		t.Fatalf("expected the digit-select footer to be gone once a second character arrived:\n%s", view)

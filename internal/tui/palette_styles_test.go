@@ -1,9 +1,10 @@
 package tui
 
 import (
+	"image/color"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // TestPaletteStylesMapsEveryFieldToItsDesignToken pins the exact
@@ -111,16 +112,16 @@ func TestPaletteStylesMapsEveryFieldToItsDesignToken(t *testing.T) {
 	}
 }
 
-func assertFg(t *testing.T, field string, style lipgloss.Style, want lipgloss.Color) {
+func assertFg(t *testing.T, field string, style lipgloss.Style, want color.Color) {
 	t.Helper()
-	if got := style.GetForeground(); got != lipgloss.TerminalColor(want) {
+	if got := style.GetForeground(); got != want {
 		t.Errorf("%s foreground = %v, want %v", field, got, want)
 	}
 }
 
-func assertBg(t *testing.T, field string, style lipgloss.Style, want lipgloss.Color) {
+func assertBg(t *testing.T, field string, style lipgloss.Style, want color.Color) {
 	t.Helper()
-	if got := style.GetBackground(); got != lipgloss.TerminalColor(want) {
+	if got := style.GetBackground(); got != want {
 		t.Errorf("%s background = %v, want %v", field, got, want)
 	}
 }

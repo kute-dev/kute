@@ -2,11 +2,12 @@ package yamlview
 
 import (
 	"fmt"
+	"image/color"
 	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -175,7 +176,7 @@ func (m Model) renderRow(theme tui.Theme, rl renderLine, selected bool, gutterWi
 	if rl.LineNo > 0 {
 		gutterText = strconv.Itoa(rl.LineNo)
 	}
-	var bg lipgloss.TerminalColor = lipgloss.NoColor{}
+	var bg color.Color = lipgloss.NoColor{}
 	if selected {
 		bg = theme.SelBg
 	} else if searchQuery != "" && strings.Contains(strings.ToLower(rl.Text), searchQuery) {
@@ -215,7 +216,7 @@ func secretKeyPrefixSplit(rl renderLine) (indent, value string, isKeyLine bool) 
 // renderSecretMaskedLine colors a masked data: entry's key normally
 // (YamlKey) but its placeholder value in a muted tone distinct from real
 // string data (theme.YamlStr) — visually, "this is not the real value".
-func renderSecretMaskedLine(theme tui.Theme, rl renderLine, bg lipgloss.TerminalColor) string {
+func renderSecretMaskedLine(theme tui.Theme, rl renderLine, bg color.Color) string {
 	indent, value, isKeyLine := secretKeyPrefixSplit(rl)
 	valStyle := lipgloss.NewStyle().Foreground(theme.TextGhost).Background(bg)
 	if !isKeyLine {
@@ -237,7 +238,7 @@ func renderSecretMaskedLine(theme tui.Theme, rl renderLine, bg lipgloss.Terminal
 // fill the line (21a's whole point is flagging plaintext-on-screen, so the
 // tag must never be the part that goes missing; docs/design README.md
 // §271-274).
-func renderSecretRevealedLine(theme tui.Theme, rl renderLine, bg lipgloss.TerminalColor, avail int) string {
+func renderSecretRevealedLine(theme tui.Theme, rl renderLine, bg color.Color, avail int) string {
 	indent, value, isKeyLine := secretKeyPrefixSplit(rl)
 	valStyle := lipgloss.NewStyle().Foreground(theme.YamlStr).Background(bg)
 	if !isKeyLine {
@@ -263,7 +264,7 @@ func revealedTag(theme tui.Theme) string {
 		Render("revealed")
 }
 
-func renderTokens(theme tui.Theme, tokens []Token, bg lipgloss.TerminalColor) string {
+func renderTokens(theme tui.Theme, tokens []Token, bg color.Color) string {
 	var b strings.Builder
 	for _, t := range tokens {
 		style := lipgloss.NewStyle().Background(bg)

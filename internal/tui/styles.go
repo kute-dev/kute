@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // Styles is the derived style set for the inverted-layout redesign
 // (mvp-plan.md), built once per Theme by NewStyles. A theme swap rebuilds

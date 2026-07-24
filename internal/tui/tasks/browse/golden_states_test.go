@@ -15,8 +15,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +27,7 @@ import (
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -584,7 +583,7 @@ func goldenMetaModel(t *testing.T, width, height int) Model {
 func goldenMetaConfirmModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	m := goldenMetaModel(t, width, height)
-	m = step(t, m, tea.KeyPressMsg{Text: "esc"})  // back out of the in-progress env= edit
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"}) // back out of the in-progress env= edit
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp}) // up to app= (labels sort: app, app.kubernetes.io/managed-by, env, team)
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -651,8 +650,8 @@ func goldenStateFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 	for _, prefix := range goldenStatePrefixes {
-		out[prefix+"-120x36.golden"] = goldenStateModel(t, prefix, 120, 36).Render()
-		out[prefix+"-80x24.golden"] = goldenStateModel(t, prefix, 80, 24).Render()
+		out[prefix+"-120x36.golden"] = goldentest.Plain(goldenStateModel(t, prefix, 120, 36).Render())
+		out[prefix+"-80x24.golden"] = goldentest.Plain(goldenStateModel(t, prefix, 80, 24).Render())
 	}
 	return out
 }
@@ -696,17 +695,13 @@ var truecolorStatePrefixes = []string{
 
 func truecolorStateFixtures(t *testing.T) map[string]string {
 	t.Helper()
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
-
 	out := map[string]string{}
 	for _, prefix := range truecolorStatePrefixes {
 		dark := goldenStateModel(t, prefix, 120, 36)
 		light := goldenStateModel(t, prefix, 120, 36)
 		light.session.Theme = tui.Light()
-		out[prefix+"-120x36-dark.golden"] = dark.Render()
-		out[prefix+"-120x36-light.golden"] = light.Render()
+		out[prefix+"-120x36-dark.golden"] = goldentest.Truecolor(dark.Render())
+		out[prefix+"-120x36-light.golden"] = goldentest.Truecolor(light.Render())
 	}
 	return out
 }
