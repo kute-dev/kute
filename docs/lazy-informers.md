@@ -3,7 +3,7 @@
 How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, and what
 that cost in design changes.
 
-Branch: `perf/lazy-informers` (18 commits, not merged; run against a real cluster,
+Branch: `perf/lazy-informers` (19 commits, not merged; run against a real cluster,
 see [Observed on the real cluster](#observed-on-the-real-cluster)). Full
 suite green, `-race` clean, **zero golden fixtures changed** — this work alters *when*
 data loads, never how it renders.
@@ -71,6 +71,7 @@ gets for free.
 | `8950b6b` `perf(kube)` | List Helm releases without reading every Secret |
 | `238170c` `perf(kube)` | Discover custom kinds without downloading their schemas |
 | `c62324d` `fix(tui)` | Stop the jump palette hanging the app on a real cluster |
+| `9939ab7` `fix(tui)` | Don't report empty data while its cache is still loading |
 
 The last two are written up in [§5.1](#51-crd-discovery--done-238170c) and
 [§5.2](#52-helm-releases-read-every-secret--done-8950b6b), where they were first
@@ -238,10 +239,12 @@ throughout. Qualitative, as reported by the user, not instrumented:
 That last one only became true after `c62324d`; the first run of this branch hung the `g`
 key for about a minute (see [What the tests missed](#what-the-tests-missed)).
 
-**Still unexercised on a real cluster**, and worth a look before this merges: the Secrets
-list (12.3 MB, the largest kind), Helm Releases and one release's history (the filtered
-Secret cache, §5.2), a custom kind's list (printer columns arriving a beat after the rows,
-§5.1), the CRDs list itself, `whocan` (four lazy RBAC informers), and the routing table.
+All of the above were subsequently walked and work. One bug came out of it: the Helm
+history screen announced "no revisions found — the release secrets may have been deleted"
+for a couple of seconds before its data arrived. Three more screens shared the fault
+(events, timeline, who-can) — see `9939ab7`, and the invariant it produced: an empty state
+is a claim about the cluster, and may not be entered before the caches behind it have
+filled.
 
 What each lazy kind now costs only if opened:
 
