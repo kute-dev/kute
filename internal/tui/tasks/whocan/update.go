@@ -18,6 +18,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if isRBACKind(msg.Kind) && m.rbac != nil {
 			return m, m.load()
 		}
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.reloadEpoch && m.rbac != nil {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 	case tui.SwitchNamespaceMsg:
@@ -100,6 +104,16 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.rows = buildRows(msg.result)
 	m.state = tui.TaskStateReady
 	if len(m.rows) == 0 {
+		// 22a resolves bindings entirely from informer caches, and all four
+		// RBAC informers start on first read — so the first answer is empty
+		// on a cold session. "No one can do this" is a security claim; it
+		// must not be made about a cache that hasn't loaded.
+		if !tui.KindsSynced(m.rbac, kube.KindRole, kube.KindRoleBinding,
+			kube.KindClusterRole, kube.KindClusterRoleBinding) {
+			m.state = tui.TaskStateLoading
+			m.feedback = ""
+			return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""

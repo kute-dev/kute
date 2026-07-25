@@ -21,6 +21,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reloadEpoch++
 			return m, m.load()
 		}
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.reloadEpoch {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
@@ -61,6 +65,15 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.revisions = msg.revisions
 	m.state = tui.TaskStateReady
 	if len(m.revisions) == 0 {
+		// The release Secrets live in a cache that starts on first read, so
+		// an empty first answer means "not loaded yet" far more often than
+		// "this release has no revisions" — and the latter is an alarming
+		// thing to assert about a release the user just opened.
+		if !tui.KindsSynced(m.lister, kube.KindHelmRelease) {
+			m.state = tui.TaskStateLoading
+			m.feedback = ""
+			return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""

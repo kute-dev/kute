@@ -20,6 +20,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Kind == kube.KindEvent && m.events != nil {
 			return m, m.load()
 		}
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.syncRetryGen && m.events != nil {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 	case tui.SwitchNamespaceMsg:
@@ -54,6 +58,16 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.recomputeVisible()
 	m.state = tui.TaskStateReady
 	if len(m.groups) == 0 {
+		// The Event informer starts on first read, so an empty first answer
+		// usually means the cache hasn't filled — not that the namespace is
+		// quiet, which is a reassuring thing to say wrongly during an
+		// incident.
+		if !tui.KindsSynced(m.lister, kube.KindEvent) {
+			m.state = tui.TaskStateLoading
+			m.feedback = ""
+			m.syncRetryGen++
+			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""

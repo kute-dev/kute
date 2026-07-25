@@ -235,3 +235,92 @@ func TestMoveSelectionScrollsOffset(t *testing.T) {
 		t.Fatalf("selected %d not within rendered viewport [%d, %d)", m.selected, m.offset, m.offset+rows)
 	}
 }
+
+// unsyncedLister is the shape a lazily-started cache presents on first read:
+// an empty answer that means nothing yet, until synced flips.
+type unsyncedLister struct {
+	inner  fakeLister
+	synced *bool
+}
+
+func (l *unsyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKind, ns string) ([]runtime.Object, error) {
+	if !*l.synced {
+		return nil, nil
+	}
+	return l.inner.ListRaw(ctx, kind, ns)
+}
+
+func (l *unsyncedLister) KindSynced(kube.ResourceKind) bool { return *l.synced }
+
+// TestNoEmptyStateWhileTheReleaseCacheFills is the regression test for 18a
+// announcing "no revisions found — the release secrets may have been
+// deleted" for a couple of seconds after opening, before the data arrived.
+// Release Secrets live in a cache that starts on first read, so that empty
+// first answer said nothing about the cluster — and what it displayed was
+// alarming rather than merely wrong.
+func TestNoEmptyStateWhileTheReleaseCacheFills(t *testing.T) {
+	synced := false
+	lister := &unsyncedLister{synced: &synced, inner: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {revisionSecret("default", "web", "deployed", 1)},
+	}}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+
+	// Deliberately not step(): it drains commands recursively, and the retry
+	// this schedules re-arms for as long as the cache stays unsynced — which
+	// here is forever, by design.
+	updated, _ := m.Update(m.load()())
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading while the release cache is still filling", m.state)
+	}
+	if got := plain(m.Render()); strings.Contains(got, "no revisions found") {
+		t.Fatalf("claimed the release's secrets were deleted while its cache was still filling:\n%s", got)
+	}
+}
+
+// TestEmptyStateOnceTheCacheIsSettled: the message is right when it's true,
+// so a settled-and-genuinely-empty cache must still reach it.
+func TestEmptyStateOnceTheCacheIsSettled(t *testing.T) {
+	synced := true
+	lister := &unsyncedLister{synced: &synced, inner: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+
+	updated, _ := m.Update(m.load()())
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty for a settled cache with no revisions", m.state)
+	}
+}
+
+// TestRetryResolvesOnceTheCacheFills drives it through: the scheduled retry
+// re-reads and settles on the real revisions.
+func TestRetryResolvesOnceTheCacheFills(t *testing.T) {
+	synced := false
+	lister := &unsyncedLister{synced: &synced, inner: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {revisionSecret("default", "web", "deployed", 1)},
+	}}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+	updated, _ := m.Update(m.load()())
+	m = *updated.(*Model)
+
+	synced = true // the cache fills while the retry is pending
+	updated, cmd := m.Update(tui.CacheSyncRetryMsg{Gen: m.reloadEpoch})
+	m = *updated.(*Model)
+	if cmd == nil {
+		t.Fatal("expected the retry to re-issue a load")
+	}
+	updated, _ = m.Update(cmd())
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready once the cache filled (feedback %q)", m.state, m.feedback)
+	}
+	if len(m.revisions) != 1 {
+		t.Fatalf("got %d revisions, want 1", len(m.revisions))
+	}
+}

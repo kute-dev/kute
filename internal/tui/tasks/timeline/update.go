@@ -23,6 +23,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if isTimelineSource(msg.Kind) && m.events != nil {
 			return m, m.load()
 		}
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.syncRetryGen && m.lister != nil {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.actionsCtl.SetOffline(m.conn.Offline())
@@ -78,6 +82,16 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		// A 16b revision rail is still worth showing even when nothing
 		// happened in the feed's own window — it's not "empty" until there's
 		// truly nothing on screen.
+		//
+		// And not even then, if the caches it merges are still filling:
+		// Events and ReplicaSets both start on first read, so a cold open
+		// would otherwise report a quiet timeline for an object mid-incident.
+		if !tui.KindsSynced(m.lister, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment) {
+			m.state = tui.TaskStateLoading
+			m.feedback = ""
+			m.syncRetryGen++
+			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	if firstLoad && len(m.rail) > 0 {

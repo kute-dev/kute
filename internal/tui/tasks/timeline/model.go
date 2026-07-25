@@ -70,13 +70,16 @@ type Config struct {
 type Model struct {
 	width, height int
 
-	session    *tui.Session
-	events     EventsReader
-	lister     resources.RawLister
-	mutator    kube.Mutator
-	actionsCtl actions.Controller
-	openEvents OpenEventsFunc
-	timeout    time.Duration
+	session *tui.Session
+	events  EventsReader
+	lister  resources.RawLister
+	// syncRetryGen guards a cache-sync retry against a newer load having
+	// landed in the meantime.
+	syncRetryGen int
+	mutator      kube.Mutator
+	actionsCtl   actions.Controller
+	openEvents   OpenEventsFunc
+	timeout      time.Duration
 
 	namespace  string
 	objectKind kube.ResourceKind

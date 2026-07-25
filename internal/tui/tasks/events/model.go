@@ -80,11 +80,14 @@ var eventWindows = []time.Duration{15 * time.Minute, time.Hour, 6 * time.Hour, 2
 type Model struct {
 	width, height int
 
-	session  *tui.Session
-	events   EventsReader
-	lister   resources.RawLister
-	openYAML OpenYAMLFunc
-	timeout  time.Duration
+	session *tui.Session
+	events  EventsReader
+	lister  resources.RawLister
+	// syncRetryGen guards a cache-sync retry against a newer load having
+	// landed in the meantime.
+	syncRetryGen int
+	openYAML     OpenYAMLFunc
+	timeout      time.Duration
 
 	namespace  string
 	objectKind kube.ResourceKind
