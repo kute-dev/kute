@@ -1,10 +1,14 @@
 # kute — Lazy informers & startup cost
 
-How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, what that
-cost in design changes, and what is still on the table.
+How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, and what
+that cost in design changes.
 
-Branch: `perf/lazy-informers` (12 commits, not merged). Full suite green, `-race` clean,
-**zero golden fixtures changed** — this work alters *when* data loads, never how it renders.
+Branch: `perf/lazy-informers` (13 commits, not merged; 9 code, 1 script, 3 doc). Full
+suite green, `-race` clean, **zero golden fixtures changed** — this work alters *when*
+data loads, never how it renders.
+
+Everything identified along the way has been done. What remains in §5 is the reasoning
+behind each change and the trade-offs deliberately accepted, not a backlog.
 
 ## Contents
 
@@ -63,8 +67,12 @@ gets for free.
 | `43202a4` `fix(tui)` | Refresh screens when their secondary resources change |
 | `668464d` `perf(kube)` | Drop managedFields from informer caches |
 | `914db9e` `chore(scripts)` | Add `scripts/measure-cluster-payload.sh` |
-| `8950b6b` `perf(kube)` | List Helm releases without reading every Secret (§5.2) |
-| `238170c` `perf(kube)` | Discover custom kinds without downloading their schemas (§5.1) |
+| `8950b6b` `perf(kube)` | List Helm releases without reading every Secret |
+| `238170c` `perf(kube)` | Discover custom kinds without downloading their schemas |
+
+The last two are written up in [§5.1](#51-crd-discovery--done-238170c) and
+[§5.2](#52-helm-releases-read-every-secret--done-8950b6b), where they were first
+identified, rather than repeated here.
 
 ### df863a8 — the false-outage fix
 
@@ -130,7 +138,8 @@ Everything else starts when something first reads it, via `ensureKind` called fr
 events bring them back.
 
 Discovered CRDs got the same treatment: discovery used to open an instance watch per
-Established CRD whether or not it was ever browsed.
+Established CRD whether or not it was ever browsed. (Discovery itself still read whole CRD
+objects at this point — [§5.1](#51-crd-discovery--done-238170c) later replaced that too.)
 
 The eager three earn their place by being needed before any navigation, or by having no
 reload path if they arrive late (the Pods health strip, Nodes list, node detail and
@@ -202,10 +211,17 @@ Real numbers from `aks-aim-prod-eastus2-02` via `scripts/measure-cluster-payload
 | CRD discovery | 2.76 MB | **~15 KB, estimated** (§5.1) |
 | **Total** | **≈ 21.8 MB** | **≈ 1.3 MB** |
 
-A ~16× cut. The CRD-discovery figure is the one number here not measured end to end: it's
-the metadata list (48 names) plus a discovery round trip, sized from their payloads rather
-than observed on the wire. Re-run `scripts/measure-cluster-payload.sh` after connecting to
-confirm. What each lazy kind now costs only if opened:
+A ~16× cut.
+
+**One caveat on that table.** The "before" column and the per-kind figures below are
+measured. The CRD-discovery "after" is not: it's the metadata list (48 names) plus a
+discovery round trip, sized from their payloads rather than observed on the wire. Nor can
+`measure-cluster-payload.sh` confirm it — that script measures what `kubectl` pulls, not
+what kute pulls. Confirming it properly means watching kute's own traffic (a proxy, or
+apiserver audit logs); the practical check is whether first paint against a slow cluster
+is now effectively instant.
+
+What each lazy kind now costs only if opened:
 
 ```
 secrets              310 objects   12.3 MB     ← largest single kind; no longer
@@ -222,9 +238,10 @@ deployments           33 objects  324.4 KB
 ## 4. Design decisions worth remembering
 
 - **Auto-start is implicit, inside `ListRaw`.** The alternative — every caller declaring
-  its kinds — meant touching ~62 call sites where a *missed* one fails silently as an
-  empty list. Implicit is correct by construction and needs suppression at exactly two
-  breadth-first consumers (the goto palette, the empty-state hints).
+  its kinds — meant touching ~85 read sites (72 direct `ListRaw` calls plus 13 through
+  `resources.List`/`Count`) where a *missed* one fails silently as an empty list.
+  Implicit is correct by construction and needs suppression at exactly two breadth-first
+  consumers (the goto palette, the empty-state hints).
 - **`ensureKind` holds `c.mu` across `factory.Start`.** The two-phase alternative has a
   real interleave: goroutine B's `Start` runs A's just-registered informer before A wires
   its handler, and `SetWatchErrorHandler` then fails outright on a running informer.
@@ -237,15 +254,25 @@ deployments           33 objects  324.4 KB
 
 ### Verification notes
 
-Three claims were checked rather than asserted:
+Each of these was checked by breaking the thing it claims to protect, rather than
+asserted:
 
 - The race test genuinely fails on the old unlocked `c.factory` read (confirmed by
   reverting the lock and observing `WARNING: DATA RACE`).
 - The namespace-palette test genuinely hangs on "loading namespaces…" with the old
   aggregate gate (confirmed by reverting the gate).
+- The Helm field-selector test genuinely fails without the filter (confirmed by removing
+  `WithTweakListOptions`, giving `field selector "", want "type=helm.sh/release.v1"`).
+
+Two tests were wrong on the first attempt and are worth remembering as traps:
+
 - The first end-to-end transform test **passed while proving nothing**, because the test
   helper built a factory without the transform. Both factories now come from one
   `newTypedFactory` constructor so production and tests can't drift again.
+- The first partial-discovery test used a malformed GroupVersion, which makes the fake
+  discovery client fail *wholesale* rather than partially — not what partial discovery
+  looks like. The matching logic was split into a pure `customKindsFrom` and tested
+  directly instead.
 
 ---
 
@@ -319,7 +346,7 @@ cache the Helm screens never read, flashing "no releases".
 ### 5.3 Known trade-offs accepted, not bugs
 
 - **The fuzzy `g` corpus is smaller from a cold session.** `gotoResourceItems` lists
-  *objects*, not counts, so §5's count fix doesn't cover it — typing a pod name into `g`
+  *objects*, not counts, so `5428db3`'s count fix doesn't cover it — typing a pod name into `g`
   searches only started kinds. Mitigation if it bites: rank un-started kinds by name-match
   on the *kind*, so the jump to that list is still one keystroke.
 - **Opening the CRDs list starts a watch per discovered kind**, to keep its COUNT column
@@ -329,9 +356,11 @@ cache the Helm screens never read, flashing "no releases".
 
 ### 5.4 Not done, deliberately
 
-- **No CRD-LIST instrumentation in the app.** A TUI has no console to log to, and a debug
-  channel for one measurement is a feature nobody asked for.
-  `scripts/measure-cluster-payload.sh` answers the question from outside.
+- **No payload instrumentation inside the app.** A TUI has no console to log to, and a
+  debug channel for one measurement is a feature nobody asked for.
+  `scripts/measure-cluster-payload.sh` answers the question from outside. (This was
+  originally about measuring the CRD list before deciding whether to fix it; §5.1 has
+  since removed that read entirely.)
 - **The managedFields fetch happens on YAML-view open, not on fold-expand.** The collapsed
   line reads `▸ managedFields (212 lines folded)` — it needs the count to render, which
   can't be known without fetching. One small GET on an explicitly-opened screen beat
