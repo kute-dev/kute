@@ -3,7 +3,7 @@
 How kute went from pulling ~22 MB before drawing anything to pulling ~4 MB, what that
 cost in design changes, and what is still on the table.
 
-Branch: `perf/lazy-informers` (8 commits, not merged). Full suite green, `-race` clean,
+Branch: `perf/lazy-informers` (10 commits, not merged). Full suite green, `-race` clean,
 **zero golden fixtures changed** — this work alters *when* data loads, never how it renders.
 
 ## Contents
@@ -63,6 +63,7 @@ gets for free.
 | `43202a4` `fix(tui)` | Refresh screens when their secondary resources change |
 | `668464d` `perf(kube)` | Drop managedFields from informer caches |
 | `914db9e` `chore(scripts)` | Add `scripts/measure-cluster-payload.sh` |
+| `8950b6b` `perf(kube)` | List Helm releases without reading every Secret (§5.2) |
 
 ### df863a8 — the false-outage fix
 
@@ -111,8 +112,10 @@ is now explicitly a connect latch. `KindSynced` reports "settled" for anything n
 ever deliver — a stopped cluster, a kind with no informer, and a kind whose watch came back
 Forbidden — so a caller gating a spinner on it cannot hang.
 
-`helmAwareLister` maps `HelmRelease` → `Secret`, the cache releases are actually decoded
-from. Load-bearing: without it the Helm list flashes "no releases" while Secrets fill.
+`helmAwareLister` had to answer for whichever cache releases were actually decoded from —
+at this point the shared Secret cache. Load-bearing: without the mapping the Helm list
+flashed "no releases" while Secrets were still filling. (§5.2 later gave releases their own
+cache, and this mapping now points there instead.)
 
 `internal/kube/cluster.go`, `internal/app/app.go`, `browse/model.go`,
 `nodedetail/model.go`, `internal/tui/namespace.go`
@@ -201,7 +204,8 @@ Real numbers from `aks-aim-prod-eastus2-02` via `scripts/measure-cluster-payload
 A 5× cut. What each lazy kind now costs only if opened:
 
 ```
-secrets              310 objects   12.3 MB     ← largest single kind
+secrets              310 objects   12.3 MB     ← largest single kind; no longer
+                                                 read to list Helm releases
 replicasets          284 objects    2.2 MB
 controllerrevisions  111 objects    1.4 MB
 jobs                  49 objects  358.9 KB
@@ -283,13 +287,25 @@ Estimated: CRD discovery **2.76 MB → single-digit KB**, putting connect at ~1.
 
 Touches `internal/kube/discovery.go`, `dynamic.go`, `cluster.go`, and the CRD column path.
 
-### 5.2 Helm releases read every Secret (small, self-contained)
+### 5.2 Helm releases read every Secret — **done** (`8950b6b`)
 
-`helmAwareLister` decodes Helm releases from *all* Secrets, so listing releases pulls
-12.3 MB on this cluster to find the `helm.sh/release.v1` ones. A field-selector-scoped read
-(`type=helm.sh/release.v1`) cuts it to near nothing. Worth doing regardless of §5.1.
+Releases were decoded from the shared Secret cache, so opening the Helm Releases list or
+one release's history pulled every Secret in scope — 12.3 MB on this cluster — to find a
+few dozen release revisions.
 
-`internal/app/app.go`, `internal/kube/helm.go`
+Releases now have their own Secret informer, filtered server-side to
+`type=helm.sh/release.v1`. `Secret.type` is a supported field selector, so the narrowing
+happens at the API server and the rest never crosses the wire.
+
+The two caches coexist deliberately: browsing Secrets is a screen about Secrets and still
+populates the shared, unfiltered one. The release cache starts on first read like every
+other lazy kind and emits its own change events, so the Helm screens no longer depend on an
+unrelated Secret changing to notice a new revision. `KindSynced` answers for the release
+cache rather than the shared one — the old mapping would have reported "settled" off a
+cache the Helm screens never read, flashing "no releases".
+
+`internal/kube/helm.go`, `cluster.go`, `internal/app/app.go`,
+`internal/tui/tasks/helmhistory/model.go`, `internal/kube/fake/fake.go`
 
 ### 5.3 Known trade-offs accepted, not bugs
 
