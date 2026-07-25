@@ -3,7 +3,8 @@
 How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, and what
 that cost in design changes.
 
-Branch: `perf/lazy-informers` (17 commits, not merged). Full
+Branch: `perf/lazy-informers` (18 commits, not merged; run against a real cluster,
+see [Observed on the real cluster](#observed-on-the-real-cluster)). Full
 suite green, `-race` clean, **zero golden fixtures changed** — this work alters *when*
 data loads, never how it renders.
 
@@ -221,6 +222,26 @@ discovery round trip, sized from their payloads rather than observed on the wire
 what kute pulls. Confirming it properly means watching kute's own traffic (a proxy, or
 apiserver audit logs); the practical check is whether first paint against a slow cluster
 is now effectively instant.
+
+### Observed on the real cluster
+
+Run against `aks-aim-prod-eastus2-02` over an SSH port-forward — the setup that started
+this, where startup used to take 1–2 minutes with the connection banner flapping
+throughout. Qualitative, as reported by the user, not instrumented:
+
+- **Pods list: under 2 s.**
+- **Namespace palette: opens immediately**, without counts, as designed.
+- **Jump palette: instant** — openable *before the pods list has even appeared*, which is
+  the point: it no longer depends on any cache being warm. Counts fill in behind it within
+  a second or two.
+
+That last one only became true after `c62324d`; the first run of this branch hung the `g`
+key for about a minute (see [What the tests missed](#what-the-tests-missed)).
+
+**Still unexercised on a real cluster**, and worth a look before this merges: the Secrets
+list (12.3 MB, the largest kind), Helm Releases and one release's history (the filtered
+Secret cache, §5.2), a custom kind's list (printer columns arriving a beat after the rows,
+§5.1), the CRDs list itself, `whocan` (four lazy RBAC informers), and the routing table.
 
 What each lazy kind now costs only if opened:
 
