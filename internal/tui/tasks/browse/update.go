@@ -18,6 +18,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
+		// A CRD change may mean this kind's columns just arrived — they're
+		// fetched per-kind on first read, so the first render of a custom
+		// kind uses neutral ones. The root shell has already rebuilt the
+		// registry by the time this lands; re-read the descriptor so the
+		// new columns take effect.
+		if msg.Kind == kube.KindCustomResourceDefinition && m.session != nil {
+			if desc, ok := m.session.Registry.Descriptor(m.kind); ok && len(desc.Columns) != len(m.desc.Columns) {
+				m.desc = desc
+				m.reloadEpoch++
+				return m, m.scheduleReload(m.reloadEpoch)
+			}
+		}
 		if msg.Kind == m.kind || auxKindOf(m.kind, msg.Kind) {
 			m.reloadEpoch++
 			return m, m.scheduleReload(m.reloadEpoch)

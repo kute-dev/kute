@@ -56,6 +56,11 @@ type Cluster struct {
 	dynFactory dynamicinformer.DynamicSharedInformerFactory
 	dynKinds   map[ResourceKind]dynamicKindInfo
 	discovered []DiscoveredKind
+	// crdColumnsFetched marks kinds whose printer columns have been pulled
+	// from their own CRD. Discovery deliberately skips them (they live in
+	// the part of a CRD that is megabytes), so they arrive per-kind on
+	// first use — see ensurePrinterColumns.
+	crdColumnsFetched map[ResourceKind]bool
 
 	// metaClient is CountLive's PartialObjectMetadata client, built on first
 	// use and dropped on SwitchContext along with everything else bound to
@@ -171,7 +176,6 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.registerWatchesLocked(eagerKinds...)
 	c.factory.Start(c.stopCh)
 	c.mu.Unlock()
-	c.ensureDynamicKind(KindCustomResourceDefinition, crdGVR, false)
 	go c.startHealthLoop(c.stopCh)
 
 	// Wait on the eager informers by name rather than calling
@@ -180,16 +184,13 @@ func (c *Cluster) Start(ctx context.Context) error {
 	// kind, say) can race into that snapshot and drag connect-time back to
 	// what this change exists to remove.
 	//
-	// The dynamic factory's sync (currently just the CRD informer) is
-	// folded into the same bounded wait, but its result is never fatal — an
-	// absent/unreachable apiextensions API just means CRD support degrades
-	// to "no custom kinds," not a broken connection (refreshDiscovery below
-	// tolerates an empty/still-syncing cache).
+	// No dynamic informer is waited on, because none is started here any
+	// more — discovery reads the API directly (refreshDiscovery) and the
+	// CRD informer starts only if the 14b CRDs list is opened.
 	var synced bool
 	done := make(chan struct{})
 	go func() {
 		synced = cache.WaitForCacheSync(c.stopCh, c.eagerHasSynced()...)
-		c.dynFactory.WaitForCacheSync(c.stopCh)
 		close(done)
 	}()
 	select {
@@ -393,6 +394,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.dynFactory = dynamicinformer.NewDynamicSharedInformerFactory(dynClient, defaultResync)
 	c.dynKinds = nil
 	c.discovered = nil
+	c.crdColumnsFetched = nil
 	// The new factory's informers are all unregistered and unsynced, and
 	// whatever the old cluster forbade says nothing about this one.
 	c.kindInformers = nil
@@ -440,6 +442,13 @@ func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string
 	}
 	c.ensureDynamicKindFor(kind)
 	if info, ok := c.getDynKind(kind); ok {
+		// Reading a custom kind is the moment its columns become worth
+		// fetching. Announcing it as a CRD change is what prompts the
+		// registry rebuild that puts them on screen — see
+		// ensurePrinterColumns.
+		if c.ensurePrinterColumns(context.Background(), kind) {
+			c.notify(KindCustomResourceDefinition)
+		}
 		return listDynamic(info, namespace)
 	}
 	return nil, fmt.Errorf("no informer registered for kind %s", kind)

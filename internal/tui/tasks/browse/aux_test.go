@@ -7,8 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 )
 
 // recordingLister notes every kind read, so a test can assert what a screen
@@ -118,5 +120,62 @@ func drain(cmd tea.Cmd) {
 			go func(c tea.Cmd) { defer wg.Done(); c() }(c)
 		}
 		wg.Wait()
+	}
+}
+
+// TestCRDChangePicksUpNewPrinterColumns covers the visible half of lazy CRD
+// discovery. A custom kind first renders with neutral NAME/AGE columns,
+// because its printer columns live in the part of a CRD that is megabytes
+// and are fetched only when the kind is actually opened. When they land, the
+// root shell rebuilds the registry and this screen has to notice.
+func TestCRDChangePicksUpNewPrinterColumns(t *testing.T) {
+	sess := newSession()
+	widget := kube.DiscoveredKind{
+		GVR:  schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		Kind: "Widget", Plural: "widgets", Group: "example.com", Established: true,
+	}
+	// Connect-time state: discovered, but columns not fetched yet.
+	sess.Registry.Register(resources.CustomDescriptor(widget))
+
+	m := New(Config{Session: sess, Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.kind = kube.ResourceKind("Widget")
+	m.desc, _ = sess.Registry.Descriptor(m.kind)
+
+	if got := len(m.desc.Columns); got != 2 {
+		t.Fatalf("precondition: a column-less custom kind should render Name/Age, got %d columns", got)
+	}
+
+	// The columns arrive; the root shell has already rebuilt the registry
+	// by the time the message reaches this screen.
+	withCols := widget
+	withCols.PrinterColumns = []kube.PrinterColumn{
+		{Name: "Phase", Type: "string", JSONPath: ".status.phase"},
+	}
+	sess.Registry.Register(resources.CustomDescriptor(withCols))
+
+	before := m.reloadEpoch
+	_, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindCustomResourceDefinition})
+
+	if cmd == nil || m.reloadEpoch == before {
+		t.Fatal("expected a reload once the kind's real columns arrived")
+	}
+	if len(m.desc.Columns) != 3 || m.desc.Columns[1] != "Phase" {
+		t.Fatalf("descriptor columns = %v, want Name/Phase/Age", m.desc.Columns)
+	}
+}
+
+// TestCRDChangeIsIgnoredWhenColumnsAreUnchanged: browse reloads on plenty of
+// signals already; a CRD event that changes nothing about this kind must not
+// add another.
+func TestCRDChangeIsIgnoredWhenColumnsAreUnchanged(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.kind = kube.KindPod
+
+	before := m.reloadEpoch
+	_, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindCustomResourceDefinition})
+	if cmd != nil || m.reloadEpoch != before {
+		t.Fatal("a CRD change reloaded the Pods list, which has nothing to do with CRDs")
 	}
 }

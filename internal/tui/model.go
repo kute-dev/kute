@@ -456,6 +456,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
 			}
 		}
+	case kube.ResourceChangedMsg:
+		// A CRD change means the kind registry itself may be stale — most
+		// often because a custom kind's printer columns have just arrived
+		// (they're fetched per-kind on first read, not at connect). Rebuild
+		// and let the message carry on to the task, which re-reads its own
+		// descriptor.
+		if msg.Kind == kube.KindCustomResourceDefinition && m.session != nil && m.session.Cluster != nil {
+			m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
+		}
 	case kube.CRDsDiscoveredMsg:
 		// The one connect path where discovery finishes outside any
 		// tea.Cmd the root can await synchronously (context.go's

@@ -258,3 +258,55 @@ func TestStartIgnoresAStrayListerRegistration(t *testing.T) {
 	// A registered informer is a watched one: its handler feeds notify.
 	waitFor(t, "the ReplicaSet informer to sync", func() bool { return c.KindSynced(KindReplicaSet) })
 }
+
+// crdListActions counts full CRD object lists — the 2.76 MB read this work
+// exists to remove. Counted off the dynamic client, since that is the only
+// path that pulls whole CRDs (the metadata client's name-only list goes
+// through a different client entirely).
+func crdListActions(dyn *dynamicfake.FakeDynamicClient) int {
+	n := 0
+	for _, a := range dyn.Actions() {
+		if a.GetVerb() == "list" && a.GetResource() == crdGVR {
+			n++
+		}
+	}
+	return n
+}
+
+// TestStartDoesNotListCRDObjects is the §5.1 regression test. A
+// CustomResourceDefinition carries the full OpenAPI schema for every version
+// it serves; listing all of them at connect was, after lazy informers
+// landed, the single largest thing a connect pulled — and 98% of it was
+// schema nothing reads.
+func TestStartDoesNotListCRDObjects(t *testing.T) {
+	c, _ := newLazyTestCluster()
+	dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
+	defer c.Stop()
+
+	if err := c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	// Give any stray informer a chance to fire before asserting a negative.
+	time.Sleep(50 * time.Millisecond)
+
+	if n := crdListActions(dyn); n != 0 {
+		t.Fatalf("connect issued %d full CRD list(s); discovery is supposed to read names and the discovery API instead", n)
+	}
+}
+
+// TestCRDListStartsItsInformerOnDemand: 14b is the one screen that wants
+// whole CRD objects, so that informer starts when it opens — not before.
+func TestCRDListStartsItsInformerOnDemand(t *testing.T) {
+	c, _ := newLazyTestCluster()
+	dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
+	defer c.Stop()
+
+	if err := c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if _, err := c.ListRaw(context.Background(), KindCustomResourceDefinition, ""); err != nil {
+		t.Fatalf("ListRaw(CustomResourceDefinition): %v", err)
+	}
+
+	waitFor(t, "the CRD informer to list", func() bool { return crdListActions(dyn) > 0 })
+}
