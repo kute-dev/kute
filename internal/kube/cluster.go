@@ -62,6 +62,9 @@ type dynamicKindInfo struct {
 	gvr        schema.GroupVersionResource
 	namespaced bool
 	lister     cache.GenericLister
+	// informer is retained alongside the lister purely for HasSynced — a
+	// lister can't report whether its cache has finished its initial fill.
+	informer cache.SharedIndexInformer
 }
 
 // NewCluster builds a Cluster from the active kubeconfig (same resolution as
@@ -242,61 +245,19 @@ func (c *Cluster) Stop() {
 // namespaces; ignored for cluster-scoped kinds). It satisfies
 // resources.RawLister.
 func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string) ([]runtime.Object, error) {
-	sel := labels.Everything()
-	f := c.factory
-	switch kind {
-	case KindPod:
-		return listNamespaced(f.Core().V1().Pods().Lister().List, f.Core().V1().Pods().Lister().Pods, namespace, sel)
-	case KindService:
-		return listNamespaced(f.Core().V1().Services().Lister().List, f.Core().V1().Services().Lister().Services, namespace, sel)
-	case KindIngress:
-		return listNamespaced(f.Networking().V1().Ingresses().Lister().List, f.Networking().V1().Ingresses().Lister().Ingresses, namespace, sel)
-	case KindConfigMap:
-		return listNamespaced(f.Core().V1().ConfigMaps().Lister().List, f.Core().V1().ConfigMaps().Lister().ConfigMaps, namespace, sel)
-	case KindSecret:
-		return listNamespaced(f.Core().V1().Secrets().Lister().List, f.Core().V1().Secrets().Lister().Secrets, namespace, sel)
-	case KindPersistentVolumeClaim:
-		return listNamespaced(f.Core().V1().PersistentVolumeClaims().Lister().List, f.Core().V1().PersistentVolumeClaims().Lister().PersistentVolumeClaims, namespace, sel)
-	case KindEvent:
-		return listNamespaced(f.Core().V1().Events().Lister().List, f.Core().V1().Events().Lister().Events, namespace, sel)
-	case KindDeployment:
-		return listNamespaced(f.Apps().V1().Deployments().Lister().List, f.Apps().V1().Deployments().Lister().Deployments, namespace, sel)
-	case KindDaemonSet:
-		return listNamespaced(f.Apps().V1().DaemonSets().Lister().List, f.Apps().V1().DaemonSets().Lister().DaemonSets, namespace, sel)
-	case KindStatefulSet:
-		return listNamespaced(f.Apps().V1().StatefulSets().Lister().List, f.Apps().V1().StatefulSets().Lister().StatefulSets, namespace, sel)
-	case KindReplicaSet:
-		return listNamespaced(f.Apps().V1().ReplicaSets().Lister().List, f.Apps().V1().ReplicaSets().Lister().ReplicaSets, namespace, sel)
-	case KindControllerRevision:
-		return listNamespaced(f.Apps().V1().ControllerRevisions().Lister().List, f.Apps().V1().ControllerRevisions().Lister().ControllerRevisions, namespace, sel)
-	case KindJob:
-		return listNamespaced(f.Batch().V1().Jobs().Lister().List, f.Batch().V1().Jobs().Lister().Jobs, namespace, sel)
-	case KindCronJob:
-		return listNamespaced(f.Batch().V1().CronJobs().Lister().List, f.Batch().V1().CronJobs().Lister().CronJobs, namespace, sel)
-	case KindHorizontalPodAutoscaler:
-		return listNamespaced(f.Autoscaling().V2().HorizontalPodAutoscalers().Lister().List, f.Autoscaling().V2().HorizontalPodAutoscalers().Lister().HorizontalPodAutoscalers, namespace, sel)
-	case KindRole:
-		return listNamespaced(f.Rbac().V1().Roles().Lister().List, f.Rbac().V1().Roles().Lister().Roles, namespace, sel)
-	case KindRoleBinding:
-		return listNamespaced(f.Rbac().V1().RoleBindings().Lister().List, f.Rbac().V1().RoleBindings().Lister().RoleBindings, namespace, sel)
-	case KindClusterRole:
-		items, err := f.Rbac().V1().ClusterRoles().Lister().List(sel)
-		return toObjects(items), err
-	case KindClusterRoleBinding:
-		items, err := f.Rbac().V1().ClusterRoleBindings().Lister().List(sel)
-		return toObjects(items), err
-	case KindNode:
-		items, err := f.Core().V1().Nodes().Lister().List(sel)
-		return toObjects(items), err
-	case KindNamespace:
-		items, err := f.Core().V1().Namespaces().Lister().List(sel)
-		return toObjects(items), err
-	default:
-		if info, ok := c.getDynKind(kind); ok {
-			return listDynamic(info, namespace)
-		}
-		return nil, fmt.Errorf("no informer registered for kind %s", kind)
+	if tk, ok := typedKinds[kind]; ok {
+		// Snapshot the factory under the lock: SwitchContext replaces it
+		// wholesale, so reading it unlocked could tear a read across two
+		// clusters' caches.
+		c.mu.Lock()
+		f := c.factory
+		c.mu.Unlock()
+		return tk.list(f, namespace, labels.Everything())
 	}
+	if info, ok := c.getDynKind(kind); ok {
+		return listDynamic(info, namespace)
+	}
+	return nil, fmt.Errorf("no informer registered for kind %s", kind)
 }
 
 // DiscoveredKinds returns the last discovery pass's parsed CRD cache
@@ -418,6 +379,14 @@ func listNamespaced[T runtime.Object, N interface {
 		return toObjects(items), err
 	}
 	items, err := scoped(namespace).List(sel)
+	return toObjects(items), err
+}
+
+// listAll is listNamespaced's cluster-scoped counterpart, for the kinds that
+// have no per-namespace lister at all (Node, Namespace, ClusterRole,
+// ClusterRoleBinding).
+func listAll[T runtime.Object](all func(labels.Selector) ([]T, error), sel labels.Selector) ([]runtime.Object, error) {
+	items, err := all(sel)
 	return toObjects(items), err
 }
 

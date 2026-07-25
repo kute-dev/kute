@@ -10,10 +10,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// getDynKind/setDynKind guard dynKinds with the same mutex as every other
-// Cluster field — refreshDiscovery/ensureDynamicKind run inside Start
-// (background goroutine in app.RunWithConfig) while ListRaw is called from
-// the Bubble Tea Update loop, so this map is genuinely cross-goroutine.
+// getDynKind guards dynKinds with the same mutex as every other Cluster
+// field — refreshDiscovery/ensureDynamicKind run inside Start (background
+// goroutine in app.RunWithConfig) while ListRaw is called from the Bubble
+// Tea Update loop, so this map is genuinely cross-goroutine. There is no
+// paired setter: ensureDynamicKind is the only writer and holds the lock
+// across registration and Start, which a separate setter would break.
 func (c *Cluster) getDynKind(kind ResourceKind) (dynamicKindInfo, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -21,22 +23,20 @@ func (c *Cluster) getDynKind(kind ResourceKind) (dynamicKindInfo, bool) {
 	return info, ok
 }
 
-func (c *Cluster) setDynKind(kind ResourceKind, info dynamicKindInfo) {
-	c.mu.Lock()
-	if c.dynKinds == nil {
-		c.dynKinds = map[ResourceKind]dynamicKindInfo{}
-	}
-	c.dynKinds[kind] = info
-	c.mu.Unlock()
-}
-
 // ensureDynamicKind idempotently starts watching gvr under kind: the
 // built-in KindCustomResourceDefinition (registered once in Start) or a
 // discovered custom kind (registered by refreshDiscovery once its CRD is
 // seen to be Established+Served). Safe to call repeatedly — dynFactory.Start
 // only starts informers that haven't already been started.
+//
+// The whole body runs under c.mu, which does two things: it keeps the
+// dynFactory/stopCh reads from racing SwitchContext's wholesale replacement
+// of both, and it makes registration-then-Start atomic, so a concurrent
+// caller's Start can't run this informer before its handlers are attached.
 func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionResource, namespaced bool) {
-	if _, ok := c.getDynKind(kind); ok {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.dynKinds[kind]; ok || c.stopCh == nil {
 		return
 	}
 	informer := c.dynFactory.ForResource(gvr)
@@ -47,7 +47,15 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionRe
 		UpdateFunc: func(any, any) { c.notify(k) },
 		DeleteFunc: func(any) { c.notify(k) },
 	})
-	c.setDynKind(kind, dynamicKindInfo{gvr: gvr, namespaced: namespaced, lister: informer.Lister()})
+	if c.dynKinds == nil {
+		c.dynKinds = map[ResourceKind]dynamicKindInfo{}
+	}
+	c.dynKinds[kind] = dynamicKindInfo{
+		gvr:        gvr,
+		namespaced: namespaced,
+		lister:     informer.Lister(),
+		informer:   informer.Informer(),
+	}
 	c.dynFactory.Start(c.stopCh)
 }
 
