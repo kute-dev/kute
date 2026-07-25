@@ -601,7 +601,7 @@ func TestGotoPaletteOpensWithoutReadingAnyCache(t *testing.T) {
 	task := &screenTask{name: "browse"}
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
-	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	_, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 
 	if reads := lister.reads(); len(reads) != 0 {
 		t.Fatalf("opening the jump palette read %v; counts must come from CountLive, never a cache", reads)
@@ -624,7 +624,7 @@ func TestGotoFuzzySearchSkipsUnstartedKinds(t *testing.T) {
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "a"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "p"})
-	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "i"})
+	_, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "i"})
 
 	for _, kind := range lister.reads() {
 		switch kind {
