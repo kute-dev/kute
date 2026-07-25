@@ -557,3 +557,80 @@ func TestGotoPaletteCountsWithoutReadingCaches(t *testing.T) {
 		t.Fatalf("expected an en dash for a kind with no count available:\n%s", view)
 	}
 }
+
+// countOnlyLister is what the real seam stack looks like once CountLive is
+// forwarded: it counts server-side and records any cache read, so a test can
+// prove the palette never falls back to measuring informer caches.
+type countOnlyLister struct {
+	mu        sync.Mutex
+	listCalls []kube.ResourceKind
+	synced    map[kube.ResourceKind]bool
+}
+
+func (l *countOnlyLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
+	l.mu.Lock()
+	l.listCalls = append(l.listCalls, kind)
+	l.mu.Unlock()
+	return nil, nil
+}
+
+func (l *countOnlyLister) CountLive(_ context.Context, _ kube.ResourceKind, _ string) (int, error) {
+	return 7, nil
+}
+
+// KindSynced answers false for anything not explicitly marked, standing in
+// for a cluster where only the kinds you've visited have running informers.
+func (l *countOnlyLister) KindSynced(kind kube.ResourceKind) bool { return l.synced[kind] }
+
+func (l *countOnlyLister) reads() []kube.ResourceKind {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]kube.ResourceKind(nil), l.listCalls...)
+}
+
+// TestGotoPaletteOpensWithoutReadingAnyCache is the regression test for the
+// jump palette hanging the app for a minute on a real cluster. Opening it
+// built one row per registered kind, and each row's count fell back to
+// counting an informer cache — which started that kind's informer, and for
+// custom kinds also fetched its CRD synchronously on the update loop.
+// Opening the palette must touch no cache at all.
+func TestGotoPaletteOpensWithoutReadingAnyCache(t *testing.T) {
+	lister := &countOnlyLister{synced: map[kube.ResourceKind]bool{}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+
+	if reads := lister.reads(); len(reads) != 0 {
+		t.Fatalf("opening the jump palette read %v; counts must come from CountLive, never a cache", reads)
+	}
+}
+
+// TestGotoFuzzySearchSkipsUnstartedKinds: typing builds a corpus of object
+// names, and listing a kind whose informer hasn't started would start it —
+// the same stampede, one keystroke later.
+func TestGotoFuzzySearchSkipsUnstartedKinds(t *testing.T) {
+	// Pods plus the eager set, which is always started on a real cluster.
+	lister := &countOnlyLister{synced: map[kube.ResourceKind]bool{
+		kube.KindPod: true, kube.KindNamespace: true, kube.KindNode: true,
+	}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "a"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "p"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "i"})
+
+	for _, kind := range lister.reads() {
+		switch kind {
+		case kube.KindPod, kube.KindNamespace, kube.KindNode, kube.KindForward:
+		default:
+			t.Fatalf("fuzzy search read the %s cache, whose informer has not started", kind)
+		}
+	}
+}

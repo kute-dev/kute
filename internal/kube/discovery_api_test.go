@@ -285,8 +285,10 @@ func TestEnsurePrinterColumnsFetchesOneCRD(t *testing.T) {
 		t.Fatalf("precondition: discovery should not have fetched columns, got %+v", cols)
 	}
 
-	if changed := c.ensurePrinterColumns(context.Background(), "Widget"); !changed {
-		t.Fatal("ensurePrinterColumns reported no change despite the CRD declaring two columns")
+	// Synchronous half, so the assertion doesn't race the goroutine
+	// ensurePrinterColumns spawns.
+	if changed := c.fetchPrinterColumns(context.Background(), "Widget"); !changed {
+		t.Fatal("fetchPrinterColumns reported no change despite the CRD declaring two columns")
 	}
 	got := c.DiscoveredKinds()[0].PrinterColumns
 	if len(got) != 2 || got[0].Name != "Phase" || got[1].JSONPath != ".spec.size" {
@@ -321,7 +323,7 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 	c.refreshDiscovery(context.Background())
 
 	for i := 0; i < 10; i++ {
-		c.ensurePrinterColumns(context.Background(), "Widget")
+		c.fetchPrinterColumns(context.Background(), "Widget")
 	}
 
 	gets := 0
@@ -340,7 +342,7 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 func TestEnsurePrinterColumnsUnknownKindIsANoOp(t *testing.T) {
 	t.Parallel()
 	c := newDiscoveryTestCluster(nil)
-	if c.ensurePrinterColumns(context.Background(), "Nonexistent") {
+	if c.fetchPrinterColumns(context.Background(), "Nonexistent") {
 		t.Fatal("reported a change for a kind discovery never saw")
 	}
 }

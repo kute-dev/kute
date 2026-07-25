@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -246,7 +247,42 @@ func listDynamic(info dynamicKindInfo, namespace string) ([]runtime.Object, erro
 // §14a's spec already provides for ("printer columns → columns, Ready-style
 // condition → status, else neutral"). Reports whether anything changed, so
 // the caller only announces a registry rebuild when there's something new.
-func (c *Cluster) ensurePrinterColumns(ctx context.Context, kind ResourceKind) bool {
+// ensurePrinterColumns kicks off the fetch and returns immediately. It must
+// never block: ListRaw calls it, and ListRaw is called from the Bubble Tea
+// update loop — a synchronous CRD Get there froze the whole app for as long
+// as the round trip took, once per custom kind touched.
+func (c *Cluster) ensurePrinterColumns(kind ResourceKind) {
+	c.mu.Lock()
+	if c.crdColumnsFetched[kind] || c.crdColumnsInFlight[kind] {
+		c.mu.Unlock()
+		return
+	}
+	if c.crdColumnsInFlight == nil {
+		c.crdColumnsInFlight = map[ResourceKind]bool{}
+	}
+	c.crdColumnsInFlight[kind] = true
+	c.mu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), crdFetchTimeout)
+		defer cancel()
+		changed := c.fetchPrinterColumns(ctx, kind)
+		c.mu.Lock()
+		delete(c.crdColumnsInFlight, kind)
+		c.mu.Unlock()
+		if changed {
+			// Announcing this as a CRD change is what prompts the registry
+			// rebuild that puts the new columns on screen.
+			c.notify(KindCustomResourceDefinition)
+		}
+	}()
+}
+
+// crdFetchTimeout bounds one CRD Get. Columns are a nicety; a kind renders
+// perfectly well with neutral ones.
+const crdFetchTimeout = 15 * time.Second
+
+func (c *Cluster) fetchPrinterColumns(ctx context.Context, kind ResourceKind) bool {
 	c.mu.Lock()
 	if c.crdColumnsFetched[kind] {
 		c.mu.Unlock()

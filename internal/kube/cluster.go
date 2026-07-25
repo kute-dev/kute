@@ -61,6 +61,9 @@ type Cluster struct {
 	// the part of a CRD that is megabytes), so they arrive per-kind on
 	// first use — see ensurePrinterColumns.
 	crdColumnsFetched map[ResourceKind]bool
+	// crdColumnsInFlight dedupes concurrent fetches: browse re-reads on
+	// every change event, and each read would otherwise launch its own.
+	crdColumnsInFlight map[ResourceKind]bool
 
 	// metaClient is CountLive's PartialObjectMetadata client, built on first
 	// use and dropped on SwitchContext along with everything else bound to
@@ -395,6 +398,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.dynKinds = nil
 	c.discovered = nil
 	c.crdColumnsFetched = nil
+	c.crdColumnsInFlight = nil
 	// The new factory's informers are all unregistered and unsynced, and
 	// whatever the old cluster forbade says nothing about this one.
 	c.kindInformers = nil
@@ -443,12 +447,8 @@ func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string
 	c.ensureDynamicKindFor(kind)
 	if info, ok := c.getDynKind(kind); ok {
 		// Reading a custom kind is the moment its columns become worth
-		// fetching. Announcing it as a CRD change is what prompts the
-		// registry rebuild that puts them on screen — see
-		// ensurePrinterColumns.
-		if c.ensurePrinterColumns(context.Background(), kind) {
-			c.notify(KindCustomResourceDefinition)
-		}
+		// fetching. Fire-and-forget: this is on the update loop's path.
+		c.ensurePrinterColumns(kind)
 		return listDynamic(info, namespace)
 	}
 	return nil, fmt.Errorf("no informer registered for kind %s", kind)

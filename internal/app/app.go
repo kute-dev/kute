@@ -118,6 +118,25 @@ func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	return kc.KindSynced(kind)
 }
 
+// CountLive forwards the server-side count; KindHelmRelease is counted from
+// the Secrets that back it. See forwardAwareLister.CountLive for why this
+// forward matters rather than being a formality.
+func (l helmAwareLister) CountLive(ctx context.Context, kind kube.ResourceKind, namespace string) (int, error) {
+	lc, ok := l.RawLister.(liveCounter)
+	if !ok {
+		return 0, fmt.Errorf("no live counter for %s", kind)
+	}
+	if kind == kube.KindHelmRelease {
+		// No honest cheap answer exists. Counting release Secrets counts
+		// revisions, not releases, and aggregating them to releases means
+		// decoding every one — which is the read this count is supposed to
+		// avoid. Report unknown and let the palette render a dash rather
+		// than a confident wrong number.
+		return 0, fmt.Errorf("helm releases have no server-side count")
+	}
+	return lc.CountLive(ctx, kind, namespace)
+}
+
 // helmSecrets reads the release Secrets from the narrowest source available.
 func (l helmAwareLister) helmSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
 	if hs, ok := l.RawLister.(helmSecretLister); ok {
@@ -133,6 +152,11 @@ type cacheSyncChecker interface{ Synced() bool }
 
 type kindSyncChecker interface {
 	KindSynced(kind kube.ResourceKind) bool
+}
+
+// liveCounter mirrors tui.LiveCounter structurally, for the same reason.
+type liveCounter interface {
+	CountLive(ctx context.Context, kind kube.ResourceKind, namespace string) (int, error)
 }
 
 // Synced forwards to the wrapped lister's own Synced, if it has one.
@@ -162,6 +186,24 @@ func (l forwardAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	return true
 }
 
+// CountLive forwards the server-side count. Forwards are in-process, so
+// they're counted from the registry rather than the API.
+//
+// Forwarding this is load-bearing, not tidy-up: the jump palette asks
+// whether its lister can count server-side, and falls back to measuring
+// informer caches when it can't. Unforwarded, that fallback fired against a
+// real cluster and started an informer per kind on the 'g' keypress —
+// exactly the stampede the server-side count exists to avoid.
+func (l forwardAwareLister) CountLive(ctx context.Context, kind kube.ResourceKind, namespace string) (int, error) {
+	if kind == kube.KindForward {
+		return len(l.forwards.ListRaw()), nil
+	}
+	if lc, ok := l.RawLister.(liveCounter); ok {
+		return lc.CountLive(ctx, kind, namespace)
+	}
+	return 0, fmt.Errorf("no live counter for %s", kind)
+}
+
 // Compile-time guarantees that both the informer-backed Cluster and the
 // in-memory fake satisfy the seams the screens depend on (--demo
 // substitutes the latter behind the same interfaces, mvp-plan.md §0.10).
@@ -179,8 +221,23 @@ var (
 	_ whocan.WhoCanReader        = (*kube.Cluster)(nil)
 	_ overview.NodeMetricsReader = (*kube.Cluster)(nil)
 	_ browse.KindSyncChecker     = (*kube.Cluster)(nil)
+	_ tui.LiveCounter            = (*kube.Cluster)(nil)
+
+	// The two lister decorators must satisfy every optional seam the
+	// cluster does. Embedding resources.RawLister as an interface field
+	// promotes only ListRaw, so each of these needs an explicit forward and
+	// a silently missing one is invisible at runtime: the consumer just
+	// type-asserts, misses, and takes its fallback path. That is exactly
+	// how CountLive went unforwarded — the jump palette quietly fell back
+	// to counting informer caches, which started an informer per kind on
+	// the 'g' keypress and hung the app for a minute on a real cluster.
+	// Assert them here so the next omission is a compile error.
 	_ browse.KindSyncChecker     = forwardAwareLister{}
+	_ browse.CacheSyncChecker    = forwardAwareLister{}
+	_ tui.LiveCounter            = forwardAwareLister{}
 	_ browse.KindSyncChecker     = helmAwareLister{}
+	_ browse.CacheSyncChecker    = helmAwareLister{}
+	_ tui.LiveCounter            = helmAwareLister{}
 	_ resources.RawLister        = (*fake.Cluster)(nil)
 	_ kube.Mutator               = (*fake.Cluster)(nil)
 	_ browse.MetricsReader       = (*fake.Cluster)(nil)

@@ -439,6 +439,14 @@ func gotoResourceItems(sess *Session) []palette.Item {
 		if !ok {
 			continue
 		}
+		// Only kinds whose caches are already populated. Listing the rest
+		// would start an informer per kind on a keystroke — the launch
+		// stampede, relocated into the search box. The corpus is therefore
+		// "things you've looked at this session", and the kind rows above
+		// still get you to anything else in one more keypress.
+		if !kindSynced(sess, kind) {
+			continue
+		}
 		ns := gotoNamespace(sess)
 		if desc.ClusterScoped {
 			ns = ""
