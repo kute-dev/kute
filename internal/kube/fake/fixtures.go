@@ -83,7 +83,7 @@ func NewDemo() *Cluster {
 		// rollback-target row (docs/design README.md §24a: "TAG · SEEN ·
 		// FROM table lists this workload's own ReplicaSet revision
 		// history").
-		demoReplicaSetRevision("api-9f4e2a1", "default", "api", "api:2.1", 2, age(40*time.Minute)),
+		demoReplicaSetRevision("api-9f4e2a1", "default", "api", "api:2.1", 2, age(20*time.Minute)),
 	)
 	// 17b: "api" is HPA-managed, so its scale prompt exercises the "managed
 	// by hpa/<name>" yellow note live in --demo mode.
