@@ -221,11 +221,20 @@ var typedKinds = map[ResourceKind]typedKind{
 	},
 }
 
-// registerWatches attaches change handlers to each of kinds and, as a side
-// effect of reaching for their informers, registers them with the factory so
-// the next factory.Start runs them. Passing no kinds registers every kind in
-// typedKinds.
+// registerWatches is registerWatchesLocked for callers that don't already
+// hold c.mu. Anything that needs registration and factory.Start to be atomic
+// (Start, ensureKind) must take the lock itself and call the locked form.
 func (c *Cluster) registerWatches(kinds ...ResourceKind) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.registerWatchesLocked(kinds...)
+}
+
+// registerWatchesLocked attaches change handlers to each of kinds and, as a
+// side effect of reaching for their informers, registers them with the
+// factory so the next factory.Start runs them. Passing no kinds registers
+// every kind in typedKinds. c.mu must be held.
+func (c *Cluster) registerWatchesLocked(kinds ...ResourceKind) {
 	if len(kinds) == 0 {
 		kinds = make([]ResourceKind, 0, len(typedKinds))
 		for kind := range typedKinds {
@@ -252,14 +261,12 @@ func (c *Cluster) registerWatches(kinds ...ResourceKind) {
 			DeleteFunc: func(any) { c.notify(kind) },
 		})
 	}
-	c.mu.Lock()
 	if c.kindInformers == nil {
 		c.kindInformers = make(map[ResourceKind]cache.SharedIndexInformer, len(handlers))
 	}
 	for kind, informer := range handlers {
 		c.kindInformers[kind] = informer
 	}
-	c.mu.Unlock()
 }
 
 // notify delivers a change event without blocking the informer goroutine; if the

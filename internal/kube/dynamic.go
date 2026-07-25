@@ -57,14 +57,19 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionRe
 		informer:   informer.Informer(),
 	}
 	c.dynFactory.Start(c.stopCh)
+	c.health.noteListBurst()
 }
 
 // refreshDiscovery reads the (by now synced, best-effort) CRD informer
-// cache, parses every CRD into a DiscoveredKind, and starts watching
-// instances for every Established+Served one. Called once at the end of
-// Start/SwitchContext — discovery is a per-context, per-connect snapshot
+// cache and parses every CRD into a DiscoveredKind. Called once at the end
+// of Start/SwitchContext — discovery is a per-context, per-connect snapshot
 // (docs/design README.md §14c: "cached per context"), not continuously
 // re-run mid-session.
+//
+// Discovery does not start instance watches. It used to open one per
+// Established CRD here, which on a cluster carrying a few operators meant
+// dozens of live watches for kinds nobody was looking at; ensureDynamicKindFor
+// now opens each on first read, matching how typed kinds behave.
 func (c *Cluster) refreshDiscovery(_ context.Context) {
 	info, ok := c.getDynKind(KindCustomResourceDefinition)
 	if !ok {
@@ -85,13 +90,36 @@ func (c *Cluster) refreshDiscovery(_ context.Context) {
 			continue
 		}
 		discovered = append(discovered, dk)
-		if dk.Established && dk.GVR.Version != "" {
-			c.ensureDynamicKind(ResourceKind(dk.Kind), dk.GVR, !dk.ClusterScoped)
-		}
 	}
 	c.mu.Lock()
 	c.discovered = discovered
 	c.mu.Unlock()
+}
+
+// ensureDynamicKindFor starts the instance informer for a discovered kind by
+// name, the dynamic counterpart of ensureKind. Reports whether kind is
+// something discovery knows about at all — a false answer is what lets
+// ListRaw tell "no such kind" apart from "not watched yet".
+func (c *Cluster) ensureDynamicKindFor(kind ResourceKind) bool {
+	c.mu.Lock()
+	if _, ok := c.dynKinds[kind]; ok {
+		c.mu.Unlock()
+		return true
+	}
+	var match DiscoveredKind
+	var found bool
+	for _, dk := range c.discovered {
+		if ResourceKind(dk.Kind) == kind && dk.Established && dk.GVR.Version != "" {
+			match, found = dk, true
+			break
+		}
+	}
+	c.mu.Unlock()
+	if !found {
+		return false
+	}
+	c.ensureDynamicKind(kind, match.GVR, !match.ClusterScoped)
+	return true
 }
 
 // listDynamic lists a dynamically registered kind's cache, scoped by

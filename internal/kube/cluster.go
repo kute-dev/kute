@@ -3,7 +3,6 @@ package kube
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -119,8 +118,28 @@ func (c *Cluster) RESTConfig() *rest.Config { return c.restCfg }
 // Events is the stream of change notifications from watched informers.
 func (c *Cluster) Events() <-chan ResourceChangedMsg { return c.events }
 
-// Start registers watch handlers, starts the informers, and blocks until the
-// caches for the registered kinds have synced (or ctx is done).
+// eagerKinds are the only typed informers started at connect time; every
+// other kind waits until something actually reads it (see ensureKind).
+//
+// Each earns its place by being needed before the user has navigated
+// anywhere, or by having no reload path if it arrives late:
+//
+//   - Namespace backs the breadcrumb, the n palette and the empty-state
+//     hints, and is a handful of tiny objects.
+//   - Pod is the default landing kind and feeds nearly every other screen.
+//   - Node is bounded by node count rather than workload count, and the Pods
+//     health strip, the Nodes list, node detail and the overview all read it
+//     without subscribing to Node changes — so a late arrival would leave a
+//     stale count on screen rather than correcting itself.
+//
+// Deliberately absent: Secret, ConfigMap, Event, ReplicaSet and
+// ControllerRevision, which between them were most of what a connect used to
+// pull before drawing anything.
+var eagerKinds = []ResourceKind{KindNamespace, KindPod, KindNode}
+
+// Start registers the eager watch handlers, starts those informers, and
+// blocks until their caches have synced (or ctx is done). Kinds outside
+// eagerKinds are started later, on first read.
 func (c *Cluster) Start(ctx context.Context) error {
 	c.mu.Lock()
 	if c.started {
@@ -130,21 +149,28 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.started = true
 	c.mu.Unlock()
 
-	c.registerWatches()
+	c.mu.Lock()
+	c.registerWatchesLocked(eagerKinds...)
 	c.factory.Start(c.stopCh)
+	c.mu.Unlock()
 	c.ensureDynamicKind(KindCustomResourceDefinition, crdGVR, false)
 	go c.startHealthLoop(c.stopCh)
 
-	// Wait for caches to sync, but abort if the caller cancels first. The
-	// dynamic factory's sync (currently just the CRD informer) is folded
-	// into the same bounded wait, but its result is never fatal — an
+	// Wait on the eager informers by name rather than calling
+	// factory.WaitForCacheSync, which waits on whatever is started at the
+	// moment it's called: a lazily-started heavy kind (browse's restored
+	// kind, say) can race into that snapshot and drag connect-time back to
+	// what this change exists to remove.
+	//
+	// The dynamic factory's sync (currently just the CRD informer) is
+	// folded into the same bounded wait, but its result is never fatal — an
 	// absent/unreachable apiextensions API just means CRD support degrades
-	// to "no custom kinds," not a broken connection (refreshDiscovery
-	// below tolerates an empty/still-syncing cache).
-	var results map[reflect.Type]bool
+	// to "no custom kinds," not a broken connection (refreshDiscovery below
+	// tolerates an empty/still-syncing cache).
+	var synced bool
 	done := make(chan struct{})
 	go func() {
-		results = c.factory.WaitForCacheSync(c.stopCh)
+		synced = cache.WaitForCacheSync(c.stopCh, c.eagerHasSynced()...)
 		c.dynFactory.WaitForCacheSync(c.stopCh)
 		close(done)
 	}()
@@ -153,10 +179,8 @@ func (c *Cluster) Start(ctx context.Context) error {
 		return ctx.Err()
 	case <-done:
 	}
-	for _, synced := range results {
-		if !synced {
-			return fmt.Errorf("informer caches failed to sync")
-		}
+	if !synced {
+		return fmt.Errorf("informer caches failed to sync")
 	}
 	c.mu.Lock()
 	c.synced = true
@@ -164,6 +188,46 @@ func (c *Cluster) Start(ctx context.Context) error {
 
 	c.refreshDiscovery(ctx)
 	return nil
+}
+
+// eagerHasSynced collects the HasSynced funcs of the eager set as registered.
+func (c *Cluster) eagerHasSynced() []cache.InformerSynced {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]cache.InformerSynced, 0, len(eagerKinds))
+	for _, kind := range eagerKinds {
+		if inf, ok := c.kindInformers[kind]; ok {
+			out = append(out, inf.HasSynced)
+		}
+	}
+	return out
+}
+
+// ensureKind idempotently registers and starts kind's typed informer, the
+// typed counterpart of ensureDynamicKind. ListRaw calls it before every
+// read, which is what makes laziness invisible to callers: no screen has to
+// declare what it needs, and a kind nobody opens is never watched.
+//
+// The whole body holds c.mu, for the same two reasons ensureDynamicKind
+// does. It keeps the factory/stopCh reads from racing SwitchContext's
+// replacement of both. And it makes registration-then-Start atomic: were the
+// lock dropped in between, a concurrent caller's Start could run this
+// informer before its watch-error handler was attached, and
+// SetWatchErrorHandler then fails outright on an already-running informer.
+func (c *Cluster) ensureKind(kind ResourceKind) {
+	if _, ok := typedKinds[kind]; !ok {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// A stopped cluster has a nil stopCh, and an informer started with one
+	// would never stop, so leave it unregistered.
+	if c.stopCh == nil || c.kindInformers[kind] != nil {
+		return
+	}
+	c.registerWatchesLocked(kind)
+	c.factory.Start(c.stopCh)
+	c.health.noteListBurst()
 }
 
 // Synced reports whether the startup informer set has completed its initial
@@ -211,6 +275,30 @@ func (c *Cluster) KindSynced(kind ResourceKind) bool {
 	if _, typed := typedKinds[kind]; typed {
 		// A real kind whose informer hasn't been registered yet.
 		return false
+	}
+	return true
+}
+
+// allStartedKindsSynced reports whether every informer started so far has
+// finished its initial LIST. This is what the health loop's connect-grace
+// window keys off, rather than Synced: with informers starting on demand,
+// the burst of LIST traffic that starves the /livez ping no longer happens
+// only at connect time — opening the Secrets list on a constrained link
+// produces exactly the same contention mid-session. Asking "is anything
+// currently listing" covers both, where "have we connected yet" covers only
+// the first.
+func (c *Cluster) allStartedKindsSynced() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for kind, inf := range c.kindInformers {
+		if !c.kindFailed[kind] && !inf.HasSynced() {
+			return false
+		}
+	}
+	for _, info := range c.dynKinds {
+		if info.informer != nil && !info.informer.HasSynced() {
+			return false
+		}
 	}
 	return true
 }
@@ -307,6 +395,12 @@ func (c *Cluster) Stop() {
 // resources.RawLister.
 func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string) ([]runtime.Object, error) {
 	if tk, ok := typedKinds[kind]; ok {
+		// Start this kind's informer if nothing has yet. The first read
+		// therefore returns an empty cache, which is exactly what
+		// KindSynced is for — the caller sees "not synced", holds its
+		// loading state, and the informer's own change events bring it
+		// back once objects land.
+		c.ensureKind(kind)
 		// Snapshot the factory under the lock: SwitchContext replaces it
 		// wholesale, so reading it unlocked could tear a read across two
 		// clusters' caches.
@@ -315,6 +409,7 @@ func (c *Cluster) ListRaw(_ context.Context, kind ResourceKind, namespace string
 		c.mu.Unlock()
 		return tk.list(f, namespace, labels.Everything())
 	}
+	c.ensureDynamicKindFor(kind)
 	if info, ok := c.getDynKind(kind); ok {
 		return listDynamic(info, namespace)
 	}
@@ -333,7 +428,14 @@ func (c *Cluster) DiscoveredKinds() []DiscoveredKind {
 // CountInstances reads a dynamically registered kind's informer cache
 // length — the 14b CRDs list's live COUNT column. 0 for a kind with no
 // registered informer (not yet discovered, or discovery hasn't run).
+//
+// This starts the kind's instance informer if discovery knows it, so
+// opening the CRDs list opens a watch per discovered kind. That's the one
+// place laziness doesn't help: it's strictly better than the old behavior
+// (which opened them all at connect, list or no list), but the column
+// really wants a server-side count rather than a cache length.
 func (c *Cluster) CountInstances(kind ResourceKind) int {
+	c.ensureDynamicKindFor(kind)
 	info, ok := c.getDynKind(kind)
 	if !ok {
 		return 0

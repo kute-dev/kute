@@ -50,17 +50,23 @@ const (
 	initialBackoff = time.Second
 
 	// connectGrace is how long a *timed-out* /livez ping is forgiven while
-	// the informer caches are still doing their initial sync. Start() fires
-	// 21 cluster-wide LISTs at once and client-go multiplexes them over a
-	// single HTTP/2 connection, so on a bandwidth-constrained link (an SSH
-	// port-forward to a private cluster is the motivating case) the ping is
-	// queued behind megabytes of Secret/ConfigMap/Event bodies and blows its
-	// deadline even though the link is healthy — the same cluster reports a
-	// ~200ms ping the moment the sync finishes. Reporting that as an outage
-	// buried the first minute of every tunnelled session in banners. Only
-	// timeouts are forgiven, and only pre-sync: a refused connection, DNS
-	// failure, TLS error, or 401 still flips to Reconnecting on the first
-	// ping so the 4c unreachable-context screen appears as promptly as ever.
+	// informer caches are still doing an initial LIST. An informer's first
+	// LIST pulls every object of its kind, and client-go multiplexes it over
+	// a single HTTP/2 connection shared with the ping, so on a
+	// bandwidth-constrained link (an SSH port-forward to a private cluster
+	// is the motivating case) the ping queues behind megabytes of body and
+	// blows its deadline while the link is perfectly healthy — the same
+	// cluster reports a ~200ms ping the moment the LIST finishes.
+	//
+	// The window is measured from the most recent informer start, not from
+	// connect, because informers now start on demand: opening the Secrets
+	// list an hour into a session produces exactly the contention a cold
+	// connect used to, and anchoring at connect would leave it unforgiven.
+	//
+	// Only timeouts are forgiven, and only while something is actually
+	// listing: a refused connection, DNS failure, TLS error, or 401 still
+	// flips to Reconnecting on the first ping so the 4c unreachable-context
+	// screen appears as promptly as ever.
 	connectGrace = 90 * time.Second
 )
 
@@ -88,9 +94,10 @@ type health struct {
 	state ConnState
 	ch    chan ConnStateMsg
 	retry chan struct{}
-	// startedAt anchors connectGrace. Stamped at construction and again on
-	// reset, so a SwitchContext into a slow cluster gets the same startup
-	// forgiveness a cold launch does.
+	// startedAt anchors connectGrace: the moment the most recent burst of
+	// initial LIST traffic began. Stamped at construction, on reset (so a
+	// SwitchContext into a slow cluster gets the same forgiveness a cold
+	// launch does), and by noteListBurst whenever an informer starts.
 	startedAt time.Time
 }
 
@@ -116,6 +123,15 @@ func (h *health) reset() {
 	h.mu.Lock()
 	h.state = ConnState{Phase: ConnConnected, FetchedAt: now}
 	h.startedAt = now
+	h.mu.Unlock()
+}
+
+// noteListBurst re-arms the connect-grace window because an informer has
+// just been started and is about to pull its whole kind down the same
+// connection the /livez ping uses.
+func (h *health) noteListBurst() {
+	h.mu.Lock()
+	h.startedAt = time.Now()
 	h.mu.Unlock()
 }
 
@@ -211,7 +227,7 @@ func (c *Cluster) ping() {
 	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 	err := c.clientset.Discovery().RESTClient().Get().AbsPath("/livez").Do(ctx).Error()
-	c.health.recordPing(time.Since(start), err, c.Synced(), time.Now())
+	c.health.recordPing(time.Since(start), err, c.allStartedKindsSynced(), time.Now())
 }
 
 // recordPing folds one /livez result into ConnState. synced is the informer
@@ -290,7 +306,7 @@ func (c *Cluster) setWatchErrorHandlers(handlers map[ResourceKind]cache.SharedIn
 			if IsPermissionError(err) {
 				c.markKindFailed(kind)
 			}
-			c.health.onWatchError(err, c.Synced(), time.Now())
+			c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
 		})
 	}
 }
