@@ -19,6 +19,17 @@ func (r Registry) Has(kind kube.ResourceKind) bool {
 	return ok
 }
 
+// Kinds lists every registered kind, in no particular order. For callers
+// that need to do something per kind (counting them all, say) rather than
+// look one up.
+func (r Registry) Kinds() []kube.ResourceKind {
+	out := make([]kube.ResourceKind, 0, len(r.byKind))
+	for kind := range r.byKind {
+		out = append(out, kind)
+	}
+	return out
+}
+
 // Register adds or replaces d's entry — how discovered kinds (14a) and the
 // CustomResourceDefinition list (14b) join a DefaultRegistry() base at
 // connect/switch time (see BuildDiscoveredRegistry in crd.go). byKind is a

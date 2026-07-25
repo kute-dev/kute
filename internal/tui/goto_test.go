@@ -2,7 +2,9 @@ package tui_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -487,4 +489,71 @@ func isSelectedLine(view, label string) bool {
 		}
 	}
 	return false
+}
+
+// countingLister records every cache read and answers counts server-side,
+// the shape *kube.Cluster has once informers start lazily.
+type countingLister struct {
+	mu        sync.Mutex
+	listCalls []kube.ResourceKind
+	counts    map[kube.ResourceKind]int
+}
+
+func (l *countingLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
+	l.mu.Lock()
+	l.listCalls = append(l.listCalls, kind)
+	l.mu.Unlock()
+	return nil, nil
+}
+
+func (l *countingLister) CountLive(_ context.Context, kind kube.ResourceKind, _ string) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n, ok := l.counts[kind]
+	if !ok {
+		return 0, fmt.Errorf("no count for %s", kind)
+	}
+	return n, nil
+}
+
+func (l *countingLister) cacheReads() []kube.ResourceKind {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]kube.ResourceKind(nil), l.listCalls...)
+}
+
+// TestGotoPaletteCountsWithoutReadingCaches is the regression test for
+// Phase 3: with informers starting on demand, counting every kind from its
+// cache would start a watch per kind the instant 'g' was pressed — the
+// launch stampede, relocated. The palette must count server-side instead.
+func TestGotoPaletteCountsWithoutReadingCaches(t *testing.T) {
+	lister := &countingLister{counts: map[kube.ResourceKind]int{
+		kube.KindPod:        42,
+		kube.KindDeployment: 7,
+	}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+
+	// Opening the palette must not have read a single cache for counts.
+	for _, kind := range lister.cacheReads() {
+		t.Fatalf("opening the jump palette read the %s cache; counts must not touch informers", kind)
+	}
+	if cmd == nil {
+		t.Fatal("expected a background count fetch to be scheduled")
+	}
+
+	// Counts land asynchronously and the palette re-renders with them.
+	updated, _ = updated.(tui.Model).Update(cmd())
+	view := updated.(tui.Model).View().Content
+	if !strings.Contains(view, "42") {
+		t.Fatalf("expected the fetched Pod count in the palette:\n%s", view)
+	}
+	// A kind the server wouldn't count reads as unknown, not as zero.
+	if !strings.Contains(view, "–") {
+		t.Fatalf("expected an en dash for a kind with no count available:\n%s", view)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
@@ -47,6 +48,11 @@ type Cluster struct {
 	dynFactory dynamicinformer.DynamicSharedInformerFactory
 	dynKinds   map[ResourceKind]dynamicKindInfo
 	discovered []DiscoveredKind
+
+	// metaClient is CountLive's PartialObjectMetadata client, built on first
+	// use and dropped on SwitchContext along with everything else bound to
+	// the old cluster.
+	metaClient metadata.Interface
 
 	// kindInformers is every typed informer registered so far, the handle
 	// KindSynced needs (a lister can't report its own sync state).
@@ -147,9 +153,6 @@ func (c *Cluster) Start(ctx context.Context) error {
 		return nil
 	}
 	c.started = true
-	c.mu.Unlock()
-
-	c.mu.Lock()
 	c.registerWatchesLocked(eagerKinds...)
 	c.factory.Start(c.stopCh)
 	c.mu.Unlock()
@@ -371,6 +374,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	// whatever the old cluster forbade says nothing about this one.
 	c.kindInformers = nil
 	c.kindFailed = nil
+	c.metaClient = nil
 	c.Context = client.Context
 	c.health.reset()
 	c.started = false

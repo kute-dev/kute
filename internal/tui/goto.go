@@ -72,22 +72,40 @@ func gotoHint(sess *Session) string {
 	return "jump anywhere · " + ns
 }
 
-// gotoCount is a live per-kind count (resources.Count, an informer-cache
-// read) scoped like browse.countNamespace: cluster-scoped kinds ignore the
-// active namespace.
+// countUnknown is gotoCount's "no number to show" answer, rendered as a dim
+// en dash. Distinct from 0, which is a real count and a real thing to say.
+const countUnknown = -1
+
+// gotoCount reports a per-kind count for the palette, scoped like
+// browse.countNamespace (cluster-scoped kinds ignore the active namespace).
+//
+// It reads only what has already been fetched. It cannot ask the cluster,
+// for two reasons: it runs inside the Update loop on every keystroke, so a
+// round trip here would freeze typing; and it is called for every kind at
+// once, so reading counts from informer caches would start a watch per kind
+// the instant the palette opened — which is exactly the launch stampede
+// lazy informers removed, just relocated to the g key.
+//
+// fetchGotoCountsCmd fills the cache in the background and the palette
+// refreshes when it lands, the same shape the namespace palette's CPU
+// column already uses.
 func gotoCount(sess *Session, desc resources.Descriptor, namespace string) int {
-	if sess == nil || sess.Lister == nil {
-		return 0
+	if sess == nil {
+		return countUnknown
 	}
 	ns := namespace
 	if desc.ClusterScoped {
 		ns = ""
 	}
-	n, err := resources.Count(context.Background(), sess.Lister, desc.Kind, ns)
-	if err != nil {
-		return 0
+	return sess.CachedCount(desc.Kind, ns)
+}
+
+// gotoCountText renders a count for the palette's right-hand column.
+func gotoCountText(count int) string {
+	if count == countUnknown {
+		return "–"
 	}
-	return n
+	return fmt.Sprintf("%d", count)
 }
 
 // gotoAliasEntry pairs an alias letter with its kind — the fixed daily-kind
@@ -169,8 +187,8 @@ func gotoRankedItem(sess *Session, desc resources.Descriptor, ns, alias string) 
 	item := palette.Item{
 		Label:  desc.Display,
 		Detail: gotoTypeLabel(desc),
-		Right:  fmt.Sprintf("%d", count),
-		Dim:    count == 0,
+		Right:  gotoCountText(count),
+		Dim:    count <= 0,
 		Muted:  alias == "",
 		Data:   gotoTarget{action: gotoSwitchKind, kind: desc.Kind},
 	}
@@ -400,7 +418,7 @@ func gotoKindItems(sess *Session) []palette.Item {
 			items = append(items, palette.Item{
 				Label:  desc.Display,
 				Detail: gotoTypeLabel(desc),
-				Right:  fmt.Sprintf("%d", count),
+				Right:  gotoCountText(count),
 				Data:   gotoTarget{action: gotoSwitchKind, kind: kind},
 			})
 		}

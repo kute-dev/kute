@@ -181,6 +181,10 @@ type Model struct {
 	// a since-closed/reopened namespace palette) landing after a newer one
 	// already replaced namespaceItemsCache — mirrors probeGen.
 	namespaceGen int
+	// gotoGen guards gotoCountsMsg against a stale count fetch (from a
+	// since-closed/reopened jump palette) landing after a newer one —
+	// mirrors namespaceGen.
+	gotoGen int
 
 	// whoCanVerbItemsCache/whoCanResourceItemsCache hold tasks/whocan's (22a)
 	// 'v'/'K' palette's unfiltered item lists for the palette session
@@ -446,6 +450,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// completed synchronously by the time this message arrives.
 		if m.session != nil && msg.Err == nil {
 			m.session.Location = Location{Context: msg.Context, Namespace: msg.Namespace, Kind: msg.Kind, Filter: msg.Filter}
+			// Every memoized count belongs to the cluster just left.
+			m.session.InvalidateCounts()
 			if m.session.Cluster != nil {
 				m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
 			}
@@ -493,6 +499,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, waitForProbe(msg.gen, msg.ch)
 	case contextProbesDoneMsg:
+		return m, nil
+	case gotoCountsMsg:
+		// A stale gen (a since-closed/reopened jump palette) is dropped —
+		// see gotoGen's doc comment. The counts themselves are already in
+		// the session cache; this just prompts a re-render with them.
+		if msg.gen == m.gotoGen && m.palette != nil && m.palette.Scope == palette.ScopeGoto {
+			m.refreshGotoPalette()
+		}
 		return m, nil
 	case namespaceCPUSharesMsg:
 		// A stale gen (a since-closed/reopened namespace palette) is
@@ -1003,6 +1017,10 @@ func (m *Model) openPalette(scope palette.Scope, prompt, hint string) tea.Cmd {
 	switch scope {
 	case palette.ScopeGoto:
 		m.refreshGotoPalette()
+		// The list renders immediately from whatever counts are still
+		// fresh; the rest fill in behind it (see fetchGotoCountsCmd).
+		m.gotoGen++
+		return fetchGotoCountsCmd(m.session, m.gotoGen)
 	case palette.ScopeNamespace:
 		m.palette.Hint = namespaceHint(m.session)
 		m.palette.ColumnHeaders = namespaceColumnHeadersFor(namespaceCountDescriptor(m.session))

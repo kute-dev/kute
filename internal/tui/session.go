@@ -58,6 +58,11 @@ type Session struct {
 	// corpus (mvp-plan.md Phase 2) without depending on a concrete cluster
 	// type. Nil when no cluster is reachable.
 	Lister resources.RawLister
+	// counts memoizes the jump palette's per-kind counts for countTTL, so
+	// rebuilding the item list on every keystroke doesn't re-ask the
+	// cluster. Filled by fetchGotoCountsCmd off the Update loop; see
+	// gotoCount for why the palette must never count synchronously.
+	counts countCache
 	// Metrics is the same seam as browse.Config.Metrics, wired to the same
 	// concrete cluster value — used by the namespace palette (namespace.go)
 	// for its CPU-share column. Nil when no cluster is reachable, or when a
