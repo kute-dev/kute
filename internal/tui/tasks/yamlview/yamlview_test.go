@@ -2,6 +2,7 @@ package yamlview
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -248,5 +249,91 @@ func TestEscSendsBackMsg(t *testing.T) {
 	}
 	if _, ok := cmd().(tui.BackMsg); !ok {
 		t.Fatalf("expected tui.BackMsg, got %T", cmd())
+	}
+}
+
+// fakeManagedFields stands in for the live Get 8a does now that informer
+// caches strip managedFields.
+type fakeManagedFields struct {
+	yaml   string
+	err    error
+	calls  int
+	lastNS string
+}
+
+func (f *fakeManagedFields) GetManagedFields(_ context.Context, _ kube.ResourceKind, ns, _ string) (string, error) {
+	f.calls++
+	f.lastNS = ns
+	return f.yaml, f.err
+}
+
+// TestManagedFieldsComeFromTheLiveReader: caches strip managedFields, so the
+// fold's content has to be fetched for the object on screen rather than read
+// back off a cached object that no longer carries it.
+func TestManagedFieldsComeFromTheLiveReader(t *testing.T) {
+	// A cached object with no managedFields — exactly what the transform
+	// leaves behind.
+	lister := &fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "worker-0", Namespace: "default"}}},
+	}}
+	managed := &fakeManagedFields{yaml: "- manager: kubectl\n  operation: Apply\n"}
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		YAML:          fakeYAML{text: fixtureYAML, resourceVersion: "12345"},
+		ManagedFields: managed,
+		Kind:          kube.KindPod,
+		Namespace:     "default", Name: "worker-0",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if managed.calls != 1 {
+		t.Fatalf("GetManagedFields called %d times, want exactly 1", managed.calls)
+	}
+	if managed.lastNS != "default" {
+		t.Fatalf("fetched managedFields for namespace %q, want default", managed.lastNS)
+	}
+	if len(m.managedFieldsLines) == 0 {
+		t.Fatal("expected the fetched managedFields to populate the fold")
+	}
+	if !strings.Contains(plain(m.Render()), "managedFields") {
+		t.Fatalf("expected the managedFields fold to render:\n%s", plain(m.Render()))
+	}
+}
+
+// TestManagedFieldsFetchFailureStillRendersTheObject: managedFields are
+// supplementary. A failed fetch costs the fold, not the whole screen.
+func TestManagedFieldsFetchFailureStillRendersTheObject(t *testing.T) {
+	lister := &fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {testPod("worker-0", "default")},
+	}}
+	managed := &fakeManagedFields{err: errors.New("forbidden")}
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		YAML:          fakeYAML{text: fixtureYAML, resourceVersion: "12345"},
+		ManagedFields: managed,
+		Kind:          kube.KindPod,
+		Namespace:     "default", Name: "worker-0",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — a managedFields failure must not fail the view (%q)", m.state, m.feedback)
+	}
+	if len(m.managedFieldsLines) != 0 {
+		t.Fatal("expected no managedFields content after a failed fetch")
+	}
+}
+
+// TestManagedFieldsFallBackToTheCachedObject covers --demo and any seam that
+// doesn't provide a live reader: nothing strips anything there, so the
+// cached object still carries them.
+func TestManagedFieldsFallBackToTheCachedObject(t *testing.T) {
+	m, _ := newModel(fixtureYAML)
+	m = step(t, m, m.Init()())
+
+	if len(m.managedFieldsLines) == 0 {
+		t.Fatal("expected managedFields read back from the cached object when no live reader is wired")
 	}
 }

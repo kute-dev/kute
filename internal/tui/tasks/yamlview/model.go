@@ -26,27 +26,39 @@ type YAMLReader interface {
 	GetYAML(ctx context.Context, kind kube.ResourceKind, namespace, name string) (text, resourceVersion string, err error)
 }
 
+// ManagedFieldsReader fetches an object's metadata.managedFields live.
+// Optional: informer caches strip managedFields (it is bookkeeping this app
+// reads nowhere else, and a large fraction of an object's bytes), so this
+// screen — the only one that displays them — fetches them for the single
+// object it is showing. A lister that doesn't implement it falls back to
+// whatever the cached object carries, which is what --demo and the tests do.
+type ManagedFieldsReader interface {
+	GetManagedFields(ctx context.Context, kind kube.ResourceKind, namespace, name string) (string, error)
+}
+
 // Config are yamlview's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values). Lister is
-// used only for the separate raw-object fetch ManagedFieldsLineCount needs
+// the fallback source for managedFields when ManagedFields is unset
 // (kube.GetYAML itself already strips managedFields before marshaling).
 type Config struct {
-	Session     *tui.Session
-	Lister      resources.RawLister
-	YAML        YAMLReader
-	Kind        kube.ResourceKind
-	Namespace   string
-	Name        string
-	LoadTimeout time.Duration
+	Session       *tui.Session
+	Lister        resources.RawLister
+	YAML          YAMLReader
+	ManagedFields ManagedFieldsReader
+	Kind          kube.ResourceKind
+	Namespace     string
+	Name          string
+	LoadTimeout   time.Duration
 }
 
 type Model struct {
 	width, height int
 
-	session *tui.Session
-	lister  resources.RawLister
-	yaml    YAMLReader
-	timeout time.Duration
+	session       *tui.Session
+	lister        resources.RawLister
+	yaml          YAMLReader
+	managedFields ManagedFieldsReader
+	timeout       time.Duration
 
 	kind      kube.ResourceKind
 	namespace string
@@ -108,18 +120,19 @@ func New(cfg Config) Model {
 		feedback = "no cluster connection"
 	}
 	return Model{
-		width:     tui.DefaultWidth,
-		height:    tui.DefaultHeight,
-		session:   cfg.Session,
-		lister:    cfg.Lister,
-		yaml:      cfg.YAML,
-		timeout:   cfg.LoadTimeout,
-		kind:      cfg.Kind,
-		namespace: cfg.Namespace,
-		name:      cfg.Name,
-		state:     state,
-		feedback:  feedback,
-		spinner:   components.NewSpinner(),
+		width:         tui.DefaultWidth,
+		height:        tui.DefaultHeight,
+		session:       cfg.Session,
+		lister:        cfg.Lister,
+		yaml:          cfg.YAML,
+		managedFields: cfg.ManagedFields,
+		timeout:       cfg.LoadTimeout,
+		kind:          cfg.Kind,
+		namespace:     cfg.Namespace,
+		name:          cfg.Name,
+		state:         state,
+		feedback:      feedback,
+		spinner:       components.NewSpinner(),
 	}
 }
 

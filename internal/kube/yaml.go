@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -95,4 +97,38 @@ func findByName(objs []runtime.Object, name string) (runtime.Object, error) {
 		}
 	}
 	return nil, fmt.Errorf("%q not found in cache", name)
+}
+
+// GetManagedFields fetches an object's metadata.managedFields directly from
+// the API server and renders it as YAML.
+//
+// It cannot come from the informer cache: managedFields is stripped on the
+// way in (transform.go), because it is routinely a third of an object's
+// bytes and 8a's YAML view is the only thing in the app that ever displays
+// it. So the one screen that wants it pays one Get for the one object it is
+// showing, rather than every cache carrying it for every object forever.
+//
+// Goes through the dynamic client so it works for any kind, discovered CRDs
+// included, without a typed switch.
+func (c *Cluster) GetManagedFields(ctx context.Context, kind ResourceKind, namespace, name string) (string, error) {
+	gvr, clusterScoped, ok := c.resourceFor(kind)
+	if !ok {
+		return "", fmt.Errorf("no API resource known for kind %s", kind)
+	}
+	c.mu.Lock()
+	dyn := c.dynClient
+	c.mu.Unlock()
+	if dyn == nil {
+		return "", fmt.Errorf("no dynamic client")
+	}
+
+	var ri dynamic.ResourceInterface = dyn.Resource(gvr)
+	if !clusterScoped && namespace != "" {
+		ri = dyn.Resource(gvr).Namespace(namespace)
+	}
+	obj, err := ri.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return ManagedFieldsYAML(obj)
 }

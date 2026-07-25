@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/dynamicinformer"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -30,7 +29,7 @@ func newLazyTestCluster(objs ...runtime.Object) (*Cluster, *fake.Clientset) {
 	})
 	return &Cluster{
 		clientset:  cs,
-		factory:    informers.NewSharedInformerFactory(cs, 0),
+		factory:    newTypedFactory(cs),
 		dynClient:  dyn,
 		dynFactory: dynamicinformer.NewDynamicSharedInformerFactory(dyn, 0),
 		stopCh:     make(chan struct{}),

@@ -40,6 +40,11 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionRe
 		return
 	}
 	informer := c.dynFactory.ForResource(gvr)
+	// The dynamic factory takes no transform option, so set it per informer
+	// — which must happen before it starts. Same reasoning as the typed
+	// factory's: managedFields is bookkeeping nothing here reads.
+	//nolint:errcheck // best-effort: a failure just means this cache keeps managedFields
+	_ = informer.Informer().SetTransform(stripManagedFields)
 	k := kind
 	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
 	_, _ = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{

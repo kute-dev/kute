@@ -24,6 +24,14 @@ import (
 // this only backstops missed notifications.
 const defaultResync = 5 * time.Minute
 
+// newTypedFactory builds the shared informer factory every typed cache comes
+// from. The one construction site, so the cache transform can't be wired
+// into production and quietly missed by a test's hand-built factory.
+func newTypedFactory(client kubernetes.Interface) informers.SharedInformerFactory {
+	return informers.NewSharedInformerFactoryWithOptions(client, defaultResync,
+		informers.WithTransform(stripManagedFields))
+}
+
 // Cluster is the live data layer: a clientset plus a shared informer factory
 // (so reads hit in-memory caches, not the API server) and a metrics client. It
 // implements the resources.RawLister contract via ListRaw and emits change
@@ -102,7 +110,7 @@ func NewClusterForContext(contextName string) (*Cluster, error) {
 	return &Cluster{
 		clientset:  client.Interface,
 		metrics:    metrics,
-		factory:    informers.NewSharedInformerFactory(client.Interface, defaultResync),
+		factory:    newTypedFactory(client.Interface),
 		restCfg:    client.RESTConfig,
 		Context:    client.Context,
 		dynClient:  dynClient,
@@ -365,7 +373,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.clientset = client.Interface
 	c.metrics = metrics
 	c.restCfg = client.RESTConfig
-	c.factory = informers.NewSharedInformerFactory(client.Interface, defaultResync)
+	c.factory = newTypedFactory(client.Interface)
 	c.dynClient = dynClient
 	c.dynFactory = dynamicinformer.NewDynamicSharedInformerFactory(dynClient, defaultResync)
 	c.dynKinds = nil

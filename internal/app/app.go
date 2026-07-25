@@ -625,16 +625,30 @@ func openWhoCanFunc(sess *tui.Session, active seams) browse.OpenWhoCanFunc {
 func openYAMLFunc(sess *tui.Session, active seams) browse.OpenYAMLFunc {
 	return func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
 		yv := yamlview.New(yamlview.Config{
-			Session:   sess,
-			Lister:    active,
-			YAML:      active,
-			Kind:      kind,
-			Namespace: namespace,
-			Name:      name,
+			Session: sess,
+			Lister:  active,
+			YAML:    active,
+			// Caches strip managedFields, so 8a fetches them for the one
+			// object it is showing. A seam that doesn't provide it (the
+			// --demo fake) falls back to the cached object.
+			ManagedFields: managedFieldsReaderOf(active),
+			Kind:          kind,
+			Namespace:     namespace,
+			Name:          name,
 		})
 		yv.SetSize(width, height)
 		return &yv, yv.Init()
 	}
+}
+
+// managedFieldsReaderOf returns v as a yamlview.ManagedFieldsReader if it
+// provides one, and nil otherwise — nil selects yamlview's cached-object
+// fallback rather than being an error.
+func managedFieldsReaderOf(v any) yamlview.ManagedFieldsReader {
+	if r, ok := v.(yamlview.ManagedFieldsReader); ok {
+		return r
+	}
+	return nil
 }
 
 // openHelmHistoryFunc pushes tasks/helmhistory (18a's 'h') for a release —
