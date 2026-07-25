@@ -3,7 +3,7 @@
 How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, and what
 that cost in design changes.
 
-Branch: `perf/lazy-informers` (13 commits, not merged; 9 code, 1 script, 3 doc). Full
+Branch: `perf/lazy-informers` (17 commits, not merged). Full
 suite green, `-race` clean, **zero golden fixtures changed** — this work alters *when*
 data loads, never how it renders.
 
@@ -69,6 +69,7 @@ gets for free.
 | `914db9e` `chore(scripts)` | Add `scripts/measure-cluster-payload.sh` |
 | `8950b6b` `perf(kube)` | List Helm releases without reading every Secret |
 | `238170c` `perf(kube)` | Discover custom kinds without downloading their schemas |
+| `c62324d` `fix(tui)` | Stop the jump palette hanging the app on a real cluster |
 
 The last two are written up in [§5.1](#51-crd-discovery--done-238170c) and
 [§5.2](#52-helm-releases-read-every-secret--done-8950b6b), where they were first
@@ -264,6 +265,21 @@ asserted:
 - The Helm field-selector test genuinely fails without the filter (confirmed by removing
   `WithTweakListOptions`, giving `field selector "", want "type=helm.sh/release.v1"`).
 
+### What the tests missed
+
+`c62324d` fixed a minute-long freeze on the `g` key that the whole suite was green
+through. The cause is worth recording: the two lister decorators in `internal/app` wrap
+`resources.RawLister`, which promotes only `ListRaw`, so every optional seam
+(`Synced`, `KindSynced`, `CountLive`, …) needs an explicit forward. A missing one is
+invisible at runtime — the consumer type-asserts, misses, and takes its fallback path,
+which here meant counting informer caches and starting an informer per kind on the update
+loop.
+
+Nothing caught it because the palette's own tests use doubles that implement the seams
+directly, so the decorator stack was never exercised. Both decorators are now compile-time
+asserted against all three seams. **When adding an optional seam, assert the decorators
+against it in the same commit** — the fallback path is what makes the omission silent.
+
 Two tests were wrong on the first attempt and are worth remembering as traps:
 
 - The first end-to-end transform test **passed while proving nothing**, because the test
@@ -346,9 +362,10 @@ cache the Helm screens never read, flashing "no releases".
 ### 5.3 Known trade-offs accepted, not bugs
 
 - **The fuzzy `g` corpus is smaller from a cold session.** `gotoResourceItems` lists
-  *objects*, not counts, so `5428db3`'s count fix doesn't cover it — typing a pod name into `g`
-  searches only started kinds. Mitigation if it bites: rank un-started kinds by name-match
-  on the *kind*, so the jump to that list is still one keystroke.
+  *objects*, not counts, so `5428db3`'s count fix didn't cover it; `c62324d` added the skip.
+  Typing a pod name into `g` searches only kinds you've opened this session. Mitigation if
+  it bites: rank un-started kinds by name-match on the *kind*, so the jump to that list is
+  still one keystroke.
 - **Opening the CRDs list starts a watch per discovered kind**, to keep its COUNT column
   truthful. Strictly better than the old behaviour (which opened them at connect
   regardless), but the column really wants `CountLive` rather than a cache length.
