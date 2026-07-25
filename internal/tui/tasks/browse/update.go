@@ -18,7 +18,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
-		if msg.Kind == m.kind {
+		if msg.Kind == m.kind || auxKindOf(m.kind, msg.Kind) {
 			m.reloadEpoch++
 			return m, m.scheduleReload(m.reloadEpoch)
 		}

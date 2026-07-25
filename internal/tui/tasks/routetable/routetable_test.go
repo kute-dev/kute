@@ -429,3 +429,32 @@ func TestKeybarPillAndHints(t *testing.T) {
 		t.Fatalf("PillText = %q, want GATEWAY", kb.PillText)
 	}
 }
+
+// TestReloadsWhenBackendCachesChange: this screen resolves every row's
+// backend live through the Service and Pod caches, but handled no change
+// events at all — it loaded once on Init and never again. A backend that
+// changed, or a cache that only finished filling after the screen opened,
+// left BACKENDS wrong until the user backed out and came back in.
+func TestReloadsWhenBackendCachesChange(t *testing.T) {
+	sel := map[string]string{"app": "web"}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindIngress: {testIngress()},
+		kube.KindService: {serviceWithSelector("web", "default", sel)},
+		kube.KindPod:     {readyPod("web-1", "default", sel, true)},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindIngress, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	for _, kind := range []kube.ResourceKind{kube.KindIngress, kube.KindService, kube.KindPod, kube.KindSecret} {
+		_, cmd := m.Update(kube.ResourceChangedMsg{Kind: kind})
+		if cmd == nil {
+			t.Errorf("a %s change must reload the routing table — it resolves backends through that cache", kind)
+		}
+	}
+
+	// Something unrelated must not.
+	if _, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindCronJob}); cmd != nil {
+		t.Error("a CronJob change has nothing to do with the routing table")
+	}
+}

@@ -15,6 +15,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
+	case kube.ResourceChangedMsg:
+		// This screen resolves every row's backend live, through the
+		// Service and Pod caches (and Secrets, for a TLS listener's cert
+		// expiry). It previously loaded once on Init and never again, so a
+		// backend that changed — or a cache that only finished filling
+		// after the screen opened — left BACKENDS wrong until the user
+		// backed out and came in again.
+		if m.reloadsOn(msg.Kind) && m.lister != nil {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.now = time.Now()
@@ -282,4 +292,18 @@ func (m Model) openObjectEvents() (tea.Model, tea.Cmd, bool) {
 	}
 	task, cmd := m.openEvents(m.kind, m.namespace, m.name, m.width, m.height)
 	return task, cmd, true
+}
+
+// reloadsOn reports whether a change to kind affects what this table shows:
+// the routing object itself, or one of the caches its backend and cert
+// columns are resolved through.
+func (m Model) reloadsOn(kind kube.ResourceKind) bool {
+	switch kind {
+	case m.kind, kube.KindService, kube.KindPod, kube.KindSecret:
+		return true
+	case kube.KindGateway:
+		// A route's parent listener supplies its hostname and TLS detail.
+		return m.kind != kube.KindGateway
+	}
+	return false
 }

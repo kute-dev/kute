@@ -23,8 +23,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
-		if msg.Kind == kube.KindPod && m.lister != nil {
-			return m, m.load()
+		// The pod itself, plus the two caches its panels are built from:
+		// Events feeds the EVENTS grid, and ReplicaSets resolve the owner
+		// hop up to a Deployment for the meta grid.
+		switch msg.Kind {
+		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet:
+			if m.lister != nil {
+				return m, m.load()
+			}
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)

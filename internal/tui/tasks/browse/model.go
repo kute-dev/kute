@@ -624,6 +624,9 @@ func (m Model) Init() tea.Cmd {
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
 	}
+	if prefetch := m.prefetchAuxKinds(); prefetch != nil {
+		cmds = append(cmds, prefetch)
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -902,6 +905,9 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+	}
+	if prefetch := m.prefetchAuxKinds(); prefetch != nil {
+		cmds = append(cmds, prefetch)
 	}
 	return tea.Batch(cmds...)
 }
