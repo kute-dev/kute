@@ -1,9 +1,9 @@
 # kute — Lazy informers & startup cost
 
-How kute went from pulling ~22 MB before drawing anything to pulling ~4 MB, what that
+How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, what that
 cost in design changes, and what is still on the table.
 
-Branch: `perf/lazy-informers` (10 commits, not merged). Full suite green, `-race` clean,
+Branch: `perf/lazy-informers` (12 commits, not merged). Full suite green, `-race` clean,
 **zero golden fixtures changed** — this work alters *when* data loads, never how it renders.
 
 ## Contents
@@ -12,7 +12,7 @@ Branch: `perf/lazy-informers` (10 commits, not merged). Full suite green, `-race
 2. [What shipped](#2-what-shipped)
 3. [Measured effect](#3-measured-effect)
 4. [Design decisions worth remembering](#4-design-decisions-worth-remembering)
-5. [What's left](#5-whats-left)
+5. [Follow-ups](#5-follow-ups)
 
 ---
 
@@ -64,6 +64,7 @@ gets for free.
 | `668464d` `perf(kube)` | Drop managedFields from informer caches |
 | `914db9e` `chore(scripts)` | Add `scripts/measure-cluster-payload.sh` |
 | `8950b6b` `perf(kube)` | List Helm releases without reading every Secret (§5.2) |
+| `238170c` `perf(kube)` | Discover custom kinds without downloading their schemas (§5.1) |
 
 ### df863a8 — the false-outage fix
 
@@ -198,10 +199,13 @@ Real numbers from `aks-aim-prod-eastus2-02` via `scripts/measure-cluster-payload
 | | before | after |
 |---|---|---|
 | Typed kinds at connect | 19.0 MB | **1.3 MB** |
-| CRD discovery | 2.76 MB | 2.76 MB (unchanged) |
-| **Total** | **≈ 21.8 MB** | **≈ 4.1 MB** |
+| CRD discovery | 2.76 MB | **~15 KB, estimated** (§5.1) |
+| **Total** | **≈ 21.8 MB** | **≈ 1.3 MB** |
 
-A 5× cut. What each lazy kind now costs only if opened:
+A ~16× cut. The CRD-discovery figure is the one number here not measured end to end: it's
+the metadata list (48 names) plus a discovery round trip, sized from their payloads rather
+than observed on the wire. Re-run `scripts/measure-cluster-payload.sh` after connecting to
+confirm. What each lazy kind now costs only if opened:
 
 ```
 secrets              310 objects   12.3 MB     ← largest single kind; no longer
@@ -245,47 +249,52 @@ Three claims were checked rather than asserted:
 
 ---
 
-## 5. What's left
+## 5. Follow-ups
 
-### 5.1 CRD discovery — 2.71 MB of pure waste (highest value)
+§5.1 and §5.2 were identified here and have since been done; they're kept with their
+reasoning intact. §5.3 and §5.4 are standing decisions, not open work. Nothing is
+outstanding.
 
-CRD discovery is now **68% of what a connect pulls**, and **98.2% of it is OpenAPI
-validation schemas kute never reads**:
+### 5.1 CRD discovery — **done** (`238170c`)
+
+Connect listed every CRD object to learn which custom kinds exist. A CRD carries the full
+OpenAPI v3 validation schema for every version it serves, so on the measured cluster that
+was 2.76 MB across 48 CRDs, of which **1.8% was anything kute reads** — the largest single
+thing a connect pulled once informers went lazy.
 
 ```
 CRDs:            48
 transferred:     2.76 MB
 actually used:   50.4 KB  (1.8%)
 schema overhead: 2.71 MB  (98.2%)
-
-largest CRDs:
-    367.3 KB  prometheusagents.monitoring.coreos.com
-    319.6 KB  prometheuses.monitoring.coreos.com
-    250.0 KB  alertmanagers.monitoring.coreos.com
-    237.1 KB  thanosrulers.monitoring.coreos.com
-    236.0 KB  scrapeconfigs.monitoring.coreos.com
 ```
 
-`ParseDiscoveredKind` reads only `spec.group`, `spec.names.{kind,plural}`, `spec.scope`,
-`spec.versions[].{name,served,storage,deprecated,additionalPrinterColumns}` and
-`status.conditions`. It never touches `spec.versions[].schema`.
+A cache transform could not have fixed this: it runs after the reflector decodes, so the
+bytes have already crossed the wire. The server had to stop sending them.
 
-**A cache transform cannot fix this** — it runs after the reflector decodes, so the 2.76 MB
-still crosses the wire. The server has to not send it, and there's no field projection for
-CRDs beyond `PartialObjectMetadata` (which strips `spec` entirely, losing printer columns,
-names and scope).
+**What it does now.** Two cheap reads that together say the same thing as the CRD list:
 
-**Proposed approach.** The discovery API (`/apis`) returns group, version, kind, plural and
-namespaced for every served resource in a few KB — most of what `ParseDiscoveredKind`
-builds, and the Established filter comes free since discovery only lists served resources.
-The one missing piece is `additionalPrinterColumns`; fetch that per-CRD, lazily, when a
-kind is actually opened, falling back to neutral NAME/AGE columns until then — which
-§14a's spec already sanctions ("printer columns → columns, Ready-style condition → status,
-**else neutral**"). Kinds you never browse cost nothing.
+- a **metadata-only list of CRDs** — names and nothing else. A CRD's name is exactly
+  `<plural>.<group>`, so it identifies precisely which group/resource pairs are custom.
+- the **discovery API**, for each one's Kind, served version and scope. A resource the
+  server is serving is established by definition, so that condition check comes free.
 
-Estimated: CRD discovery **2.76 MB → single-digit KB**, putting connect at ~1.3 MB total.
+The name list is what makes the filter exact. Matching on group names instead would need a
+hardcoded list of built-in groups, and that list gets Gateway API wrong —
+`gateway.networking.k8s.io` is CRD-backed despite the `k8s.io` suffix.
 
-Touches `internal/kube/discovery.go`, `dynamic.go`, `cluster.go`, and the CRD column path.
+**Printer columns** are the one thing neither read supplies, and they live in the part of a
+CRD that makes it huge. They arrive per-kind, on first read of that kind — typically none
+per session, occasionally one. Until then a custom kind renders with the neutral NAME/AGE
+columns §14a already provides for ("printer columns → columns, Ready-style condition →
+status, **else neutral**"), then picks up its real ones: `ListRaw` announces the fetch as a
+CRD change, the root shell rebuilds the registry, and `browse` re-reads its descriptor.
+
+The CRD informer itself is no longer started at connect either. The CRDs list (14b) is the
+one screen that wants whole CRD objects, so it opens when that screen does.
+
+`internal/kube/dynamic.go`, `discovery.go`, `cluster.go`, `internal/tui/model.go`,
+`internal/tui/tasks/browse/update.go`
 
 ### 5.2 Helm releases read every Secret — **done** (`8950b6b`)
 
