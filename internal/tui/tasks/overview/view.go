@@ -270,14 +270,15 @@ func (m Model) nodesLines(theme tui.Theme, width int) []string {
 		extra = len(shown) - maxPanelRows
 		shown = shown[:maxPanelRows]
 	}
+	focused := m.focusedIndex(panelNodes, m.nodesSel)
 	rows := make([]components.Row, len(shown))
 	for i, row := range shown {
-		rows[i] = m.nodeRow(theme, row)
+		rows[i] = m.nodeRow(theme, row, i == focused)
 	}
 	t := components.Table{
 		Columns:     []components.Column{{Min: 2}, {Min: 10, Flex: true}, {Min: 12}},
 		Rows:        rows,
-		Selected:    m.focusedIndex(panelNodes, m.nodesSel),
+		Selected:    focused,
 		Width:       width,
 		Height:      len(rows) + 1,
 		HeaderStyle: lipgloss.NewStyle(),
@@ -291,10 +292,11 @@ func (m Model) nodesLines(theme tui.Theme, width int) []string {
 	return lines
 }
 
-func (m Model) nodeRow(theme tui.Theme, row resources.Row) components.Row {
-	glyphStyle := lipgloss.NewStyle().Foreground(glyphTone(theme, row))
-	name := lipgloss.NewStyle().Foreground(theme.TextPrimary)
-	status := lipgloss.NewStyle().Foreground(theme.TextDim)
+func (m Model) nodeRow(theme tui.Theme, row resources.Row, selected bool) components.Row {
+	style := selRowStyle(theme, selected)
+	glyphStyle := style(glyphTone(theme, row))
+	name := style(theme.TextPrimary)
+	status := style(theme.TextDim)
 	statusText := row.Name
 	if len(row.Cells) > 1 {
 		statusText = row.Cells[1]
@@ -304,6 +306,21 @@ func (m Model) nodeRow(theme tui.Theme, row resources.Row) components.Row {
 		{Text: row.Name, Style: name},
 		{Text: statusText, Style: status},
 	}}
+}
+
+// selRowStyle returns a Foreground-style constructor that also bakes in
+// theme.SelBg when selected — Table renders the selected row per-cell
+// rather than flattening it (mirrors browse's newRowCellStyles), so every
+// cell style in a selected row must carry the background itself or the
+// highlight reads as a hollow bar around unstyled text.
+func selRowStyle(theme tui.Theme, selected bool) func(color.Color) lipgloss.Style {
+	return func(fg color.Color) lipgloss.Style {
+		s := lipgloss.NewStyle().Foreground(fg)
+		if selected {
+			s = s.Background(theme.SelBg)
+		}
+		return s
+	}
 }
 
 func glyphTone(theme tui.Theme, row resources.Row) color.Color {
@@ -340,14 +357,15 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 		extra = len(shown) - maxPanelRows
 		shown = shown[:maxPanelRows]
 	}
+	focused := m.focusedIndex(panelTrouble, m.troubleSel)
 	rows := make([]components.Row, len(shown))
 	for i, row := range shown {
-		rows[i] = m.troubleRow(theme, row)
+		rows[i] = m.troubleRow(theme, row, i == focused)
 	}
 	t := components.Table{
 		Columns:     []components.Column{{Min: 2}, {Min: 10, Flex: true}, {Min: 10}, {Min: 14}},
 		Rows:        rows,
-		Selected:    m.focusedIndex(panelTrouble, m.troubleSel),
+		Selected:    focused,
 		Width:       width,
 		Height:      len(rows) + 1,
 		HeaderStyle: lipgloss.NewStyle(),
@@ -361,11 +379,12 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	return lines
 }
 
-func (m Model) troubleRow(theme tui.Theme, row resources.Row) components.Row {
-	glyphStyle := lipgloss.NewStyle().Foreground(glyphTone(theme, row))
-	name := lipgloss.NewStyle().Foreground(theme.BadText)
-	ns := lipgloss.NewStyle().Foreground(theme.TextDim)
-	status := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+func (m Model) troubleRow(theme tui.Theme, row resources.Row, selected bool) components.Row {
+	style := selRowStyle(theme, selected)
+	glyphStyle := style(glyphTone(theme, row))
+	name := style(theme.BadText)
+	ns := style(theme.TextDim)
+	status := style(theme.TextSecondary)
 	statusText := row.Name
 	if len(row.Cells) > 2 {
 		statusText = row.Cells[2]
@@ -393,14 +412,15 @@ func (m Model) changesLines(theme tui.Theme, width int) []string {
 		extra = len(shown) - maxPanelRows
 		shown = shown[:maxPanelRows]
 	}
+	focused := m.focusedIndex(panelChanges, m.changesSel)
 	rows := make([]components.Row, len(shown))
 	for i, e := range shown {
-		rows[i] = m.changeRow(theme, e)
+		rows[i] = m.changeRow(theme, e, i == focused)
 	}
 	t := components.Table{
 		Columns:     []components.Column{{Min: 5}, {Min: 2}, {Min: 10, Flex: true}, {Min: 16}},
 		Rows:        rows,
-		Selected:    m.focusedIndex(panelChanges, m.changesSel),
+		Selected:    focused,
 		Width:       width,
 		Height:      len(rows) + 1,
 		HeaderStyle: lipgloss.NewStyle(),
@@ -414,11 +434,12 @@ func (m Model) changesLines(theme tui.Theme, width int) []string {
 	return lines
 }
 
-func (m Model) changeRow(theme tui.Theme, e kube.TimelineEntry) components.Row {
-	rollout := lipgloss.NewStyle().Foreground(theme.Accent)
-	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
-	object := lipgloss.NewStyle().Foreground(theme.TextPrimary)
-	msg := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+func (m Model) changeRow(theme tui.Theme, e kube.TimelineEntry, selected bool) components.Row {
+	style := selRowStyle(theme, selected)
+	rollout := style(theme.Accent)
+	dim := style(theme.TextDim)
+	object := style(theme.TextPrimary)
+	msg := style(theme.TextSecondary)
 	return components.Row{Cells: []components.Cell{
 		{Text: e.Time.Format("15:04"), Style: dim},
 		{Text: tui.GlyphRollout, Style: rollout},
