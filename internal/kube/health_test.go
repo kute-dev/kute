@@ -1,7 +1,10 @@
 package kube
 
 import (
+	"context"
 	"errors"
+	"net"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -32,7 +35,7 @@ func TestBackoffDelaySchedule(t *testing.T) {
 func TestHealthOnWatchErrorFlipsToReconnecting(t *testing.T) {
 	t.Parallel()
 	h := newHealth()
-	h.onWatchError(errors.New("dial tcp: i/o timeout"))
+	h.onWatchError(errors.New("dial tcp: i/o timeout"), true, time.Now())
 
 	got := h.get()
 	if got.Phase != ConnReconnecting {
@@ -52,10 +55,10 @@ func TestHealthOnWatchErrorFlipsToReconnecting(t *testing.T) {
 func TestHealthOnWatchErrorDoesNotResetAttemptWhileReconnecting(t *testing.T) {
 	t.Parallel()
 	h := newHealth()
-	h.onWatchError(errors.New("first error"))
+	h.onWatchError(errors.New("first error"), true, time.Now())
 	first := h.get()
 
-	h.onWatchError(errors.New("second error, same outage"))
+	h.onWatchError(errors.New("second error, same outage"), true, time.Now())
 	second := h.get()
 
 	if second.Attempt != first.Attempt {
@@ -119,6 +122,194 @@ func TestNewHealthStartsConnected(t *testing.T) {
 	}
 }
 
+// timeoutErr mimics what client-go hands back when the ping's own context
+// deadline fires: the transport error wrapped in a *url.Error.
+func timeoutErr() error {
+	return &url.Error{
+		Op:  "Get",
+		URL: "https://localhost:10443/livez",
+		Err: context.DeadlineExceeded,
+	}
+}
+
+func TestIsTimeout(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"bare deadline exceeded", context.DeadlineExceeded, true},
+		{"wrapped in url.Error", timeoutErr(), true},
+		{"net.Error reporting timeout", &net.DNSError{IsTimeout: true}, true},
+		{"connection refused", errors.New("dial tcp 127.0.0.1:10443: connect: connection refused"), false},
+		{"unauthorized", errors.New("the server has asked for the client to provide credentials"), false},
+	}
+	for _, tt := range tests {
+		if got := isTimeout(tt.err); got != tt.want {
+			t.Errorf("isTimeout(%s) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// TestRecordPingForgivesTimeoutDuringInitialSync is the SSH-tunnel fix: while
+// the informer caches are still syncing, Start()'s 21 cluster-wide LISTs
+// saturate the link and the /livez ping blows its deadline. That must not
+// surface as an outage.
+func TestRecordPingForgivesTimeoutDuringInitialSync(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(pingTimeout, timeoutErr(), false, h.startedAt.Add(30*time.Second))
+
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Fatalf("Phase = %v, want Connected (timeout mid-sync is startup congestion)", got.Phase)
+	}
+	select {
+	case msg := <-h.ch:
+		t.Fatalf("a forgiven ping must not emit a ConnStateMsg, got %+v", msg)
+	default:
+	}
+}
+
+func TestRecordPingReportsTimeoutOnceCachesSynced(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(pingTimeout, timeoutErr(), true, h.startedAt.Add(30*time.Second))
+
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting (post-sync timeout is a real outage)", got.Phase)
+	}
+	if got.Attempt != 1 {
+		t.Fatalf("Attempt = %d, want 1", got.Attempt)
+	}
+}
+
+func TestRecordPingReportsTimeoutPastConnectGrace(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(pingTimeout, timeoutErr(), false, h.startedAt.Add(connectGrace+time.Second))
+
+	if got := h.get(); got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting — the grace window is bounded, not open-ended", got.Phase)
+	}
+}
+
+// TestRecordPingReportsNonTimeoutImmediately pins the 4c path: an unreachable
+// context still has to reach the setup screen on the first ping, so only
+// timeouts are forgiven.
+func TestRecordPingReportsNonTimeoutImmediately(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	refused := errors.New("dial tcp 127.0.0.1:10443: connect: connection refused")
+	h.recordPing(time.Millisecond, refused, false, h.startedAt.Add(2*time.Second))
+
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting on a refused connection mid-sync", got.Phase)
+	}
+	if got.Err != refused.Error() {
+		t.Fatalf("Err = %q, want the verbatim error", got.Err)
+	}
+}
+
+// TestRecordPingAdvancesAttemptMidOutage: post-sync, a timeout during an
+// outage already in progress keeps advancing the attempt/backoff.
+func TestRecordPingAdvancesAttemptMidOutage(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("watch dropped"), true, time.Now())
+	h.recordPing(pingTimeout, timeoutErr(), true, time.Now())
+
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting", got.Phase)
+	}
+	if got.Attempt != 2 {
+		t.Fatalf("Attempt = %d, want 2 (the outage's attempts keep accruing)", got.Attempt)
+	}
+}
+
+// TestConnectGraceIsPhaseBlind pins the deliberate choice in inConnectGrace:
+// a lone watch error early in the sync must not re-arm the banner storm for
+// every congested ping that follows it.
+func TestConnectGraceIsPhaseBlind(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	// A reflector LIST times out mid-sync and flips us to Reconnecting...
+	h.onWatchError(timeoutErr(), true, time.Now())
+	if h.get().Phase != ConnReconnecting {
+		t.Fatalf("precondition: expected the watch error to flip to Reconnecting")
+	}
+	before := h.get()
+
+	// ...but the congested pings behind it are still forgiven while syncing.
+	h.recordPing(pingTimeout, timeoutErr(), false, h.startedAt.Add(5*time.Second))
+
+	if got := h.get(); got.Attempt != before.Attempt {
+		t.Fatalf("Attempt advanced %d→%d on a forgiven mid-sync ping", before.Attempt, got.Attempt)
+	}
+}
+
+// TestOnWatchErrorForgivesTimeoutDuringInitialSync: the reflector's own LIST
+// competing with twenty siblings for a constrained link is congestion, not an
+// outage — same rule the ping path follows.
+func TestOnWatchErrorForgivesTimeoutDuringInitialSync(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(timeoutErr(), false, h.startedAt.Add(10*time.Second))
+
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Fatalf("Phase = %v, want Connected (LIST timeout mid-sync is congestion)", got.Phase)
+	}
+}
+
+// TestOnWatchErrorReportsNonTimeoutDuringInitialSync: a genuinely broken link
+// still flips immediately, even mid-sync.
+func TestOnWatchErrorReportsNonTimeoutDuringInitialSync(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("connect: connection refused"), false, h.startedAt.Add(time.Second))
+
+	if got := h.get(); got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting on a refused connection", got.Phase)
+	}
+}
+
+func TestRecordPingSuccessClearsOutage(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("watch dropped"), true, time.Now())
+	h.recordPing(226*time.Millisecond, nil, true, time.Now())
+
+	got := h.get()
+	if got.Phase != ConnConnected {
+		t.Fatalf("Phase = %v, want Connected", got.Phase)
+	}
+	if got.Latency != 226*time.Millisecond {
+		t.Fatalf("Latency = %v, want the measured round trip", got.Latency)
+	}
+	if got.Attempt != 0 {
+		t.Fatalf("Attempt = %d, want 0 after recovery", got.Attempt)
+	}
+}
+
+// TestHealthResetRestampsConnectGrace: a SwitchContext into a slow cluster
+// gets the same startup forgiveness a cold launch does.
+func TestHealthResetRestampsConnectGrace(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.startedAt = time.Now().Add(-time.Hour) // pretend the process is old
+
+	h.reset()
+	h.recordPing(pingTimeout, timeoutErr(), false, time.Now())
+
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Fatalf("Phase = %v, want Connected — reset() must restamp the grace window", got.Phase)
+	}
+}
+
 // TestHealthResetPreservesChannelIdentity pins the SwitchContext fix
 // (cluster.go now calls health.reset() instead of replacing health
 // wholesale via newHealth()): a caller already ranging over the original
@@ -129,7 +320,7 @@ func TestNewHealthStartsConnected(t *testing.T) {
 func TestHealthResetPreservesChannelIdentity(t *testing.T) {
 	t.Parallel()
 	h := newHealth()
-	h.onWatchError(errors.New("boom"))
+	h.onWatchError(errors.New("boom"), true, time.Now())
 	origCh, origRetry := h.ch, h.retry
 
 	h.reset()

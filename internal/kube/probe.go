@@ -13,11 +13,17 @@ type ProbeResult struct {
 	Err     error
 }
 
-const probeTimeout = 3 * time.Second
+// probeTimeout bounds one context's reachability check. Generous rather than
+// snappy: results stream in as they land, so a slow-but-reachable context
+// (a bastion/port-forwarded cluster, or any context probed while the active
+// cluster's informers are saturating the same link) costs a later verdict,
+// whereas a tight deadline costs a *wrong* one — an "unreachable" label on a
+// context that works fine.
+const probeTimeout = 6 * time.Second
 
 // ProbeContexts probes every named kubeconfig context concurrently — for
 // each, build a rest.Config (no caching; this is a one-shot check, not a
-// long-lived client) and hit /livez with a 3s timeout — and streams results
+// long-lived client) and hit /livez with probeTimeout — and streams results
 // as they complete. Used by the context palette (7a) and the
 // unreachable-at-launch screen (4c) to show reachability + latency in the
 // background while the user browses. The channel closes once every context
