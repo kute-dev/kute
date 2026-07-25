@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -40,7 +41,9 @@ type Cell struct {
 // GroupStyle styles that line, and (like Cell.Style) must already bake in
 // the selection background when this row is Table.Selected, since a
 // GroupHeader row can be the selected one too (6b's fold/collapsed-summary
-// lines are navigable stops when their rows are folded away).
+// lines are navigable stops when their rows are folded away). GroupHeader
+// rows are not backstopped by fillCellBackground (see renderGroupRowV2) —
+// browse, their only caller, already bakes the background in itself.
 //
 // RowStyle backs a non-selected row's own full-width background tint (20a's
 // marked-row MarkBg) — the zero value renders no background, unchanged from
@@ -49,7 +52,12 @@ type Cell struct {
 // (renderRowV2's pad()), so a row-level tint needs this separate hook the
 // same way Table.SelRowStyle already covers those spans for the selected
 // row. Selected always overrides RowStyle (SelRowStyle wins), so callers can
-// set both without conflict.
+// set both without conflict. A plain (single-Style, non-ANSI-text) Cell
+// automatically has this background backstopped by fillCellBackground if
+// the caller didn't already bake it in; a composite/pre-rendered cell
+// (bars, multi-segment glyphs, match highlights) must still bake it in
+// itself, since fillCellBackground can't reach inside already-rendered ANSI
+// spans without truncating at their internal resets.
 type Row struct {
 	Cells       []Cell
 	GroupHeader string
@@ -229,15 +237,20 @@ func (t Table) renderHeaderV2(widths []int, width int) string {
 
 // renderRowV2 draws one data row. The selected row keeps per-cell styling
 // (mockup 2a: only the name brightens — RDY/STATUS/… keep their colors on
-// the selection background): the caller must bake the selection background
-// into every selected-row cell style/span, and the table renders each
-// cell's padding and the inter-column gaps through SelRowStyle so the
-// background reads as one continuous fill.
+// the selection background): the table renders each cell's padding and the
+// inter-column gaps through SelRowStyle/RowStyle so the background reads as
+// one continuous fill, and backstops each plain (single-Style) cell's own
+// background the same way via fillCellBackground — a composite/pre-rendered
+// cell (bars, multi-segment glyphs, match highlights) still needs the
+// caller to bake the background into its own embedded spans, since
+// fillCellBackground can't reach inside already-rendered ANSI text without
+// truncating at its internal resets.
 func (t Table) renderRowV2(row Row, selected bool, widths []int, width int) string {
 	gapStyle := row.RowStyle
 	if selected {
 		gapStyle = t.SelRowStyle
 	}
+	rowBg := rowBackgroundColor(row, t.SelRowStyle, selected)
 	pad := func(n int) string {
 		if n <= 0 {
 			return ""
@@ -252,6 +265,7 @@ func (t Table) renderRowV2(row Row, selected bool, widths []int, width int) stri
 		if i < len(row.Cells) {
 			text, style = row.Cells[i].Text, row.Cells[i].Style
 		}
+		style = fillCellBackground(style, text, rowBg)
 		w := 0
 		if i < len(widths) {
 			w = widths[i]
@@ -279,6 +293,49 @@ func (t Table) renderRowV2(row Row, selected bool, widths []int, width int) stri
 	}
 	line := prefix + body
 	return line + pad(width-ansi.StringWidth(line))
+}
+
+// rowBackgroundColor returns the background that should backstop every
+// plain (single-Style) cell in row: SelRowStyle's when selected (selection
+// always wins over a marked-row tint), else row.RowStyle's own tint, or nil
+// when neither carries a real background. GetBackground() reports the
+// zero-value lipgloss.NoColor{} (not nil) when nothing was ever set, so a
+// type-check is enough to detect "no background in play" — the fast path
+// every ordinary unselected/untinted row takes.
+func rowBackgroundColor(row Row, selRowStyle lipgloss.Style, selected bool) color.Color {
+	style := row.RowStyle
+	if selected {
+		style = selRowStyle
+	}
+	bg := style.GetBackground()
+	if _, ok := bg.(lipgloss.NoColor); ok {
+		return nil
+	}
+	return bg
+}
+
+// fillCellBackground backstops a data cell's background from rowBg when the
+// cell didn't already bake one in itself (the class of bug where a plain
+// Foreground-only cell style on a selected/marked row rendered a hollow
+// highlight — background only in the gaps, not under the text). It is a
+// byte-identical no-op when: rowBg is nil (no selection/tint in play); the
+// cell already set its own Background (an already-correct caller, or a cell
+// with a genuinely independent background); or text already carries
+// embedded ANSI (a composite pre-rendered cell — MiniBar bars, multi-segment
+// health glyphs, fuzzy-match spans — which must stay fully caller-owned,
+// since each embedded sub-span's own SGR reset would truncate an outer
+// background partway through the text).
+func fillCellBackground(style lipgloss.Style, text string, rowBg color.Color) lipgloss.Style {
+	if rowBg == nil {
+		return style
+	}
+	if _, ok := style.GetBackground().(lipgloss.NoColor); !ok {
+		return style
+	}
+	if ansi.Strip(text) != text {
+		return style
+	}
+	return style.Background(rowBg)
 }
 
 // renderGroupRowV2 draws one Row.GroupHeader line. Unselected, it's just

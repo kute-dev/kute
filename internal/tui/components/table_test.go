@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -85,6 +86,81 @@ func TestTableRenderSelectedRowShowsBar(t *testing.T) {
 	}
 	if !strings.HasPrefix(lines[2], tableSelBar) {
 		t.Fatalf("row 1 should start with the selection bar: %q", lines[2])
+	}
+}
+
+func TestTableRenderSelectedRowMergesBackgroundOntoPlainCellStyle(t *testing.T) {
+	fg := lipgloss.Color("#d0d0d0")
+	selBg := lipgloss.Color("#3a3a5c")
+	// A plain, Foreground-only cell style — the bug shape: the caller never
+	// baked the selection background into the cell, only Table's own
+	// SelRowStyle/SelBarStyle carry it.
+	cellStyle := lipgloss.NewStyle().Foreground(fg)
+	table := Table{
+		Width:    30,
+		Height:   3,
+		Selected: 0,
+		Columns:  []Column{{Title: "Name", Min: 20, Flex: true}, {Title: "Age", Min: 6}},
+		Rows: []Row{
+			{Cells: []Cell{{Text: "api", Style: cellStyle}, {Text: "2d", Style: cellStyle}}},
+		},
+		SelBarStyle: lipgloss.NewStyle().Background(selBg),
+		SelRowStyle: lipgloss.NewStyle().Background(selBg),
+	}
+	got := table.Render()
+
+	want := lipgloss.NewStyle().Foreground(fg).Background(selBg).Render("api")
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected selected row's plain cell to carry both foreground and background:\nwant substring: %q\ngot: %q", want, got)
+	}
+}
+
+func TestTableRenderMarkedRowMergesBackgroundOntoPlainCellStyle(t *testing.T) {
+	fg := lipgloss.Color("#d0d0d0")
+	markBg := lipgloss.Color("#403020")
+	cellStyle := lipgloss.NewStyle().Foreground(fg)
+	table := Table{
+		Width:    30,
+		Height:   3,
+		Selected: -1, // nothing selected — isolates the RowStyle/mark path
+		Columns:  []Column{{Title: "Name", Min: 20, Flex: true}, {Title: "Age", Min: 6}},
+		Rows: []Row{
+			{
+				Cells:    []Cell{{Text: "api", Style: cellStyle}, {Text: "2d", Style: cellStyle}},
+				RowStyle: lipgloss.NewStyle().Background(markBg),
+			},
+		},
+	}
+	got := table.Render()
+
+	want := lipgloss.NewStyle().Foreground(fg).Background(markBg).Render("api")
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected marked row's plain cell to carry both foreground and background:\nwant substring: %q\ngot: %q", want, got)
+	}
+}
+
+func TestTableRenderSelectedRowLeavesPreRenderedCellUntouched(t *testing.T) {
+	fg := lipgloss.Color("#00ff00")
+	selBg := lipgloss.Color("#3a3a5c")
+	// A composite/pre-rendered cell (mirrors browse's MiniBar/health-glyph
+	// cells): Cell.Style is the zero value, the color is already embedded in
+	// Text with its own internal SGR reset.
+	preRendered := lipgloss.NewStyle().Foreground(fg).Render("██")
+	table := Table{
+		Width:    30,
+		Height:   3,
+		Selected: 0,
+		Columns:  []Column{{Title: "Name", Min: 20, Flex: true}, {Title: "Age", Min: 6}},
+		Rows: []Row{
+			{Cells: []Cell{{Text: preRendered}, {Text: "2d"}}},
+		},
+		SelBarStyle: lipgloss.NewStyle().Background(selBg),
+		SelRowStyle: lipgloss.NewStyle().Background(selBg),
+	}
+	got := table.Render()
+
+	if !strings.Contains(got, preRendered) {
+		t.Fatalf("expected composite/pre-rendered cell text to pass through untouched:\ngot: %q", got)
 	}
 }
 
