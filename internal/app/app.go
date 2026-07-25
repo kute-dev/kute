@@ -90,9 +90,29 @@ func (l helmAwareLister) Synced() bool {
 	return true
 }
 
-// cacheSyncChecker mirrors browse.CacheSyncChecker structurally so this
-// package doesn't need to import browse just for the type assertion below.
+// KindSynced answers for the cache a kind is actually served from, which for
+// KindHelmRelease is the Secret cache — releases are decoded from Secrets
+// rather than having an informer of their own. Without that remapping the
+// Helm list would ask about a kind no informer backs, get "nothing to wait
+// for", and flash "no releases" while the Secret cache was still filling.
+func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
+	if kind == kube.KindHelmRelease {
+		kind = kube.KindSecret
+	}
+	if kc, ok := l.RawLister.(kindSyncChecker); ok {
+		return kc.KindSynced(kind)
+	}
+	return true
+}
+
+// cacheSyncChecker and kindSyncChecker mirror browse.CacheSyncChecker and
+// browse.KindSyncChecker structurally so this package doesn't need to import
+// browse just for the type assertions below.
 type cacheSyncChecker interface{ Synced() bool }
+
+type kindSyncChecker interface {
+	KindSynced(kind kube.ResourceKind) bool
+}
 
 // Synced forwards to the wrapped lister's own Synced, if it has one.
 // Embedding resources.RawLister as an interface field only promotes methods
@@ -101,11 +121,22 @@ type cacheSyncChecker interface{ Synced() bool }
 // listerSynced type-assertion against the wrapper (not the cluster) always
 // missed, so a load reply landing before the informer cache's initial sync
 // read as a genuinely empty result (10c) instead of "still loading" (15a).
-// *fake.Cluster doesn't implement Synced either, so this still falls
-// through to "synced" for --demo, same as before.
 func (l forwardAwareLister) Synced() bool {
 	if sc, ok := l.RawLister.(cacheSyncChecker); ok {
 		return sc.Synced()
+	}
+	return true
+}
+
+// KindSynced forwards per-kind sync state for the same reason Synced
+// forwards the aggregate. Forwards are in-process state with no cache to
+// wait on, so they are always current.
+func (l forwardAwareLister) KindSynced(kind kube.ResourceKind) bool {
+	if kind == kube.KindForward {
+		return true
+	}
+	if kc, ok := l.RawLister.(kindSyncChecker); ok {
+		return kc.KindSynced(kind)
 	}
 	return true
 }
@@ -126,6 +157,9 @@ var (
 	_ resources.InstanceCounter  = (*kube.Cluster)(nil)
 	_ whocan.WhoCanReader        = (*kube.Cluster)(nil)
 	_ overview.NodeMetricsReader = (*kube.Cluster)(nil)
+	_ browse.KindSyncChecker     = (*kube.Cluster)(nil)
+	_ browse.KindSyncChecker     = forwardAwareLister{}
+	_ browse.KindSyncChecker     = helmAwareLister{}
 	_ resources.RawLister        = (*fake.Cluster)(nil)
 	_ kube.Mutator               = (*fake.Cluster)(nil)
 	_ browse.MetricsReader       = (*fake.Cluster)(nil)
@@ -138,6 +172,7 @@ var (
 	_ resources.InstanceCounter  = (*fake.Cluster)(nil)
 	_ whocan.WhoCanReader        = (*fake.Cluster)(nil)
 	_ overview.NodeMetricsReader = (*fake.Cluster)(nil)
+	_ browse.KindSyncChecker     = (*fake.Cluster)(nil)
 )
 
 // seams is what browse, nodedetail, poddetail, yamlview, events, and

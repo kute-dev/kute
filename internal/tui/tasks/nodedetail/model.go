@@ -235,11 +235,21 @@ type CacheSyncChecker interface {
 	Synced() bool
 }
 
-// listerSynced reports whether m.lister's cache has finished its initial
-// sync — true for any lister that doesn't opt into CacheSyncChecker (fakes,
-// test doubles), so this only changes behavior for *kube.Cluster. Mirrors
-// browse.Model.listerSynced.
+// KindSyncChecker is CacheSyncChecker's per-kind refinement — see
+// browse.KindSyncChecker. This screen's list is always Pods, so that's the
+// kind it asks about.
+type KindSyncChecker interface {
+	KindSynced(kind kube.ResourceKind) bool
+}
+
+// listerSynced reports whether the Pod cache backing this screen's list has
+// finished its initial fill — true for any lister that opts into neither
+// checker (fakes, test doubles), so this only changes behavior for
+// *kube.Cluster. Mirrors browse.Model.listerSynced.
 func (m Model) listerSynced() bool {
+	if kc, ok := m.lister.(KindSyncChecker); ok {
+		return kc.KindSynced(kube.KindPod)
+	}
 	sc, ok := m.lister.(CacheSyncChecker)
 	return !ok || sc.Synced()
 }

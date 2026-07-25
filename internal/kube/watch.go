@@ -252,6 +252,14 @@ func (c *Cluster) registerWatches(kinds ...ResourceKind) {
 			DeleteFunc: func(any) { c.notify(kind) },
 		})
 	}
+	c.mu.Lock()
+	if c.kindInformers == nil {
+		c.kindInformers = make(map[ResourceKind]cache.SharedIndexInformer, len(handlers))
+	}
+	for kind, informer := range handlers {
+		c.kindInformers[kind] = informer
+	}
+	c.mu.Unlock()
 }
 
 // notify delivers a change event without blocking the informer goroutine; if the

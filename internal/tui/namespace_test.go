@@ -628,3 +628,74 @@ func TestRootModelNamespaceDigitThenLetterFiltersNormally(t *testing.T) {
 		t.Fatalf("expected \"10\" to fuzzy-filter to 10-legacy:\n%s", view)
 	}
 }
+
+// stuckAggregateLister reproduces the cluster this phase exists to fix: the
+// Namespace cache has been full for ages, but the cluster-wide flag never
+// flips because some unrelated, rarely-watched kind (classically
+// HorizontalPodAutoscalers, on a cluster whose RBAC forbids listing them)
+// never finishes its initial sync and never will.
+type stuckAggregateLister struct {
+	lister gotoFakeLister
+}
+
+func (l stuckAggregateLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l stuckAggregateLister) Synced() bool { return false }
+
+func (l stuckAggregateLister) KindSynced(kind kube.ResourceKind) bool {
+	return kind != kube.KindHorizontalPodAutoscaler
+}
+
+// TestRootModelNDoesNotHangOnAStuckAggregateFlag: with rows in hand the
+// palette renders regardless, which the pre-existing len(rows)==0 guard
+// already ensured. Kept as the companion to the empty case below, which is
+// where the aggregate flag genuinely misled.
+func TestRootModelNDoesNotHangOnAStuckAggregateFlag(t *testing.T) {
+	lister := stuckAggregateLister{lister: gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNamespace: {namespaceObj("default"), namespaceObj("prod")},
+	}}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
+	view := updated.(tui.Model).View().Content
+
+	if strings.Contains(view, "loading namespaces") {
+		t.Fatalf("palette hung on loading despite a full Namespace cache:\n%s", view)
+	}
+	for _, want := range []string{"default", "prod"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected %q in the palette:\n%s", want, view)
+		}
+	}
+}
+
+// TestRootModelNSettlesWhenNamespacesAreGenuinelyEmpty is where the
+// cluster-wide flag actually misled. The Namespace cache is synced and truly
+// has nothing visible (a token scoped to zero namespaces), but some
+// unrelated informer is wedged, so the aggregate flag is false. The old
+// gate read "empty and not synced" and retried every 250ms forever; the
+// per-kind gate knows this empty answer came from a settled cache and lets
+// the palette say so.
+func TestRootModelNSettlesWhenNamespacesAreGenuinelyEmpty(t *testing.T) {
+	lister := stuckAggregateLister{lister: gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
+	view := updated.(tui.Model).View().Content
+
+	if strings.Contains(view, "loading") {
+		t.Fatalf("palette still loading though the Namespace cache is synced and empty:\n%s", view)
+	}
+	// It settles on the real (empty) list, with 6a's pinned last row intact.
+	if !strings.Contains(view, "all namespaces") {
+		t.Fatalf("expected the settled palette to render its pinned row:\n%s", view)
+	}
+}

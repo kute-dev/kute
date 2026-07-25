@@ -55,6 +55,13 @@ type Cluster struct {
 	userName   string
 	userGroups []string
 
+	// notSynced/kindSynced mirror *kube.Cluster's cache-sync reporting so a
+	// test can drive a screen's loading/retry path through the real seam.
+	// Inverted so the zero value reads as synced, which is what --demo and
+	// every fixture that never touches these want.
+	notSynced  bool
+	kindSynced map[kube.ResourceKind]bool
+
 	events chan kube.ResourceChangedMsg
 	connCh chan kube.ConnStateMsg
 	conn   kube.ConnState
@@ -112,6 +119,45 @@ func (c *Cluster) ListRaw(_ context.Context, kind kube.ResourceKind, namespace s
 		}
 	}
 	return out, nil
+}
+
+// Synced mirrors *kube.Cluster.Synced. The fake's objects are seeded
+// synchronously, so it reports connected unless a test says otherwise.
+func (c *Cluster) Synced() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.notSynced
+}
+
+// KindSynced mirrors *kube.Cluster.KindSynced. Every kind reads as synced
+// unless a test gates one with SetKindSynced — which is the seam that lets a
+// test drive a screen's loading/retry path through the real interface rather
+// than a bespoke per-package lister double.
+func (c *Cluster) KindSynced(kind kube.ResourceKind) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if synced, ok := c.kindSynced[kind]; ok {
+		return synced
+	}
+	return !c.notSynced
+}
+
+// SetSynced overrides what Synced reports.
+func (c *Cluster) SetSynced(synced bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.notSynced = !synced
+}
+
+// SetKindSynced overrides what KindSynced reports for one kind, leaving
+// every other kind alone.
+func (c *Cluster) SetKindSynced(kind kube.ResourceKind, synced bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kindSynced == nil {
+		c.kindSynced = map[kube.ResourceKind]bool{}
+	}
+	c.kindSynced[kind] = synced
 }
 
 // --- kube.Mutator ---

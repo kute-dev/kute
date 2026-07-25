@@ -167,13 +167,21 @@ type cacheSyncChecker interface {
 	Synced() bool
 }
 
-// listerSynced reports whether sess.Lister's cache is done with its initial
-// sync — true for any lister that doesn't opt into cacheSyncChecker (fakes,
-// test doubles, or no session yet), so this only changes behavior for a
-// live *kube.Cluster.
-func listerSynced(sess *Session) bool {
+// kindSyncChecker mirrors browse.KindSyncChecker, the per-kind refinement.
+type kindSyncChecker interface {
+	KindSynced(kind kube.ResourceKind) bool
+}
+
+// kindSynced reports whether the cache backing kind is done with its initial
+// fill — true for any lister that opts into neither checker (fakes, test
+// doubles, or no session yet), so this only changes behavior for a live
+// *kube.Cluster.
+func kindSynced(sess *Session, kind kube.ResourceKind) bool {
 	if sess == nil {
 		return true
+	}
+	if kc, ok := sess.Lister.(kindSyncChecker); ok {
+		return kc.KindSynced(kind)
 	}
 	sc, ok := sess.Lister.(cacheSyncChecker)
 	return !ok || sc.Synced()
@@ -201,21 +209,16 @@ func scheduleNamespaceSyncRetry(gen int) tea.Cmd {
 // shortly rather than flashing "no matches" for a cluster that actually has
 // namespaces (mirrors browse's listerSynced retry in applyRowsLoaded).
 //
-// It gates on namespaceItems' own result (rows), not the cluster-wide
-// listerSynced flag: *kube.Cluster.Synced only flips true once every
-// registered kind's informer (Pods, RBAC, HPA, …) has completed its initial
-// sync, but each informer fills its own cache independently — the
-// Namespace informer routinely has real data well before some unrelated,
-// rarely-watched kind (e.g. HorizontalPodAutoscalers on a cluster/RBAC
-// setup that can't list it) finishes syncing, or ever does. Gating on the
-// aggregate flag left this palette stuck on "loading namespaces…" forever
-// on such clusters even though the data it needs was already there;
-// checking listerSynced only as a fallback when rows come back empty keeps
-// the original regression (an empty cache read before real objects have
-// landed must not be mistaken for "no namespaces") covered.
+// The sync question asked is specifically about the Namespace cache. It used
+// to be the cluster-wide one, which only flipped true once every registered
+// informer (Pods, RBAC, HPA, …) had synced — so on a cluster whose RBAC
+// forbids listing one of them, it never flipped, and this palette hung on
+// "loading namespaces…" forever even though its own data had arrived long
+// before. The rows check remains as well, so a populated list renders
+// immediately whatever the cache reports.
 func (m *Model) loadNamespacePalette(gen int) tea.Cmd {
 	items, rows := namespaceItems(m.session)
-	if len(rows) == 0 && !listerSynced(m.session) {
+	if len(rows) == 0 && !kindSynced(m.session, kube.KindNamespace) {
 		m.palette.Loading = true
 		m.palette.Items = nil
 		return scheduleNamespaceSyncRetry(gen)

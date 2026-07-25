@@ -57,6 +57,88 @@ func (l *notYetSyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKind
 
 func (l *notYetSyncedLister) Synced() bool { return *l.synced }
 
+// perKindSyncedLister reports sync state per kind, the way *kube.Cluster
+// does once each informer is started independently. Only the kinds named in
+// unsynced are still filling; every other kind is trustworthy.
+type perKindSyncedLister struct {
+	lister   fakeLister
+	unsynced map[kube.ResourceKind]bool
+}
+
+func (l *perKindSyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if l.unsynced[kind] {
+		return nil, nil
+	}
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l *perKindSyncedLister) KindSynced(kind kube.ResourceKind) bool { return !l.unsynced[kind] }
+
+// TestListerSyncedIsPerKind is the point of the whole per-kind seam: one
+// kind's cache still filling must not make another kind's empty result look
+// untrustworthy, and vice versa. Under the old cluster-wide flag both of
+// these answered the same way.
+func TestListerSyncedIsPerKind(t *testing.T) {
+	lister := &perKindSyncedLister{
+		unsynced: map[kube.ResourceKind]bool{kube.KindDeployment: true},
+		lister:   fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+
+	m.kind = kube.KindPod
+	if !m.listerSynced() {
+		t.Error("Pods should read as synced — only Deployments is still filling")
+	}
+	m.kind = kube.KindDeployment
+	if m.listerSynced() {
+		t.Error("Deployments should read as unsynced while its informer is still filling")
+	}
+}
+
+// TestEmptyKindRendersEmptyWhileAnotherKindSyncs: a genuinely empty Pods
+// list must reach the empty state immediately even though some unrelated
+// kind hasn't synced. The cluster-wide flag used to hold this in a loading
+// spinner until every informer in the process had finished.
+func TestEmptyKindRendersEmptyWhileAnotherKindSyncs(t *testing.T) {
+	lister := &perKindSyncedLister{
+		unsynced: map[kube.ResourceKind]bool{kube.KindHorizontalPodAutoscaler: true},
+		lister:   fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+
+	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty — Pods synced, so this empty answer is trustworthy", m.state)
+	}
+}
+
+// TestUnsyncedKindStaysLoadingViaKindChecker is the mirror image: the kind
+// on screen is the one still filling, so its empty result is not
+// trustworthy and browse must keep spinning.
+func TestUnsyncedKindStaysLoadingViaKindChecker(t *testing.T) {
+	lister := &perKindSyncedLister{
+		unsynced: map[kube.ResourceKind]bool{kube.KindSecret: true},
+		lister:   fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindSecret
+
+	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindSecret, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading while the Secret informer is still filling", m.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry to be scheduled")
+	}
+}
+
 // TestApplyRowsLoadedStaysLoadingWhileCacheSyncing is the regression test for
 // launch showing "no pods in <namespace>" instead of a loading indicator:
 // an empty result from a not-yet-synced lister must not flip browse to

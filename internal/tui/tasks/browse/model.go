@@ -70,6 +70,16 @@ type CacheSyncChecker interface {
 	Synced() bool
 }
 
+// KindSyncChecker is CacheSyncChecker's per-kind refinement, preferred over
+// it wherever both are available. Informers fill independently and are
+// started independently, so "has this cluster connected" is the wrong
+// question when the one being asked is "is this empty list of Secrets
+// trustworthy". A lister implementing this answers for the kind actually on
+// screen.
+type KindSyncChecker interface {
+	KindSynced(kind kube.ResourceKind) bool
+}
+
 // OpenNodeDetailFunc pushes tasks/nodedetail (11b) for the named node.
 type OpenNodeDetailFunc func(nodeName string, width, height int) (tea.Model, tea.Cmd)
 
@@ -558,10 +568,15 @@ func (m Model) grouped() bool {
 	return m.namespace == "" && !m.desc.ClusterScoped
 }
 
-// listerSynced reports whether m.lister's cache is done with its initial
-// sync — true for any lister that doesn't opt into CacheSyncChecker (fakes,
-// test doubles), so this only changes behavior for *kube.Cluster.
+// listerSynced reports whether the cache backing the kind currently on
+// screen is done with its initial fill. Prefers the per-kind answer and
+// falls back to the cluster-wide one, then to "synced" for any lister that
+// opts into neither (fakes, test doubles), so this only changes behavior for
+// *kube.Cluster.
 func (m Model) listerSynced() bool {
+	if kc, ok := m.lister.(KindSyncChecker); ok {
+		return kc.KindSynced(m.kind)
+	}
 	sc, ok := m.lister.(CacheSyncChecker)
 	return !ok || sc.Synced()
 }

@@ -49,6 +49,13 @@ type Cluster struct {
 	dynKinds   map[ResourceKind]dynamicKindInfo
 	discovered []DiscoveredKind
 
+	// kindInformers is every typed informer registered so far, the handle
+	// KindSynced needs (a lister can't report its own sync state).
+	// kindFailed marks kinds whose watch hit a permanent error, so their
+	// caches are never waited on again.
+	kindInformers map[ResourceKind]cache.SharedIndexInformer
+	kindFailed    map[ResourceKind]bool
+
 	events  chan ResourceChangedMsg
 	health  *health
 	stopCh  chan struct{}
@@ -159,15 +166,65 @@ func (c *Cluster) Start(ctx context.Context) error {
 	return nil
 }
 
-// Synced reports whether the informer caches have completed their initial
-// sync. ListRaw reads the caches directly regardless of sync state, so right
-// after launch (or mid SwitchContext) it can return a truthful-looking empty
-// list before the first real objects have arrived; callers use Synced to
-// tell that apart from a genuinely empty result.
+// Synced reports whether the startup informer set has completed its initial
+// sync. It is a latch: set once at the end of Start and never cleared, so it
+// answers "has this cluster finished connecting", not "is every cache
+// currently up to date". Callers deciding whether a specific empty list is
+// trustworthy want KindSynced instead.
 func (c *Cluster) Synced() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.synced
+}
+
+// KindSynced reports whether kind's own informer cache has completed its
+// initial fill. ListRaw reads caches directly regardless of sync state, so
+// an empty result is ambiguous — genuinely no objects, or the cache hasn't
+// been populated yet — and this is what disambiguates it.
+//
+// Per-kind rather than cluster-wide because each informer fills
+// independently: the Namespace cache routinely has real data long before
+// some unrelated, rarely-watched kind finishes, and on a cluster whose RBAC
+// forbids listing (say) HorizontalPodAutoscalers, an aggregate flag never
+// flips at all.
+//
+// Reports true — "this empty answer is trustworthy, render it" — for a
+// stopped cluster, for synthetic kinds with no informer to wait on, and for
+// a kind whose watch failed with a permission error, so a caller gating a
+// loading state on this can never spin forever waiting for a cache that is
+// never going to arrive.
+func (c *Cluster) KindSynced(kind ResourceKind) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.stopCh == nil {
+		return true
+	}
+	if c.kindFailed[kind] {
+		return true
+	}
+	if inf, ok := c.kindInformers[kind]; ok {
+		return inf.HasSynced()
+	}
+	if info, ok := c.dynKinds[kind]; ok {
+		return info.informer != nil && info.informer.HasSynced()
+	}
+	if _, typed := typedKinds[kind]; typed {
+		// A real kind whose informer hasn't been registered yet.
+		return false
+	}
+	return true
+}
+
+// markKindFailed records that kind's watch reported an error the cache will
+// never recover from on its own — today only "you may not list this",
+// which is a permanent answer for the session, not a transient outage.
+func (c *Cluster) markKindFailed(kind ResourceKind) {
+	c.mu.Lock()
+	if c.kindFailed == nil {
+		c.kindFailed = map[ResourceKind]bool{}
+	}
+	c.kindFailed[kind] = true
+	c.mu.Unlock()
 }
 
 // CurrentNamespace and CurrentContext expose the active scope for switchers.
@@ -222,6 +279,10 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.dynFactory = dynamicinformer.NewDynamicSharedInformerFactory(dynClient, defaultResync)
 	c.dynKinds = nil
 	c.discovered = nil
+	// The new factory's informers are all unregistered and unsynced, and
+	// whatever the old cluster forbade says nothing about this one.
+	c.kindInformers = nil
+	c.kindFailed = nil
 	c.Context = client.Context
 	c.health.reset()
 	c.started = false
