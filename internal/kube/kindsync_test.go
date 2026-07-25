@@ -1,8 +1,10 @@
 package kube
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,10 +63,42 @@ func TestKindSyncedTrueForSyntheticKinds(t *testing.T) {
 	c := newSyncTestCluster()
 	defer close(c.stopCh)
 
-	for _, kind := range []ResourceKind{KindForward, KindHelmRelease} {
-		if !c.KindSynced(kind) {
-			t.Errorf("KindSynced(%s) = false; a kind with no informer has nothing to wait for", kind)
-		}
+	// Forwards are in-process state, not a cache.
+	if !c.KindSynced(KindForward) {
+		t.Error("KindSynced(Forward) = false; a kind with no informer has nothing to wait for")
+	}
+}
+
+// TestKindSyncedForHelmReleasesTracksItsOwnCache: releases are no longer
+// derived from the shared Secret cache — they have their own filtered
+// informer, and this must answer for that one. Answering for KindSecret
+// would report "settled" off a cache the Helm screens never read.
+func TestKindSyncedForHelmReleasesTracksItsOwnCache(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	if c.KindSynced(KindHelmRelease) {
+		t.Fatal("KindSynced(HelmRelease) = true before its informer was started")
+	}
+
+	// Starting the shared Secret cache must not vouch for releases.
+	c.registerWatches(KindSecret)
+	c.factory.Start(c.stopCh)
+	c.factory.WaitForCacheSync(c.stopCh)
+	if c.KindSynced(KindHelmRelease) {
+		t.Fatal("the shared Secret cache wrongly vouched for HelmRelease")
+	}
+
+	if _, err := c.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
+		t.Fatalf("ListHelmReleaseSecrets: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !c.KindSynced(KindHelmRelease) && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !c.KindSynced(KindHelmRelease) {
+		t.Fatal("KindSynced(HelmRelease) never settled after its own cache filled")
 	}
 }
 

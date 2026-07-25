@@ -24,7 +24,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -325,4 +329,77 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 		Type: HelmReleaseSecretType,
 		Data: map[string][]byte{"release": []byte(encoded)},
 	}
+}
+
+// helmReleaseFieldSelector narrows a Secret list/watch to Helm's own release
+// storage. Secret.type is a server-supported field selector, so this filters
+// at the API server rather than after the fact.
+var helmReleaseFieldSelector = fields.OneTermEqualSelector("type", string(HelmReleaseSecretType)).String()
+
+// ensureHelmSecrets idempotently starts the informer behind
+// ListHelmReleaseSecrets: a Secret informer of its own, filtered server-side
+// to type=helm.sh/release.v1.
+//
+// It is deliberately not the shared Secret cache. Releases are a small,
+// distinctively-typed slice of a namespace's Secrets, but the shared cache
+// holds all of them — image-pull credentials, TLS material, every
+// ServiceAccount token — which on a real cluster is the single largest kind
+// there is. Listing Helm releases used to pull all of it (12 MB on the
+// cluster this was measured against) to find a few dozen release Secrets.
+//
+// The two caches coexist: opening the Secrets list still populates the shared
+// one, and that is the right cost for a screen that is actually about
+// Secrets. This one only ever holds releases.
+func (c *Cluster) ensureHelmSecrets() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.stopCh == nil || c.helmInformer != nil {
+		return
+	}
+	if c.helmFactory == nil {
+		c.helmFactory = informers.NewSharedInformerFactoryWithOptions(
+			c.clientset, defaultResync,
+			informers.WithTransform(stripManagedFields),
+			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+				opts.FieldSelector = helmReleaseFieldSelector
+			}),
+		)
+	}
+	informer := c.helmFactory.Core().V1().Secrets().Informer()
+	//nolint:errcheck // best-effort: a failed registration just means no health signal here
+	// Runs later, on the reflector's goroutine — so it takes the lock
+	// itself rather than assuming the one held here.
+	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		if IsPermissionError(err) {
+			c.markKindFailed(KindHelmRelease)
+		}
+		c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
+	})
+	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
+	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(any) { c.notify(KindHelmRelease) },
+		UpdateFunc: func(any, any) { c.notify(KindHelmRelease) },
+		DeleteFunc: func(any) { c.notify(KindHelmRelease) },
+	})
+	c.helmInformer = informer
+	c.helmFactory.Start(c.stopCh)
+	c.health.noteListBurst()
+}
+
+// ListHelmReleaseSecrets returns the helm.sh/release.v1 Secrets in namespace
+// ("" for all), from a cache that holds only those. Callers decode them with
+// DecodeHelmReleases; this deliberately returns Secrets rather than releases
+// so the decode stays where it already lives.
+func (c *Cluster) ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
+	c.ensureHelmSecrets()
+	c.mu.Lock()
+	f := c.helmFactory
+	c.mu.Unlock()
+	if f == nil {
+		// No cluster to read from (a stopped Cluster); an empty result plus
+		// KindSynced reporting settled is how every other read degrades.
+		return nil, nil
+	}
+	lister := f.Core().V1().Secrets().Lister()
+	return listNamespaced(lister.List, lister.Secrets, namespace, labels.Everything())
 }

@@ -142,6 +142,28 @@ func (c *Cluster) KindSynced(kind kube.ResourceKind) bool {
 	return !c.notSynced
 }
 
+// ListHelmReleaseSecrets mirrors *kube.Cluster's filtered release cache. The
+// real one is a separate, server-side-filtered Secret informer; the fake has
+// one seeded map, so it filters by type here — same answer, and it keeps the
+// Helm screens exercising the narrow path in --demo rather than the
+// read-every-Secret fallback.
+func (c *Cluster) ListHelmReleaseSecrets(_ context.Context, namespace string) ([]runtime.Object, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []runtime.Object
+	for _, obj := range c.objects[kube.KindSecret] {
+		secret, ok := obj.(*corev1.Secret)
+		if !ok || secret.Type != kube.HelmReleaseSecretType {
+			continue
+		}
+		if namespace != "" && secret.Namespace != namespace {
+			continue
+		}
+		out = append(out, obj)
+	}
+	return out, nil
+}
+
 // SetSynced overrides what Synced reports.
 func (c *Cluster) SetSynced(synced bool) {
 	c.mu.Lock()

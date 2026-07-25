@@ -62,6 +62,13 @@ type Cluster struct {
 	// the old cluster.
 	metaClient metadata.Interface
 
+	// helmFactory/helmInformer back KindHelmRelease: a second Secret
+	// informer, filtered server-side to type=helm.sh/release.v1 so listing
+	// releases doesn't pull every Secret in the cluster (see helm.go's
+	// ensureHelmSecrets). Started on first read, like every other lazy kind.
+	helmFactory  informers.SharedInformerFactory
+	helmInformer cache.SharedIndexInformer
+
 	// kindInformers is every typed informer registered so far, the handle
 	// KindSynced needs (a lister can't report its own sync state).
 	// kindFailed marks kinds whose watch hit a permanent error, so their
@@ -277,6 +284,11 @@ func (c *Cluster) KindSynced(kind ResourceKind) bool {
 	if c.kindFailed[kind] {
 		return true
 	}
+	if kind == KindHelmRelease {
+		// Releases come from their own filtered Secret cache, not the
+		// shared one, so this must not answer for KindSecret.
+		return c.helmInformer != nil && c.helmInformer.HasSynced()
+	}
 	if inf, ok := c.kindInformers[kind]; ok {
 		return inf.HasSynced()
 	}
@@ -310,6 +322,9 @@ func (c *Cluster) allStartedKindsSynced() bool {
 		if info.informer != nil && !info.informer.HasSynced() {
 			return false
 		}
+	}
+	if c.helmInformer != nil && !c.kindFailed[KindHelmRelease] && !c.helmInformer.HasSynced() {
+		return false
 	}
 	return true
 }
@@ -383,6 +398,8 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.kindInformers = nil
 	c.kindFailed = nil
 	c.metaClient = nil
+	c.helmFactory = nil
+	c.helmInformer = nil
 	c.Context = client.Context
 	c.health.reset()
 	c.started = false

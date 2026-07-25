@@ -64,11 +64,20 @@ type helmAwareLister struct {
 	resources.RawLister
 }
 
+// helmSecretLister is implemented by a lister that can hand back just the
+// helm.sh/release.v1 Secrets, from a cache holding only those. Optional: a
+// lister without it falls back to filtering the shared Secret cache, which
+// is correct but means reading every Secret in the namespace to find a
+// handful of releases.
+type helmSecretLister interface {
+	ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error)
+}
+
 func (l helmAwareLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
 	if kind != kube.KindHelmRelease {
 		return l.RawLister.ListRaw(ctx, kind, namespace)
 	}
-	secrets, err := l.RawLister.ListRaw(ctx, kube.KindSecret, namespace)
+	secrets, err := l.helmSecrets(ctx, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -91,18 +100,30 @@ func (l helmAwareLister) Synced() bool {
 }
 
 // KindSynced answers for the cache a kind is actually served from, which for
-// KindHelmRelease is the Secret cache — releases are decoded from Secrets
-// rather than having an informer of their own. Without that remapping the
-// Helm list would ask about a kind no informer backs, get "nothing to wait
-// for", and flash "no releases" while the Secret cache was still filling.
+// KindHelmRelease is whichever cache the releases actually came from: its
+// own filtered Secret informer when the lister has one, otherwise the shared
+// Secret cache the fallback read from. Getting this wrong means the Helm
+// list asks about a kind nothing backs, hears "nothing to wait for", and
+// flashes "no releases" while the real cache is still filling.
 func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
+	kc, ok := l.RawLister.(kindSyncChecker)
+	if !ok {
+		return true
+	}
 	if kind == kube.KindHelmRelease {
-		kind = kube.KindSecret
+		if _, filtered := l.RawLister.(helmSecretLister); !filtered {
+			kind = kube.KindSecret
+		}
 	}
-	if kc, ok := l.RawLister.(kindSyncChecker); ok {
-		return kc.KindSynced(kind)
+	return kc.KindSynced(kind)
+}
+
+// helmSecrets reads the release Secrets from the narrowest source available.
+func (l helmAwareLister) helmSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
+	if hs, ok := l.RawLister.(helmSecretLister); ok {
+		return hs.ListHelmReleaseSecrets(ctx, namespace)
 	}
-	return true
+	return l.RawLister.ListRaw(ctx, kube.KindSecret, namespace)
 }
 
 // cacheSyncChecker and kindSyncChecker mirror browse.CacheSyncChecker and
@@ -1044,12 +1065,13 @@ func forwardEvents(ctx context.Context, src eventSource, program *tea.Program) {
 			}
 			program.Send(ev)
 			if ev.Kind == kube.KindSecret {
-				// helmAwareLister computes KindHelmRelease from the Secret
-				// cache rather than its own informer (docs/design README.md
-				// §18a), so a Secret change needs to also invalidate any
-				// open Helm Releases/history screen — they key their own
-				// reload off KindHelmRelease/KindSecret, never KindSecret
-				// alone reaching them by coincidence.
+				// A release Secret changing already emits KindHelmRelease
+				// directly, from the filtered release informer that backs
+				// the Helm screens (kube/helm.go). This covers the listers
+				// that have no such informer — *fake.Cluster in --demo and
+				// tests — where releases really are derived from whatever
+				// Secrets are seeded, and so a Secret change is the only
+				// signal an open Helm screen would ever get.
 				program.Send(kube.ResourceChangedMsg{Kind: kube.KindHelmRelease})
 			}
 		case cs, ok := <-conn:

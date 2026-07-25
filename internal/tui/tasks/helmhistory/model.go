@@ -15,6 +15,8 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
@@ -115,7 +117,7 @@ func (m Model) load() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		secrets, err := lister.ListRaw(ctx, kube.KindSecret, namespace)
+		secrets, err := helmSecrets(ctx, lister, namespace)
 		if err != nil {
 			return loadedMsg{epoch: epoch, err: err}
 		}
@@ -141,4 +143,22 @@ func (m Model) isProd() bool {
 		return false
 	}
 	return m.session.Config.IsProd(m.session.Location.Context)
+}
+
+// helmSecretLister is implemented by a lister backed by a Secret cache
+// filtered to helm.sh/release.v1 — see app.helmAwareLister's copy. Duplicated
+// here per the repo's package-local-seam convention rather than imported.
+type helmSecretLister interface {
+	ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error)
+}
+
+// helmSecrets reads a namespace's release Secrets from the narrowest source
+// the lister offers. The fallback reads every Secret in the namespace, which
+// is correct but pulls the largest kind on most clusters to find a handful of
+// revisions.
+func helmSecrets(ctx context.Context, lister resources.RawLister, namespace string) ([]runtime.Object, error) {
+	if hs, ok := lister.(helmSecretLister); ok {
+		return hs.ListHelmReleaseSecrets(ctx, namespace)
+	}
+	return lister.ListRaw(ctx, kube.KindSecret, namespace)
 }
