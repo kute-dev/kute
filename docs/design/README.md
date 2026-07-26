@@ -71,7 +71,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Breadcrumb extends: `… › Pods › nva-worker-9k2ss` (pod name bold).
 - **Title row:** pod name (bold, 14px-equivalent = emphasized) · status `✕ CrashLoopBackOff` (red) · `↺ 6 restarts` (yellow) · right `watching · live` (dim).
 - **Meta grid** (label over value): NODE / IP / QOS / CONTROLLER / AGE. Controller is a link (`deploy/nva-worker ↗` in purple) that jumps via the goto machinery.
-- **Last-termination banner** (promoted to top, bg `#2a1518`, border `#4a2228`): `Last termination` (red bold) + `exit 137 · OOMKilled · 4m ago`; body line names the container (yellow) and the memory limit + next backoff. This answers "why is it broken?" first — never bury it.
+- **Last-termination banner** (promoted to top, solid fill `#2a1518` with a `▌` left accent bar in `#4a2228` — no box border, since a 1-cell border glyph can't be tinted on its inner half alone and either bleeds the fill outside the stroke or leaves a gap inside it): `Last termination` (red bold) + `exit 137 · OOMKilled · 4m ago`; body line names the container (yellow) and the memory limit + next backoff. This answers "why is it broken?" first — never bury it.
 - **CONTAINERS:** grid — status glyph · name · image (dim, ellipsize) · state (`Waiting · backoff` red / `Running` green) · restarts right-aligned.
 - **CPU/MEM bars** with `used / limit` text; MEM at 96% renders the bar and text red.
 - **EVENTS (newest first):** grid — type (`Warning` yellow/red, `Normal` blue) · reason · age · message (ellipsize).

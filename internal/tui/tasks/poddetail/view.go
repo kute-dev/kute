@@ -191,8 +191,8 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	if lt == nil {
 		return ""
 	}
-	title := lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Render("Last termination")
-	facts := lipgloss.NewStyle().Foreground(theme.BadMuted).Render(
+	title := lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ErrBannerBg).Bold(true).Render("Last termination")
+	facts := lipgloss.NewStyle().Foreground(theme.BadMuted).Background(theme.ErrBannerBg).Render(
 		fmt.Sprintf("exit %d · %s · %s ago", lt.ExitCode, lt.Reason, shortDur(lt.Age)),
 	)
 
@@ -200,8 +200,12 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	// the OOMKilled wording only when the limit that was exceeded is known —
 	// then the next backoff estimate (docs/design README.md §5a: "the
 	// memory limit + next backoff").
-	bodyStyle := lipgloss.NewStyle().Foreground(theme.BadText)
-	container := lipgloss.NewStyle().Foreground(theme.Warn).Render(lt.Container)
+	// Every inner style here must repeat Background(theme.ErrBannerBg): each
+	// styled substring closes with its own ANSI reset, which wipes the outer
+	// banner style's background for the gap until the next explicit one
+	// (same reasoning as deleteConfirmModal's per-field Background pairing).
+	bodyStyle := lipgloss.NewStyle().Foreground(theme.BadText).Background(theme.ErrBannerBg)
+	container := lipgloss.NewStyle().Foreground(theme.Warn).Background(theme.ErrBannerBg).Render(lt.Container)
 	what := fmt.Sprintf(" exited with code %d.", lt.ExitCode)
 	if lt.Reason == "OOMKilled" && m.pod.MEMLimitBytes > 0 {
 		what = " exceeded memory limit " + formatBytes(m.pod.MEMLimitBytes) + "."
@@ -209,12 +213,23 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	what += fmt.Sprintf(" Next backoff ~%s.", shortDur(lt.NextBackoff()))
 	body := bodyStyle.Render("Container ") + container + bodyStyle.Render(what)
 
-	content := title + "  " + facts + "\n" + body
+	gap := lipgloss.NewStyle().Background(theme.ErrBannerBg).Render("  ")
+	content := title + gap + facts + "\n" + body
+	// The banner is a solid tinted block, not a bordered box. A box-drawing
+	// glyph inks the middle of a full cell and the two halves aren't separately
+	// addressable, so a boxed banner can only pick which artifact to show:
+	// BorderBackground bleeds the tint one cell *outside* the stroke, omitting
+	// it leaves a one-cell gap *inside* it. Letting the fill be the shape
+	// sidesteps the choice. ErrBannerBorder survives as a left accent bar —
+	// ▌ inks the left half of its cell and takes the fill on the right half, so
+	// the bar sits flush against the block with no seam of its own.
+	accent := lipgloss.Border{Left: "▌"}
 	style := lipgloss.NewStyle().
 		Background(theme.ErrBannerBg).
+		Border(accent, false, false, false, true).
 		BorderForeground(theme.ErrBannerBorder).
-		Border(lipgloss.RoundedBorder()).
-		Padding(0, 1).
+		BorderBackground(theme.ErrBannerBg).
+		Padding(1, 1).
 		Width(width) // lipgloss v2's Width already counts the border, so this is exactly width
 	return style.Render(content)
 }
