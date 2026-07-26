@@ -137,6 +137,17 @@ func (l helmAwareLister) CountLive(ctx context.Context, kind kube.ResourceKind, 
 	return lc.CountLive(ctx, kind, namespace)
 }
 
+// newSessionLister is the one place the read-side decorator stack is
+// composed. Order matters — helmAwareLister has to wrap forwardAwareLister
+// so KindForward still short-circuits before the Helm dispatch — and every
+// optional seam has to be forwarded through both layers (see the
+// compile-time assertions below). Having a single constructor means there's
+// one composition for those assertions and the lister tests to speak about,
+// rather than five hand-spelled copies that can drift apart.
+func newSessionLister(raw resources.RawLister, forwards *kube.ForwardManager) helmAwareLister {
+	return helmAwareLister{RawLister: forwardAwareLister{RawLister: raw, forwards: forwards}}
+}
+
 // helmSecrets reads the release Secrets from the narrowest source available.
 func (l helmAwareLister) helmSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
 	if hs, ok := l.RawLister.(helmSecretLister); ok {
@@ -285,7 +296,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	switch {
 	case cluster != nil:
 		sess.Forwards = kube.NewForwardManager()
-		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
+		sess.Lister = newSessionLister(cluster, sess.Forwards)
 		sess.Metrics = cluster
 		// Snapshot before buildBrowseTask: browse.New's own KindEvent
 		// carve-out (its doc comment) resets Session.Location.Kind to Pod
@@ -320,7 +331,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Location.Namespace = namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(demoCluster.DiscoveredKinds(), demoCluster)
 		sess.Forwards = kube.NewForwardManager()
-		lister := helmAwareLister{RawLister: forwardAwareLister{RawLister: demoCluster, forwards: sess.Forwards}}
+		lister := newSessionLister(demoCluster, sess.Forwards)
 		sess.Lister = lister
 		sess.Metrics = demoCluster
 		openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
@@ -389,7 +400,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *browse.Model {
 	streamer := liveClusterLogStreamer{cluster: cluster}
 	clusterName, namespace := cluster.Context.ClusterName, cluster.Context.Namespace
-	lister := helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
+	lister := newSessionLister(cluster, sess.Forwards)
 	openLogs := openLogsFunc(sess, cluster, streamer, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, cluster)
 	openExec := openExecFunc(sess, kubectlShellDetector{})
@@ -487,7 +498,7 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 			sess.Forwards = kube.NewForwardManager()
 		}
 		sess.Cluster = cluster
-		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
+		sess.Lister = newSessionLister(cluster, sess.Forwards)
 		sess.Metrics = cluster
 		sess.Location.Context = cluster.Context.ContextName
 		sess.Location.Namespace = cluster.Context.Namespace
@@ -531,7 +542,7 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 			sess.Forwards = kube.NewForwardManager()
 		}
 		sess.Cluster = cluster
-		sess.Lister = helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
+		sess.Lister = newSessionLister(cluster, sess.Forwards)
 		sess.Metrics = cluster
 		sess.Location.Context = cluster.Context.ContextName
 		sess.Location.Namespace = cluster.Context.Namespace
