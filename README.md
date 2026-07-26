@@ -28,7 +28,7 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 - **Restart-aware logs and an incident timeline** — pod logs draw a boundary at every container restart; the timeline screen merges events, restarts, and rollout revisions into one newest-first feed answering "what changed recently."
 - **Termination causes and conditions shown verbatim** — the actual condition message is the diagnosis, never paraphrased or summarized away.
 - **Every mutating action shows its command first** — exec, port-forward, scale, image/resource changes, label edits, rollout restarts, and Helm rollbacks all print the exact command that's about to run before it runs. Copyable documentation, not a black box.
-- **Deliberate friction on destructive actions** — reversible verbs like cordon execute immediately; delete and rollout-restart are tiered, with inline y/N confirmation normally and a type-the-name modal when the context is explicitly tagged as production (via kubeconfig annotation, never guessed from a name). Drain and force-delete always require the modal.
+- **Deliberate friction on destructive actions** — reversible verbs like cordon execute immediately; delete and rollout-restart are tiered, with inline y/N confirmation normally and a type-the-name modal when the context is explicitly listed as production in your [config file](#configuration), never guessed from a name. Drain always confirms, and force-delete needs the typed name in a prod context.
 - **CRDs work without a configuration project** — kinds discovered from the API automatically get columns, status, and detail views. No plugins, no per-CRD setup.
 - **Alt-tab namespace/context switching** — the same palette that jumps to any resource kind also toggles between your last two namespaces or contexts with no typing, and recalls recent ones by number.
 - **One palette jumps to anything** — a kind's alias letter, a fuzzy kind name, or a specific resource by name all live in the same `g` palette; typing a pod's name jumps straight to it, switching kind and namespace as a side effect.
@@ -53,7 +53,7 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 
 ## Resilience & safety
 
-When the API server connection drops, kute keeps showing your last known state (desaturated, with an age stamp) instead of blanking the screen — and disables mutating actions until the connection is back.
+When the API server connection drops, kute keeps showing your last known state (desaturated, with an age stamp) instead of blanking the screen — and disables every mutating action until the connection is back, including the ones that hand off to `kubectl`: exec, node shell, and edit.
 
 ## Install
 
@@ -66,6 +66,61 @@ Or with Homebrew:
 ```sh
 brew install kute-dev/tap/kute
 ```
+
+## Usage
+
+Run `kute` with no arguments and it opens on the context you last used, in the namespace you left it in. The flags below pin a starting point instead — useful in a script, an alias, or when reproducing something for a bug report.
+
+| Flag | What it does |
+| --- | --- |
+| `--context <name>` | Launch against a specific kubeconfig context, instead of the last-used one (or the kubeconfig's `current-context` on a first run). |
+| `-n`, `--namespace <name>` | Launch in a specific namespace. Outranks both the remembered namespace and the context's own default. |
+| `--kubeconfig <path>` | Read a specific kubeconfig file. Takes precedence over `$KUBECONFIG`, which takes precedence over `~/.kube/config`. |
+| `--theme dark\|light` | Force a theme instead of detecting it from the terminal background. |
+| `--demo` | Run against a built-in in-memory fake cluster. No kubeconfig or cluster needed. |
+| `--version` | Print version, commit and build date, then exit. |
+
+Everything else is a keystroke: `?` from any screen lists the keys for that screen plus the global ones.
+
+## Configuration
+
+kute reads `~/.config/kute/config.yaml`. Every key is optional — with no file at all, kute runs with the defaults below.
+
+```yaml
+# Contexts to treat as production. This is the ONLY source of PROD status —
+# kute never guesses from a context's name.
+prodContexts:
+  - prod-eks
+  - aks-prod-eastus2
+
+# Force a theme: dark | light. Omit to detect from the terminal background.
+# The --theme flag overrides this.
+theme: dark
+
+# Image kubectl debug uses for the node-shell verb ('s' on a node).
+# Override it for clusters that can't pull from Docker Hub.
+# Default: busybox:1.37
+nodeShellImage: my-registry.internal/busybox:1.37
+
+update:
+  # Set false to disable the once-per-24h release-feed check that drives the
+  # update-available chip. Useful behind egress-flagging proxies.
+  check: false
+```
+
+### `prodContexts` and destructive actions
+
+`prodContexts` is what escalates kute's confirmation friction, so it's worth setting before you need it:
+
+| | Non-prod context | Context listed in `prodContexts` |
+| --- | --- | --- |
+| Delete, rollout restart | inline `y/N` | type the resource's name to confirm |
+| Force delete (`ctrl+k`) | staged inside the inline `y/N` | type the resource's name |
+| Drain | `y/N` confirm | `y/N` confirm |
+| Edit, set image, set resources | applies on save | inline `y/N` first |
+| Cordon / uncordon | applies immediately | applies immediately |
+
+A context you haven't listed gets the lighter confirmations — including a production cluster kute has no way of recognizing. You can also mark or unmark the selected context with `ctrl+p` in the context palette (`c`), which writes back to this same file, so every other kute session picks it up.
 
 ## Running From Source
 

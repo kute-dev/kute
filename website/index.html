@@ -315,7 +315,7 @@
           <div class="friction-item"><span class="tier del">delete, rollout restart</span> inline y/N in the keybar — no modal</div>
           <div class="friction-item"><span class="tier prod">prod / drain</span> type-the-name modal — the only red border in the app</div>
         </div>
-        <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);">PROD comes from a kubeconfig annotation, never a name heuristic. Secrets decode in memory only and re-mask on exit.</p>
+        <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);">PROD comes from the <code>prodContexts</code> list in <code>~/.config/kute/config.yaml</code>, never a name heuristic. Secrets decode in memory only and re-mask on exit.</p>
       </div>
     </div>
   </div>
