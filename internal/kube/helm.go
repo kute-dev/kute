@@ -231,6 +231,41 @@ func LatestHelmReleases(all []HelmRelease) []HelmRelease {
 	return out
 }
 
+// HelmReleaseSecretsFor narrows release Secrets to one release's own
+// revisions, before anything decodes them.
+//
+// The release cache is cluster-wide, and decoding is not cheap — base64,
+// gunzip, JSON, then a YAML re-marshal of the values map, per revision of
+// every release in every namespace. 18a's history screen wants one release,
+// and it re-reads on every Secret change event and on every cache-sync
+// retry tick, so doing that filtering after the decode (HelmReleaseHistory
+// alone) throws away nearly all of the work it just paid for.
+//
+// Helm labels each revision Secret with the release name; the object-name
+// fallback covers a Secret written without them.
+func HelmReleaseSecretsFor(objs []runtime.Object, namespace, name string) []runtime.Object {
+	prefix := fmt.Sprintf("sh.helm.release.v1.%s.v", name)
+	out := make([]runtime.Object, 0, len(objs))
+	for _, obj := range objs {
+		secret, ok := obj.(*corev1.Secret)
+		if !ok || secret.Type != HelmReleaseSecretType {
+			continue
+		}
+		if namespace != "" && secret.Namespace != namespace {
+			continue
+		}
+		if release, labelled := secret.Labels["name"]; labelled {
+			if release != name {
+				continue
+			}
+		} else if !strings.HasPrefix(secret.Name, prefix) {
+			continue
+		}
+		out = append(out, obj)
+	}
+	return out
+}
+
 // HelmReleaseHistory filters all to one release's revisions, newest first —
 // 18a's `h` revision rail.
 func HelmReleaseHistory(all []HelmRelease, namespace, name string) []HelmRelease {

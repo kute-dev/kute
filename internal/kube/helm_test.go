@@ -1,8 +1,13 @@
 package kube
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestEncodeDecodeHelmReleaseSecretRoundTrip(t *testing.T) {
@@ -107,5 +112,46 @@ func TestHelmRollbackCommandString(t *testing.T) {
 	}
 	if got, want := HelmRollbackCommandString("production", "postgresql", 2), "helm rollback postgresql 2 -n production"; got != want {
 		t.Fatalf("HelmRollbackCommandString(2) = %q, want %q", got, want)
+	}
+}
+
+// TestHelmReleaseSecretsForNarrowsBeforeDecode covers the pre-decode filter
+// 18a's history screen runs. The release cache is cluster-wide and the
+// screen re-reads it on every Secret change, so the one release it displays
+// has to be picked out before the expensive part.
+func TestHelmReleaseSecretsForNarrowsBeforeDecode(t *testing.T) {
+	t.Parallel()
+	labelled := func(namespace, name string, revision int) *corev1.Secret {
+		return EncodeHelmReleaseSecret(HelmRelease{Namespace: namespace, Name: name, Revision: revision})
+	}
+	// A revision Secret written without Helm's own labels — matched on the
+	// object-name convention instead.
+	unlabelled := labelled("production", "postgresql", 4)
+	unlabelled.Labels = nil
+
+	objs := []runtime.Object{
+		labelled("production", "postgresql", 1),
+		labelled("production", "postgresql", 2),
+		unlabelled,
+		labelled("production", "redis", 7),
+		labelled("staging", "postgresql", 9),
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tls", Namespace: "production"}},
+	}
+
+	got := HelmReleaseSecretsFor(objs, "production", "postgresql")
+	if len(got) != 3 {
+		t.Fatalf("HelmReleaseSecretsFor returned %d secrets, want 3 (revisions 1, 2 and the unlabelled 4)", len(got))
+	}
+	for _, obj := range got {
+		secret := obj.(*corev1.Secret)
+		if secret.Namespace != "production" || !strings.HasPrefix(secret.Name, "sh.helm.release.v1.postgresql.v") {
+			t.Errorf("unexpected secret %s/%s", secret.Namespace, secret.Name)
+		}
+	}
+
+	// The filter must not change what the screen ends up showing.
+	history := HelmReleaseHistory(DecodeHelmReleases(got), "production", "postgresql")
+	if len(history) != 3 || history[0].Revision != 4 {
+		t.Fatalf("history after filtering = %+v, want 3 revisions newest-first", history)
 	}
 }
