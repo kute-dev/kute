@@ -61,6 +61,16 @@ type Model struct {
 	state    tui.TaskState
 	feedback string
 	spinner  spinner.Model
+
+	// now is wall-clock as of the last spinner tick / conn-state message.
+	// The loading header's "· 0.4s" counter is computed from this rather
+	// than read from the clock in Render, which has to stay pure —
+	// f(model, theme, size), no I/O and no clock reads.
+	now time.Time
+	// loadStartedAt is when the current loading spell began, so the counter
+	// measures the wait the user is actually sitting through rather than
+	// restarting on each cache-sync retry.
+	loadStartedAt time.Time
 }
 
 // loadedMsg carries one load()'s result.
@@ -80,6 +90,7 @@ func New(cfg Config) Model {
 		state = tui.TaskStateError
 		feedback = "no cluster connection"
 	}
+	started := time.Now()
 	return Model{
 		width:     tui.DefaultWidth,
 		height:    tui.DefaultHeight,
@@ -93,6 +104,9 @@ func New(cfg Config) Model {
 		state:     state,
 		feedback:  feedback,
 		spinner:   components.NewSpinner(),
+
+		now:           started,
+		loadStartedAt: started,
 	}
 }
 

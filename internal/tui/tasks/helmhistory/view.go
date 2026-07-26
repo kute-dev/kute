@@ -51,6 +51,20 @@ func (m Model) Header() tui.HeaderState {
 		{Text: "History", Style: text},
 	}
 
+	if m.state == tui.TaskStateLoading {
+		// 15a's loading-header treatment applied to a detail screen: a
+		// counting timer instead of the usual conn/forward badges (see
+		// nodedetail.Model.Header's equivalent branch).
+		elapsed := max(m.now.Sub(m.loadStartedAt), 0)
+		return tui.HeaderState{
+			Crumbs: crumbs,
+			Conn: tui.ConnBadge{
+				Text:  fmt.Sprintf("%s loading %s history · %.1fs", m.spinner.View(), m.name, elapsed.Seconds()),
+				Style: lipgloss.NewStyle().Foreground(theme.Warn),
+			},
+		}
+	}
+
 	var forwardChip tui.ConnBadge
 	if m.session != nil {
 		forwardChip = tui.BuildForwardChip(theme, m.session.ForwardSummary())
@@ -63,7 +77,27 @@ func (m Model) Header() tui.HeaderState {
 	}
 }
 
+// stripLineCount is how many Strips lines the current state renders — kept
+// in sync with Strips itself so tableDataRows budgets the rail viewport
+// correctly (mirrors nodedetail's own stripLineCount/Strips split).
+//
+// Loading and ready deliberately render the same number of lines: the strip
+// and its divider rule come out of tui.FrameBodyHeight, so a strip that
+// appeared only once the data landed would push the rail down two rows at
+// exactly the moment it filled in.
+func (m Model) stripLineCount() int {
+	switch m.state {
+	case tui.TaskStateReady, tui.TaskStateLoading:
+		return 1
+	default:
+		return 0
+	}
+}
+
 func (m Model) Strips(width int) []string {
+	if m.state == tui.TaskStateLoading {
+		return []string{m.loadingStripLine(m.Theme(), width)}
+	}
 	if m.state != tui.TaskStateReady {
 		return nil
 	}
@@ -83,6 +117,21 @@ func insetStripLine(line string, width int) string {
 	return components.Pad(strings.Repeat(" ", tui.FrameInset)+line, width)
 }
 
+// stripInnerWidth/padBetween give the loading strip the same inset and
+// left/right split every other screen's strip uses, duplicated per the
+// repo's package-local-seam convention (nodedetail's own copies).
+func stripInnerWidth(width int) int {
+	return max(width-2*tui.FrameInset, 0)
+}
+
+func padBetween(left, right string, width int) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
 func (m Model) Body(width, height int) string {
 	if m.actions.Active() && m.actions.Tier() == actions.TierModal {
 		// TierInline (non-prod: "Rollback inherits 8b friction" — inline
@@ -97,8 +146,7 @@ func (m Model) Body(width, height int) string {
 	case tui.TaskStateReady:
 		return m.railBody(m.Theme(), width, height)
 	case tui.TaskStateLoading:
-		style := lipgloss.NewStyle().Foreground(m.Theme().Accent)
-		return components.LoadingBody(m.spinner, style, m.feedback, width, height)
+		return m.loadingBody(m.Theme(), width, height)
 	default:
 		return components.CenterLines([]string{m.feedback}, width, height)
 	}
@@ -127,7 +175,7 @@ func (m Model) confirmBody(width, height int) string {
 // nodedetail/routetable's own tableDataRows (Table.visibleRowCount(),
 // table.go: Height-1, no ShowHeaderRule here).
 func (m Model) tableDataRows() int {
-	height := tui.FrameBodyHeight(m.height, len(m.Strips(m.width)))
+	height := tui.FrameBodyHeight(m.height, m.stripLineCount())
 	rows := max(height-2, 1) - 1
 	return max(rows, 1)
 }

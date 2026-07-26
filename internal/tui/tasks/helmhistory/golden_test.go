@@ -60,11 +60,31 @@ func goldenHelmHistoryModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// goldenLoadingHistoryModel is 18a's shell before the revisions land: New +
+// SetSize, never Init() — no load reply and no spinner tick, so the header's
+// counting timer renders a deterministic 0.0s off spinner frame 0 (mirrors
+// browse's own goldenLoadingModel). now is pinned to loadStartedAt so a slow
+// test machine can't tick it over to 0.1s.
+func goldenLoadingHistoryModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	sess := newSession()
+	sess.Location.Namespace = "production"
+	m := New(Config{
+		Session: sess, Lister: fakeLister{}, Mutator: &fakeMutator{},
+		Namespace: "production", Name: "postgresql",
+	})
+	m.SetSize(width, height)
+	m.now = m.loadStartedAt
+	return m
+}
+
 func goldenHelmHistoryFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden": goldentest.Plain(goldenHelmHistoryModel(t, 120, 36).Render()),
-		"80x24.golden":  goldentest.Plain(goldenHelmHistoryModel(t, 80, 24).Render()),
+		"120x36.golden":         goldentest.Plain(goldenHelmHistoryModel(t, 120, 36).Render()),
+		"80x24.golden":          goldentest.Plain(goldenHelmHistoryModel(t, 80, 24).Render()),
+		"loading-120x36.golden": goldentest.Plain(goldenLoadingHistoryModel(t, 120, 36).Render()),
+		"loading-80x24.golden":  goldentest.Plain(goldenLoadingHistoryModel(t, 80, 24).Render()),
 	}
 }
 
@@ -106,6 +126,12 @@ func TestGoldenFixtures(t *testing.T) {
 // glyphs, current-revision highlight, conn badge) the profile-less goldens
 // above can't see. The profile swap is global, so these tests must not run
 // parallel with other renders in this package (none of them do).
+//
+// The loading state is deliberately not among them: its skeleton is
+// TextGhost/TextGhost2 bars under a Warn header timer, and every one of
+// those tokens is already pinned by the ready-state fixtures here and by
+// browse's own 15a truecolor renders. The plain loading goldens above cover
+// its layout, which is the part that was actually wrong.
 func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	dark := goldenHelmHistoryModel(t, 120, 36)

@@ -2,6 +2,7 @@ package helmhistory
 
 import (
 	"fmt"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -26,6 +27,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.load()
 		}
 	case kube.ConnStateMsg:
+		m.now = time.Now()
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
 	case loadedMsg:
@@ -34,6 +36,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state != tui.TaskStateLoading {
 			return m, nil
 		}
+		// The loading header's counting timer reads m.now, so it advances
+		// off the same tick that animates the spinner — never off a clock
+		// read in a render function.
+		m.now = time.Now()
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
@@ -54,6 +60,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if msg.epoch != m.reloadEpoch {
 		return m, nil
 	}
+	wasLoading := m.state == tui.TaskStateLoading
 	if msg.err != nil {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
@@ -72,7 +79,17 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		if !tui.KindsSynced(m.lister, kube.KindHelmRelease) {
 			m.state = tui.TaskStateLoading
 			m.feedback = ""
-			return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+			cmds := []tea.Cmd{tui.ScheduleCacheSyncRetry(m.reloadEpoch)}
+			if !wasLoading {
+				// Re-entering loading from ready (a reload after a rollback,
+				// say). Update's spinner case bails out when the screen isn't
+				// loading, so the tick chain has already stopped — restart it,
+				// and the timer with it. Doing this unconditionally would run
+				// two chains and double the spin rate.
+				m.now, m.loadStartedAt = time.Now(), time.Now()
+				cmds = append(cmds, m.spinner.Tick)
+			}
+			return m, tea.Batch(cmds...)
 		}
 		m.state = tui.TaskStateEmpty
 	}

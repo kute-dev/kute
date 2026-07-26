@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	corev1 "k8s.io/api/core/v1"
@@ -322,5 +324,65 @@ func TestRetryResolvesOnceTheCacheFills(t *testing.T) {
 	}
 	if len(m.revisions) != 1 {
 		t.Fatalf("got %d revisions, want 1", len(m.revisions))
+	}
+}
+
+// TestLoadingStateRendersTheFullShell pins 15a's claim for 18a's history:
+// the shell — breadcrumb, strip, the rail's own column headers, the keybar's
+// live esc — paints in the first frame, and only the rows are replaced by
+// placeholders. It used to be a bare centered spinner over an empty body.
+func TestLoadingStateRendersTheFullShell(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: fakeLister{}, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 36)
+	view := plain(m.Render())
+
+	for _, want := range []string{
+		"production", "postgresql", "History", // shell breadcrumb
+		"loading postgresql history",                                 // header timer
+		"reading postgresql revisions", "decoded from the release's", // strip
+		"REV", "STATUS", "CHART", "UPDATED", // the rail's real column headers
+		"– of –",   // placeholder footer
+		"esc",      // back is live from the first frame
+		"rollback", // ...as the disabled-verb note
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("loading view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+// TestLoadingHeaderTimerAdvances checks the 15a header's "· 0.4s" counter
+// ticks off the spinner's own TickMsg rather than staying frozen at 0s, and
+// that it does so without Render reading the clock (the purity invariant).
+func TestLoadingHeaderTimerAdvances(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: fakeLister{}, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 36)
+	m.loadStartedAt = m.loadStartedAt.Add(-2 * time.Second)
+
+	updated, _ := m.Update(spinner.TickMsg{Time: time.Now()})
+	view := plain(updated.(*Model).Render())
+	if !strings.Contains(view, "history · 2.") {
+		t.Fatalf("expected the header timer to show ~2s elapsed:\n%s", view)
+	}
+}
+
+// TestLoadingAndReadyStripsAreTheSameHeight is what makes the revisions
+// landing a fill-in rather than a relayout: the strip and its divider rule
+// come out of tui.FrameBodyHeight, so a strip that only appeared once the
+// data arrived would shove the rail down two rows at that exact moment.
+func TestLoadingAndReadyStripsAreTheSameHeight(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {revisionSecret("production", "postgresql", "deployed", 1)},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 36)
+	loading := m.stripLineCount()
+
+	m = step(t, m, m.Init()())
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("expected ready state, got %s", m.state)
+	}
+	if ready := m.stripLineCount(); ready != loading {
+		t.Fatalf("strip is %d lines while loading and %d when ready — the rail relayouts on arrival", loading, ready)
 	}
 }
