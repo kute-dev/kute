@@ -21,10 +21,12 @@ const loadingBarGlyph = "▬"
 // what's coming.
 const loadingRevisionRows = 4
 
-// loadingChartFrac are the skeleton rail's per-row CHART-column fill
-// fractions — a fixed, varied set standing in for however many revisions the
-// release actually has, mirroring browse's loadingNameFrac trick.
-var loadingChartFrac = [loadingRevisionRows]float64{0.7, 0.5, 0.62, 0.44}
+// loadingFlexFrac are the skeleton rail's per-row fill fractions for the
+// flex column (STATUS — see railColumns) — a fixed, varied set standing in
+// for however many revisions the release actually has, and for how much the
+// length of a status reason varies between them, mirroring browse's
+// loadingNameFrac trick.
+var loadingFlexFrac = [loadingRevisionRows]float64{0.7, 0.5, 0.62, 0.44}
 
 // loadingStripLine is 18a's loading strip: what's being read, and where it
 // comes from — the applied-to-a-detail-screen version of docs/design
@@ -39,8 +41,8 @@ func (m Model) loadingStripLine(theme tui.Theme, width int) string {
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 
-// loadingRowStyles picks a skeleton row's two bar colors (chart brighter,
-// other cells dimmer, both a tone darker for the back half of the rows) —
+// loadingRowStyles picks a skeleton row's two bar colors (the flex column
+// brighter, other cells dimmer, both a tone darker for the back half) —
 // duplicated from nodedetail.loadingRowStyles per the repo's
 // package-local-seam convention, sized for loadingRevisionRows.
 func loadingRowStyles(theme tui.Theme, row int) (flex, cell lipgloss.Style) {
@@ -51,13 +53,13 @@ func loadingRowStyles(theme tui.Theme, row int) (flex, cell lipgloss.Style) {
 }
 
 // loadingCellBar picks one skeleton rail-row cell's placeholder bar length —
-// duplicated from nodedetail.loadingCellBar, reading loadingChartFrac.
+// duplicated from nodedetail.loadingCellBar, reading loadingFlexFrac.
 func loadingCellBar(col components.Column, row int) string {
 	if col.Title == "" {
 		return "●"
 	}
 	if col.Flex {
-		n := max(int(30*loadingChartFrac[row%loadingRevisionRows]), 3)
+		n := max(int(30*loadingFlexFrac[row%loadingRevisionRows]), 3)
 		return strings.Repeat(loadingBarGlyph, n)
 	}
 	n := max(col.Min*3/5, 1)

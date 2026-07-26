@@ -180,11 +180,22 @@ func (m Model) tableDataRows() int {
 	return max(rows, 1)
 }
 
+// railColumns puts STATUS after CHART and lets it flex, which is the
+// opposite of the list's shared skeleton and deliberate: §18a says a failed
+// revision "carries the reason verbatim", and the reason is the whole point
+// of opening history on a broken release. A fixed STATUS clipped it to
+// "failed · Upgrad…" while CHART soaked up the leftover width to render a
+// chart name the user already knows. Chart names are the predictable half
+// of the row, so they take the truncation now.
+//
+// The order follows: the flex column sits next to the right-aligned UPDATED
+// so the elastic gap is between them, and CHART/REV stay left as a stable
+// pair of fixed columns.
 var railColumns = []components.Column{
 	{Title: "", Min: 2},
 	{Title: "REV", Min: 13},
-	{Title: "STATUS", Min: 16},
-	{Title: "CHART", Min: 22, Flex: true},
+	{Title: "CHART", Min: 22},
+	{Title: "STATUS", Min: 16, Flex: true},
 	{Title: "UPDATED", Min: 10, Align: components.AlignRight},
 }
 
@@ -225,8 +236,8 @@ func (m Model) railBody(theme tui.Theme, width, height int) string {
 		rows = append(rows, components.Row{Cells: []components.Cell{
 			{Text: glyph, Style: glyphStyle},
 			{Text: revText, Style: revStyle},
-			{Text: rev.StatusCell(), Style: glyphStyle},
 			{Text: rev.Chart + " " + rev.ChartVersion, Style: dim},
+			{Text: rev.StatusCell(), Style: glyphStyle},
 			{Text: updated, Style: dim},
 		}})
 	}

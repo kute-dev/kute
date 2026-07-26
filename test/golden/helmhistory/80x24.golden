@@ -3,11 +3,11 @@
   4 revisions · newest first · current highlighted                              
 ────────────────────────────────────────────────────────────────────────────────
                                                                                 
-      REV            STATUS            CHART                           UPDATED  
-▎ ●   4 (current)    deployed          postgresql 12.1.9                3m ago  
-  ✕   3              failed · hook t…  postgresql 12.1.8               22m ago  
-  ○   2              superseded        postgresql 12.1.8                3h ago  
-  ○   1              superseded        postgresql 12.1.6                1d ago  
+      REV            CHART                   STATUS                    UPDATED  
+▎ ●   4 (current)    postgresql 12.1.9       deployed                   3m ago  
+  ✕   3              postgresql 12.1.8       failed · hook timeout     22m ago  
+  ○   2              postgresql 12.1.8       superseded                 3h ago  
+  ○   1              postgresql 12.1.6       superseded                 1d ago  
   1–4 of 4                                                              ██████  
                                                                                 
                                                                                 

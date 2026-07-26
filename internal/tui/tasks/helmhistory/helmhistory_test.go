@@ -386,3 +386,25 @@ func TestLoadingAndReadyStripsAreTheSameHeight(t *testing.T) {
 		t.Fatalf("strip is %d lines while loading and %d when ready — the rail relayouts on arrival", loading, ready)
 	}
 }
+
+// TestLongStatusReasonRendersVerbatim is why STATUS flexes and CHART
+// doesn't (railColumns): §18a says a failed revision "carries the reason
+// verbatim", and the reason is the whole point of opening history on a
+// broken release. Behind a fixed 16-cell STATUS this clipped to
+// "failed · Upgrad…", which says nothing.
+func TestLongStatusReasonRendersVerbatim(t *testing.T) {
+	const reason = "Upgrade \"postgresql\" failed: timed out"
+	secret := kube.EncodeHelmReleaseSecret(kube.HelmRelease{
+		Namespace: "production", Name: "postgresql", Chart: "postgresql", ChartVersion: "12.1.9",
+		Revision: 3, Status: "failed", StatusReason: reason,
+	})
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindSecret: {secret}}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "production", Name: "postgresql"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "failed · "+reason) {
+		t.Fatalf("expected the failure reason verbatim, got a clipped STATUS cell:\n%s", view)
+	}
+}
