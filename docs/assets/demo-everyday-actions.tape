@@ -23,14 +23,17 @@ Output "docs/assets/demo-everyday-actions.gif"
 Require kute
 
 Set Shell "bash"
-Set FontSize 14
-Set Width 1200
-Set Height 720
+Set FontSize 16
+Set FontFamily "JetBrainsMono Nerd Font Mono"
+Set Width 1220
+Set Height 770
 Set Padding 10
-Set WindowBar Colorful
-Set BorderRadius 8
 Set Framerate 24
 Set TypingSpeed 140ms
+Set Theme "Catppuccin Macchiato"
+Set LineHeight 1.55
+
+Env COLORTERM truecolor
 
 Hide
 Type "kute --demo --keycast"
