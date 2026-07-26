@@ -5,6 +5,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // execResultMsg carries kube.ExecSpec's exit outcome. nil means a clean
@@ -56,6 +57,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.moveSelection(1)
 	case "enter":
+		// Exec is Mutating, so it's refused while offline (docs/design
+		// README.md §52). Unlike the list screens this one can't lean on a
+		// keybar note the user is already looking at — the connection may
+		// well have dropped after the picker was pushed — so it says so in
+		// the panel's own feedback line.
+		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
+			m.feedback = "Exec is disabled while offline."
+			return m, nil
+		}
 		return m, m.execSelected()
 	}
 	return m, nil

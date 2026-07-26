@@ -60,35 +60,46 @@ func (v Verb) AppliesTo(kind kube.ResourceKind) bool {
 
 // HiddenWhileOffline reports whether v's keybar hint should be omitted
 // given the connection state — true only for a Mutating verb while offline.
-// Non-mutating verbs (navigation, Exec/Edit/NodeShell's own tty-handoff
-// writes, Forward's local-only session) are never hidden by this, since
-// docs/design README.md §301's "mutating actions disabled" applies strictly
-// to kube.Mutator-routed writes.
+// Mutating covers more than kube.Mutator-routed writes: Exec and NodeShell
+// hand a tty to kubectl instead, and are gated at their own dispatch sites
+// rather than in actions.Controller.Begin, but docs/design README.md §52's
+// "mutating actions disabled while OFFLINE" applies to them the same way.
+// Forward stays exempt — a port-forward is a local session, not a write.
 func (v Verb) HiddenWhileOffline(offline bool) bool {
 	return v.Mutating && offline
 }
 
-// Non-mutating navigation/view verbs.
+// Navigation/view verbs, plus the two tty-handoff verbs (Exec/NodeShell)
+// that are Mutating without being tiered.
 var (
 	Goto   = Verb{ID: "goto", Key: "g", Label: "goto", Global: true}
 	Filter = Verb{ID: "filter", Key: "/", Label: "filter", Global: true}
 	Open   = Verb{ID: "open", Key: "↵", Label: "open"}
 	Logs   = Verb{ID: "logs", Key: "l", Label: "logs", Kinds: []kube.ResourceKind{kube.KindPod}}
 	YAML   = Verb{ID: "yaml", Key: "y", Label: "yaml"}
-	Exec   = Verb{ID: "exec", Key: "x", Label: "exec", Kinds: []kube.ResourceKind{kube.KindPod}}
+	// Exec is 'x' on a pod — an interactive shell inside a container, handed
+	// off to a kubectl subprocess (kube.ExecSpec over tea.ExecProcess) rather
+	// than routed through kube.Mutator, hence TierNone: there's no confirm
+	// step to run. Mutating even so, because whatever the user types at that
+	// prompt is a write, and a shell opened against a dead API connection
+	// only fails at the handoff with a raw kubectl error (docs/design
+	// README.md §52: OFFLINE disables mutating actions).
+	Exec = Verb{ID: "exec", Key: "x", Label: "exec", Mutating: true, Kinds: []kube.ResourceKind{kube.KindPod}}
 	// NodeShell is 's' on a node — a root shell on the node itself via a
 	// kubectl debug subprocess (kube.NodeShellSpec over tea.ExecProcess),
-	// the same tty-handoff path as Exec. Like Exec it never goes through
-	// kube.Mutator/actions.Controller, so it carries no Tier/Mutating flag
-	// even though kubectl debug does leave a node-debugger pod behind.
-	NodeShell = Verb{ID: "node-shell", Key: "s", Label: "node shell", Kinds: []kube.ResourceKind{kube.KindNode}}
+	// the same tty-handoff path, TierNone for the same reason, and Mutating
+	// for a stronger version of Exec's: kubectl debug creates a privileged
+	// node-debugger pod, so this writes to the cluster before the user has
+	// typed anything.
+	NodeShell = Verb{ID: "node-shell", Key: "s", Label: "node shell", Mutating: true, Kinds: []kube.ResourceKind{kube.KindNode}}
 	// Edit is 'E' on any row, any kind — kubectl edit (kube.EditSpec) over
-	// tea.ExecProcess, the same tty-handoff path as Exec/NodeShell. It never
-	// goes through kube.Mutator/actions.Controller, so — like Exec/
-	// NodeShell — it carries no Tier/Mutating flag even though it's a real
-	// mutation; the PROD-only y/N gate each call site applies is driven by
-	// TierForEdit below, not this field.
-	Edit          = Verb{ID: "edit", Key: "E", Label: "edit", Global: true}
+	// tea.ExecProcess, the same tty-handoff path as Exec/NodeShell, and
+	// Mutating for the plainest reason of the three: it applies whatever the
+	// user saves. Tier stays None because kubectl owns the session once kute
+	// suspends; the PROD-only y/N gate each call site applies is driven by
+	// TierForEdit below, not this field. §4a names it alongside delete and
+	// exec as disabled while offline.
+	Edit          = Verb{ID: "edit", Key: "E", Label: "edit", Mutating: true, Global: true}
 	Events        = Verb{ID: "events", Key: "e", Label: "events", Global: true}
 	Namespace     = Verb{ID: "namespace", Key: "n", Label: "namespace", Global: true}
 	Context       = Verb{ID: "context", Key: "c", Label: "context", Global: true}

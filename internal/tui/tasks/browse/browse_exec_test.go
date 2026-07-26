@@ -103,3 +103,43 @@ func TestExecResultFeedbackSurfacesInKeybar(t *testing.T) {
 type errExitStatus struct{}
 
 func (errExitStatus) Error() string { return "exit status 127" }
+
+// TestExecRefusedWhileOffline pins the 4a invariant for 'x': Exec is a
+// Mutating verb, so a broken connection must refuse it outright rather than
+// handing the tty to a kubectl that can only fail (docs/design README.md
+// §52: "mutating actions disabled" while OFFLINE).
+func TestExecRefusedWhileOffline(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	openExecCalled := false
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		OpenExec: func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) {
+			openExecCalled = true
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "i/o timeout"})
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
+	if _, ok := updated.(*Model); !ok {
+		t.Fatalf("expected browse to stay the active task, got %T", updated)
+	}
+	if cmd != nil {
+		t.Error("'x' handed the tty to kubectl while offline")
+	}
+	if openExecCalled {
+		t.Error("'x' pushed the exec picker while offline")
+	}
+
+	// Back online, the same key works again — the gate is the connection
+	// state, not a latch.
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	if _, cmd = m.Update(tea.KeyPressMsg{Text: "x"}); cmd == nil {
+		t.Error("'x' stayed refused after reconnecting")
+	}
+}
+

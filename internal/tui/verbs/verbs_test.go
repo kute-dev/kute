@@ -102,8 +102,20 @@ func TestTiers(t *testing.T) {
 func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 	t.Parallel()
 
+	// Mutating verbs are expected to be tiered (an inline y/N or a
+	// type-the-name modal). These are the deliberate exceptions: reversible-
+	// and-immediate verbs whose own editor panel is the confirmation step,
+	// plus the three tty-handoff verbs, which have no Tier because kubectl
+	// owns the session once kute suspends (edit's PROD y/N comes from
+	// TierForEdit instead).
+	untiered := map[string]bool{
+		"cordon": true, "scale": true, "set-image": true, "set-resources": true,
+		"meta": true, "add-secret-key": true, "add-configmap-key": true,
+		"restart-configmap-consumers": true,
+		"exec":                        true, "node-shell": true, "edit": true,
+	}
 	for _, v := range All {
-		if v.Mutating && v.Tier == actions.TierNone && v.ID != "cordon" && v.ID != "scale" && v.ID != "set-image" && v.ID != "set-resources" && v.ID != "meta" && v.ID != "add-secret-key" && v.ID != "add-configmap-key" && v.ID != "restart-configmap-consumers" {
+		if v.Mutating && v.Tier == actions.TierNone && !untiered[v.ID] {
 			t.Errorf("%s is mutating with TierNone but isn't an allow-listed reversible verb", v.ID)
 		}
 	}
@@ -176,5 +188,31 @@ func TestTierForLeavesNonInlineVerbsAlone(t *testing.T) {
 				t.Errorf("TierFor(%s, isProd=%v) = %v, want %v (unaffected by prod)", tt.verb.ID, isProd, got, tt.want)
 			}
 		}
+	}
+}
+
+// TestTtyHandoffVerbsAreGatedOffline pins docs/design README.md §4a's
+// "delete/exec/edit verbs are disabled while offline" for the three verbs
+// that reach the cluster through a kubectl subprocess rather than
+// kube.Mutator: exec hands the user a prompt they can write from, a node
+// shell creates a privileged debugger pod before they type anything, and edit
+// applies whatever they save. Forward stays exempt — a port-forward is a
+// local session, not a cluster write.
+func TestTtyHandoffVerbsAreGatedOffline(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []Verb{Exec, NodeShell, Edit} {
+		if !v.Mutating {
+			t.Errorf("%s should be Mutating so the OFFLINE gate reaches it", v.ID)
+		}
+		if !v.HiddenWhileOffline(true) {
+			t.Errorf("%s should be hidden/refused while offline", v.ID)
+		}
+		if v.HiddenWhileOffline(false) {
+			t.Errorf("%s should be available while connected", v.ID)
+		}
+	}
+	if Forward.HiddenWhileOffline(true) {
+		t.Error("Forward should stay available while offline — a local session, not a write")
 	}
 }

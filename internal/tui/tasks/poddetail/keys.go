@@ -65,7 +65,7 @@ func (m Model) Keybar() tui.Keybar {
 	if m.openLogs != nil {
 		verbGroup = append(verbGroup, verbs.Logs.Hint())
 	}
-	if m.found && len(m.pod.ContainerInfos) > 0 {
+	if m.found && len(m.pod.ContainerInfos) > 0 && !verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
 		verbGroup = append(verbGroup, verbs.Exec.Hint())
 	}
 	if m.found && m.openForward != nil {

@@ -3,8 +3,8 @@
 How kute went from pulling ~22 MB before drawing anything to pulling ~1.3 MB, and what
 that cost in design changes.
 
-Branch: `perf/lazy-informers` (19 commits, not merged; run against a real cluster,
-see [Observed on the real cluster](#observed-on-the-real-cluster)). Full
+Shipped on `main` (19 commits, originally the `perf/lazy-informers` branch; run against a
+real cluster, see [Observed on the real cluster](#observed-on-the-real-cluster)). Full
 suite green, `-race` clean, **zero golden fixtures changed** — this work alters *when*
 data loads, never how it renders.
 

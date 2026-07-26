@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // TestNodeShellKeyRunsDirectly confirms 's' on a Nodes row hands the tty to
@@ -71,3 +72,45 @@ func TestNodeShellExitFeedbackSurfacesInKeybar(t *testing.T) {
 type errExit struct{}
 
 func (errExit) Error() string { return "exit status 1" }
+
+// TestNodeShellRefusedWhileOffline pins the 4a gate for 's': NodeShell is a
+// Mutating verb (kubectl debug creates a privileged node-debugger pod, so it
+// writes to the cluster before the user types anything), and a broken
+// connection must refuse it outright — docs/design README.md §52's "mutating
+// actions disabled" while OFFLINE.
+func TestNodeShellRefusedWhileOffline(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {nodeObj("node-a", true, false)},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindNode
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "i/o timeout"})
+
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: "s"}); cmd != nil {
+		t.Error("'s' spawned a node-debugger pod while offline")
+	}
+	if hints := strings.Join(keybarKeys(m.Keybar()), " "); strings.Contains(hints, "s") && strings.Contains(hints, "node shell") {
+		t.Errorf("node-shell hint still advertised while offline: %q", hints)
+	}
+
+	// Back online the same key works again — the gate is the connection
+	// state, not a latch.
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: "s"}); cmd == nil {
+		t.Error("'s' stayed refused after reconnecting")
+	}
+}
+
+// keybarKeys flattens a Keybar's hint groups to "key label" pairs.
+func keybarKeys(kb tui.Keybar) []string {
+	var out []string
+	for _, g := range kb.Groups {
+		for _, h := range g {
+			out = append(out, h.Key+" "+h.Label)
+		}
+	}
+	return out
+}

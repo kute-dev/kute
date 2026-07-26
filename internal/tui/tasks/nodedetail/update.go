@@ -179,6 +179,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "x":
+		// Exec is Mutating: refused while offline (docs/design README.md
+		// §52), same as this screen's cordon/drain.
+		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
+			return m, nil
+		}
 		if task, cmd, ok := m.openSelectedExec(); ok {
 			if task != nil {
 				return task, cmd
@@ -190,12 +195,23 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "s":
+		// A node shell creates a privileged node-debugger pod, so it's a
+		// write before the user types anything — gated like cordon/drain.
+		if verbs.NodeShell.HiddenWhileOffline(m.conn.Offline()) {
+			return m, nil
+		}
 		return m, m.nodeShellCmd()
 	case "C":
 		return m, m.beginCordon()
 	case "D":
 		return m, m.beginDrain()
 	case "E":
+		// kubectl edit applies whatever the user saves, so it's gated with
+		// the other mutating verbs while offline (docs/design README.md
+		// §4a: "delete/exec/edit verbs are disabled while offline").
+		if verbs.Edit.HiddenWhileOffline(m.conn.Offline()) {
+			return m, nil
+		}
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}

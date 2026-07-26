@@ -162,6 +162,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case "x":
+		// Exec is Mutating: refused while offline (docs/design README.md
+		// §52). keys.go has already dropped the hint and switched the keybar
+		// to OFFLINE · "mutating actions disabled".
+		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
+			return m, nil
+		}
 		if task, cmd, ok := m.openSelectedExec(); ok {
 			if task != nil {
 				return task, cmd
@@ -173,6 +179,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "E":
+		// kubectl edit applies whatever the user saves, so it's gated with
+		// the other mutating verbs while offline (docs/design README.md
+		// §4a: "delete/exec/edit verbs are disabled while offline").
+		if verbs.Edit.HiddenWhileOffline(m.conn.Offline()) {
+			return m, nil
+		}
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}

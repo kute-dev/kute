@@ -360,7 +360,9 @@ func TestDKeyConfirmsThenDrains(t *testing.T) {
 
 // TestKeybarGoesOfflineAndHidesCordonDrain pins the cross-cutting 4a fix
 // (docs/design README.md §52, §301): nodedetail must show the OFFLINE pill
-// and drop cordon/drain from the keybar while disconnected, not just browse.
+// and drop its mutating verbs while disconnected, not just browse — cordon
+// and drain, plus the two tty-handoff verbs (exec, node shell), whose
+// kubectl subprocesses write to the cluster just as much.
 func TestKeybarGoesOfflineAndHidesCordonDrain(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {testNode("node-a")},
@@ -377,10 +379,19 @@ func TestKeybarGoesOfflineAndHidesCordonDrain(t *testing.T) {
 	}
 	for _, g := range kb.Groups {
 		for _, h := range g {
-			if h.Key == verbs.Cordon.Key || h.Key == verbs.Drain.Key {
-				t.Fatalf("expected cordon/drain hints hidden while offline, got groups %+v", kb.Groups)
+			switch h.Key {
+			case verbs.Cordon.Key, verbs.Drain.Key, verbs.Exec.Key, verbs.NodeShell.Key:
+				t.Fatalf("expected mutating hints hidden while offline, got groups %+v", kb.Groups)
 			}
 		}
+	}
+	// The keys themselves are refused, not just un-advertised — 's' in
+	// particular would otherwise create a privileged node-debugger pod.
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.NodeShell.Key}); cmd != nil {
+		t.Error("'s' spawned a node-debugger pod while offline")
+	}
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.Exec.Key}); cmd != nil {
+		t.Error("'x' handed the tty to kubectl while offline")
 	}
 
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})

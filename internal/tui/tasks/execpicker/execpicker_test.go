@@ -327,3 +327,31 @@ func TestPreferredShellPassedToExec(t *testing.T) {
 		t.Errorf("preferredShell after a failed probe = %q, want empty", got)
 	}
 }
+
+// TestEnterRefusedWhileOffline pins the 4a gate on the picker itself: Exec is
+// Mutating, so a connection that dropped after the picker was pushed must
+// refuse enter — and say so in the panel, since this screen has no keybar
+// note the user is already reading (docs/design README.md §52).
+func TestEnterRefusedWhileOffline(t *testing.T) {
+	t.Parallel()
+
+	m := newModel()
+	m.SetSize(120, 36)
+	updated, _ := m.Update(kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "i/o timeout"})
+	m = *updated.(*Model)
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = *updated.(*Model)
+	if cmd != nil {
+		t.Error("enter handed the tty to kubectl while offline")
+	}
+	if !strings.Contains(plain(m.Render()), "disabled while offline") {
+		t.Errorf("expected the refusal in the panel, got:\n%s", plain(m.Render()))
+	}
+
+	updated, _ = m.Update(kube.ConnStateMsg{Phase: kube.ConnConnected})
+	m = *updated.(*Model)
+	if _, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
+		t.Error("enter stayed refused after reconnecting")
+	}
+}

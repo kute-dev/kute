@@ -220,8 +220,8 @@ func TestConnStateDrivesHeaderBadge(t *testing.T) {
 
 // TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
 // (docs/design README.md §52, §301): poddetail must show the OFFLINE pill
-// and drop its own mutating verb (delete) from the keybar while
-// disconnected, not just browse.
+// and drop its own mutating verbs — delete, and exec, whose tty handoff is
+// mutating too — from the keybar while disconnected, not just browse.
 func TestKeybarGoesOfflineAndHidesDelete(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {runningPod("api-0", "default", "node-a")},
@@ -243,10 +243,14 @@ func TestKeybarGoesOfflineAndHidesDelete(t *testing.T) {
 	}
 	for _, g := range kb.Groups {
 		for _, h := range g {
-			if h.Key == verbs.Delete.Key {
-				t.Fatalf("expected delete hint hidden while offline, got groups %+v", kb.Groups)
+			if h.Key == verbs.Delete.Key || h.Key == verbs.Exec.Key {
+				t.Fatalf("expected delete/exec hints hidden while offline, got groups %+v", kb.Groups)
 			}
 		}
+	}
+	// The key itself is refused, not just un-advertised.
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.Exec.Key}); cmd != nil {
+		t.Error("'x' handed the tty to kubectl while offline")
 	}
 
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})

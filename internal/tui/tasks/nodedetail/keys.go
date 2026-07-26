@@ -42,6 +42,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
+	offline := m.conn.Offline()
 	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
 	if len(m.pods) > 0 {
 		podGroup := []tui.KeyHint{}
@@ -51,14 +52,17 @@ func (m Model) Keybar() tui.Keybar {
 		if m.openLogs != nil {
 			podGroup = append(podGroup, verbs.Logs.Hint())
 		}
-		podGroup = append(podGroup, verbs.Exec.Hint())
+		if !verbs.Exec.HiddenWhileOffline(offline) {
+			podGroup = append(podGroup, verbs.Exec.Hint())
+		}
 		if m.openForward != nil {
 			podGroup = append(podGroup, verbs.Forward.Hint())
 		}
 		groups = append(groups, podGroup)
 	}
-	groups = append(groups, []tui.KeyHint{verbs.NodeShell.Hint()})
-	offline := m.conn.Offline()
+	if !verbs.NodeShell.HiddenWhileOffline(offline) {
+		groups = append(groups, []tui.KeyHint{verbs.NodeShell.Hint()})
+	}
 	if m.mutator != nil && !verbs.Cordon.HiddenWhileOffline(offline) && !verbs.Drain.HiddenWhileOffline(offline) {
 		groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})
 	}

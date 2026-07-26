@@ -133,9 +133,10 @@ func padBetween(left, right string, width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// unreachableBody is 4c: title + retry countdown, the raw error, a SWITCH
-// CONTEXT preview (names only — live reachability is one 'c' away via the
-// context palette), and — while editing — the inline kubeconfig-path input.
+// unreachableBody is 4c: title + retry countdown, the raw error, the
+// pre-probed SWITCH CONTEXT list (switchContextLines — reachability and
+// latency per context, from m.probes), and — while editing — the inline
+// kubeconfig-path input.
 func (m Model) unreachableBody(width, height int) string {
 	theme := m.Theme()
 	bw := blockWidth(width)

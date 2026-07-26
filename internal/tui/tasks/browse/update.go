@@ -455,6 +455,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.kind == kube.KindForward {
 			return m, m.stopSelectedForward()
 		}
+		// Exec is Mutating: refused while offline, like every other mutating
+		// verb (docs/design README.md §52). The keybar has already dropped
+		// the hint and says "mutating actions disabled", so this is a
+		// deliberate no-op rather than a silent one.
+		if verbs.Exec.HiddenWhileOffline(m.offline()) {
+			return m, nil
+		}
 		if task, cmd, ok := m.openSelectedExec(); ok {
 			if task != nil {
 				return task, cmd
@@ -466,10 +473,22 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.beginStopAllForwards()
 		}
 	case "s":
+		// Same gate as 'x' above, and a stronger reason for it: kubectl debug
+		// creates a privileged node-debugger pod, so a node shell writes to
+		// the cluster before the user types anything.
+		if verbs.NodeShell.HiddenWhileOffline(m.offline()) {
+			return m, nil
+		}
 		if cmd, ok := m.selectedNodeShell(); ok {
 			return m, cmd
 		}
 	case "E":
+		// kubectl edit applies whatever the user saves, so it's gated with
+		// the other mutating verbs while offline (docs/design README.md
+		// §4a: "delete/exec/edit verbs are disabled while offline").
+		if verbs.Edit.HiddenWhileOffline(m.offline()) {
+			return m, nil
+		}
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
