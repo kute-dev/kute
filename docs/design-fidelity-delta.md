@@ -5,8 +5,15 @@ against the tree at `61cdafd`, 103 commits after the audit was written. Each fin
 re-checked at its cited code location (or wherever that code moved to), not re-read from
 the report.
 
-**52 of 59 findings are closed. 7 remain open — one of them a real functional gap, five
-decided deviations the spec text never absorbed, one pure doc drift.**
+**53 of 59 findings are closed. 6 remain open — all of them spec-vs-code rulings, not
+defects: five decided deviations the spec text never absorbed, one pure doc drift.**
+
+Two fixes landed the same day this delta was written (`3e9e5cd`, `8975c5f`) and have moved
+to [Closed since the audit](#closed-since-the-audit). Only one of them closed a *finding*
+(§10a's hardcoded shell list); the other hardened a position this delta had recorded as
+already-decided, so the count moves by one, not two. What's left needs a decision, then an
+edit on whichever side loses; the open items are tracked as work in
+[`beta-plan.md`](beta-plan.md) §6.
 
 A note on the count: the audit's headline says "69 findings total — 9 invariant · 13
 missing · 47 fidelity gaps", but the report enumerates **59** bullets (8 invariant · 13
@@ -17,34 +24,7 @@ tracks.
 
 ## Still open
 
-### 1. Exec container picker shows a hardcoded shell list — the one functional gap
-
-Every row still renders the literal string `"sh, bash"` regardless of the container's
-image. §10a asks for real shell detection.
-
-`internal/tui/tasks/execpicker/view.go:138`
-
-This is the only finding in the audit that is still broken in the plain sense: the screen
-shows information that isn't true about the container in front of you.
-
-### 2. Exec and node-shell are not gated while offline — decided, but worth re-confirming
-
-The audit's headline invariant violation ("mutating verbs are not actually disabled while
-offline") is **closed**: the gate now lives in `actions.Controller.Begin`
-(`internal/tui/actions/controller.go:113`), which every write verb routes through, and
-`verbs.Verb.Mutating` has a real reader (`verbs.go:68`).
-
-What remains is narrower and now deliberate: `x` (exec) and `s` (node shell) carry no
-`Mutating` flag by design — the code comments at `verbs/verbs.go:82-88` reason that
-neither goes through `kube.Mutator`, so neither is tiered or gated. They stay live while
-offline and fail at the `kubectl` handoff instead.
-
-That's defensible, but the README promises kute "disables mutating actions until the
-connection is back", and shelling into a container over a dead API connection is a write
-in the user's mental model. Either gate them or narrow the README sentence — right now
-the code and the pitch disagree.
-
-### 3. 6b's collapsed healthy-group line renders gray, not green
+### 1. 6b's collapsed healthy-group line renders gray, not green
 
 `groupLineStyle` uses `TextFaint` for `rowKindCollapsedSummary`; §6b specifies green. The
 deviation is code-commented as intentional ("a fully-healthy namespace has nothing to
@@ -53,7 +33,7 @@ the spec still says green. Needs a design decision, then whichever side loses ge
 
 spec `docs/design/README.md:99` · code `internal/tui/tasks/browse/view.go:991-1007`
 
-### 4. Secret-reveal indicator is a filled pill, not a bordered chip
+### 2. Secret-reveal indicator is a filled pill, not a bordered chip
 
 §21a says bordered; `revealedTag` renders a filled pill, documented as a terminal-idiom
 substitution. The *truncation* half of this finding — the tag silently disappearing off
@@ -61,7 +41,7 @@ long values — is fixed (`yamlview/view.go:228-247` now reserves the tag's widt
 
 spec `docs/design/README.md:273` · code `internal/tui/tasks/yamlview/view.go:257-263`
 
-### 5. `/` filter resolves to three different mechanisms
+### 3. `/` filter resolves to three different mechanisms
 
 Unchanged, and each divergence is still individually justified in a comment:
 
@@ -77,28 +57,28 @@ The spec frames filtering as one shared mechanism. Either the spec acknowledges 
 spec `docs/design/README.md:298` · code `browse/filter.go:19`, `nodedetail/filter.go:5`,
 `events/view.go:170`, `podlogs/model.go:243`, `timeline/update.go:183`
 
-### 6. Podlogs `/` doesn't use the table's filter grammar
+### 4. Podlogs `/` doesn't use the table's filter grammar
 
 The same split as above, called out separately by the audit for §5b. Same resolution
 either way.
 
 code `internal/tui/tasks/podlogs/model.go:243-254`
 
-### 7. One kind-name branch survives in the CRD registry
+### 5. One kind-name branch survives in the CRD registry
 
 `crd.go:372` still special-cases `dk.Kind == kube.KindHTTPRoute` to attach §23b's
 ATTACHED column — the sole per-kind branch in the CRD path, against the "CRD support is
 data, not code" invariant. Narrow and documented. Accept it explicitly in CLAUDE.md as a
 carve-out, or move the column onto a discovered-kind capability so the branch disappears.
 
-### 8. §2a's keybar text in the spec no longer matches any code
+### 6. §2a's keybar text in the spec no longer matches any code
 
 Pure doc drift, no code defect: the spec's `↵ open · l logs · d describe · e exec` names
 a `describe` verb that has never existed, and swaps `e`/`x` versus the shipped bindings
 (`e` = events, `x` = exec). The 0.3.0 keybar re-curation (`caffc5e`, `b63daec`) changed
 the keybar and the spec line was never updated.
 
-spec `docs/design/README.md:31` · registry `internal/tui/verbs/verbs.go:73-130`
+spec `docs/design/README.md:32` · registry `internal/tui/verbs/verbs.go:73-130`
 
 ---
 
@@ -171,9 +151,9 @@ is `TextFaint` and its "no status semantics · NAME + AGE only" strip copy rende
 `f` (port-forward) is wired in `poddetail:171` and `nodedetail:188`, and the
 "N hidden by filter — esc to clear" notice is in all five filterable screens.
 
-### Closed by demo-fixture work (2)
+### Closed by demo-fixture work (3)
 
-Both "the fake provider must stay feature-complete" invariant violations are gone:
+All three "the fake provider must stay feature-complete" invariant violations are gone:
 `demoUsageRatio` gives every running demo pod real CPU/MEM in the Fill/Warn/Bad ranges
 (`fake/fake.go:748-752`), and `apiPod` gained a `metrics-sidecar` container
 (`fake/fixtures.go:54-62`) so §10a's picker is reachable by driving `--demo`. The fake
@@ -186,15 +166,38 @@ The CPU/MEM bar glyphs: §11a now specifies `▮▮▮▮▯▯` (`docs/design/R
 matching the 0.2.0 mockup's own 25a bars and the shared `components/bar.go`. The audit
 flagged code-vs-spec; the spec moved.
 
+### Closed after this delta was written (1 finding, 2 fixes)
+
+Both landed the same day, in response to this report. The first closes an audit finding;
+the second hardens the exec/node-shell carve-out this delta had recorded as decided — so
+it moves no count, but it does remove the gap between the code and the README's own
+promise.
+
+- **§10a's hardcoded shell list** (`3e9e5cd`). `kube.DetectShells` probes each container
+  with `command -v` through a non-interactive `kubectl exec` — a real probe, not an
+  inference from the image name — fired from the picker's `Init` so rows paint immediately.
+  Four honest states: `checking…`, the detected shells in preference order, `no shell` for
+  a distroless container (a real answer, and the one worth having before pressing enter),
+  and `–` when the probe couldn't run at all. The detected shell is passed into
+  `kube.ExecSpec`, so the row, the will-run line, and the command that actually executes
+  all name the same shell. `fake.Cluster.DetectShells` keeps demo mode
+  feature-complete, and the goldens now pin two different answers.
+- **Exec/node-shell/edit not gated while offline** (`8975c5f`). All three carry
+  `Mutating: true` and are refused at every dispatch site (`browse` `x`/`s`/`E`,
+  `poddetail` `x`/`E`, `nodedetail` `x`/`s`/`E`, and the picker's own enter, which says so
+  in its panel since the connection can drop after the picker was pushed). `Edit` was
+  included because `docs/design/README.md:53` names it in the same breath as delete and
+  exec: "Delete/exec/edit verbs are disabled while offline."
+
 ---
 
 ## Incidental drift found while triaging
 
-Not audit findings, but wrong in the tree right now:
+Both of these were fixed (`a5e6fb8`, `c8dc37c`): `setup/view.go`'s `unreachableBody`
+comment claiming the SWITCH CONTEXT list was "names only" when it probes, and
+`docs/lazy-informers.md`'s header describing the work as an unmerged branch.
 
-- `internal/tui/tasks/setup/view.go:136-138` — `unreachableBody`'s doc comment still says
-  the SWITCH CONTEXT section is "names only — live reachability is one 'c' away via the
-  context palette". It probes. The comment predates the fix and now contradicts
-  `switchContextLines`' own comment 70 lines below.
-- `docs/lazy-informers.md:6` — describes the work as living on an unmerged branch
-  (`perf/lazy-informers`, "19 commits, not merged"). It's on `main`.
+Two others found while fixing the above are still open, tracked in
+[`beta-plan.md`](beta-plan.md) §7: `execpicker`'s will-run line ellipsizing before its
+trailing shell, and `website/index.html:316`'s claim that drain gets a type-the-name modal
+(it confirms with `y/N`).
