@@ -304,7 +304,20 @@ directly, so the decorator stack was never exercised. Both decorators are now co
 asserted against all three seams. **When adding an optional seam, assert the decorators
 against it in the same commit** — the fallback path is what makes the omission silent.
 
-Two tests were wrong on the first attempt and are worth remembering as traps:
+That rule was written and immediately under-applied. `c62324d` asserted the three seams
+*it* had just fixed without auditing the one that already existed: `ListHelmReleaseSecrets`
+predated the assertion block and was never added to it. So the Helm Releases list read
+every Secret in the namespace through the shared informer — the exact 12.3 MB above that
+the filtered release cache exists to avoid — and left that cache cold until the `h`
+keypress started it, mid-session, cluster-wide, with the history screen polling on a
+spinner until it synced. **The seam list is not fixed: audit it, don't append to it.**
+
+The demo path is why it survived so long. `fake.Cluster` answers both routes identically
+from one seeded map and reports every kind synced immediately, so `--demo` — the path the
+goldens exercise — renders the same thing at the same speed down either branch. A fallback
+that is invisible in the fake is the shape to watch for.
+
+Three tests were wrong on the first attempt and are worth remembering as traps:
 
 - The first end-to-end transform test **passed while proving nothing**, because the test
   helper built a factory without the transform. Both factories now come from one
@@ -313,6 +326,11 @@ Two tests were wrong on the first attempt and are worth remembering as traps:
   discovery client fail *wholesale* rather than partially — not what partial discovery
   looks like. The matching logic was split into a pure `customKindsFrom` and tested
   directly instead.
+- The obvious home for a decorator-stack test is `internal/kube`, next to the recorded-
+  actions tests — but `kube` can't import `app`, and a double built in `app` would be
+  another stack that isn't the real one. `internal/app/lister_test.go` records reads
+  through `newSessionLister`, the same constructor `NewModel` calls, so there is no
+  second composition to drift.
 
 ---
 

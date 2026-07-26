@@ -145,10 +145,15 @@ func (m Model) isProd() bool {
 	return m.session.Config.IsProd(m.session.Location.Context)
 }
 
-// helmSecretLister is implemented by a lister backed by a Secret cache
-// filtered to helm.sh/release.v1 — see app.helmAwareLister's copy. Duplicated
-// here per the repo's package-local-seam convention rather than imported.
-type helmSecretLister interface {
+// HelmSecretLister is implemented by a lister backed by a Secret cache
+// filtered to helm.sh/release.v1 — see app.helmAwareLister's copy. Declared
+// here, in the package that consumes it, per the repo's seam convention.
+//
+// Exported so app can assert its lister decorators against it at compile
+// time: this is an optional seam, so a decorator that forgets to forward it
+// doesn't fail to build — it just misses the type assertion below and takes
+// the read-every-Secret fallback, silently.
+type HelmSecretLister interface {
 	ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error)
 }
 
@@ -157,7 +162,7 @@ type helmSecretLister interface {
 // is correct but pulls the largest kind on most clusters to find a handful of
 // revisions.
 func helmSecrets(ctx context.Context, lister resources.RawLister, namespace string) ([]runtime.Object, error) {
-	if hs, ok := lister.(helmSecretLister); ok {
+	if hs, ok := lister.(HelmSecretLister); ok {
 		return hs.ListHelmReleaseSecrets(ctx, namespace)
 	}
 	return lister.ListRaw(ctx, kube.KindSecret, namespace)

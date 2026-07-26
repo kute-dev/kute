@@ -110,10 +110,8 @@ func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	if !ok {
 		return true
 	}
-	if kind == kube.KindHelmRelease {
-		if _, filtered := l.RawLister.(helmSecretLister); !filtered {
-			kind = kube.KindSecret
-		}
+	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
+		kind = kube.KindSecret
 	}
 	return kc.KindSynced(kind)
 }
@@ -146,6 +144,22 @@ func (l helmAwareLister) CountLive(ctx context.Context, kind kube.ResourceKind, 
 // rather than five hand-spelled copies that can drift apart.
 func newSessionLister(raw resources.RawLister, forwards *kube.ForwardManager) helmAwareLister {
 	return helmAwareLister{RawLister: forwardAwareLister{RawLister: raw, forwards: forwards}}
+}
+
+// ListHelmReleaseSecrets keeps the seam alive one layer further up, so
+// anything handed the fully-decorated sess.Lister still reaches the narrow
+// cache. See forwardAwareLister's copy for why this is load-bearing.
+func (l helmAwareLister) ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
+	return l.helmSecrets(ctx, namespace)
+}
+
+// hasHelmReleaseCache passes the question down; see forwardAwareLister's.
+func (l helmAwareLister) hasHelmReleaseCache() bool {
+	if p, ok := l.RawLister.(helmCacheProber); ok {
+		return p.hasHelmReleaseCache()
+	}
+	_, ok := l.RawLister.(helmSecretLister)
+	return ok
 }
 
 // helmSecrets reads the release Secrets from the narrowest source available.
@@ -215,24 +229,60 @@ func (l forwardAwareLister) CountLive(ctx context.Context, kind kube.ResourceKin
 	return 0, fmt.Errorf("no live counter for %s", kind)
 }
 
+// ListHelmReleaseSecrets forwards the narrow, server-side-filtered release
+// cache, and is load-bearing for the same reason CountLive is. Unforwarded,
+// helmAwareLister.helmSecrets type-asserted against *this wrapper*, missed,
+// and read every Secret in the namespace through the shared informer
+// instead — the exact read internal/kube/helm.go keeps a separate cache to
+// avoid — while leaving the release cache cold until the 'h' keypress
+// started it, so opening a release's history sat on a spinner through a
+// second cluster-wide Secret LIST.
+//
+// The fallback matters as much as the forward: once a decorator advertises
+// this method every caller's type assertion succeeds, so it must never be a
+// dead end. Without a narrow cache underneath, the shared Secret cache is
+// the documented answer (see helmSecretLister) and this returns it.
+func (l forwardAwareLister) ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
+	if hs, ok := l.RawLister.(helmSecretLister); ok {
+		return hs.ListHelmReleaseSecrets(ctx, namespace)
+	}
+	return l.RawLister.ListRaw(ctx, kube.KindSecret, namespace)
+}
+
+// hasHelmReleaseCache reports whether a real filtered release cache is what
+// ListHelmReleaseSecrets reads, as opposed to this decorator's shared-Secret
+// fallback. KindSynced needs the distinction that the type assertion can no
+// longer make for it: the two sources are different informers, and gating a
+// loading state on the wrong one is how "no releases" gets claimed about a
+// cache that is still filling.
+func (l forwardAwareLister) hasHelmReleaseCache() bool {
+	_, ok := l.RawLister.(helmSecretLister)
+	return ok
+}
+
+// helmCacheProber is hasHelmReleaseCache's seam, so the question survives
+// one decorator asking the next.
+type helmCacheProber interface{ hasHelmReleaseCache() bool }
+
 // Compile-time guarantees that both the informer-backed Cluster and the
 // in-memory fake satisfy the seams the screens depend on (--demo
 // substitutes the latter behind the same interfaces, mvp-plan.md §0.10).
 var (
-	_ resources.RawLister        = (*kube.Cluster)(nil)
-	_ kube.Mutator               = (*kube.Cluster)(nil)
-	_ browse.MetricsReader       = (*kube.Cluster)(nil)
-	_ browse.NodeMetricsReader   = (*kube.Cluster)(nil)
-	_ poddetail.EventsReader     = (*kube.Cluster)(nil)
-	_ yamlview.YAMLReader        = (*kube.Cluster)(nil)
-	_ events.EventsReader        = (*kube.Cluster)(nil)
-	_ objectdetail.EventsReader  = (*kube.Cluster)(nil)
-	_ timeline.EventsReader      = (*kube.Cluster)(nil)
-	_ resources.InstanceCounter  = (*kube.Cluster)(nil)
-	_ whocan.WhoCanReader        = (*kube.Cluster)(nil)
-	_ overview.NodeMetricsReader = (*kube.Cluster)(nil)
-	_ browse.KindSyncChecker     = (*kube.Cluster)(nil)
-	_ tui.LiveCounter            = (*kube.Cluster)(nil)
+	_ resources.RawLister          = (*kube.Cluster)(nil)
+	_ kube.Mutator                 = (*kube.Cluster)(nil)
+	_ browse.MetricsReader         = (*kube.Cluster)(nil)
+	_ browse.NodeMetricsReader     = (*kube.Cluster)(nil)
+	_ poddetail.EventsReader       = (*kube.Cluster)(nil)
+	_ yamlview.YAMLReader          = (*kube.Cluster)(nil)
+	_ events.EventsReader          = (*kube.Cluster)(nil)
+	_ objectdetail.EventsReader    = (*kube.Cluster)(nil)
+	_ timeline.EventsReader        = (*kube.Cluster)(nil)
+	_ resources.InstanceCounter    = (*kube.Cluster)(nil)
+	_ whocan.WhoCanReader          = (*kube.Cluster)(nil)
+	_ overview.NodeMetricsReader   = (*kube.Cluster)(nil)
+	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
+	_ tui.LiveCounter              = (*kube.Cluster)(nil)
+	_ helmhistory.HelmSecretLister = (*kube.Cluster)(nil)
 
 	// The two lister decorators must satisfy every optional seam the
 	// cluster does. Embedding resources.RawLister as an interface field
@@ -242,26 +292,32 @@ var (
 	// how CountLive went unforwarded — the jump palette quietly fell back
 	// to counting informer caches, which started an informer per kind on
 	// the 'g' keypress and hung the app for a minute on a real cluster.
+	// ListHelmReleaseSecrets went the same way: it predated this block and
+	// was never added to it, so the Helm list read every Secret in the
+	// namespace and left the release cache for the 'h' key to start cold.
 	// Assert them here so the next omission is a compile error.
-	_ browse.KindSyncChecker     = forwardAwareLister{}
-	_ browse.CacheSyncChecker    = forwardAwareLister{}
-	_ tui.LiveCounter            = forwardAwareLister{}
-	_ browse.KindSyncChecker     = helmAwareLister{}
-	_ browse.CacheSyncChecker    = helmAwareLister{}
-	_ tui.LiveCounter            = helmAwareLister{}
-	_ resources.RawLister        = (*fake.Cluster)(nil)
-	_ kube.Mutator               = (*fake.Cluster)(nil)
-	_ browse.MetricsReader       = (*fake.Cluster)(nil)
-	_ browse.NodeMetricsReader   = (*fake.Cluster)(nil)
-	_ poddetail.EventsReader     = (*fake.Cluster)(nil)
-	_ yamlview.YAMLReader        = (*fake.Cluster)(nil)
-	_ events.EventsReader        = (*fake.Cluster)(nil)
-	_ objectdetail.EventsReader  = (*fake.Cluster)(nil)
-	_ timeline.EventsReader      = (*fake.Cluster)(nil)
-	_ resources.InstanceCounter  = (*fake.Cluster)(nil)
-	_ whocan.WhoCanReader        = (*fake.Cluster)(nil)
-	_ overview.NodeMetricsReader = (*fake.Cluster)(nil)
-	_ browse.KindSyncChecker     = (*fake.Cluster)(nil)
+	_ browse.KindSyncChecker       = forwardAwareLister{}
+	_ browse.CacheSyncChecker      = forwardAwareLister{}
+	_ tui.LiveCounter              = forwardAwareLister{}
+	_ helmhistory.HelmSecretLister = forwardAwareLister{}
+	_ browse.KindSyncChecker       = helmAwareLister{}
+	_ browse.CacheSyncChecker      = helmAwareLister{}
+	_ tui.LiveCounter              = helmAwareLister{}
+	_ helmhistory.HelmSecretLister = helmAwareLister{}
+	_ resources.RawLister          = (*fake.Cluster)(nil)
+	_ kube.Mutator                 = (*fake.Cluster)(nil)
+	_ browse.MetricsReader         = (*fake.Cluster)(nil)
+	_ browse.NodeMetricsReader     = (*fake.Cluster)(nil)
+	_ poddetail.EventsReader       = (*fake.Cluster)(nil)
+	_ yamlview.YAMLReader          = (*fake.Cluster)(nil)
+	_ events.EventsReader          = (*fake.Cluster)(nil)
+	_ objectdetail.EventsReader    = (*fake.Cluster)(nil)
+	_ timeline.EventsReader        = (*fake.Cluster)(nil)
+	_ resources.InstanceCounter    = (*fake.Cluster)(nil)
+	_ whocan.WhoCanReader          = (*fake.Cluster)(nil)
+	_ overview.NodeMetricsReader   = (*fake.Cluster)(nil)
+	_ browse.KindSyncChecker       = (*fake.Cluster)(nil)
+	_ helmhistory.HelmSecretLister = (*fake.Cluster)(nil)
 )
 
 // seams is what browse, nodedetail, poddetail, yamlview, events, and
