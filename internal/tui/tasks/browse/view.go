@@ -96,12 +96,16 @@ func (m Model) Header() tui.HeaderState {
 	if m.state == tui.TaskStateLoading {
 		// 15a: the header's right side is a counting timer instead of the
 		// usual sync/forward/conn badges — "what" is loading and for how
-		// long, with no fake progress bar (docs/design README.md §15a).
+		// long, with no fake progress bar (docs/design README.md §15a). The
+		// leading marker is the shared spinner rather than §15a's static ▲,
+		// so the badge reads as live even in the sub-second stretch before
+		// the timer's first decimal turns over; View stays pure (the frame
+		// index only advances on spinner.TickMsg, in Update).
 		elapsed := max(m.now.Sub(m.loadStartedAt), 0)
 		return tui.HeaderState{
 			Crumbs: crumbs,
 			Conn: tui.ConnBadge{
-				Text:  fmt.Sprintf("%s loading %s · %.1fs", tui.GlyphPending, lowerDisplay(m.desc.Display), elapsed.Seconds()),
+				Text:  fmt.Sprintf("%s loading %s · %.1fs", m.spinner.View(), lowerDisplay(m.desc.Display), elapsed.Seconds()),
 				Style: lipgloss.NewStyle().Foreground(theme.Warn),
 			},
 		}

@@ -57,7 +57,7 @@ func (m Model) Header() tui.HeaderState {
 		return tui.HeaderState{
 			Crumbs: crumbs,
 			Conn: tui.ConnBadge{
-				Text:  fmt.Sprintf("%s loading %s · %.1fs", tui.GlyphPending, m.nodeName, elapsed.Seconds()),
+				Text:  fmt.Sprintf("%s loading %s · %.1fs", m.spinner.View(), m.nodeName, elapsed.Seconds()),
 				Style: lipgloss.NewStyle().Foreground(theme.Warn),
 			},
 		}

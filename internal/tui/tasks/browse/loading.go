@@ -32,7 +32,10 @@ const loadingNameNominalWidth = 40
 
 // loadingStripLine is 15a's strip replacing the health strip while loading:
 // "listing <kind> in <scope>…" on the left, a note that the watch hasn't
-// started yet on the right (docs/design README.md §15a).
+// started yet on the right (docs/design README.md §15a). The marker is the
+// shared spinner rather than §15a's literal ▲, matching the header badge —
+// both read the same m.spinner, so the two marks animate in lockstep rather
+// than drifting against each other.
 func (m Model) loadingStripLine(theme tui.Theme, width int) string {
 	warn := lipgloss.NewStyle().Foreground(theme.Warn)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
@@ -47,7 +50,7 @@ func (m Model) loadingStripLine(theme tui.Theme, width int) string {
 	default:
 		scope = " in " + m.namespace
 	}
-	left := warn.Render(tui.GlyphPending) + " " +
+	left := warn.Render(m.spinner.View()) + " " +
 		dim.Render(fmt.Sprintf("listing %s%s…", lowerDisplay(m.desc.Display), scope))
 	right := faint.Render("watch starts when the list lands")
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)

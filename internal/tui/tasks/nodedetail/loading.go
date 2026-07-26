@@ -24,7 +24,7 @@ func (m Model) loadingStripLine(theme tui.Theme, width int) string {
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 
-	left := warn.Render(tui.GlyphPending) + " " + dim.Render(fmt.Sprintf("fetching %s…", m.nodeName))
+	left := warn.Render(m.spinner.View()) + " " + dim.Render(fmt.Sprintf("fetching %s…", m.nodeName))
 	right := faint.Render("conditions, allocation & pods load together")
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }

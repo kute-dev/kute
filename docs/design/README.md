@@ -228,7 +228,8 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 15a — Loading a kind
 - The **full shell paints in the first frame** — breadcrumb, column headers, keybar. Loading replaces only the rows, never the app.
-- Header status: `▲ loading pods · 0.4s` (yellow) — a counting timer, not a fake progress bar; on timeout 4c takes over. Strip: `▲ listing pods in nva-stage…` + right `watch starts when the list lands`.
+- Header status: `⣾ loading pods · 0.4s` (yellow) — a counting timer, not a fake progress bar; on timeout 4c takes over. Strip: `⣾ listing pods in nva-stage…` + right `watch starts when the list lands`.
+- Both marks are the **shared loading spinner**, not a static status glyph — an animating mark reads as live in the sub-second stretch before the timer's first decimal turns over. One spinner per screen drives both, so they animate in lockstep. Detail screens (11b, 23a) apply the same treatment to their own loading header/strip.
 - **Skeleton rows** (7, fading opacity toward the bottom): gray pills (`#1c1c2c` name, `#16161f` cells) laid out on the exact column grid of the real table, so live data is a fill-in, not a relayout. Footer `– of –`.
 - Nav keys (`g n c ?`) live immediately; row actions dark until rows exist (keybar says `row actions enable when data lands`).
 - Revisiting a kind seen this session: **cached rows dimmed** (4a's stale grammar) instead of skeletons.
@@ -467,6 +468,8 @@ Rules that hold in both themes:
 - Test on a real light terminal and on 256-color fallback; hex values degrade via termenv.
 
 Status glyphs: `●` running · `▲` pending · `✕` failed/crashloop · `○` completed · `◌` disconnected/probing · `↺` restarts · `⧗` stale · `▶` following · `▲` warning/version-skew · `◈` cordoned · `∗` all namespaces · `⇄` port-forward.
+
+Loading spinner: `⣾⣽⣻⢿⡿⣟⣯⣷` at 10fps — the one animated mark in the app, shared by every loading header, strip, and body (15a) so they all move identically. Not in the status vocabulary above: it says *in flight*, never a resource's state.
 
 Typography: single monospace face (mock uses JetBrains Mono; the terminal's font applies). Weight via bold only. Uppercase + letterspacing for section labels/column headers.
 

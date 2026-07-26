@@ -24,8 +24,8 @@ const keycastCoalesceWindow = 700 * time.Millisecond
 const keycastIdleClear = 2500 * time.Millisecond
 
 // keycastTickInterval drives the idle-clear countdown — coarser than
-// spinner.MiniDot's own FPS since the chip only needs to notice the idle
-// deadline has passed, not animate.
+// the shared loading spinner's own FPS since the chip only needs to notice
+// the idle deadline has passed, not animate.
 const keycastTickInterval = 250 * time.Millisecond
 
 // keycastToken is one entry in the --keycast chip: either a run of merged
