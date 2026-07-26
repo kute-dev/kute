@@ -1,9 +1,100 @@
 package kube
 
 import (
+	"context"
 	"os/exec"
+	"slices"
 	"strings"
 )
+
+// ShellCandidates are the shells 10a probes for, in the preference order
+// execArgs itself applies (bash first, sh as the floor). Detecting anything
+// kute wouldn't actually run would make the picker's shells column disagree
+// with its own "will run" line.
+var ShellCandidates = []string{"bash", "sh"}
+
+// shellProbeScript lists whichever ShellCandidates exist on PATH, one per
+// line. Built from ShellCandidates rather than spelled out, so the probe
+// can't drift into detecting a shell execArgs would never actually run. It
+// runs through a shell, so it needs one to work at all — hence DetectShells'
+// two attempts.
+var shellProbeScript = "for s in " + strings.Join(ShellCandidates, " ") +
+	`; do command -v $s >/dev/null 2>&1 && echo $s; done`
+
+// DetectShells reports which of ShellCandidates a container actually has,
+// in preference order (docs/design README.md §10a: "detected shells").
+//
+// This is a real probe, not an inference from the image name: it runs
+// `command -v` inside the container via kubectl exec. That's one short-lived
+// exec per container, on a screen the user opened by pressing 'x' — already
+// an explicit intent to exec into this pod, and strictly less invasive than
+// the interactive shell they're about to get. It does leave a pods/exec
+// audit entry per container, which is the honest cost of answering the
+// question instead of guessing at it.
+//
+// An empty slice with a nil error is a real answer — the container has no
+// shell at all (distroless), which is exactly what a user needs to know
+// before pressing enter. A non-nil error means the probe couldn't run
+// (no kubectl, no pods/exec permission, connection down); callers must
+// render that as unknown, never as "no shell" and never as a fabricated
+// list.
+func DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error) {
+	// Two attempts: the probe script needs a shell to run, so an image
+	// shipping bash but no sh (rare, but real) would otherwise report no
+	// shell. bash is the fallback runner precisely because it's the other
+	// candidate.
+	var firstErr error
+	for _, runner := range []string{"sh", "bash"} {
+		out, err := exec.CommandContext(ctx, "kubectl", shellProbeArgs(namespace, pod, container, runner)...).Output()
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		return parseDetectedShells(string(out)), nil
+	}
+	return nil, firstErr
+}
+
+// shellProbeArgs builds the probe's kubectl argv. Deliberately not
+// execArgs: the probe is non-interactive, so it must not pass -it (kubectl
+// warns "Unable to use a TTY" onto stderr when stdin isn't a terminal, and
+// a TTY would merge stderr into the output being parsed).
+func shellProbeArgs(namespace, pod, container, runner string) []string {
+	args := []string{"exec", pod, "-n", namespace}
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+	return append(args, "--", runner, "-c", shellProbeScript)
+}
+
+// parseDetectedShells reduces the probe's stdout to ShellCandidates in
+// preference order. It matches on the basename so /bin/bash and /usr/bin/bash
+// both count, and ignores anything unrecognized rather than trusting
+// arbitrary output from inside a container.
+func parseDetectedShells(out string) []string {
+	found := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if i := strings.LastIndex(line, "/"); i >= 0 {
+			line = line[i+1:]
+		}
+		if slices.Contains(ShellCandidates, line) {
+			found[line] = true
+		}
+	}
+	var shells []string
+	for _, c := range ShellCandidates {
+		if found[c] {
+			shells = append(shells, c)
+		}
+	}
+	return shells
+}
 
 // execArgs builds the kubectl exec argv shared by ExecSpec and
 // ExecCommandString, so the 10a picker's "will run" documentation line can
@@ -24,8 +115,12 @@ func execArgs(namespace, pod, container, shell string) []string {
 
 // ExecSpec builds the kubectl exec command for the 10a exec screen. Bubble
 // Tea suspends and hands the tty to this process (tea.ExecProcess); exit
-// returns control to the pod that launched it. Shell detection is static
-// for MVP: try bash, fall back to sh — no live in-container probe.
+// returns control to the pod that launched it. An empty shell keeps the
+// in-container bash-then-sh fallback below, for the paths with no detection
+// result to go on (a single-container pod, which skips the picker entirely,
+// or a probe that couldn't run); 10a passes DetectShells' answer once it has
+// one, so the picker's shells column, its "will run" line and this command
+// all name the same shell.
 func ExecSpec(namespace, pod, container, shell string) *exec.Cmd {
 	return exec.Command("kubectl", execArgs(namespace, pod, container, shell)...)
 }

@@ -320,7 +320,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Metrics = demoCluster
 		openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
 		openYAML := openYAMLFunc(sess, demoCluster)
-		openExec := openExecFunc(sess)
+		openExec := openExecFunc(sess, demoCluster)
 		openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
 		openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
 		openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
@@ -387,7 +387,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	lister := helmAwareLister{RawLister: forwardAwareLister{RawLister: cluster, forwards: sess.Forwards}}
 	openLogs := openLogsFunc(sess, cluster, streamer, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, cluster)
-	openExec := openExecFunc(sess)
+	openExec := openExecFunc(sess, kubectlShellDetector{})
 	openForward := openForwardFunc(sess, lister, cluster)
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward)
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward)
@@ -828,20 +828,32 @@ func openHelmValuesFunc(sess *tui.Session) browse.OpenHelmValuesFunc {
 }
 
 // openExecFunc pushes tasks/execpicker (10a) for a pod's containers. Unlike
-// this file's other Open*Func builders it needs no `active seams` argument
-// — the picker only spawns a kubectl subprocess, it never reads from the
-// cluster.
-func openExecFunc(sess *tui.Session) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
+// this file's other Open*Func builders it takes no `active seams` argument —
+// the picker never reads from the cluster; it spawns a kubectl subprocess to
+// exec, and probes each container's shells through the shells seam (real:
+// kubectlShellDetector, demo: *fake.Cluster).
+func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 	return func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 		ep := execpicker.New(execpicker.Config{
 			Session:    sess,
 			Namespace:  namespace,
 			PodName:    name,
 			Containers: containers,
+			Shells:     shells,
 		})
 		ep.SetSize(width, height)
 		return &ep, ep.Init()
 	}
+}
+
+// kubectlShellDetector adapts kube.DetectShells to execpicker's own
+// ShellDetector seam — a free function needs no cluster handle (it shells out
+// to kubectl exactly like kube.ExecSpec does), so this is a zero-value type
+// rather than something built from *kube.Cluster.
+type kubectlShellDetector struct{}
+
+func (kubectlShellDetector) DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error) {
+	return kube.DetectShells(ctx, namespace, pod, container)
 }
 
 // openForwardFunc pushes tasks/forwardpicker (13a) against a real cluster.

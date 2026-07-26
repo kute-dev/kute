@@ -14,12 +14,25 @@ import (
 // line so the user can retry a different container or back out.
 type execResultMsg struct{ err error }
 
+// shellsMsg carries one container's shell-detection outcome back from
+// detectShellsCmd (docs/design README.md §10a's shells column).
+type shellsMsg struct {
+	container string
+	shells    []string
+	err       error
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+	case shellsMsg:
+		if m.detected == nil {
+			m.detected = map[string]shellResult{}
+		}
+		m.detected[msg.container] = shellResult{shells: msg.shells, err: msg.err}
 	case execResultMsg:
 		if msg.err != nil {
 			m.feedback = "exec exited: " + msg.err.Error()
@@ -68,12 +81,14 @@ func clamp(v, lo, hi int) int {
 
 // execSelected suspends the program and hands the tty to kubectl for the
 // highlighted container (tea.ExecProcess); nil when nothing's selected.
+// Passes the detected shell when there is one, so what runs is what the row
+// and the "will run" line said would run.
 func (m Model) execSelected() tea.Cmd {
 	if m.selected < 0 || m.selected >= len(m.containers) {
 		return nil
 	}
 	container := m.containers[m.selected].Name
-	cmd := kube.ExecSpec(m.namespace, m.podName, container, "")
+	cmd := kube.ExecSpec(m.namespace, m.podName, container, m.preferredShell(m.selected))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return execResultMsg{err: err}
 	})

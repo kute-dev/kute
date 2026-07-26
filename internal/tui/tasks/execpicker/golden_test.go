@@ -15,6 +15,12 @@ import (
 // Running, with the sidecar (row 1) selected so the "will run" line exercises
 // a non-default selection (docs/design README.md §10a: "kubectl exec -it
 // <pod> -c <container> -- bash").
+//
+// Detection results are seeded directly rather than probed, so the fixtures
+// stay deterministic (no Init, no kubectl) while still pinning two different
+// shells-column answers: the app container has bash and sh, the sidecar only
+// sh — which is also why the selected row's "will run" line names `sh`
+// concretely instead of the in-container fallback one-liner.
 func goldenExecPickerModel(width, height int) Model {
 	sess := &tui.Session{Theme: tui.Dark()}
 	sess.Location.Context = "nva-stage-cluster"
@@ -26,9 +32,14 @@ func goldenExecPickerModel(width, height int) Model {
 			{Name: "gateway", Image: "nva-gateway:1.19.0", State: "Running"},
 			{Name: "istio-proxy", Image: "sidecar:v1.2", State: "Running", IsSidecar: true},
 		},
+		Shells: stubShellDetector{},
 	})
 	m.SetSize(width, height)
 	m.selected = 1
+	m.detected = map[string]shellResult{
+		"gateway":     {shells: []string{"bash", "sh"}},
+		"istio-proxy": {shells: []string{"sh"}},
+	}
 	return m
 }
 

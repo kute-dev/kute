@@ -1,7 +1,9 @@
 package execpicker
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -166,5 +168,162 @@ func TestViewRendersContainers(t *testing.T) {
 	}
 	if !strings.Contains(out, "kubectl exec") {
 		t.Fatalf("expected the 'will run' kubectl command in the rendered view, got:\n%s", out)
+	}
+}
+
+// stubShellDetector returns a fixed answer per container, so tests (and the
+// golden fixtures) exercise the shells column without spawning kubectl:
+// "gateway" has bash and sh, "istio-proxy" only sh, "distroless" none, and
+// anything named "denied" fails the probe.
+type stubShellDetector struct{}
+
+func (stubShellDetector) DetectShells(_ context.Context, _, _, container string) ([]string, error) {
+	switch container {
+	case "denied":
+		return nil, errors.New("pods/exec is forbidden")
+	case "distroless":
+		return nil, nil
+	case "istio-proxy":
+		return []string{"sh"}, nil
+	default:
+		return []string{"bash", "sh"}, nil
+	}
+}
+
+func TestShellsTextStates(t *testing.T) {
+	t.Parallel()
+
+	m := newModel()
+	m.shells = stubShellDetector{}
+	// Nothing detected yet — the probe is still in flight.
+	if got := m.shellsText("gateway"); got != "checking…" {
+		t.Errorf("pending shells cell = %q, want \"checking…\"", got)
+	}
+
+	m.detected = map[string]shellResult{
+		"gateway":     {shells: []string{"bash", "sh"}},
+		"istio-proxy": {shells: []string{"sh"}},
+		"distroless":  {},
+		"denied":      {err: errors.New("pods/exec is forbidden")},
+	}
+	tests := []struct {
+		container, want string
+	}{
+		{"gateway", "bash, sh"},
+		{"istio-proxy", "sh"},
+		// A real answer: no shell at all. Distinct from unknown, because it
+		// tells the user enter won't get them a prompt.
+		{"distroless", "no shell"},
+		// The probe couldn't run — never rendered as "no shell", never as a
+		// fabricated list.
+		{"denied", "–"},
+	}
+	for _, tt := range tests {
+		if got := m.shellsText(tt.container); got != tt.want {
+			t.Errorf("shellsText(%q) = %q, want %q", tt.container, got, tt.want)
+		}
+	}
+}
+
+func TestShellsTextUnknownWithoutDetector(t *testing.T) {
+	t.Parallel()
+	m := newModel() // Config.Shells nil
+	if got := m.shellsText("gateway"); got != "–" {
+		t.Errorf("shells cell without a detector = %q, want \"–\"", got)
+	}
+}
+
+func TestInitProbesEveryContainer(t *testing.T) {
+	t.Parallel()
+
+	m := newModel()
+	m.shells = stubShellDetector{}
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init returned no probe command")
+	}
+	// Drive the batch through Update and assert both containers land.
+	model := tea.Model(&m)
+	for _, msg := range collectBatch(t, cmd) {
+		model, _ = model.Update(msg)
+	}
+	got := model.(*Model).detected
+	if len(got) != 2 {
+		t.Fatalf("detected %d containers, want 2: %v", len(got), got)
+	}
+	if want := []string{"bash", "sh"}; !slices.Equal(got["gateway"].shells, want) {
+		t.Errorf("gateway shells = %v, want %v", got["gateway"].shells, want)
+	}
+	if want := []string{"sh"}; !slices.Equal(got["istio-proxy"].shells, want) {
+		t.Errorf("istio-proxy shells = %v, want %v", got["istio-proxy"].shells, want)
+	}
+}
+
+func TestInitWithoutDetectorProbesNothing(t *testing.T) {
+	t.Parallel()
+	m := newModel() // Config.Shells nil
+	if cmd := m.Init(); cmd != nil {
+		t.Error("Init spawned a probe with no detector configured")
+	}
+}
+
+// collectBatch flattens a tea.Batch into its messages by running every
+// returned Cmd. tea.BatchMsg is a []tea.Cmd, so one level of nesting is all
+// Init produces.
+func collectBatch(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	var msgs []tea.Msg
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			if c == nil {
+				continue
+			}
+			msgs = append(msgs, c())
+		}
+	default:
+		msgs = append(msgs, msg)
+	}
+	return msgs
+}
+
+// TestWillRunCommandNamesDetectedShell asserts on the command text rather
+// than the rendered line: mockup 10a's panel is a fixed 56 cells, so
+// willRunLine ellipsizes a realistic pod's command well before its trailing
+// shell — the shells column, not this line, is where the user reads which
+// shell they'll get.
+func TestWillRunCommandNamesDetectedShell(t *testing.T) {
+	t.Parallel()
+
+	m := newModel()
+	m.shells = stubShellDetector{}
+	m.detected = map[string]shellResult{"gateway": {shells: []string{"bash", "sh"}}}
+	got := kube.ExecCommandString(m.namespace, m.podName, "gateway", m.preferredShell(0))
+	if !strings.HasSuffix(got, "-- bash") {
+		t.Errorf("will-run command = %q, want it to end in the detected shell", got)
+	}
+
+	// With no detection result the command keeps kube.ExecSpec's own
+	// in-container bash-then-sh fallback, rather than claiming a shell.
+	m.detected = map[string]shellResult{}
+	got = kube.ExecCommandString(m.namespace, m.podName, "gateway", m.preferredShell(0))
+	if !strings.Contains(got, "command -v bash") {
+		t.Errorf("undetected will-run command = %q, want the in-container fallback probe", got)
+	}
+}
+
+func TestPreferredShellPassedToExec(t *testing.T) {
+	t.Parallel()
+
+	m := newModel()
+	m.detected = map[string]shellResult{"gateway": {shells: []string{"bash", "sh"}}}
+	if got := m.preferredShell(0); got != "bash" {
+		t.Errorf("preferredShell = %q, want \"bash\" (first in preference order)", got)
+	}
+	// A failed probe must not resolve to a shell — that would put a command
+	// on screen that may not exist in the container.
+	m.detected = map[string]shellResult{"gateway": {err: errors.New("forbidden")}}
+	if got := m.preferredShell(0); got != "" {
+		t.Errorf("preferredShell after a failed probe = %q, want empty", got)
 	}
 }

@@ -9,8 +9,8 @@
          │                                                            │         
          │  exec › nva-gateway-2b81x                    2 containers  │         
          │                                                            │         
-         │    gateway  nva-gateway:1.19.0        ● running  sh, bash  │         
-         │  ▸ istio-proxy  sidecar:v1.2 sidecar  ● running  sh, bash  │         
+         │    gateway  nva-gateway:1.19.0        ● running  bash, sh  │         
+         │  ▸ istio-proxy  sidecar:v1.2 sidecar        ● running  sh  │         
          │                                                            │         
          │  will run  kubectl exec -it nva-gateway-2b81x -n nva-sta…  │         
          │                                                            │         

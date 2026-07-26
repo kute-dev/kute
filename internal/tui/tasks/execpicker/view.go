@@ -135,11 +135,32 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 	}
 	name := nameStyle.Render(c.Name) + "  " + imgStyle.Render(img)
 	state := stateStyle.Render(glyph + " " + text)
-	shells := shellStyle.Render("sh, bash")
+	shells := shellStyle.Render(m.shellsText(c.Name))
 
 	left := marker + name
 	gap := max(panelWidth-lipgloss.Width(left)-lipgloss.Width(state)-lipgloss.Width(shells)-2, 1)
 	return left + strings.Repeat(" ", gap) + state + "  " + shells
+}
+
+// shellsText renders one row's right-aligned shells cell (docs/design
+// README.md §10a: "detected shells right-aligned — bash preferred"). Four
+// honest states, since a guess here would contradict the will-run line:
+// "checking…" while the probe is in flight, the detected shells in
+// preference order, "no shell" for a container that genuinely has none
+// (distroless — worth knowing before pressing enter), and "–" when the probe
+// couldn't run at all (no kubectl, no pods/exec permission, connection down).
+func (m Model) shellsText(container string) string {
+	res, ok := m.detected[container]
+	switch {
+	case m.shells == nil || (ok && res.err != nil):
+		return "–"
+	case !ok:
+		return "checking…"
+	case len(res.shells) == 0:
+		return "no shell"
+	default:
+		return strings.Join(res.shells, ", ")
+	}
 }
 
 // willRunLine shows the exact kubectl command the highlighted container's
@@ -151,7 +172,7 @@ func (m Model) willRunLine(theme tui.Theme) string {
 		return label
 	}
 	container := m.containers[m.selected].Name
-	cmdText := kube.ExecCommandString(m.namespace, m.podName, container, "")
+	cmdText := kube.ExecCommandString(m.namespace, m.podName, container, m.preferredShell(m.selected))
 	return label + lipgloss.NewStyle().Foreground(theme.TextSecondary).Render(ellipsize(cmdText, panelWidth-10))
 }
 
