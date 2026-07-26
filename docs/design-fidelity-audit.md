@@ -1,5 +1,10 @@
 # kute — Design-Fidelity Audit
 
+> **Superseded as a worklist.** This is a point-in-time report from `5c17421`. 52 of its
+> 59 findings have since been fixed — see [`design-fidelity-delta.md`](design-fidelity-delta.md)
+> for the re-verified still-open list. Read this file for the reasoning and citations
+> behind a finding; read the delta for whether it's still true.
+
 Every screen in `docs/design/README.md` checked against the current implementation. 40 design sections, 15 task packages, 13 parallel review passes. Each screen was read against its exact spec text and driven live in `--demo` mode via `tmux`, side by side with its Go source — not just re-read from memory.
 
 **Findings only — no code was changed.** `17a` (YAML edit mode) was out of scope per instruction; `3a` is marked superseded in the spec itself and wasn't reviewed. A handful of the most surprising claims below were independently re-verified by hand after the review passes returned (marked ✓ **spot-checked**).
