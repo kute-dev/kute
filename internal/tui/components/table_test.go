@@ -231,3 +231,34 @@ func TestTableFooterLine(t *testing.T) {
 		t.Fatalf("footer width = %d, want 40: %q", runewidth.StringWidth(got), got)
 	}
 }
+
+// TestColumnWidthsMatchesWhatRenderUses pins the exported accessor against
+// the header Render actually produces — callers use it to decide whether a
+// cell will truncate, so a divergence would have them offering to expand
+// text that fits, or staying quiet about text that doesn't.
+func TestColumnWidthsMatchesWhatRenderUses(t *testing.T) {
+	table := Table{
+		Width:   60,
+		Height:  3,
+		Columns: []Column{{Title: "Rev", Min: 5}, {Title: "Status", Min: 16, Flex: true}},
+		Rows:    []Row{{Cells: []Cell{{Text: "2"}, {Text: "deployed"}}}},
+	}
+	widths := table.ColumnWidths(60)
+	if len(widths) != 2 {
+		t.Fatalf("ColumnWidths returned %d entries, want 2", len(widths))
+	}
+	if widths[0] != 5 {
+		t.Errorf("fixed column width = %d, want its Min of 5", widths[0])
+	}
+	// The flex column takes everything the fixed column and the table's own
+	// margins/gaps leave behind: 60 - 2 (marker) - 2 (right margin) - 2 (gap) - 5.
+	if want := 60 - 2 - tableRightMargin - 2 - 5; widths[1] != want {
+		t.Errorf("flex column width = %d, want %d", widths[1], want)
+	}
+	// A cell exactly at the reported width must survive Render untruncated.
+	fits := strings.Repeat("x", widths[1])
+	table.Rows = []Row{{Cells: []Cell{{Text: "2"}, {Text: fits}}}}
+	if !strings.Contains(table.Render(), fits) {
+		t.Errorf("a cell of exactly ColumnWidths' width was truncated:\n%s", table.Render())
+	}
+}

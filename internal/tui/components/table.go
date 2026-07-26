@@ -144,6 +144,18 @@ func (t Table) Render() string {
 	return strings.Join(lines, "\n")
 }
 
+// ColumnWidths reports the on-screen width each column will be rendered at,
+// for callers that need to know whether a cell's text will fit — a screen
+// that shows an overflowing value somewhere else has to ask rather than
+// re-derive the flex arithmetic, or the two drift and it starts offering to
+// expand text that was never truncated.
+func (t Table) ColumnWidths(width int) []int {
+	if width <= 0 {
+		width = 80
+	}
+	return t.columnWidths(width)
+}
+
 // columnWidths distributes width across columns: fixed/Min columns get
 // exactly Min, flex columns split whatever remains (extra cells going to
 // the earliest flex columns).

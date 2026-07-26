@@ -408,3 +408,78 @@ func TestLongStatusReasonRendersVerbatim(t *testing.T) {
 		t.Fatalf("expected the failure reason verbatim, got a clipped STATUS cell:\n%s", view)
 	}
 }
+
+// longReasonModel is a release whose failed revision carries a real Helm
+// description — long enough to outrun the STATUS column at any terminal
+// width, which is the case the strip exists for.
+func longReasonModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	const reason = `Upgrade "postgresql" failed: post-upgrade hooks failed: job failed: BackoffLimitExceeded`
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {
+			kube.EncodeHelmReleaseSecret(kube.HelmRelease{
+				Namespace: "production", Name: "postgresql", Chart: "postgresql", ChartVersion: "12.1.9",
+				Revision: 2, Status: "deployed",
+			}),
+			kube.EncodeHelmReleaseSecret(kube.HelmRelease{
+				Namespace: "production", Name: "postgresql", Chart: "postgresql", ChartVersion: "12.1.8",
+				Revision: 1, Status: "failed", StatusReason: reason,
+			}),
+		},
+	}}
+	sess := newSession()
+	sess.Location.Namespace = "production"
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{},
+		Namespace: "production", Name: "postgresql"})
+	m.SetSize(width, height)
+	return step(t, m, m.Init()())
+}
+
+// TestStripCarriesTheSelectedRevisionsOverflowingReason: a STATUS cell that
+// can't fit is still readable, in the strip, for as long as that revision is
+// selected. §18a's "failed carries the reason verbatim" survives a column
+// that no terminal width can make wide enough.
+func TestStripCarriesTheSelectedRevisionsOverflowingReason(t *testing.T) {
+	m := longReasonModel(t, 120, 36)
+
+	// Revision 2 (deployed) is selected first — nothing is truncated, so the
+	// strip stays the count line rather than restating a legible status.
+	strip := plain(strings.Join(m.Strips(120), "\n"))
+	if !strings.Contains(strip, "2 revisions") {
+		t.Fatalf("expected the count strip while nothing overflows, got:\n%s", strip)
+	}
+
+	m.moveSelection(1) // the failed revision
+	strip = plain(strings.Join(m.Strips(120), "\n"))
+	for _, want := range []string{"revision 1", "failed", "post-upgrade hooks failed"} {
+		if !strings.Contains(strip, want) {
+			t.Fatalf("overflow strip missing %q:\n%s", want, strip)
+		}
+	}
+
+	m.moveSelection(-1) // back to the deployed revision
+	strip = plain(strings.Join(m.Strips(120), "\n"))
+	if !strings.Contains(strip, "2 revisions") {
+		t.Fatalf("expected the count strip back once nothing overflows, got:\n%s", strip)
+	}
+}
+
+// TestOverflowStripReplacesRatherThanAddsALine is the constraint that keeps
+// the rail still: the strip's height is budgeted by stripLineCount, so a
+// strip that grew when the cursor reached a failed revision would shove
+// every row down by one as you scrolled past it.
+func TestOverflowStripReplacesRatherThanAddsALine(t *testing.T) {
+	m := longReasonModel(t, 120, 36)
+	before := m.stripLineCount()
+
+	m.moveSelection(1)
+	if _, _, ok := m.statusOverflow(120); !ok {
+		t.Fatal("expected the failed revision's status to overflow at 120 cols")
+	}
+	if after := m.stripLineCount(); after != before {
+		t.Fatalf("strip is %d lines normally and %d while overflowing — the rail shifts on selection", before, after)
+	}
+	if got := len(m.Strips(120)); got != before {
+		t.Fatalf("Strips returned %d lines, want %d to match stripLineCount", got, before)
+	}
+}

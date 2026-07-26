@@ -1,0 +1,24 @@
+  kute │ test-cluster › production › postgresql › History   ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────
+  ✕ revision 1 · failed · Upgrade "postgresql" failed: post-upgrade hooks fai…  
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
+      REV            CHART                   STATUS                    UPDATED  
+  ●   2 (current)    postgresql 12.1.9       deployed                        –  
+▎ ✕   1              postgresql 12.1.8       failed · Upgrade "po…           –  
+  1–2 of 2                                                              ██████  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   HELM  esc back  ↑↓ move │ R rollback                                 ? help  

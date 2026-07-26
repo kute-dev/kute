@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -101,6 +102,9 @@ func (m Model) Strips(width int) []string {
 	if m.state != tui.TaskStateReady {
 		return nil
 	}
+	if line, ok := m.overflowStripLine(m.Theme(), width); ok {
+		return []string{line}
+	}
 	dim := lipgloss.NewStyle().Foreground(theme(m).TextFaint)
 	count := lipgloss.NewStyle().Foreground(theme(m).TextPrimary)
 	word := "revisions"
@@ -109,6 +113,62 @@ func (m Model) Strips(width int) []string {
 	}
 	line := count.Render(fmt.Sprintf("%d", len(m.revisions))) + " " + dim.Render(word+" · newest first · current highlighted")
 	return []string{insetStripLine(line, width)}
+}
+
+// statusOverflow reports the selected revision's STATUS text when the rail
+// can't render it whole, so something else can. A failure reason is the
+// diagnosis (§18a: "failed carries the reason verbatim"), and even with
+// STATUS flexing, real Helm descriptions —
+// `Upgrade "x" failed: post-upgrade hooks failed: job failed:
+// BackoffLimitExceeded` — outrun any column at any terminal width.
+//
+// The width comes from the same components.Table the rail renders through
+// rather than being re-derived here: the flex arithmetic lives in one place,
+// so this can't start claiming an overflow that isn't there.
+func (m Model) statusOverflow(width int) (kube.HelmRelease, string, bool) {
+	rev, ok := m.selectedRevision()
+	if !ok {
+		return kube.HelmRelease{}, "", false
+	}
+	cell := rev.StatusCell()
+	widths := (components.Table{Columns: railColumns}).ColumnWidths(width)
+	for i, col := range railColumns {
+		if col.Title != "STATUS" {
+			continue
+		}
+		if lipgloss.Width(cell) > widths[i] {
+			return rev, cell, true
+		}
+		break
+	}
+	return kube.HelmRelease{}, "", false
+}
+
+// overflowStripLine is where that reason goes: the strip, in place of the
+// count line, for as long as a revision whose status doesn't fit is
+// selected. It replaces rather than adds a line — the strip's height is
+// budgeted by stripLineCount, and a strip that grew on selection would shove
+// the rail down a row every time the cursor passed a failed revision.
+//
+// It appears only while there is genuinely something unreadable on the row;
+// otherwise the count line stands, since restating a status the user can
+// already read in full is noise.
+func (m Model) overflowStripLine(theme tui.Theme, width int) (string, bool) {
+	rev, cell, ok := m.statusOverflow(width)
+	if !ok {
+		return "", false
+	}
+	glyphStyle, glyph := statusGlyph(theme, rev.Status)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+
+	left := glyphStyle.Render(glyph) + " " +
+		faint.Render(fmt.Sprintf("revision %d", rev.Revision)) + " " +
+		dim.Render("· "+cell)
+	// Truncate rather than wrap: the strip is one line by contract, and a
+	// reason long enough to overflow even here is already past the point of
+	// being read at a glance — 'y' on the row has the whole object.
+	return insetStripLine(components.Truncate(left, stripInnerWidth(width)), width), true
 }
 
 func theme(m Model) tui.Theme { return m.Theme() }
@@ -204,25 +264,12 @@ var railColumns = []components.Column{
 // of the dim treatment every other revision gets — "the current one
 // highlighted" (docs/design README.md §16b).
 func (m Model) railBody(theme tui.Theme, width, height int) string {
-	good := lipgloss.NewStyle().Foreground(theme.Good)
-	warn := lipgloss.NewStyle().Foreground(theme.Warn)
-	bad := lipgloss.NewStyle().Foreground(theme.Bad)
-	neutral := lipgloss.NewStyle().Foreground(theme.Info)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	current := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
 	rows := make([]components.Row, 0, len(m.revisions))
 	for i, rev := range m.revisions {
-		class := helmStatusClass(rev.Status)
-		glyphStyle, glyph := good, tui.GlyphRunning
-		switch class {
-		case "warn":
-			glyphStyle, glyph = warn, tui.GlyphPending
-		case "fail":
-			glyphStyle, glyph = bad, tui.GlyphFailed
-		case "neutral":
-			glyphStyle, glyph = neutral, tui.GlyphCompleted
-		}
+		glyphStyle, glyph := statusGlyph(theme, rev.Status)
 		revStyle := dim
 		revText := fmt.Sprintf("%d", rev.Revision)
 		if i == 0 {
@@ -256,6 +303,22 @@ func (m Model) railBody(theme tui.Theme, width, height int) string {
 		FooterStyle: lipgloss.NewStyle().Foreground(theme.TextGhost),
 	}
 	return "\n" + t.Render() + "\n" + t.FooterLine(width)
+}
+
+// statusGlyph maps a release status to its 2a glyph and severity color —
+// the one place that mapping lives for this screen, so the strip's overflow
+// line can't disagree with the row it's quoting.
+func statusGlyph(theme tui.Theme, status string) (lipgloss.Style, string) {
+	switch helmStatusClass(status) {
+	case "warn":
+		return lipgloss.NewStyle().Foreground(theme.Warn), tui.GlyphPending
+	case "fail":
+		return lipgloss.NewStyle().Foreground(theme.Bad), tui.GlyphFailed
+	case "neutral":
+		return lipgloss.NewStyle().Foreground(theme.Info), tui.GlyphCompleted
+	default:
+		return lipgloss.NewStyle().Foreground(theme.Good), tui.GlyphRunning
+	}
 }
 
 // helmStatusClass mirrors resources.helmReleaseStatusClass without an

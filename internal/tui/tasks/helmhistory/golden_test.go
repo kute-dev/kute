@@ -78,11 +78,24 @@ func goldenLoadingHistoryModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// goldenOverflowHistoryModel selects a revision whose failure reason is
+// longer than any STATUS column can be, so the strip carries it in full
+// instead of the usual revision count (view.go's overflowStripLine).
+func goldenOverflowHistoryModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	m := longReasonModel(t, width, height)
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected, Latency: 12 * time.Millisecond})
+	m.moveSelection(1)
+	return m
+}
+
 func goldenHelmHistoryFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden":         goldentest.Plain(goldenHelmHistoryModel(t, 120, 36).Render()),
-		"80x24.golden":          goldentest.Plain(goldenHelmHistoryModel(t, 80, 24).Render()),
+		"120x36.golden":          goldentest.Plain(goldenHelmHistoryModel(t, 120, 36).Render()),
+		"80x24.golden":           goldentest.Plain(goldenHelmHistoryModel(t, 80, 24).Render()),
+		"overflow-120x36.golden": goldentest.Plain(goldenOverflowHistoryModel(t, 120, 36).Render()),
+		"overflow-80x24.golden":  goldentest.Plain(goldenOverflowHistoryModel(t, 80, 24).Render()),
 		"loading-120x36.golden": goldentest.Plain(goldenLoadingHistoryModel(t, 120, 36).Render()),
 		"loading-80x24.golden":  goldentest.Plain(goldenLoadingHistoryModel(t, 80, 24).Render()),
 	}
