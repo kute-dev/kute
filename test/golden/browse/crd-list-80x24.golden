@@ -2,11 +2,11 @@
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 established   ▲ 1 installing                                              
 ────────────────────────────────────────────────────────────────────────────────
-     NAME                          GROUP    VERSIONS    SCOPE    COUNT     AGE  
+     NAME                         GROUP    VERSIONS    SCOPE    COUNT      AGE  
 ────────────────────────────────────────────────────────────────────────────────
-▎ ●  certificaterequests.cert-ma…  cert-m…  v1          Namesp…  0          0s  
-  ●  certificates.cert-manager.io  cert-m…  v1          Namesp…  0          0s  
-  ▲  httproutes.gateway.networki…  gatewa…  v1          Namesp…  0          0s  
+▎ ●  certificaterequests.cert-m…  cert-m…  v1          Namesp…  0           0s  
+  ●  certificates.cert-manager.…  cert-m…  v1          Namesp…  0           0s  
+  ▲  httproutes.gateway.network…  gatewa…  v1          Namesp…  0           0s  
   1–3 of 3                                                              ██████  
                                                                                 
                                                                                 

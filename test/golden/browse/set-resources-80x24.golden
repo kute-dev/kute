@@ -2,9 +2,9 @@
 ────────────────────────────────────────────────────────────────────────────────
   ● 1 stable                                                     1 deployments  
 ────────────────────────────────────────────────────────────────────────────────
-     NAME          RDY    ROLLOUT               IMAGE                      AGE  
+     NAME         RDY    ROLLOUT               IMAGE                       AGE  
 ────────────────────────────────────────────────────────────────────────────────
-▎ ●  aim-worker    4/4    stable                registry.aim.dev/aim-wo…   30d  
+▎ ●  aim-worker   4/4    stable                registry.aim.dev/aim-wo…    30d  
                                                                                 
   ╭──────────────────────────────────────────────────────────────────────────╮  
   │ container   worker   usage: from the metrics poll                        │  

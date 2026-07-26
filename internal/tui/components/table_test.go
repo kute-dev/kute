@@ -39,6 +39,31 @@ func TestTableRenderSortIndicator(t *testing.T) {
 	}
 }
 
+// TestTableSortIndicatorNeedsTwoSpareCells pins renderHeaderV2's width
+// guard: the arrow costs a space plus the glyph, and a column one cell short
+// drops it silently rather than overflowing its slot and shifting every
+// column to its right. resources.fixedWidths budgets against this contract
+// (TestFixedWidthsLeaveRoomForSortArrow), so it may not drift unnoticed.
+func TestTableSortIndicatorNeedsTwoSpareCells(t *testing.T) {
+	header := func(min int) string {
+		table := Table{
+			Width:   40,
+			Height:  3,
+			SortKey: "rev",
+			SortAsc: true,
+			Columns: []Column{{Title: "Name", Min: 20}, {Title: "Rev", Min: min, Sort: "rev"}},
+			Rows:    []Row{{Cells: []Cell{{Text: "api"}, {Text: "2"}}}},
+		}
+		return strings.Split(table.Render(), "\n")[0]
+	}
+	if got := header(5); !strings.Contains(got, "REV ↑") {
+		t.Fatalf("a 5-cell column fits \"REV ↑\" exactly, want the arrow:\n%s", got)
+	}
+	if got := header(4); strings.Contains(got, "↑") {
+		t.Fatalf("a 4-cell column can't fit the arrow without overflowing:\n%s", got)
+	}
+}
+
 func TestTableRenderRightAligns(t *testing.T) {
 	table := Table{
 		Width:   40,

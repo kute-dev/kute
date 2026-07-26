@@ -227,6 +227,56 @@ func TestSortArrowRendersOnChosenColumn(t *testing.T) {
 	}
 }
 
+// TestSortArrowRendersOnNarrowFixedColumns covers the columns whose
+// resources.fixedWidths entry is their whole on-screen width: REV on 18a's
+// Helm list and AGE everywhere. Both were sized at 4 against a 3-cell title,
+// which is one cell short of the " ↓" components.Table appends — so they
+// sorted correctly while showing no indicator at all.
+func TestSortArrowRendersOnNarrowFixedColumns(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		kind   kube.ResourceKind
+		objs   []runtime.Object
+		key    string
+		header string
+	}{
+		{
+			name: "helm rev", kind: kube.KindHelmRelease, key: "4", header: "REV",
+			objs: []runtime.Object{
+				helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3),
+				helmRelease("default", "redis", "redis", "18.1.5", "7.2.4", "deployed", 2),
+			},
+		},
+		{
+			name: "pod age", kind: kube.KindPod, key: "8", header: "AGE",
+			objs: []runtime.Object{pod("default", "zeta"), pod("default", "alpha")},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{tc.kind: tc.objs}}
+			session := newSession()
+			session.Location.Kind = tc.kind
+			m := New(Config{Session: session, Lister: lister})
+			m.SetSize(120, 36)
+			m = step(t, m, m.Init()())
+
+			// Both columns are right-aligned, so they sort descending first
+			// (resources.RightAlignTitles drives sort.go's defaultSortAsc).
+			m = step(t, m, tea.KeyPressMsg{Text: tc.key})
+			view := ansi.Strip(m.Render())
+			if !strings.Contains(view, tc.header+" ↓") {
+				t.Fatalf("expected a descending arrow next to %s:\n%s", tc.header, view)
+			}
+
+			m = step(t, m, tea.KeyPressMsg{Text: tc.key})
+			view = ansi.Strip(m.Render())
+			if !strings.Contains(view, tc.header+" ↑") {
+				t.Fatalf("expected an ascending arrow next to %s:\n%s", tc.header, view)
+			}
+		})
+	}
+}
+
 // displayRowNames extracts m.display's data rows' Names in order, skipping
 // any 6b group/fold/summary lines (none expected here since these tests all
 // stay single-namespace) — bulk.go's own rowNames takes a plain

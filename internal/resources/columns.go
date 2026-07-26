@@ -67,13 +67,22 @@ const MetricColumnWidth = 12
 // fixedWidths are the docs/design §2a column widths (mock grid mapped to
 // cells). Status is 16 — the mockup renders "CrashLoopBackOff" untruncated,
 // so the README's approximate "13ch" loses to the mock here.
+//
+// Every entry must leave len(title)+2 cells — the same floor minWidthFor
+// applies to unlisted titles — because a fixed column never flexes, so its
+// entry here *is* its on-screen width, and components.Table drops the sort
+// arrow silently when the title plus " ↑" doesn't fit. AGE, REV and UPTIME
+// were all one cell short and so could never show which way they were
+// sorted. Restarts is the one exemption: browse renders it as the 1-cell ↺
+// glyph (browse/view.go's browseColumns), not as the word.
+// TestFixedWidthsLeaveRoomForSortArrow guards this.
 var fixedWidths = map[string]int{
 	"Rdy":      5,
 	"Status":   16,
 	"Health":   13, // "●12 ▲1 ✕1" — matches the namespace palette's HEALTH width
 	"Restarts": 4,
 	"Node":     9,
-	"Age":      4,
+	"Age":      5, // "AGE" + the 2-cell sort-arrow allowance
 	"CPU":      MetricColumnWidth,
 	"MEM":      MetricColumnWidth,
 	"Pods":     9,  // "62/110"
@@ -84,11 +93,11 @@ var fixedWidths = map[string]int{
 	"Address":  15, // LB IP/hostname, e.g. "203.0.113.10"
 	"Ports":    10, // "80" / "80, 443"
 	"Local":    16, // "localhost:65535"
-	"Uptime":   7,  // "12h34m"
+	"Uptime":   8,  // "12h34m" + the arrow allowance
 	"Traffic":  22, // "retry 3 · next in 8s" / "idle 12m"
 	"Chart":    22, // "postgresql 12.1.9"
 	"App Ver":  10, // "15.4.0"
-	"Rev":      4,  // revision number, right-aligned
+	"Rev":      5,  // revision number, right-aligned ("REV" + the arrow allowance)
 	"Updated":  10, // "3d ago" / "12m ago"
 }
 

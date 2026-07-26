@@ -1,7 +1,10 @@
 package resources
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -118,6 +121,32 @@ func TestColumnsEventsFlexesFirstColumnWhenNoName(t *testing.T) {
 	cols := Columns(descFor(t, kube.KindEvent))
 	if len(cols) < 2 || cols[1].Title != "Type" || !cols[1].Flex {
 		t.Fatalf("expected Events to flex its first data column (Type), got %+v", cols)
+	}
+}
+
+// TestFixedWidthsLeaveRoomForSortArrow guards the invariant documented on
+// fixedWidths: a fixed column never flexes, so its entry is its on-screen
+// width, and components.Table's renderHeaderV2 drops the " ↑"/" ↓" sort
+// indicator without a trace when the title plus two cells doesn't fit. AGE
+// and REV were both 4 against a 3-cell title and so could never show which
+// way the list was sorted.
+func TestFixedWidthsLeaveRoomForSortArrow(t *testing.T) {
+	t.Parallel()
+	const arrow = 2 // " ↑"
+	for title, width := range fixedWidths {
+		if title == "Restarts" {
+			// browse renders this one as the 1-cell ↺ glyph, not the word
+			// (browse/view.go's browseColumns), so its title never measures 8.
+			continue
+		}
+		// Measured the way renderHeaderV2 measures it — the uppercased title,
+		// in display cells, not bytes.
+		cells := ansi.StringWidth(strings.ToUpper(title))
+		if want := cells + arrow; width < want {
+			t.Errorf("fixedWidths[%q] = %d, want >= %d: a %d-cell column can't fit %q plus the sort arrow, "+
+				"so renderHeaderV2 drops the arrow and the column looks unsortable",
+				title, width, want, width, strings.ToUpper(title))
+		}
 	}
 }
 
