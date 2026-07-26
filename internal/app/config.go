@@ -23,6 +23,18 @@ type Config struct {
 	// X" side of every 28a/28b comparison. Empty (a plain `go run`/test
 	// build with no ldflags) falls back to tui.Version in BuildSession.
 	Version string
+	// Context pins the kubeconfig context to launch against (--context),
+	// overriding both the last-used context and the kubeconfig's own
+	// current-context. Empty keeps the normal restore.
+	Context string
+	// Namespace pins the namespace to launch in (-n/--namespace), the
+	// highest-precedence source: it beats the persisted per-context
+	// namespace and the context's own default.
+	Namespace string
+	// Kubeconfig pins the kubeconfig file to read (--kubeconfig), ahead of
+	// $KUBECONFIG and ~/.kube/config. Applied via kube.SetKubeconfigPath
+	// before any client is built.
+	Kubeconfig string
 }
 
 func DefaultConfig() Config {

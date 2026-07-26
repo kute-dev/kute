@@ -17,6 +17,10 @@ var (
 func main() {
 	cfg := app.DefaultConfig()
 	cfg.Version = version
+	flag.StringVar(&cfg.Context, "context", "", "kubeconfig context to launch against (default: last used, else the kubeconfig's current-context)")
+	flag.StringVar(&cfg.Namespace, "namespace", "", "namespace to launch in (default: last used, else the context's own)")
+	flag.StringVar(&cfg.Namespace, "n", "", "shorthand for --namespace")
+	flag.StringVar(&cfg.Kubeconfig, "kubeconfig", "", "path to the kubeconfig file to use (default: $KUBECONFIG, else ~/.kube/config)")
 	flag.BoolVar(&cfg.Demo, "demo", false, "run against an in-memory fake cluster instead of a real one")
 	flag.BoolVar(&cfg.Keycast, "keycast", false, "show a recent-keypresses chip (bottom-right) — for demo recording")
 	flag.StringVar(&cfg.Theme, "theme", "", "override theme selection: dark|light (default: auto-detect)")

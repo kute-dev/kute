@@ -15,7 +15,7 @@ func TestBuildConfigLookupErrorPaths(t *testing.T) {
 
 	t.Run("KUBECONFIG unset", func(t *testing.T) {
 		t.Parallel()
-		err := buildConfigLookupError("", "/home/x/.kube/config", cause)
+		err := buildConfigLookupError("", "", "/home/x/.kube/config", cause)
 		if len(err.Paths) != 2 {
 			t.Fatalf("Paths = %d entries, want 2", len(err.Paths))
 		}
@@ -32,7 +32,7 @@ func TestBuildConfigLookupErrorPaths(t *testing.T) {
 
 	t.Run("KUBECONFIG set to a missing file", func(t *testing.T) {
 		t.Parallel()
-		err := buildConfigLookupError("/tmp/does-not-exist-kute-test", "/home/x/.kube/config", cause)
+		err := buildConfigLookupError("/tmp/does-not-exist-kute-test", "$KUBECONFIG", "/home/x/.kube/config", cause)
 		if err.Paths[0].Path != "/tmp/does-not-exist-kute-test" {
 			t.Errorf("Paths[0].Path = %q, want the env value", err.Paths[0].Path)
 		}
@@ -43,7 +43,7 @@ func TestBuildConfigLookupErrorPaths(t *testing.T) {
 
 	t.Run("Error/Unwrap", func(t *testing.T) {
 		t.Parallel()
-		err := buildConfigLookupError("", "", cause)
+		err := buildConfigLookupError("", "", "", cause)
 		if !errors.Is(err, cause) {
 			t.Errorf("errors.Is(err, cause) = false, want true (Unwrap must expose cause)")
 		}
@@ -120,5 +120,42 @@ users:
 	}
 	if client.Context.ContextName != "ctx-a" {
 		t.Errorf("ContextName = %q, want the file's default %q", client.Context.ContextName, "ctx-a")
+	}
+}
+
+// TestKubeconfigSourcePrecedence pins --kubeconfig ahead of $KUBECONFIG
+// (kubectl's own precedence) and the label each one reports into 10b's
+// LOOKED IN box, so a failure names the file the user actually pointed at.
+func TestKubeconfigSourcePrecedence(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/tmp/from-env")
+	t.Cleanup(func() { SetKubeconfigPath("") })
+
+	if path, label := kubeconfigSource(); path != "/tmp/from-env" || label != "$KUBECONFIG" {
+		t.Errorf("kubeconfigSource() = %q/%q with no flag, want the env path", path, label)
+	}
+
+	SetKubeconfigPath("/tmp/from-flag")
+	if path, label := kubeconfigSource(); path != "/tmp/from-flag" || label != "--kubeconfig" {
+		t.Errorf("kubeconfigSource() = %q/%q, want the flag to win over $KUBECONFIG", path, label)
+	}
+	if got, ok := KubeconfigPath(); !ok || got != "/tmp/from-flag" {
+		t.Errorf("KubeconfigPath() = %q/%v, want the flag path — the 7a palette hint must name the file in use", got, ok)
+	}
+
+	// Clearing the override falls back to the env var rather than sticking.
+	SetKubeconfigPath("")
+	if path, _ := kubeconfigSource(); path != "/tmp/from-env" {
+		t.Errorf("kubeconfigSource() = %q after clearing the flag, want the env path", path)
+	}
+}
+
+// TestConfigLookupErrorNamesTheFlag pins the diagnostic label: when
+// --kubeconfig pointed at a missing file, 10b must say --kubeconfig, not
+// $KUBECONFIG.
+func TestConfigLookupErrorNamesTheFlag(t *testing.T) {
+	t.Parallel()
+	err := buildConfigLookupError("/tmp/kute-flag-missing", "--kubeconfig", "/home/x/.kube/config", errors.New("boom"))
+	if err.Paths[0].Label != "--kubeconfig" {
+		t.Errorf("Paths[0].Label = %q, want --kubeconfig", err.Paths[0].Label)
 	}
 }

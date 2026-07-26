@@ -17,9 +17,53 @@ import (
 // PathCheck is one kubeconfig location kute looked at and why it didn't
 // yield a usable config — the 10b "LOOKED IN" box's rows.
 type PathCheck struct {
-	Label  string // "$KUBECONFIG", "~/.kube/config"
+	Label  string // "--kubeconfig", "$KUBECONFIG", "~/.kube/config"
 	Path   string // resolved path; empty when the env var itself is unset
 	Reason string // "not set", "no such file", or a parse error
+}
+
+// kubeconfigFlagPath is --kubeconfig's value, set once from main before
+// anything reads a kubeconfig. A package var rather than a parameter
+// threaded through every reader because it's process-wide startup input with
+// exactly the same lifetime and meaning as $KUBECONFIG, and four independent
+// paths resolve a kubeconfig (the client, AvailableContexts, KubeconfigPath's
+// palette hint, and 10b's LOOKED IN diagnostics) — a flag one of them missed
+// would silently describe a different file than the one in use.
+var kubeconfigFlagPath string
+
+// SetKubeconfigPath pins the kubeconfig file kute reads, taking precedence
+// over $KUBECONFIG (matching kubectl's own --kubeconfig precedence). Call it
+// before building a client; the empty string clears the override.
+func SetKubeconfigPath(path string) { kubeconfigFlagPath = path }
+
+// kubeconfigSource resolves which kubeconfig to read and what to call it in
+// user-facing diagnostics. label is "" when neither the flag nor the env var
+// supplied one, leaving the caller on the ~/.kube/config default.
+func kubeconfigSource() (path, label string) {
+	if kubeconfigFlagPath != "" {
+		return kubeconfigFlagPath, "--kubeconfig"
+	}
+	if env := os.Getenv("KUBECONFIG"); env != "" {
+		return env, "$KUBECONFIG"
+	}
+	return "", ""
+}
+
+// explicitKubeconfigPath is kubeconfigSource's path-only form, for the
+// loading rules — the flag, else $KUBECONFIG, else "".
+func explicitKubeconfigPath() string {
+	path, _ := kubeconfigSource()
+	return path
+}
+
+// defaultKubeconfigPath is ~/.kube/config, or "" when the home directory
+// can't be determined.
+func defaultKubeconfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".kube", "config")
 }
 
 // ConfigLookupError is returned when no kubeconfig could be found anywhere
@@ -37,12 +81,14 @@ func (e *ConfigLookupError) Error() string {
 
 func (e *ConfigLookupError) Unwrap() error { return e.cause }
 
-func buildConfigLookupError(envPath, defaultPath string, cause error) *ConfigLookupError {
+func buildConfigLookupError(explicitPath, explicitLabel, defaultPath string, cause error) *ConfigLookupError {
 	var checks []PathCheck
-	if envPath == "" {
+	if explicitPath == "" {
+		// Neither --kubeconfig nor $KUBECONFIG supplied a path. Report the
+		// env var, since that's the one the user can set without re-running.
 		checks = append(checks, PathCheck{Label: "$KUBECONFIG", Reason: "not set"})
 	} else {
-		checks = append(checks, PathCheck{Label: "$KUBECONFIG", Path: envPath, Reason: pathFailureReason(envPath)})
+		checks = append(checks, PathCheck{Label: explicitLabel, Path: explicitPath, Reason: pathFailureReason(explicitPath)})
 	}
 	if defaultPath != "" {
 		checks = append(checks, PathCheck{Label: "~/.kube/config", Path: defaultPath, Reason: pathFailureReason(defaultPath)})
@@ -79,13 +125,10 @@ func NewClientForContext(contextName string) (Client, error) {
 
 func newClientForContext(contextName string) (Client, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	envPath := os.Getenv("KUBECONFIG")
-	defaultPath := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		defaultPath = filepath.Join(home, ".kube", "config")
-	}
-	if envPath != "" {
-		loadingRules.ExplicitPath = envPath
+	explicitPath, explicitLabel := kubeconfigSource()
+	defaultPath := defaultKubeconfigPath()
+	if explicitPath != "" {
+		loadingRules.ExplicitPath = explicitPath
 	} else if defaultPath != "" {
 		loadingRules.ExplicitPath = defaultPath
 	}
@@ -101,7 +144,7 @@ func newClientForContext(contextName string) (Client, error) {
 		if inClusterConfig, inClusterErr := rest.InClusterConfig(); inClusterErr == nil {
 			restConfig = inClusterConfig
 		} else {
-			return Client{}, buildConfigLookupError(envPath, defaultPath, err)
+			return Client{}, buildConfigLookupError(explicitPath, explicitLabel, defaultPath, err)
 		}
 	}
 
@@ -188,15 +231,16 @@ func clientCertIdentity(authInfo *clientcmdapi.AuthInfo) (commonName string, org
 	return cert.Subject.CommonName, cert.Subject.Organization, true
 }
 
-// KubeconfigPath returns the kubeconfig file path kute resolves ($KUBECONFIG,
-// else ~/.kube/config), and whether it could be determined — for the context
-// palette's right-hand hint (7a: "~/.kube/config · 5 contexts").
+// KubeconfigPath returns the kubeconfig file path kute resolves
+// (--kubeconfig, else $KUBECONFIG, else ~/.kube/config), and whether it could
+// be determined — for the context palette's right-hand hint (7a:
+// "~/.kube/config · 5 contexts").
 func KubeconfigPath() (string, bool) {
-	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		return kubeconfig, true
+	if explicit := explicitKubeconfigPath(); explicit != "" {
+		return explicit, true
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".kube", "config"), true
+	if path := defaultKubeconfigPath(); path != "" {
+		return path, true
 	}
 	return "", false
 }
@@ -206,10 +250,10 @@ func KubeconfigPath() (string, bool) {
 // without contacting any cluster.
 func AvailableContexts() (names []string, current string, err error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
-		loadingRules.ExplicitPath = kubeconfig
-	} else if home, homeErr := os.UserHomeDir(); homeErr == nil {
-		loadingRules.ExplicitPath = filepath.Join(home, ".kube", "config")
+	if explicit := explicitKubeconfigPath(); explicit != "" {
+		loadingRules.ExplicitPath = explicit
+	} else if path := defaultKubeconfigPath(); path != "" {
+		loadingRules.ExplicitPath = path
 	}
 	raw, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{}).RawConfig()
 	if err != nil {

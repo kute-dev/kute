@@ -22,6 +22,10 @@ import (
 // mode) — callers wire screens against kube/fake instead, behind the same
 // seams (§0.10).
 func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err error) {
+	// Before anything reads a kubeconfig: --kubeconfig outranks $KUBECONFIG,
+	// and every reader in kube resolves through this one override.
+	kube.SetKubeconfigPath(cfg.Kubeconfig)
+
 	userConfig := config.Load()
 	sessionState := state.Load()
 	theme := selectTheme(cfg.Theme, userConfig.Theme)
@@ -39,9 +43,12 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 	}
 
 	if cfg.Demo {
+		if cfg.Namespace != "" {
+			sess.Location.Namespace = cfg.Namespace
+		}
 		return sess, nil, nil
 	}
-	cluster, err = kube.NewClusterForContext(startupContext(sessionState))
+	cluster, err = kube.NewClusterForContext(startupContext(cfg, sessionState))
 	if err != nil {
 		return sess, nil, err
 	}
@@ -57,15 +64,27 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 		}
 		sess.Location.Filter = pc.Filter
 	}
+	// -n/--namespace is the highest-precedence namespace source, so it's
+	// applied last: an explicit flag has to beat both the context's own
+	// default namespace and the per-context restore above.
+	if cfg.Namespace != "" {
+		sess.Location.Namespace = cfg.Namespace
+	}
 	return sess, cluster, nil
 }
 
-// startupContext picks the kubeconfig context to launch against: the most
-// recently used one (sessionState.RecentContexts[0], mirroring 7a's own
-// per-context namespace/kind/filter restore) if the kubeconfig still has it,
-// otherwise "" — the kubeconfig's own current-context — for a fresh install
-// or a recent context that's since been removed.
-func startupContext(sessionState state.State) string {
+// startupContext picks the kubeconfig context to launch against: --context
+// when given (passed through verbatim, so a name the kubeconfig doesn't have
+// surfaces as 4c's unreachable screen naming it rather than silently landing
+// somewhere else), else the most recently used one
+// (sessionState.RecentContexts[0], mirroring 7a's own per-context
+// namespace/kind/filter restore) if the kubeconfig still has it, otherwise
+// "" — the kubeconfig's own current-context — for a fresh install or a recent
+// context that's since been removed.
+func startupContext(cfg Config, sessionState state.State) string {
+	if cfg.Context != "" {
+		return cfg.Context
+	}
 	if len(sessionState.RecentContexts) == 0 {
 		return ""
 	}

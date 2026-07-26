@@ -311,6 +311,11 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	case cfg.Demo:
 		demoCluster := fake.NewDemo()
 		clusterName, namespace := demoCluster.CurrentContext(), demoCluster.CurrentNamespace()
+		if cfg.Namespace != "" {
+			// -n/--namespace outranks the fake cluster's own default here for
+			// the same reason it does on a real one: an explicit flag wins.
+			namespace = cfg.Namespace
+		}
 		sess.Location.Context = clusterName
 		sess.Location.Namespace = namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(demoCluster.DiscoveredKinds(), demoCluster)

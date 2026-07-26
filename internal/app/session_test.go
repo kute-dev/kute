@@ -4,8 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/tui"
 )
@@ -87,7 +92,7 @@ func TestBuildSessionDemoModeHasNoCluster(t *testing.T) {
 
 func TestStartupContextPrefersMostRecentAvailableContext(t *testing.T) {
 	writeTestKubeconfig(t, "ctx-a")
-	got := startupContext(state.State{RecentContexts: []string{"ctx-b", "ctx-a"}})
+	got := startupContext(Config{}, state.State{RecentContexts: []string{"ctx-b", "ctx-a"}})
 	if got != "ctx-b" {
 		t.Fatalf("startupContext() = %q, want ctx-b", got)
 	}
@@ -95,7 +100,7 @@ func TestStartupContextPrefersMostRecentAvailableContext(t *testing.T) {
 
 func TestStartupContextFallsBackWhenRecentContextIsGone(t *testing.T) {
 	writeTestKubeconfig(t, "ctx-a")
-	got := startupContext(state.State{RecentContexts: []string{"ctx-deleted"}})
+	got := startupContext(Config{}, state.State{RecentContexts: []string{"ctx-deleted"}})
 	if got != "" {
 		t.Fatalf("startupContext() = %q, want empty (defer to kubeconfig current-context)", got)
 	}
@@ -103,8 +108,91 @@ func TestStartupContextFallsBackWhenRecentContextIsGone(t *testing.T) {
 
 func TestStartupContextEmptyWithNoRecents(t *testing.T) {
 	writeTestKubeconfig(t, "ctx-a")
-	got := startupContext(state.State{})
+	got := startupContext(Config{}, state.State{})
 	if got != "" {
 		t.Fatalf("startupContext() = %q, want empty", got)
+	}
+}
+
+// TestStartupContextFlagWins pins --context ahead of the last-used context:
+// the flag is passed through verbatim, so even a name the kubeconfig doesn't
+// have reaches the cluster builder (and surfaces as 4c naming it) rather than
+// silently falling back to somewhere else.
+func TestStartupContextFlagWins(t *testing.T) {
+	writeTestKubeconfig(t, "ctx-a")
+
+	if got := startupContext(Config{Context: "ctx-b"}, state.State{RecentContexts: []string{"ctx-a"}}); got != "ctx-b" {
+		t.Errorf("startupContext(--context ctx-b) = %q, want ctx-b over the recent ctx-a", got)
+	}
+	if got := startupContext(Config{Context: "ctx-typo"}, state.State{}); got != "ctx-typo" {
+		t.Errorf("startupContext(--context ctx-typo) = %q, want it passed through verbatim", got)
+	}
+}
+
+// TestBuildSessionNamespaceFlagWins pins -n/--namespace as the
+// highest-precedence namespace source: ahead of the context's own namespace
+// and ahead of the persisted per-context restore. Building a session needs no
+// live cluster — client construction doesn't dial.
+func TestBuildSessionNamespaceFlagWins(t *testing.T) {
+	writeTestKubeconfig(t, "ctx-a")
+
+	sess, cluster, err := BuildSession(Config{Namespace: "ingress-nginx"})
+	if err != nil || cluster == nil {
+		t.Fatalf("BuildSession() = %v, cluster %v; want a client built from the test kubeconfig", err, cluster)
+	}
+	if got := sess.Location.Namespace; got != "ingress-nginx" {
+		t.Errorf("Location.Namespace = %q, want the --namespace value to win", got)
+	}
+
+	// Without the flag it falls back to the context's own namespace.
+	sess, _, err = BuildSession(Config{})
+	if err != nil {
+		t.Fatalf("BuildSession() = %v", err)
+	}
+	if got := sess.Location.Namespace; got != "default" {
+		t.Errorf("Location.Namespace = %q with no flag, want the context's own namespace", got)
+	}
+}
+
+// TestBuildSessionNamespaceFlagWinsInDemo pins the same precedence for
+// --demo, whose namespace otherwise comes from the fake cluster.
+func TestBuildSessionNamespaceFlagWinsInDemo(t *testing.T) {
+	sess, _, _ := BuildSession(Config{Demo: true, Namespace: "ingress-nginx"})
+	if got := sess.Location.Namespace; got != "ingress-nginx" {
+		t.Errorf("Location.Namespace = %q, want the --namespace value", got)
+	}
+}
+
+// TestBuildSessionAppliesKubeconfigFlag pins the ordering that makes
+// --kubeconfig work at all: BuildSession must hand it to kube before building
+// any client, so every kubeconfig reader resolves the same file.
+func TestBuildSessionAppliesKubeconfigFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "explicit-config")
+	if err := os.WriteFile(path, []byte("apiVersion: v1\nkind: Config\n"), 0o600); err != nil {
+		t.Fatalf("writing kubeconfig: %v", err)
+	}
+	t.Cleanup(func() { kube.SetKubeconfigPath("") })
+
+	if _, _, err := BuildSession(Config{Demo: true, Kubeconfig: path}); err != nil {
+		t.Fatalf("BuildSession() = %v", err)
+	}
+	if got, ok := kube.KubeconfigPath(); !ok || got != path {
+		t.Errorf("kube.KubeconfigPath() = %q/%v after BuildSession, want the --kubeconfig path", got, ok)
+	}
+}
+
+// TestNewModelDemoStartsInFlaggedNamespace drives the flag the way the binary
+// does — through NewModel, which builds the demo cluster and would otherwise
+// overwrite Location.Namespace with the fake cluster's own default — and
+// checks the rendered header actually names it.
+func TestNewModelDemoStartsInFlaggedNamespace(t *testing.T) {
+	model, _, demo := NewModel(Config{AppName: DefaultAppName, Demo: true, Namespace: "ingress-nginx"})
+	if demo == nil {
+		t.Fatal("expected a demo cluster")
+	}
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	view := ansi.Strip(updated.(tui.Model).View().Content)
+	if !strings.Contains(view, "ingress-nginx") {
+		t.Errorf("rendered view never names the --namespace value:\n%s", view)
 	}
 }
