@@ -26,26 +26,14 @@ Set Width 1220
 Set Height 770
 Set Padding 10
 Set Framerate 24
-Set TypingSpeed 140ms
-Set Theme "Catppuccin Macchiato"
+Set Theme "Catppuccin Mocha"
 Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Hide
-Type "kute --demo --keycast"
+Type "kute --demo --keycast -n production"
 Enter
-Sleep 900ms
-Show
 
-Sleep 1200ms
-
-# --- 1) switch to "production", the namespace holding both fixtures below.
-Type "n"
-Sleep 500ms
-Type "prod"
-Sleep 400ms
-Enter
 Sleep 1200ms
 
 # --- 2) goto Ingress ("i" pins it to rank 1) — "web-secure" (1 ok, 1 fail)

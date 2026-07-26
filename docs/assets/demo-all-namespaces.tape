@@ -25,25 +25,15 @@ Set Width 1220
 Set Height 770
 Set Padding 10
 Set Framerate 24
-Set TypingSpeed 140ms
-Set Theme "Catppuccin Macchiato"
+Set Theme "Catppuccin Mocha"
 Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Hide
-Type "kute --demo --keycast"
+Type "kute --demo --keycast -n production"
 Enter
-Sleep 900ms
-Type "n"
-Sleep 300ms
-Type "p"
-Sleep 300ms
-Enter
-Sleep 900ms
-Show
 
-Sleep 1200ms
+Sleep 900ms
 
 Type "a"
 Sleep 1800ms
