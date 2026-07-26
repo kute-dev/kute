@@ -3,14 +3,7 @@
 Everything outstanding between `v0.3.0-alpha.4` and a `0.4.0-beta.1` tag, with the
 reasoning for why each item gates a beta rather than being post-beta polish.
 
-**Where the code stands.** All 40 design-spec screens are implemented except §17a (YAML
-edit mode); §3a is superseded by the spec's own text. `go test ./...` is green, CI runs
-vet + golangci-lint + `-race -shuffle` + goreleaser check + weekly govulncheck, and the
-release pipeline (goreleaser → Homebrew tap + install.sh + git-cliff changelog + website)
-works. The 59-finding design-fidelity audit is at **53 closed, 6 open** — see
-[`design-fidelity-delta.md`](design-fidelity-delta.md).
-
-The remaining distance to beta is therefore not features. It's a frozen public surface,
+The remaining distance to beta is not features. It's a frozen public surface,
 evidence the app works somewhere other than one AKS cluster, and a path for a user who
 hits a bug to tell us something useful.
 
@@ -28,18 +21,6 @@ The gates a `0.4.0-beta.1` has to clear:
    a restricted user, and a cluster big enough to hurt.
 4. **A bug is reportable.** Someone hitting a crash or a wrong render can produce
    something we can act on without a screen recording.
-
----
-
-## Already closed since this plan was first written
-
-| Item | Commit |
-| --- | --- |
-| Re-triaged the 69-headline/59-real-finding audit against `main`, recorded the delta | `7b43476` |
-| Exec picker now detects each container's real shells instead of showing a fixed `sh, bash` | `3e9e5cd` |
-| Exec, node shell, and edit refused while offline (§4a's own requirement) | `8975c5f` |
-| `--context`, `-n`/`--namespace`, `--kubeconfig` startup flags | `a5e6fb8` |
-| Config file + flags documented; the "PROD comes from a kubeconfig annotation" error fixed in README and website | `c8dc37c` |
 
 ---
 
@@ -88,22 +69,14 @@ timeline → a mutating verb) with results written down, not just "worked".
 
 ## 3. Decide §17a (YAML edit mode)
 
-The one unimplemented spec section, excluded from two audits in a row as "out of scope per
-instruction". Ambiguity here is worse than either answer: it's referenced by §27a's buffer
-editor, which had to invent its own apply key (`ctrl-o`) because 17a's `ctrl-s` is XOFF in
-some terminals.
-
-*Acceptance:* either implemented, or marked deferred in `docs/design/README.md` §17a with
-the reason, so nothing else has to guess at it.
+Simple edit mode is OK for now.
 
 ## 4. Diagnostics and a bug-report path
 
 A TUI crash currently leaves the user with nothing to attach. There's no log destination,
 no crash context, no issue template.
 
-Note this does not contradict [`lazy-informers.md`](lazy-informers.md) §5.4's "no payload
-instrumentation inside the app" — that declined a measurement channel for one perf
-question. This is diagnostics for a user who cannot otherwise report a bug.
+This is diagnostics for a user who cannot otherwise report a bug.
 
 - `--log-file <path>` for the error/klog stream (klog is already wired through a private
   flagset in `internal/app`).
