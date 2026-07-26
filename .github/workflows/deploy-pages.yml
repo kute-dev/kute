@@ -36,6 +36,12 @@ jobs:
           mkdir -p _site/assets
           cp -r website/. _site/
           cp docs/assets/incident-walkthrough-all-namespaces.gif docs/assets/namespace-palette-demo.gif docs/assets/goto-palette-demo.gif docs/assets/demo-everyday-actions.gif docs/assets/demo-routing-table.gif _site/assets/
+      - name: Cache-bust demo GIFs
+        # GitHub Pages doesn't let us set Cache-Control, so a re-recorded gif
+        # keeping the same filename would otherwise stay stuck in visitors'
+        # browser caches. Tag each reference with the commit SHA so every
+        # deploy that touches a gif forces a fresh fetch.
+        run: sed -i -E "s/(\.gif)\"/\1?v=${GITHUB_SHA}\"/g" _site/demo.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
