@@ -29,7 +29,7 @@ func (helpBackdropScreen) Header() tui.HeaderState {
 		{Text: "microk8s-cluster"}, {Text: "nva-stage"}, {Text: "Pods"},
 	}}
 }
-func (helpBackdropScreen) Strips(int) []string { return []string{"● 32 running · ◐ 2 pending"} }
+func (helpBackdropScreen) Strips(int) []string { return []string{"● 32 running · ▲ 2 pending"} }
 func (helpBackdropScreen) Keybar() tui.Keybar {
 	return tui.Keybar{
 		PillText: "PODS",

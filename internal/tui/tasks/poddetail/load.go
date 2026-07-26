@@ -116,7 +116,7 @@ func statusClass(p kube.Pod) (glyph, class, text string) {
 	case strings.Contains(p.Reason, "CrashLoop"):
 		return "✕", "fail", p.Reason
 	case p.Status == string(corev1.PodPending):
-		return "◐", "warn", p.Reason
+		return "▲", "warn", p.Reason
 	default:
 		return "●", "ok", p.Reason
 	}

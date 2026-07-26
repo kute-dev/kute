@@ -42,10 +42,10 @@ const (
 // the root shell (mvp-plan.md §0.9).
 const cursor = "▎"
 
-// pendingGlyph mirrors tui.GlyphPending ("◐") — duplicated locally rather
+// pendingGlyph mirrors tui.GlyphPending ("▲") — duplicated locally rather
 // than imported, same as cursor above, so palette stays Theme/glyph-agnostic
 // and import-cycle-free from tui.
-const pendingGlyph = "◐"
+const pendingGlyph = "▲"
 
 // Tone selects the style a piece of result-row text renders through —
 // ToneDefault is the faint Detail shade (counts, ↗ markers); OK/Warn/Bad
@@ -145,7 +145,7 @@ type Item struct {
 
 // Segment is one independently toned run within a Cell — 6a's HEALTH
 // column needs this, since one cell shows multiple glyph counts each in
-// their own status color ("●32 ◐2 ✕1").
+// their own status color ("●32 ▲2 ✕1").
 type Segment struct {
 	Text string
 	Tone Tone

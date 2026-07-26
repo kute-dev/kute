@@ -111,7 +111,7 @@ func conditionStatus(u *unstructured.Unstructured, wantTypes ...string) (glyph s
 		case "False":
 			return "✕", StatusFail
 		default:
-			return "◐", StatusWarn
+			return "▲", StatusWarn
 		}
 	}
 	return "·", StatusNeutral
@@ -264,7 +264,7 @@ func crdHealthLabel(class StatusClass) string {
 }
 
 // projectCRD renders one CustomResourceDefinition row: glyph from its own
-// Established condition (◐ while the API hasn't started serving it yet per
+// Established condition (▲ while the API hasn't started serving it yet per
 // 14b), VERSIONS joins every declared version (deprecated ones marked),
 // COUNT from counter — the one place a Descriptor's Project reads live
 // cluster state beyond its own object, since a CRD's instance count isn't a
@@ -283,7 +283,7 @@ func projectCRD(counter InstanceCounter) func(obj runtime.Object) Row {
 		}
 		_, name, age := metaOf(obj)
 
-		glyph, class := "◐", StatusWarn
+		glyph, class := "▲", StatusWarn
 		if dk.Established {
 			glyph, class = "●", StatusOK
 		}

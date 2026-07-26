@@ -5,7 +5,7 @@
      HOST + PATH                                      TLS        BACKEND                                     ENDPOINTS  
 ▎ ●  nva.example.com /api                             ● 19d      api:8080                                      1 ready  
   ✕  nva.example.com /legacy                          ● 19d      old-svc:80                                          —  
-  ◐  nva.example.com /beta                            ● 19d      beta-svc:8080                                 0 ready  
+  ▲  nva.example.com /beta                            ● 19d      beta-svc:8080                                 0 ready  
   tls  nva-tls · expires in 19d                                                                                         
                                                                                                                         
                                                                                                                         

@@ -63,7 +63,7 @@ type Row struct {
 	GroupHeader string
 	GroupStyle  lipgloss.Style
 	RowStyle    lipgloss.Style
-	// GroupRight holds 6b's right-aligned trouble chips (e.g. "◐2 ✕1"),
+	// GroupRight holds 6b's right-aligned trouble chips (e.g. "▲2 ✕1"),
 	// each its own toned Cell — unlike GroupHeader/GroupStyle's single plain
 	// run, these render as independently-styled segments (mirroring how
 	// Cells does for data rows) so a crashloop chip can render red while a

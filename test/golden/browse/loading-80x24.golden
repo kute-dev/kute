@@ -1,6 +1,6 @@
-  kute │ microk8s-cluster › default › Pods (g to jump)   ◐ loading pods · 0.0s  
+  kute │ microk8s-cluster › default › Pods (g to jump)   ▲ loading pods · 0.0s  
 ────────────────────────────────────────────────────────────────────────────────
-  ◐ listing pods in default…                  watch starts when the list lands  
+  ▲ listing pods in default…                  watch starts when the list lands  
 ────────────────────────────────────────────────────────────────────────────────
                                                                                 
      NAME    RDY    STATUS            ↺     CPU           MEM           NODE   …

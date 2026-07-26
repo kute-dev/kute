@@ -1,6 +1,6 @@
   kute │ microk8s-cluster › Forwards  ∗ all namespaces (g to jump)                                         ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ● 1 active   ◐ 1 reconnecting                               2 forwards · 2 namespaces · forwards end when kute exits  
+  ● 1 active   ▲ 1 reconnecting                               2 forwards · 2 namespaces · forwards end when kute exits  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      LOCAL             TARGET                                             NAMESPACE    UPTIME                  TRAFFIC  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -217,8 +217,8 @@ func TestProjectPodPendingShowsWaitingReason(t *testing.T) {
 			if row.Cells[2] != tc.wantStatus {
 				t.Fatalf("expected STATUS cell %q, got %q", tc.wantStatus, row.Cells[2])
 			}
-			if row.Status != StatusWarn || row.Glyph != "◐" {
-				t.Fatalf("pending pod should stay StatusWarn/◐, got %s/%s", row.Status, row.Glyph)
+			if row.Status != StatusWarn || row.Glyph != "▲" {
+				t.Fatalf("pending pod should stay StatusWarn/▲, got %s/%s", row.Status, row.Glyph)
 			}
 		})
 	}
@@ -347,7 +347,7 @@ func TestProjectNodeClassifiesStatus(t *testing.T) {
 		{
 			name:       "memory pressure",
 			node:       &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n3"}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{ready, memPressure}}},
-			wantStatus: StatusWarn, wantText: "MemPressure", wantGlyph: "◐",
+			wantStatus: StatusWarn, wantText: "MemPressure", wantGlyph: "▲",
 		},
 		{
 			name:       "cordoned wins over ready",

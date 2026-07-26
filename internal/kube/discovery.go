@@ -50,7 +50,7 @@ type DiscoveredKind struct {
 	// Name/Age entries are filtered out even if a CRD author redundantly
 	// declared them, since every kind gets those two implicitly.
 	PrinterColumns []PrinterColumn
-	// Established mirrors the CRD's own Established condition — 14b's "◐
+	// Established mirrors the CRD's own Established condition — 14b's "▲
 	// until the API serves them" glyph, and 14a/refreshDiscovery's gate on
 	// whether to start watching instances at all.
 	Established bool

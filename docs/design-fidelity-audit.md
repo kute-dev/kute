@@ -132,7 +132,7 @@ Structurally complete — every section is present and correctly ordered — but
 
 ### 5a — Pod full view
 
-- **[gap]** The title row's status text is missing its leading glyph (✕/◐/●/○) — the underlying data has it, but the render call discards it.
+- **[gap]** The title row's status text is missing its leading glyph (✕/▲/●/○) — the underlying data has it, but the render call discards it.
   spec `README.md:71` · code `internal/tui/tasks/poddetail/view.go:143-147`
 - **[gap]** The MEM bar doesn't turn red at 96% usage — only the adjoining text does. Golden-fixture-confirmed: at 246Mi/256Mi (96%), the bar fill renders Warn/yellow while the text renders Bad/red.
   spec `README.md:75` · code `internal/tui/tasks/poddetail/view.go:342-366`, `internal/tui/components/bar.go:54-64`

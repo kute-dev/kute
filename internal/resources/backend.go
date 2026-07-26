@@ -34,9 +34,9 @@ type BackendState struct {
 	Unresolvable bool
 }
 
-// Glyph renders b as the shared ●/✕/◐ backend grammar (docs/design
+// Glyph renders b as the shared ●/✕/▲ backend grammar (docs/design
 // README.md §23a: "green ● service exists + ready endpoints; red ✕ service
-// not found; yellow ◐ 0 ready").
+// not found; yellow ▲ 0 ready").
 func (b BackendState) Glyph() (glyph string, class StatusClass) {
 	switch {
 	case !b.Exists:
@@ -44,7 +44,7 @@ func (b BackendState) Glyph() (glyph string, class StatusClass) {
 	case b.Unresolvable, b.Ready > 0:
 		return "●", StatusOK
 	default:
-		return "◐", StatusWarn
+		return "▲", StatusWarn
 	}
 }
 

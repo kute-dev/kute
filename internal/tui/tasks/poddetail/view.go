@@ -287,7 +287,7 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 		stateText := c.State
 		switch c.State {
 		case "Waiting":
-			glyph, glyphStyle = "◐", lipgloss.NewStyle().Foreground(theme.Bad)
+			glyph, glyphStyle = "▲", lipgloss.NewStyle().Foreground(theme.Bad)
 			stateStyle = lipgloss.NewStyle().Foreground(theme.Bad)
 			if c.Reason != "" {
 				stateText = "Waiting · " + c.Reason

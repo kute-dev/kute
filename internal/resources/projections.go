@@ -178,7 +178,7 @@ func projectPod(obj runtime.Object) Row {
 			status = reason // e.g. "OOMKilled", "Error"
 		}
 	case p.Status.Phase == corev1.PodPending:
-		glyph, class = "◐", StatusWarn
+		glyph, class = "▲", StatusWarn
 		if reason, ok := podInitReason(p); ok {
 			status = reason // e.g. "Init:0/2", "Init:CrashLoopBackOff"
 		} else if reason := podWaitingReason(p.Status.ContainerStatuses); reason != "" {
@@ -191,7 +191,7 @@ func projectPod(obj runtime.Object) Row {
 	case total > 0 && ready >= total:
 		glyph, class = "●", StatusOK
 	default:
-		glyph, class = "◐", StatusWarn
+		glyph, class = "▲", StatusWarn
 	}
 
 	node := p.Spec.NodeName
@@ -594,7 +594,7 @@ func projectNode(obj runtime.Object) Row {
 		for _, cond := range nodePressureConditions {
 			for _, c := range n.Status.Conditions {
 				if c.Type == cond.typ && c.Status == corev1.ConditionTrue {
-					statusText, class, glyph = cond.label, StatusWarn, "◐"
+					statusText, class, glyph = cond.label, StatusWarn, "▲"
 				}
 			}
 		}

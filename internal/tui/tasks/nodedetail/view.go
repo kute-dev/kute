@@ -480,7 +480,7 @@ func podMetricCell(cpu bool, pod kube.Pod, maxVal int64, st podRowStyles) compon
 }
 
 // podHealthStripLine renders the bottom pane's own per-status glyph+count
-// summary, directly above the pods table — the same "● N running · ◐ M
+// summary, directly above the pods table — the same "● N running · ▲ M
 // pending · ✕ K crashloop" shape browse's 2a health strip uses.
 // Descriptor.Health/HealthLabel are reused as-is (already wired for Pod in
 // the registry); only the glyph/color mapping and line layout are

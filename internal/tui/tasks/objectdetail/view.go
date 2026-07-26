@@ -209,7 +209,7 @@ func (m Model) conditionsBlock(theme tui.Theme) string {
 
 	lines := []string{title}
 	for _, c := range m.conditions {
-		glyph, style := "◐", warn
+		glyph, style := "▲", warn
 		switch c.Status {
 		case "True":
 			glyph, style = "●", good

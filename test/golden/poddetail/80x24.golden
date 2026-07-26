@@ -13,7 +13,7 @@ worker-01    10.1.34.19    Burstable    Deployment/nva-…  │
                                                           │                     
 CONTAINERS                                                │                     
      NAME        IMAGE         STATE                 RE…  │                     
-  ◐  worker      nva/worker:…  Waiting · CrashLoop…    …  │                     
+  ▲  worker      nva/worker:…  Waiting · CrashLoop…    …  │                     
   ●  metrics-s…  nva/sidecar…  Running                 …  │                     
 CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m                            │                     
 MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                        │                     

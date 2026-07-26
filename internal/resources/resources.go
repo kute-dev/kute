@@ -64,7 +64,7 @@ type Row struct {
 }
 
 // HealthCounts tallies a kind's rows by StatusClass, for the browse
-// health-strip ("● 32 ◐ 2 ✕ 1"). It's coarse (OK/Warn/Fail/Neutral) rather
+// health-strip ("● 32 ▲ 2 ✕ 1"). It's coarse (OK/Warn/Fail/Neutral) rather
 // than kind-specific so every Descriptor can share one Health
 // implementation (StatusHealth) unless a kind needs bespoke tallying.
 type HealthCounts struct {

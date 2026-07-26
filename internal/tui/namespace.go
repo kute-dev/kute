@@ -24,7 +24,7 @@ import (
 // built-in kind names without crowding the NAMESPACE flex column; anything
 // longer (a verbose discovered CRD name) truncates with components.
 // Truncate's existing "…" handling when rendered. HEALTH's four glyph
-// segments ("●999 ◐99 ✕99 ○9") fit inside 13 with margin to spare for
+// segments ("●999 ▲99 ✕99 ○9") fit inside 13 with margin to spare for
 // realistic cluster sizes; CPU is unaffected by the active kind.
 func namespaceColumnHeadersFor(desc resources.Descriptor) []palette.ColumnHeader {
 	label := strings.ToUpper(desc.Display)

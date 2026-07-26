@@ -402,7 +402,7 @@ type Model struct {
 	feedback string
 	spinner  spinner.Model
 	// loadStartedAt is when the current TaskStateLoading spell began — 15a's
-	// header timer ("◐ loading pods · 0.4s") measures elapsed against this
+	// header timer ("▲ loading pods · 0.4s") measures elapsed against this
 	// rather than reading the clock in Render (render must stay pure:
 	// f(model, theme, size)); SpinnerTickMsg's 100ms cadence keeps m.now
 	// fresh while it's ticking.

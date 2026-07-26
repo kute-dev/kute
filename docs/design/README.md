@@ -23,7 +23,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 2a — Main table (resting state)
 - **Purpose:** the default screen; 100% of body pixels on live resource data.
 - **Header bar** (bg `#0e0e15`, bottom border `#26263a`): app name `kute` (purple `#a78bfa`, bold) `│` context `microk8s-cluster` (dim `#676780`) `›` namespace `nva-stage` (purple) `›` kind `Pods` (bold `#f0f0fa`) + hint `(g to jump)` (`#55556e`, small). Right-aligned: `sync 2s` (dim) and connection status `● connected · 12ms` (green `#34d17b`).
-- **Health strip** (bg `#0c0c12`, border-bottom `#1c1c2c`): per-status counts — `● 32 running` (green dot), `◐ 2 pending` (yellow `#e8c74a`), `✕ 1 crashloop` (red `#ef6a6a`), `○ 1 completed` (blue `#6aa8ef`); numbers in `#d8d8e8`, labels dim. Right: `36 pods · 3 nodes`.
+- **Health strip** (bg `#0c0c12`, border-bottom `#1c1c2c`): per-status counts — `● 32 running` (green dot), `▲ 2 pending` (yellow `#e8c74a`), `✕ 1 crashloop` (red `#ef6a6a`), `○ 1 completed` (blue `#6aa8ef`); numbers in `#d8d8e8`, labels dim. Right: `36 pods · 3 nodes`.
 - **Table columns:** status dot (2ch) · NAME (flex, ellipsize) · RDY (5ch) · STATUS (13ch) · ↺ restarts (4ch) · CPU (bar+pct) · MEM (bar+pct) · NODE (9ch) · AGE (right-aligned, 4ch). Column headers uppercase, `#55556e`, letterspaced; sort indicator `↑`/`↓` in purple next to sorted column.
 - **Manual sort (1-9):** digit keys pick a column by position (1 = first data column past the status dot) on every kind's own table — first press sorts ascending, pressing the same digit again flips to descending, a different digit switches columns at its own natural first direction. Metrics/counts/recency columns (Restarts, CPU, MEM, Age, and anything else rendered right-aligned as numeric — Data, Replicas, Completions, Active, Capacity, Traffic, Rev, Updated) default descending-first (busiest/most/most-recent first); everything else (Name, Status, Node, Ready, ...) defaults ascending-first. A CPU/MEM sort stays live across the 2s metrics poll. No-op in the all-namespaces grouped view (6b) — namespace partitioning owns row order there, and the arrow stays hidden the same way it already does for the built-in default. Resets back to the built-in default (unhealthy-first, CRD's group-then-name, etc.) whenever the kind or namespace changes.
 - **Rows:** 1 line each. Status dot and STATUS text share the status color (Running green, Pending yellow, CrashLoopBackOff red, Completed blue). Names `#d8d8e8`; crashlooping pod names tinted `#f0b7b7`. Restarts > 0 render yellow, otherwise dim. CPU/MEM: mini bar (track `#1c1c2c`, fill purple, fill yellow when ≥70%) + small pct in dim; `–` when metrics unavailable.
@@ -87,7 +87,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 6a — Namespace palette (`n`)
 - Same palette shell as goto (2b), scoped to namespaces; opens over the dimmed table. Input prompt `ns ›`, right hint `microk8s-cluster · 6 namespaces`.
-- **Columns:** selection glyph · NAMESPACE (current one tagged `current` in `#55556e`) · count column for the kind the table is currently showing (header names the kind — `PODS`, `DEPLOYMENTS`, `INGRESSES`, …; falls back to `PODS` for a cluster-scoped active kind — Nodes, Namespaces, Forwards — or before the first navigation) · HEALTH (inline colored glyph counts: `●32 ◐2 ✕1`, tallied for that same kind) · CPU share right-aligned (always pod CPU usage, independent of the active kind — metrics-server has no other kind's usage to report). Zero-count namespaces dim (`#44445c`) but stay listed.
+- **Columns:** selection glyph · NAMESPACE (current one tagged `current` in `#55556e`) · count column for the kind the table is currently showing (header names the kind — `PODS`, `DEPLOYMENTS`, `INGRESSES`, …; falls back to `PODS` for a cluster-scoped active kind — Nodes, Namespaces, Forwards — or before the first navigation) · HEALTH (inline colored glyph counts: `●32 ▲2 ✕1`, tallied for that same kind) · CPU share right-aligned (always pod CPU usage, independent of the active kind — metrics-server has no other kind's usage to report). Zero-count namespaces dim (`#44445c`) but stay listed.
 - **`all namespaces` is a first-class last row** (blue `#6aa8ef`, glyph `∗`), separated by a top border — reached via `↑↓`/`↵`, not a dedicated key: `a` types into the query like any other letter, so filtering to a namespace starting with "a" isn't shadowed by an all-namespaces jump.
 - **RECENT row:** last-visited namespaces. Opening the palette pre-selects the most recently visited *other* namespace (alt-tab semantics, like editor Ctrl-Tab), so `n ↵` — the same two keystrokes as the old double-tap — toggles straight back to it; typing goes anywhere else.
 - **Numbered recent pick:** current and the immediately-previous namespace (the row tagged `previous` — the alt-tab target above) are both excluded from the numbered pick and from the RECENT row's own list: each already has its own on-row tag, so a digit for either — or repeating either in RECENT's text — would be redundant. Every recent namespace *after* that gets a 1-based digit, most-recent-first, capped at `1`-`9`. The digit renders directly on the row itself, in the same leading gutter cell the selection arrow occupies — the row IS the legend, no separate lookup needed. Typing that bare digit as the query's only character jumps `Sel` straight to it and shows a "`↵` switches to *name*" footer; it's a tentative selection, not an instant jump — `↵` still commits it. Any further typed character makes the digit "just the query's first character" again and reverts to plain fuzzy filtering, so e.g. `2048` still filters to a namespace named that. Same grammar as 7a's.
@@ -96,7 +96,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 6b — All-namespaces mode
 - Header scope segment renders `∗ all namespaces` in blue — scope is never ambiguous. Health strip shows cluster-wide counts + `125 pods · 6 namespaces`.
-- **Rows grouped by namespace** (no NAMESPACE column): group header line (bg `#0e0e15`) = `▾` + namespace name (`#c4b5fd`) + pod count + right-aligned trouble chips (`◐2 ✕1`).
+- **Rows grouped by namespace** (no NAMESPACE column): group header line (bg `#0e0e15`) = `▾` + namespace name (`#c4b5fd`) + pod count + right-aligned trouble chips (`▲2 ✕1`).
 - **Triage default:** unhealthy pods first within groups; fully-healthy namespaces collapse to a single line (`▸ nva-prod · 54 pods · all running` in green). Partially-shown groups end with `+ N running · ↹ expand` in `#44445c`.
 - Keys: `↹` expand/collapse group · `↵` open · `n` namespace palette · `N` jump into the selected pod's namespace (scoped mode, pod still selected). Keybar pill `ALL NS` (bg `#12203a`, text `#8ab8ef` — blue, not purple).
 
@@ -156,14 +156,14 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Keybar: normal `PODS` pill + `0 pods · watching — new pods appear live` (new pods appear without refresh).
 
 ### 11a — Nodes list (cluster-scoped)
-- Namespace segment **drops out of the breadcrumb** (`… cluster › Nodes` + small `cluster-scoped` tag). Summary strip: `● 3 ready · ◐ 1 pressure · ◈ 1 cordoned` + right `5 nodes · 125 pods · cluster cpu 46% · mem 71%`.
-- Columns: glyph · NAME (control-plane role tagged inline) · STATUS (`Ready` dim, `MemPressure` yellow, `cordoned` blue `◈`) · HEALTH (inline colored glyph counts of that node's own pods, e.g. `●12 ◐1 ✕1` — same glyphs/order as the namespace palette's HEALTH column, scaled to one node) · PODS `62/110` · CPU bar+pct · MEM bar+pct · VERSION · AGE. Bars are block glyphs (`▮▮▮▮▯▯`), colored yellow only when hot (mem 91%). Version skew flagged with a quiet yellow `▲`.
+- Namespace segment **drops out of the breadcrumb** (`… cluster › Nodes` + small `cluster-scoped` tag). Summary strip: `● 3 ready · ▲ 1 pressure · ◈ 1 cordoned` + right `5 nodes · 125 pods · cluster cpu 46% · mem 71%`.
+- Columns: glyph · NAME (control-plane role tagged inline) · STATUS (`Ready` dim, `MemPressure` yellow, `cordoned` blue `◈`) · HEALTH (inline colored glyph counts of that node's own pods, e.g. `●12 ▲1 ✕1` — same glyphs/order as the namespace palette's HEALTH column, scaled to one node) · PODS `62/110` · CPU bar+pct · MEM bar+pct · VERSION · AGE. Bars are block glyphs (`▮▮▮▮▯▯`), colored yellow only when hot (mem 91%). Version skew flagged with a quiet yellow `▲`.
 - Keys: `↵` node detail · `C` cordon/uncordon (reversible, no confirm) · `D` drain (evicts workloads → routes through the 8b confirm, showing how many pods will be evicted) · `y` yaml. Keybar pill `NODES`.
 
 ### 11b — Node detail (↵ from nodes list)
 - Same detail recipe as 5a: facts panel · related-objects table · keybar.
-- **Top half, two columns:** CONDITIONS — each line leads with a status glyph (`●` healthy/inactive-pressure, `◐` active pressure, `✕` NotReady); label text dims even when its glyph is green (Ready, inactive pressure) — only an *active* problem (pressure true, NotReady) colors the label itself too. No `true` word is ever shown; inactive conditions show a dim `false`. Active pressure appends kubelet message + age in a dimmer tone than the yellow label. │ ALLOCATED/ALLOCATABLE (cpu/mem/pods as bar + `used / total` text, hot values yellow) + TAINTS.
-- **Bottom half: the node's pods** — 2a's own Pods-list table widget (same per-status glyph/color derivation, live CPU/MEM mini-bars, RDY ratio, restart/crashloop tinting, and header-rule divider), filtered to this node and **sorted unhealthy-first then name**, the same order 2a's own Pods list uses. Columns: glyph · NAME · RDY · STATUS · ↺ restarts · CPU · MEM · NAMESPACE · AGE — NODE is dropped (every row is already this node) in favor of NAMESPACE, since a node's pods span namespaces. A health-strip line (2a's own "● N running · ◐ M pending · ✕ K crashloop" shape, tallying just this node's pods) sits directly above the table, its own horizontal rule separating it from both the facts panel above and the column headers below — the same strip/table rule treatment 2a uses. **Footer:** 2a's own `1–N of M` + scrollbar-glyph pagination line under the table. `↵` opens the pod (5a) — node → culprit → detail is three keys.
+- **Top half, two columns:** CONDITIONS — each line leads with a status glyph (`●` healthy/inactive-pressure, `▲` active pressure, `✕` NotReady); label text dims even when its glyph is green (Ready, inactive pressure) — only an *active* problem (pressure true, NotReady) colors the label itself too. No `true` word is ever shown; inactive conditions show a dim `false`. Active pressure appends kubelet message + age in a dimmer tone than the yellow label. │ ALLOCATED/ALLOCATABLE (cpu/mem/pods as bar + `used / total` text, hot values yellow) + TAINTS.
+- **Bottom half: the node's pods** — 2a's own Pods-list table widget (same per-status glyph/color derivation, live CPU/MEM mini-bars, RDY ratio, restart/crashloop tinting, and header-rule divider), filtered to this node and **sorted unhealthy-first then name**, the same order 2a's own Pods list uses. Columns: glyph · NAME · RDY · STATUS · ↺ restarts · CPU · MEM · NAMESPACE · AGE — NODE is dropped (every row is already this node) in favor of NAMESPACE, since a node's pods span namespaces. A health-strip line (2a's own "● N running · ▲ M pending · ✕ K crashloop" shape, tallying just this node's pods) sits directly above the table, its own horizontal rule separating it from both the facts panel above and the column headers below — the same strip/table rule treatment 2a uses. **Footer:** 2a's own `1–N of M` + scrollbar-glyph pagination line under the table. `↵` opens the pod (5a) — node → culprit → detail is three keys.
 - Keys: `↵ open pod · C cordon · D drain · e node events · esc back`. Keybar pill `NODE`.
 
 
@@ -203,14 +203,14 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 14a — Custom resource list (exemplar: Certificates)
 - Same skeleton as pods. Breadcrumb kind segment carries the API version tag: `Certificates` + `cert-manager.io/v1` in `#44445c` 11px.
 - **Columns come from the CRD's `additionalPrinterColumns`** — kute never guesses. NAME and AGE always present; the rest as declared (here: READY · SECRET · ISSUER), ellipsized.
-- **Status derivation is conditions-based:** a Ready/Available-style condition maps to the standard glyphs (`✕ False` red, `◐ False`-but-Issuing yellow, `● True` green) and drives the summary strip (`status from Ready condition` noted right). Unhealthy-first sort + `+ N ready` collapse carry over.
+- **Status derivation is conditions-based:** a Ready/Available-style condition maps to the standard glyphs (`✕ False` red, `▲ False`-but-Issuing yellow, `● True` green) and drives the summary strip (`status from Ready condition` noted right). Unhealthy-first sort + `+ N ready` collapse carry over.
 - **Fallback (no printer columns, no conditions):** NAME + AGE only, neutral `·` glyph in `#55556e`, strip drops counts and says `no status semantics · NAME + AGE only` — never fake health.
 - Verbs from the command registry — only generic ones apply: `↵ open · y yaml · e events · ctrl-d delete · / filter`. Delete follows the 8b prod policy. Keybar pill = short kind name (`CERTS`).
 
 ### 14b — CustomResourceDefinitions list
-- Cluster-scoped: namespace drops from the breadcrumb + `cluster-scoped` tag, same rule as Nodes (11a). Strip: `● 27 established · ◐ 1 installing` + `28 definitions · 9 API groups · sorted by group`.
+- Cluster-scoped: namespace drops from the breadcrumb + `cluster-scoped` tag, same rule as Nodes (11a). Strip: `● 27 established · ▲ 1 installing` + `28 definitions · 9 API groups · sorted by group`.
 - Columns: glyph · NAME (plural, lowercase) · GROUP · VERSIONS (served versions; deprecated ones dim) · SCOPE (`Namespaced`/`Cluster`) · COUNT (live instance count, right) · AGE.
-- Status glyph = the CRD's **Established condition**; freshly-applied CRDs show `◐` until the API serves them. Zero-count kinds render dim.
+- Status glyph = the CRD's **Established condition**; freshly-applied CRDs show `▲` until the API serves them. Zero-count kinds render dim.
 - **`↵` jumps straight to that kind's instance list (14a)** — CRDs are a routing layer, like events. Keys: `↵ open instances · y yaml · / filter · g goto`. Keybar pill `CRDS`.
 - Deleting a CRD deletes all its instances — it **always** gets the type-the-name modal (8b), even outside PROD.
 
@@ -228,7 +228,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 15a — Loading a kind
 - The **full shell paints in the first frame** — breadcrumb, column headers, keybar. Loading replaces only the rows, never the app.
-- Header status: `◐ loading pods · 0.4s` (yellow) — a counting timer, not a fake progress bar; on timeout 4c takes over. Strip: `◐ listing pods in nva-stage…` + right `watch starts when the list lands`.
+- Header status: `▲ loading pods · 0.4s` (yellow) — a counting timer, not a fake progress bar; on timeout 4c takes over. Strip: `▲ listing pods in nva-stage…` + right `watch starts when the list lands`.
 - **Skeleton rows** (7, fading opacity toward the bottom): gray pills (`#1c1c2c` name, `#16161f` cells) laid out on the exact column grid of the real table, so live data is a fill-in, not a relayout. Footer `– of –`.
 - Nav keys (`g n c ?`) live immediately; row actions dark until rows exist (keybar says `row actions enable when data lands`).
 - Revisiting a kind seen this session: **cached rows dimmed** (4a's stale grammar) instead of skeletons.
@@ -282,7 +282,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `same as` strip shows the equivalent `kubectl auth can-i` (10a's idiom). `↵` opens the binding's YAML — the answer is always inspectable. Keybar pill `WHO CAN`.
 
 ### 23a — Ingress routing table (`↵` on an ingress)
-- **Not a describe page** — one row per host+path → `service:port`, the join raw YAML makes you do in your head. Backends resolve live from the watch: green ● service exists + ready endpoints; red ✕ `service not found` (inline, never a tooltip); yellow ◐ `0 ready`.
+- **Not a describe page** — one row per host+path → `service:port`, the join raw YAML makes you do in your head. Backends resolve live from the watch: green ● service exists + ready endpoints; red ✕ `service not found` (inline, never a tooltip); yellow ▲ `0 ready`.
 - The ingress **list** earns its keep first: NAME · CLASS · HOSTS · TLS (●/–) · BACKENDS (`3 ok · 1 broken`) · AGE. Strip counts unhealthy-first.
 - TLS column shows cert expiry from the referenced secret (yellow <30d, red expired); a strip above the keybar names each secret — `↵` there jumps to it (21a's secret semantics apply).
 - `↵` on a route → backend Service (9a's filtered-table recipe); `y` copies the full URL. Keybar pill `ROUTES`.
@@ -290,7 +290,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 23b — HTTPRoute / Gateway API routing table
 - Gateway API splits routing across **two objects owned by different people** (Gateway = infra, HTTPRoute = app team, joined by parentRefs). Kute resolves the join both ways: the route's parent strip shows `gw/public › https:443 · ✓ accepted` (from `status.parents`); `p` opens the Gateway.
 - **Attachment status lives in the list**: HTTPRoute list gains ATTACHED (`✓ gw/public` green / `✕ not accepted` red with the condition message verbatim) — a valid-but-unattached route is the #1 Gateway API footgun.
-- One row per rule match → backendRef; weighted backends stack under their match (`└ same match`) with split percentages (canary weight yellow). Same ●/✕/◐ backend grammar as 23a.
+- One row per rule match → backendRef; weighted backends stack under their match (`└ same match`) with split percentages (canary weight yellow). Same ●/✕/▲ backend grammar as 23a.
 - Gateway `↵` mirrors it: listeners as rows (protocol:port · hostname · TLS + expiry · `12 routes attached`); `↵` on a listener filters to attached routes.
 - GRPCRoute/TCPRoute reuse the table with fewer columns; all kinds arrive via `g` discovery like any CRD.
 
@@ -466,7 +466,7 @@ Rules that hold in both themes:
 - 4a desaturation: each theme defines its own muted ramp (dark: dim the colors; light: wash toward gray) — don't compute it, declare it in the struct.
 - Test on a real light terminal and on 256-color fallback; hex values degrade via termenv.
 
-Status glyphs: `●` running · `◐` pending · `✕` failed/crashloop · `○` completed · `◌` disconnected/probing · `↺` restarts · `⧗` stale · `▶` following · `▲` warning/version-skew · `◈` cordoned · `∗` all namespaces · `⇄` port-forward.
+Status glyphs: `●` running · `▲` pending · `✕` failed/crashloop · `○` completed · `◌` disconnected/probing · `↺` restarts · `⧗` stale · `▶` following · `▲` warning/version-skew · `◈` cordoned · `∗` all namespaces · `⇄` port-forward.
 
 Typography: single monospace face (mock uses JetBrains Mono; the terminal's font applies). Weight via bold only. Uppercase + letterspacing for section labels/column headers.
 

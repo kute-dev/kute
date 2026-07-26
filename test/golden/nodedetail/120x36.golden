@@ -2,7 +2,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 CONDITIONS                                                    ALLOCATED / ALLOCATABLE                                   
 ● Ready                                                       cpu  ▮▮▮▮▮▮▮▯▯▯▯▯ 2200m / 4000m                           
-◐ MemoryPressure — kubelet has insufficient memory availabl…  mem  ▮▮▮▮▮▮▮▮▮▮▮▮ 7.4Gi / 8.0Gi                           
+▲ MemoryPressure — kubelet has insufficient memory availabl…  mem  ▮▮▮▮▮▮▮▮▮▮▮▮ 7.4Gi / 8.0Gi                           
 ● DiskPressure false                                          pods ▮▯▯▯▯▯▯▯▯▯▯▯ 3 / 110                                 
 ● PIDPressure false                                                                                                     
                                                               TAINTS                                                    

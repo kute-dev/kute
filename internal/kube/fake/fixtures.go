@@ -157,7 +157,7 @@ func NewDemo() *Cluster {
 	demoGatewayAPIFixtures(c, age)
 	demoHelmReleaseFixtures(c, age)
 
-	// "ghost" exercises 23a's ◐ "0 ready" backend state: a Service whose
+	// "ghost" exercises 23a's ▲ "0 ready" backend state: a Service whose
 	// selector matches no pod at all, fronted by an Ingress rule that routes
 	// to it — staging otherwise has no pods (10c's empty-namespace preview).
 	c.Seed(kube.KindService, demoService("empty-svc", "staging", map[string]string{"app": "ghost"}, age(5*24*time.Hour)))
@@ -1053,7 +1053,7 @@ func demoGatewayAPIFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		CRDName:     "httproutes." + group,
 	})
 
-	// web-canary has no matching pods (Ready=0) so its split leg renders ◐,
+	// web-canary has no matching pods (Ready=0) so its split leg renders ▲,
 	// distinct from web's ● (the same Service demoProductionFixtures' pods
 	// already match).
 	c.Seed(kube.KindService, demoService("web-canary", "production", map[string]string{"app": "web-canary"}, gwAge))

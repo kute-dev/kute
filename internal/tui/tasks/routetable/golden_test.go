@@ -74,7 +74,7 @@ func demoCertPEM(t *testing.T, notAfter time.Time) []byte {
 // goldenIngress builds 23a's mock shape: three rules under one host, each
 // landing on a different backend-health outcome — "api" resolves (● 1
 // ready), "old-svc" doesn't exist (✕ service not found), "beta-svc" exists
-// but has no ready pods matching its selector (◐ 0 ready). A single TLS
+// but has no ready pods matching its selector (▲ 0 ready). A single TLS
 // block covers the host with a secret whose cert expires inside 30 days
 // (§23a: "yellow <30d").
 func goldenIngress() *networkingv1.Ingress {
@@ -109,7 +109,7 @@ func goldenIngressLister(t *testing.T) fakeLister {
 		kube.KindService: {
 			serviceWithSelector("api", "nva-stage", apiSel),
 			// beta-svc has a selector but no matching ready pod, so
-			// ResolveServiceBackend resolves it to Ready=0 -> the ◐ "0
+			// ResolveServiceBackend resolves it to Ready=0 -> the ▲ "0
 			// ready" grammar (docs/design README.md §23a).
 			serviceWithSelector("beta-svc", "nva-stage", betaSel),
 			// old-svc is intentionally absent -> ✕ "service not found".
@@ -139,7 +139,7 @@ func goldenIngressModel(t *testing.T, width, height int) Model {
 // goldenRoute builds 23b's mock shape: an HTTPRoute accepted by Gateway
 // "public" on its "https" listener/section, one rule matching "/" with a
 // 90/10 weighted split -- "web" resolves (● ready), "web-canary" has no
-// ready pods (◐ 0 ready, stacked "└ same match" under the first row, its
+// ready pods (▲ 0 ready, stacked "└ same match" under the first row, its
 // weight rendered in the canary-weight-yellow tone per §23b).
 func goldenRoute() *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
@@ -277,7 +277,7 @@ func TestGoldenFixtures(t *testing.T) {
 // truecolorGoldenFixtures renders 23a's Ingress flavor with a forced
 // truecolor profile in both themes, pinning the Theme-token-to-cell color
 // mapping the plain goldens above can't see (the yellow <30d TLS cell/strip,
-// the ✕/◐ backend glyphs, the selected-row background) -- same pattern as
+// the ✕/▲ backend glyphs, the selected-row background) -- same pattern as
 // browse's 2a and setup's 4c (browse/golden_test.go, setup/golden_test.go).
 // Scoped to the ingress flavor only, matching setup's precedent of
 // truecolor'ing just its "unreachable" state and not "noconfig". The

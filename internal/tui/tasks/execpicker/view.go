@@ -122,7 +122,7 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 
 	glyph, text := "●", "running"
 	if c.State != "" && c.State != "Running" {
-		glyph, stateStyle = "◐", stateStyle.Foreground(theme.Warn)
+		glyph, stateStyle = "▲", stateStyle.Foreground(theme.Warn)
 		text = strings.ToLower(c.State)
 		if c.Reason != "" {
 			text += " · " + strings.ToLower(c.Reason)

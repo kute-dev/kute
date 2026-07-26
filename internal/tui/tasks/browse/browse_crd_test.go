@@ -181,7 +181,7 @@ func TestCRDNoStatusSemanticsStripDropsCounts(t *testing.T) {
 }
 
 // installingCRDRow is a freshly-applied CRD the API hasn't started serving
-// yet (no Established condition at all) — 14b's ◐ "installing" state.
+// yet (no Established condition at all) — 14b's ▲ "installing" state.
 func installingCRDRow(name, group string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "apiextensions.k8s.io/v1",

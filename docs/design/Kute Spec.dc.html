@@ -66,7 +66,7 @@
           <span style="color: #ef6a6a;">✕</span><span style="color: #f0b7b7;">app.nva.dev <span style="color: #c98a8a;">/reports</span></span><span style="color: #34d17b;">● 61d</span><span style="color: #ef6a6a;">svc/nva-reports:80 — service not found</span><span style="color: #ef6a6a; text-align: right;">—</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 90px minmax(0,1fr) 120px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span><span style="color: #d8d8e8;">admin.nva.dev <span style="color: #676780;">/</span></span><span style="color: #e8c74a;">● 22d</span><span style="color: #d8d8e8;">svc/nva-admin:443</span><span style="color: #e8c74a; text-align: right;">0 ready</span>
+          <span style="color: #e8c74a;">▲</span><span style="color: #d8d8e8;">admin.nva.dev <span style="color: #676780;">/</span></span><span style="color: #e8c74a;">● 22d</span><span style="color: #d8d8e8;">svc/nva-admin:443</span><span style="color: #e8c74a; text-align: right;">0 ready</span>
         </div>
 
         <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
@@ -89,7 +89,7 @@
 
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
-          <li><span style="color: #e9e2ff;">One row per host+path → backend</span> — the join raw YAML makes you do in your head. Backends resolve live from the watch: green ● service exists + ready endpoints; red ✕ `service not found` (name inline, never a tooltip); yellow ◐ service exists but `0 ready`.</li>
+          <li><span style="color: #e9e2ff;">One row per host+path → backend</span> — the join raw YAML makes you do in your head. Backends resolve live from the watch: green ● service exists + ready endpoints; red ✕ `service not found` (name inline, never a tooltip); yellow ▲ service exists but `0 ready`.</li>
           <li>The ingress <span style="color: #e9e2ff;">list</span> earns its keep first: NAME · CLASS · HOSTS · TLS (●/–) · BACKENDS (`3 ok · 1 broken`) · AGE — most visits never open a row. The strip's broken count is unhealthy-first, same as everywhere.</li>
           <li>TLS column shows cert expiry from the referenced secret (yellow &lt;30d, red expired); the strip above the keybar names each secret — `↵` there jumps to it (secret semantics from <a href="#21a">21a</a> apply).</li>
           <li>`↵` on a route goes to the backend Service (filtered-table recipe from <a href="#9a">9a</a>); `y` copies the full URL (`https://app.nva.dev/api`). No describe prose anywhere — every fact is a row or a strip.</li>
@@ -163,7 +163,7 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>Gateway API splits routing across <span style="color: #e9e2ff;">two objects owned by different people</span> — Gateway (infra) and HTTPRoute (app team), joined by parentRefs. Kute resolves the join both ways: the route's strip shows its parent chain (`gw/public › https:443 · ✓ accepted` from `status.parents`); `p` or `↵` on the parent strip opens the Gateway.</li>
           <li><span style="color: #e9e2ff;">Attachment status lives in the list</span>, not buried in conditions: the HTTPRoute list's ATTACHED column shows `✓ gw/public` green or `✕ not accepted` red with the condition message verbatim (`no matching listener hostname`) — a valid-but-unattached route is the #1 Gateway API footgun.</li>
-          <li>One row per rule match → backendRef; <span style="color: #e9e2ff;">weighted backends stack under their match</span> (`└ same match`) with the split percentages — canary weight is why teams adopt Gateway API, so it gets a column, canary weight in yellow. Backends resolve with 23a's ●/✕/◐ grammar.</li>
+          <li>One row per rule match → backendRef; <span style="color: #e9e2ff;">weighted backends stack under their match</span> (`└ same match`) with the split percentages — canary weight is why teams adopt Gateway API, so it gets a column, canary weight in yellow. Backends resolve with 23a's ●/✕/▲ grammar.</li>
           <li>Gateway `↵` is the mirror image: listeners as rows (protocol:port · hostname · TLS cert + expiry · `12 routes attached`), `↵` on a listener filters to its attached routes (<a href="#9a">9a</a>'s recipe).</li>
           <li>GRPCRoute/TCPRoute reuse the same table with fewer columns; all Gateway API kinds arrive via `g` discovery like any CRD — no special registration.</li>
         </ul>
@@ -216,7 +216,7 @@
           <span style="color: #a78bfa;">▪</span><span style="color: #ef6a6a;">✕</span><span style="color: #f0b7b7;">nva-worker-b7f2c</span><span style="color: #9a9ab2;">0/1</span><span style="color: #ef6a6a;">CrashLoopBackOff</span><span style="color: #e8c74a;">38</span><span style="color: #676780; text-align: right;">3h</span>
         </div>
         <div style="display: grid; grid-template-columns: 16px 20px minmax(0,1fr) 52px 130px 40px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
-          <span style="color: #a78bfa;">▪</span><span style="color: #e8c74a;">◐</span><span style="color: #f0f0fa;">nva-worker-x41mm</span><span style="color: #9a9ab2;">0/1</span><span style="color: #e8c74a;">Pending</span><span style="color: #676780;">0</span><span style="color: #676780; text-align: right;">18s</span>
+          <span style="color: #a78bfa;">▪</span><span style="color: #e8c74a;">▲</span><span style="color: #f0f0fa;">nva-worker-x41mm</span><span style="color: #9a9ab2;">0/1</span><span style="color: #e8c74a;">Pending</span><span style="color: #676780;">0</span><span style="color: #676780; text-align: right;">18s</span>
         </div>
         <div style="display: grid; grid-template-columns: 16px 20px minmax(0,1fr) 52px 130px 40px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
           <span></span><span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">nva-gateway-2b81x</span><span style="color: #9a9ab2;">1/1</span><span style="color: #676780;">Running</span><span style="color: #676780;">0</span><span style="color: #676780; text-align: right;">21d</span>
@@ -617,7 +617,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">crashloop</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">node pressure</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">node pressure</span></span>
           <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">4</span> <span style="color: #676780;">warnings 1h</span></span>
           <span style="margin-left: auto; color: #676780;">v1.30.2 · 5 nodes · 125 pods · 6 namespaces</span>
         </div>
@@ -643,7 +643,7 @@
 
             <span style="color: #55556e; font-size: 11px; letter-spacing: 0.06em; margin-top: 8px;">NODES <span style="color: #33334a;">· ↵ node detail</span></span>
             <div style="display: flex; flex-direction: column;">
-              <div style="display: flex; gap: 10px; padding: 2px 0;"><span style="color: #e8c74a;">◐</span><span style="color: #d8d8e8;">worker-02</span><span style="color: #e8c74a;">MemPressure · mem 91%</span></div>
+              <div style="display: flex; gap: 10px; padding: 2px 0;"><span style="color: #e8c74a;">▲</span><span style="color: #d8d8e8;">worker-02</span><span style="color: #e8c74a;">MemPressure · mem 91%</span></div>
               <div style="display: flex; gap: 10px; padding: 2px 0;"><span style="color: #6aa8ef;">◈</span><span style="color: #d8d8e8;">worker-04</span><span style="color: #676780;">cordoned · 0 pods</span></div>
               <div style="display: flex; gap: 10px; padding: 2px 0;"><span style="color: #34d17b;">●</span><span style="color: #676780;">+ 3 ready</span></div>
             </div>
@@ -922,7 +922,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">32</span> <span style="color: #676780;">running</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">pending</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">pending</span></span>
           <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">crashloop</span></span>
           <span><span style="color: #6aa8ef;">○</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">completed</span></span>
           <span style="margin-left: auto; color: #676780;">36 pods · 3 nodes</span>
@@ -1206,7 +1206,7 @@
               <span style="color: #a78bfa;">▸</span>
               <span style="color: #f0f0fa; font-weight: 500;">nva-stage <span style="color: #55556e; font-size: 11px;">current</span></span>
               <span style="color: #9a9ab2;">36</span>
-              <span><span style="color: #34d17b;">●32</span> <span style="color: #e8c74a;">◐2</span> <span style="color: #ef6a6a;">✕1</span></span>
+              <span><span style="color: #34d17b;">●32</span> <span style="color: #e8c74a;">▲2</span> <span style="color: #ef6a6a;">✕1</span></span>
               <span style="color: #676780; text-align: right;">41%</span>
             </div>
             <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 70px 90px 60px; gap: 0 12px; padding: 3px 14px; align-items: center; border-left: 2px solid transparent;">
@@ -1248,7 +1248,7 @@
               <span style="color: #6aa8ef;">∗</span>
               <span style="color: #6aa8ef;">all namespaces</span>
               <span style="color: #9a9ab2;">125</span>
-              <span style="white-space: nowrap;"><span style="color: #34d17b;">●120</span> <span style="color: #e8c74a;">◐2</span> <span style="color: #ef6a6a;">✕2</span></span>
+              <span style="white-space: nowrap;"><span style="color: #34d17b;">●120</span> <span style="color: #e8c74a;">▲2</span> <span style="color: #ef6a6a;">✕2</span></span>
               <span style="color: #676780; text-align: right;"></span>
             </div>
           </div>
@@ -1302,7 +1302,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">120</span> <span style="color: #676780;">running</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">pending</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">pending</span></span>
           <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">crashloop</span></span>
           <span><span style="color: #6aa8ef;">○</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">completed</span></span>
           <span style="margin-left: auto; color: #676780;">125 pods · 6 namespaces · sorted by <span style="color: #d8d8e8;">status</span></span>
@@ -1317,7 +1317,7 @@
           <span style="color: #a78bfa; font-size: 11px;">▾</span>
           <span style="color: #c4b5fd; font-size: 11px; letter-spacing: 0.04em;">nva-stage</span>
           <span style="color: #55556e; font-size: 11px;">36 pods</span>
-          <span style="margin-left: auto; font-size: 11px;"><span style="color: #e8c74a;">◐2</span> <span style="color: #ef6a6a;">✕1</span></span>
+          <span style="margin-left: auto; font-size: 11px;"><span style="color: #e8c74a;">▲2</span> <span style="color: #ef6a6a;">✕1</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 56px 132px 40px 92px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
           <span style="color: #ef6a6a;">✕</span>
@@ -1325,12 +1325,12 @@
           <span style="color: #9a9ab2;">0/1</span><span style="color: #ef6a6a;">CrashLoopBackOff</span><span style="color: #e8c74a;">6</span><span style="color: #676780;">worker-01</span><span style="color: #676780; text-align: right;">3h</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 56px 132px 40px 92px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">nva-cc-api-6cf94</span>
           <span style="color: #9a9ab2;">0/1</span><span style="color: #e8c74a;">Pending</span><span style="color: #676780;">0</span><span style="color: #676780;">worker-01</span><span style="color: #676780; text-align: right;">18s</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 56px 132px 40px 92px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">nva-bp-api-migrate-x9s</span>
           <span style="color: #9a9ab2;">0/1</span><span style="color: #e8c74a;">Pending</span><span style="color: #676780;">0</span><span style="color: #676780;">worker-01</span><span style="color: #676780; text-align: right;">12s</span>
         </div>
@@ -1844,7 +1844,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">7</span> <span style="color: #676780;">available</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">progressing</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">progressing</span></span>
           <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">degraded</span></span>
           <span style="margin-left: auto; color: #676780;">9 deployments · sorted by <span style="color: #d8d8e8;">status</span></span>
         </div>
@@ -1862,7 +1862,7 @@
           <span style="color: #676780; text-align: right;">41d</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 66px 100px 240px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">nva-cc-api</span>
           <span style="color: #e8c74a;">3/4</span>
           <span style="color: #e8c74a;">2m 14s ▸</span>
@@ -2028,7 +2028,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">3</span> <span style="color: #676780;">ready</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">pressure</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">pressure</span></span>
           <span><span style="color: #6aa8ef;">◈</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">cordoned</span></span>
           <span style="margin-left: auto; color: #676780;">5 nodes · 125 pods · cluster <span style="color: #d8d8e8;">cpu 46%</span> · <span style="color: #d8d8e8;">mem 71%</span></span>
         </div>
@@ -2038,7 +2038,7 @@
         </div>
 
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 88px 62px 128px 128px 62px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">worker-01</span>
           <span style="color: #e8c74a;">MemPressure</span>
           <span style="color: #9a9ab2;">62/110</span>
@@ -2133,7 +2133,7 @@
             <div style="color: #55556e; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 6px;">CONDITIONS</div>
             <div style="display: flex; flex-direction: column; gap: 2px; font-size: 12px;">
               <span><span style="color: #34d17b;">●</span> <span style="color: #9a9ab2;">Ready</span></span>
-              <span><span style="color: #e8c74a;">◐</span> <span style="color: #e8c74a;">MemoryPressure</span> <span style="color: #676780;">— kubelet has insufficient memory · 14m</span></span>
+              <span><span style="color: #e8c74a;">▲</span> <span style="color: #e8c74a;">MemoryPressure</span> <span style="color: #676780;">— kubelet has insufficient memory · 14m</span></span>
               <span><span style="color: #34d17b;">●</span> <span style="color: #9a9ab2;">DiskPressure</span> <span style="color: #44445c;">false</span></span>
               <span><span style="color: #34d17b;">●</span> <span style="color: #9a9ab2;">PIDPressure</span> <span style="color: #44445c;">false</span></span>
             </div>
@@ -2705,7 +2705,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">4</span> <span style="color: #676780;">ready</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">issuing</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">issuing</span></span>
           <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">not ready</span></span>
           <span style="margin-left: auto; color: #676780;">6 certificates · status from <span style="color: #d8d8e8;">Ready condition</span></span>
         </div>
@@ -2723,7 +2723,7 @@
           <span style="color: #676780; text-align: right;">41d</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 190px 170px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">new-svc-tls</span>
           <span style="color: #e8c74a;">False</span>
           <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">new-svc-tls-cert</span>
@@ -2824,7 +2824,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
           <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">27</span> <span style="color: #676780;">established</span></span>
-          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">installing</span></span>
+          <span><span style="color: #e8c74a;">▲</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">installing</span></span>
           <span style="margin-left: auto; color: #676780;">28 definitions · 9 API groups · sorted by <span style="color: #d8d8e8;">group</span></span>
         </div>
 
@@ -2878,7 +2878,7 @@
           <span style="color: #676780; text-align: right;">90d</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 190px 100px 100px 70px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">gatewayclasses</span>
           <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">gateway.networking.k8s.io</span>
           <span style="color: #676780;">v1 <span style="color: #44445c;">v1beta1</span></span>
@@ -2910,7 +2910,7 @@
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>Cluster-scoped: the namespace segment drops from the breadcrumb, same rule as Nodes (<a href="#11a">11a</a>). COUNT is live instance counts — <span style="color: #e9e2ff;">↵ jumps straight to that kind's list</span> (14a), so CRDs are a routing layer like events.</li>
-          <li>Status glyph = the CRD's <span style="color: #e9e2ff;">Established</span> condition; a freshly-applied CRD shows ◐ until the API serves it. Zero-count kinds keep the dim treatment from the old taxonomy.</li>
+          <li>Status glyph = the CRD's <span style="color: #e9e2ff;">Established</span> condition; a freshly-applied CRD shows ▲ until the API serves it. Zero-count kinds keep the dim treatment from the old taxonomy.</li>
           <li>Deleting a CRD deletes all its instances — it always gets the type-the-name modal (<a href="#8b">8b</a>), even outside PROD.</li>
         </ul>
       </sc-if>
@@ -3027,7 +3027,7 @@
           <span style="color: #676780; text-align: right;">4m</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px 110px 70px minmax(0,1fr) 48px; gap: 0 12px; padding: 3px 14px 8px; align-items: center; border-bottom: 1px solid #1c1c2c;">
-          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #e8c74a;">▲</span>
           <span style="color: #d8d8e8;">Issuing</span>
           <span style="color: #e8c74a;">True</span>
           <span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Waiting for HTTP-01 challenge propagation: wrong status code '404'</span>
@@ -3398,10 +3398,10 @@
           <span style="color: #a78bfa;">nva-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Pods</span>
-          <span style="margin-left: auto; color: #e8c74a;">◐ loading pods · 0.4s</span>
+          <span style="margin-left: auto; color: #e8c74a;">▲ loading pods · 0.4s</span>
         </div>
         <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
-          <span style="color: #676780;"><span style="color: #e8c74a;">◐</span> listing pods in nva-stage…</span>
+          <span style="color: #676780;"><span style="color: #e8c74a;">▲</span> listing pods in nva-stage…</span>
           <span style="margin-left: auto; color: #44445c;">watch starts when the list lands</span>
         </div>
 
@@ -3439,7 +3439,7 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>The <span style="color: #e9e2ff;">full shell paints in the first frame</span> — breadcrumb, column headers, keybar. Loading replaces only the rows, never the app; it must not look like a different screen.</li>
           <li>Skeleton rows fade toward the bottom and columns match the real table exactly, so the swap to live data is a fill-in, not a relayout. No spinner-only blank screen, ever.</li>
-          <li>The header states <span style="color: #e9e2ff;">what</span> is loading and for how long (<span style="color: #e8c74a;">◐ loading pods · 0.4s</span>) — a counting timer instead of a fake progress bar; past ~5s it's the user's cue something is wrong (then <a href="#4c">4c</a> takes over on timeout).</li>
+          <li>The header states <span style="color: #e9e2ff;">what</span> is loading and for how long (<span style="color: #e8c74a;">▲ loading pods · 0.4s</span>) — a counting timer instead of a fake progress bar; past ~5s it's the user's cue something is wrong (then <a href="#4c">4c</a> takes over on timeout).</li>
           <li>Nav keys (<span style="color: #e9e2ff;">g · n · c · ?</span>) work immediately — you can bail to another kind, namespace, or context without waiting. Row actions stay dark until rows exist.</li>
           <li>Same treatment for every kind: switching to Deployments shows "loading deployments" with that kind's column skeleton. Revisiting a kind seen this session shows <span style="color: #e9e2ff;">cached rows dimmed</span> instead of skeletons, stale until the watch catches up (same dimming grammar as <a href="#4a">4a</a>).</li>
         </ul>

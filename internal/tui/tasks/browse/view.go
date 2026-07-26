@@ -246,7 +246,7 @@ func (m Model) columnHeaderLine(theme tui.Theme, width int) string {
 }
 
 // healthStripLine renders the per-status glyph+count segments (docs/design
-// §2a: "● 32 running · ◐ 2 pending · ✕ 1 crashloop · ○ 1 completed") in
+// §2a: "● 32 running · ▲ 2 pending · ✕ 1 crashloop · ○ 1 completed") in
 // OK/Warn/Fail/Neutral order, skipping zero counts, plus a right-aligned
 // total.
 func (m Model) healthStripLine(theme tui.Theme, width int) string {
@@ -293,7 +293,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		}
 		if m.kind == kube.KindHelmRelease && seg.class == resources.StatusWarn {
 			// 18a's own strip example renders pending-upgrade as ◌, not the
-			// generic ◐ pending glyph every other kind's Warn class uses.
+			// generic ▲ pending glyph every other kind's Warn class uses.
 			glyph = tui.GlyphProbing
 		}
 		parts = append(parts, glyphStyle.Render(glyph)+" "+
@@ -939,7 +939,7 @@ func (m Model) groupHeaderLine(namespace string, counts resources.HealthCounts) 
 }
 
 // groupHeaderChips builds 6b's right-aligned trouble chips (docs/design
-// README.md §6b: "right-aligned trouble chips (◐2 ✕1)") — one per non-zero
+// README.md §6b: "right-aligned trouble chips (▲2 ✕1)") — one per non-zero
 // class, each its own status color, replacing the inline "N crashloop · M
 // pending" text groupHeaderLine used to append. Empty when the group has
 // nothing to flag.

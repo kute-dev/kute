@@ -5,7 +5,7 @@ package tui
 // fallback (terminal degradation, deferred post-MVP) is a one-file change.
 const (
 	GlyphRunning   = "●"
-	GlyphPending   = "◐"
+	GlyphPending   = "▲"
 	GlyphFailed    = "✕"
 	GlyphCompleted = "○"
 	GlyphProbing   = "◌"

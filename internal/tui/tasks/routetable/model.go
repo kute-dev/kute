@@ -16,7 +16,7 @@
 //     attached-route count from status.listeners.
 //
 // Every backend's health (docs/design README.md's shared "● ready endpoints
-// / ✕ not found / ◐ 0 ready" grammar) comes from
+// / ✕ not found / ▲ 0 ready" grammar) comes from
 // resources.ResolveServiceBackend — a Service lookup plus a selector match
 // against cached Pods, deliberately reusing the already-watched Service/Pod
 // informers rather than a new EndpointSlice one.

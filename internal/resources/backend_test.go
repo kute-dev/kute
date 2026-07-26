@@ -83,8 +83,8 @@ func TestResolveServiceBackendZeroReady(t *testing.T) {
 		t.Fatalf("unexpected state: %+v", state)
 	}
 	glyph, class := state.Glyph()
-	if glyph != "◐" || class != StatusWarn {
-		t.Fatalf("Glyph() = %q/%v, want ◐/warn", glyph, class)
+	if glyph != "▲" || class != StatusWarn {
+		t.Fatalf("Glyph() = %q/%v, want ▲/warn", glyph, class)
 	}
 }
 
