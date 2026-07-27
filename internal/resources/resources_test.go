@@ -162,6 +162,9 @@ func TestProjectPodHonorsFalseReadyConditionOverContainerReady(t *testing.T) {
 	if row.Status != StatusFail || row.Glyph != "✕" {
 		t.Fatalf("pod with False Ready condition should be StatusFail/✕ despite 1/1 container ready, got %s/%s", row.Status, row.Glyph)
 	}
+	if row.Cells[2] != "CrashLoopBackOff" {
+		t.Fatalf("STATUS cell must not fall back to the phase-derived %q for a red row, got %q", "Running", row.Cells[2])
+	}
 }
 
 func TestProjectPodShowsTerminatingWhileDeleting(t *testing.T) {

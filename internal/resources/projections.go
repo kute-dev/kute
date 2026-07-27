@@ -187,7 +187,14 @@ func projectPod(obj runtime.Object) Row {
 	case strings.Contains(podWaitingReason(p.Status.ContainerStatuses), "CrashLoop"):
 		glyph, class, status = "✕", StatusFail, podWaitingReason(p.Status.ContainerStatuses)
 	case total > 0 && ready >= total && podReadyConditionFalse(p):
-		glyph, class = "✕", StatusFail
+		// Containers report ready by count, but the pod-level Ready
+		// condition lags False — the same flapping-restart window
+		// podWaitingReason above can miss because Waiting.Reason has
+		// already cleared. Must not leave status at its phase-derived
+		// "Running" default, or the row reads healthy while its own glyph
+		// and the health-strip tally (podHealthLabel, StatusFail →
+		// "crashloop") both call it failed.
+		glyph, class, status = "✕", StatusFail, "CrashLoopBackOff"
 	case total > 0 && ready >= total:
 		glyph, class = "●", StatusOK
 	default:
