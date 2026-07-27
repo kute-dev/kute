@@ -70,7 +70,7 @@ type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Mod
 // Config are poddetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values). Siblings/
 // SiblingIndex are the ordered pod-name list + cursor browse hands over so
-// j/k can move to the next/prev pod without leaving detail (docs/design
+// [/] can move to the next/prev pod without leaving detail (docs/design
 // README.md §5a).
 type Config struct {
 	Session      *tui.Session

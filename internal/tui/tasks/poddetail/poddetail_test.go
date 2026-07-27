@@ -526,26 +526,26 @@ func TestSiblingNavigationMovesAndClamps(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	// k at the start is a no-op.
+	// [ at the start is a no-op.
 	before := m
-	m = step(t, m, tea.KeyPressMsg{Text: "k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "["})
 	if m.name != before.name || m.siblingIndex != before.siblingIndex {
-		t.Fatalf("expected k at the start to no-op, got name=%q index=%d", m.name, m.siblingIndex)
+		t.Fatalf("expected [ at the start to no-op, got name=%q index=%d", m.name, m.siblingIndex)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "j"})
+	m = step(t, m, tea.KeyPressMsg{Text: "]"})
 	if m.name != "b" || m.siblingIndex != 1 {
-		t.Fatalf("expected j to move to sibling 'b', got name=%q index=%d", m.name, m.siblingIndex)
+		t.Fatalf("expected ] to move to sibling 'b', got name=%q index=%d", m.name, m.siblingIndex)
 	}
 	if m.state != tui.TaskStateReady || m.pod.Name != "b" {
 		t.Fatalf("expected reload for sibling 'b', got state=%s pod=%q", m.state, m.pod.Name)
 	}
 
-	// j at the end is a no-op.
+	// ] at the end is a no-op.
 	afterLast := m
-	m = step(t, m, tea.KeyPressMsg{Text: "j"})
+	m = step(t, m, tea.KeyPressMsg{Text: "]"})
 	if m.name != afterLast.name || m.siblingIndex != afterLast.siblingIndex {
-		t.Fatalf("expected j at the end to no-op, got name=%q index=%d", m.name, m.siblingIndex)
+		t.Fatalf("expected ] at the end to no-op, got name=%q index=%d", m.name, m.siblingIndex)
 	}
 }
 

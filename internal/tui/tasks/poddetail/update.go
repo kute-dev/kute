@@ -131,9 +131,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
-	case "j":
+	case "]":
 		return m, m.moveSibling(1)
-	case "k":
+	case "[":
 		return m, m.moveSibling(-1)
 	case "tab":
 		m.cycleContainer()
@@ -253,7 +253,7 @@ func (m Model) isProd() bool {
 }
 
 // moveSibling shifts to the next/prev pod in browse's ordered list without
-// leaving detail (docs/design README.md §5a: "j/k moves through the table's
+// leaving detail (docs/design README.md §5a: "[/] moves through the table's
 // pod list without leaving detail view") — a no-op at either end, and a
 // no-op when there's no sibling list at all (e.g. reached from nodedetail's
 // single-pod handoff).

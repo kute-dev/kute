@@ -76,7 +76,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **CPU/MEM bars** with `used / limit` text; MEM at 96% renders the bar and text red.
 - **EVENTS (newest first):** grid — type (`Warning` yellow/red, `Normal` blue) · reason · age · message (ellipsize).
 - **Right sidebar** (~25% width, bg `#0a0a0f`, left border): LABELS (`key=` dim, value bright), RELATED (purple links with `↗`: owner deploy, rs, svc, configmaps), TOLERATIONS.
-- **Keybar:** `esc back · j/k next/prev pod │ l logs · e exec · y yaml · ctrl-d delete │ tab cycle container · ? help`. `j/k` moves through the table's pod list **without leaving detail view**.
+- **Keybar:** `esc back · [/] next/prev pod │ l logs · e exec · y yaml · ctrl-d delete │ tab cycle container · ? help`. `[/]` moves through the table's pod list **without leaving detail view**.
 
 ### 5b — Log view (l from table or detail)
 - Breadcrumb: `… › nva-worker-9k2ss › logs · worker`; right status `▶ following` (green).
@@ -370,7 +370,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `g` opens the jump palette anywhere. Empty query = alias letters + ranked daily kinds (12a); typing = fuzzy results across kinds/resources/namespaces/contexts (2b/12b). `esc` closes; `↵` jumps.
 - `/` opens filter on the current view (table rows or log stream). Show `matched/total` and a "N hidden by filter — esc to clear" notice so items never silently disappear. Highlight matched characters in results.
 - `↵` opens the selected resource's full view; `esc` walks back one level (detail → table; palette/filter → close). While a filter is being typed, `↵` never opens a destination (even for a kind that has one) — it commits the filter instead, keeping the query/rows/chrome as-is but releasing keys back to normal list navigation and verbs; a second `↵` then opens the selected row's destination same as unfiltered. `/` on a committed filter resumes editing the same query.
-- `j/k` and `↑↓` are synonyms for movement everywhere; in detail view `j/k` means next/prev sibling resource.
+- `j/k` and `↑↓` are synonyms for movement everywhere; in pod detail (5a) `[/]` moves to the next/prev sibling pod, and in generic custom resource detail (14d) `j/k` still means next/prev sibling resource.
 - Connection loss: switch to 4a automatically; keep the last snapshot; retry with exponential backoff and a visible countdown; disable mutating verbs. On reconnect, silently return to live and drop the stale strip.
 - RELATED/CONTROLLER links reuse the goto navigation (push detail view of the target).
 - **Destructive-action policy:** reversible-and-immediate verbs (cordon) execute right away; delete and rollout restart are both tiered — inline `y/N` in non-prod, type-the-name modal in PROD contexts; drain and force-delete get the modal always. The PROD flag comes from a kubeconfig annotation, never a name heuristic.
