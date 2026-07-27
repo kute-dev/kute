@@ -88,7 +88,8 @@ kute reads `~/.config/kute/config.yaml`. Every key is optional — with no file 
 
 ```yaml
 # Contexts to treat as production. This is the ONLY source of PROD status —
-# kute never guesses from a context's name.
+# kute never guesses from a context's name. Toggle with ctrl+p in the
+# context palette (c) instead of hand-editing this list.
 prodContexts:
   - prod-eks
   - aks-prod-eastus2
