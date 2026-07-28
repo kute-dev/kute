@@ -70,12 +70,18 @@ type Cluster struct {
 	// the old cluster.
 	metaClient metadata.Interface
 
-	// helmFactory/helmInformer back KindHelmRelease: a second Secret
-	// informer, filtered server-side to type=helm.sh/release.v1 so listing
+	// helmFactories/helmInformers back KindHelmRelease: Secret informers of
+	// their own, filtered server-side to type=helm.sh/release.v1 so listing
 	// releases doesn't pull every Secret in the cluster (see helm.go's
-	// ensureHelmSecrets). Started on first read, like every other lazy kind.
-	helmFactory  informers.SharedInformerFactory
-	helmInformer cache.SharedIndexInformer
+	// ensureHelmSecrets). Started on first read, like every other lazy kind,
+	// and keyed by namespace ("" = all) because a cluster-wide release list
+	// is a much bigger read than the one namespace a screen is showing.
+	// helmScope is the namespace of the most recent read, which is the cache
+	// KindSynced(KindHelmRelease) has to answer for — a screen asking "is my
+	// answer trustworthy yet" means the cache its own list just came from.
+	helmFactories map[string]informers.SharedInformerFactory
+	helmInformers map[string]cache.SharedIndexInformer
+	helmScope     string
 
 	// kindInformers is every typed informer registered so far, the handle
 	// KindSynced needs (a lister can't report its own sync state).
@@ -290,8 +296,11 @@ func (c *Cluster) KindSynced(kind ResourceKind) bool {
 	}
 	if kind == KindHelmRelease {
 		// Releases come from their own filtered Secret cache, not the
-		// shared one, so this must not answer for KindSecret.
-		return c.helmInformer != nil && c.helmInformer.HasSynced()
+		// shared one, so this must not answer for KindSecret — and there is
+		// one such cache per namespace read, so it answers for the scope the
+		// last read actually used.
+		inf := c.helmInformers[c.helmScope]
+		return inf != nil && inf.HasSynced()
 	}
 	if inf, ok := c.kindInformers[kind]; ok {
 		return inf.HasSynced()
@@ -327,8 +336,12 @@ func (c *Cluster) allStartedKindsSynced() bool {
 			return false
 		}
 	}
-	if c.helmInformer != nil && !c.kindFailed[KindHelmRelease] && !c.helmInformer.HasSynced() {
-		return false
+	if !c.kindFailed[KindHelmRelease] {
+		for _, inf := range c.helmInformers {
+			if !inf.HasSynced() {
+				return false
+			}
+		}
 	}
 	return true
 }
@@ -404,8 +417,9 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	c.kindInformers = nil
 	c.kindFailed = nil
 	c.metaClient = nil
-	c.helmFactory = nil
-	c.helmInformer = nil
+	c.helmFactories = nil
+	c.helmInformers = nil
+	c.helmScope = ""
 	c.Context = client.Context
 	c.health.reset()
 	c.started = false

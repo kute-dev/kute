@@ -415,8 +415,8 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 var helmReleaseFieldSelector = fields.OneTermEqualSelector("type", string(HelmReleaseSecretType)).String()
 
 // ensureHelmSecrets idempotently starts the informer behind
-// ListHelmReleaseSecrets: a Secret informer of its own, filtered server-side
-// to type=helm.sh/release.v1.
+// ListHelmReleaseSecrets for one namespace ("" for all): a Secret informer of
+// its own, filtered server-side to type=helm.sh/release.v1.
 //
 // It is deliberately not the shared Secret cache. Releases are a small,
 // distinctively-typed slice of a namespace's Secrets, but the shared cache
@@ -428,22 +428,40 @@ var helmReleaseFieldSelector = fields.OneTermEqualSelector("type", string(HelmRe
 // The two caches coexist: opening the Secrets list still populates the shared
 // one, and that is the right cost for a screen that is actually about
 // Secrets. This one only ever holds releases.
-func (c *Cluster) ensureHelmSecrets() {
+//
+// It is also scoped to the namespace being read, one informer per namespace,
+// rather than one cluster-wide cache serving every read. The type filter
+// narrows the *kind* of Secret but not the *scope*, and release Secrets carry
+// the release's whole gzipped manifest, so a cluster-wide list is far larger
+// than the namespaced one that answers the screen actually open: 8.19 MB
+// against 4 MB on the cluster this was measured against. On a link where the
+// bigger read can't finish inside the API server's 60s request window it
+// never completes at all — the reflector retries the same doomed LIST
+// forever, KindSynced never flips, and the Helm list spins indefinitely while
+// `helm list -n <ns>` answers in seconds. All-namespaces mode (namespace "")
+// still reads cluster-wide: you asked for every namespace, same as the
+// Secrets list itself.
+func (c *Cluster) ensureHelmSecrets(namespace string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stopCh == nil || c.helmInformer != nil {
+	if c.stopCh == nil {
 		return
 	}
-	if c.helmFactory == nil {
-		c.helmFactory = informers.NewSharedInformerFactoryWithOptions(
-			c.clientset, defaultResync,
-			informers.WithTransform(stripManagedFields),
-			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-				opts.FieldSelector = helmReleaseFieldSelector
-			}),
-		)
+	// The scope of the most recent read is what KindSynced(KindHelmRelease)
+	// answers for, so record it whether or not the informer already exists.
+	c.helmScope = namespace
+	if c.helmInformers[namespace] != nil {
+		return
 	}
-	informer := c.helmFactory.Core().V1().Secrets().Informer()
+	factory := informers.NewSharedInformerFactoryWithOptions(
+		c.clientset, defaultResync,
+		informers.WithNamespace(namespace),
+		informers.WithTransform(stripManagedFields),
+		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+			opts.FieldSelector = helmReleaseFieldSelector
+		}),
+	)
+	informer := factory.Core().V1().Secrets().Informer()
 	//nolint:errcheck // best-effort: a failed registration just means no health signal here
 	// Runs later, on the reflector's goroutine — so it takes the lock
 	// itself rather than assuming the one held here.
@@ -459,8 +477,13 @@ func (c *Cluster) ensureHelmSecrets() {
 		UpdateFunc: func(any, any) { c.notify(KindHelmRelease) },
 		DeleteFunc: func(any) { c.notify(KindHelmRelease) },
 	})
-	c.helmInformer = informer
-	c.helmFactory.Start(c.stopCh)
+	if c.helmFactories == nil {
+		c.helmFactories = map[string]informers.SharedInformerFactory{}
+		c.helmInformers = map[string]cache.SharedIndexInformer{}
+	}
+	c.helmFactories[namespace] = factory
+	c.helmInformers[namespace] = informer
+	factory.Start(c.stopCh)
 	c.health.noteListBurst()
 }
 
@@ -469,15 +492,18 @@ func (c *Cluster) ensureHelmSecrets() {
 // DecodeHelmReleases; this deliberately returns Secrets rather than releases
 // so the decode stays where it already lives.
 func (c *Cluster) ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error) {
-	c.ensureHelmSecrets()
+	c.ensureHelmSecrets(namespace)
 	c.mu.Lock()
-	f := c.helmFactory
+	f := c.helmFactories[namespace]
 	c.mu.Unlock()
 	if f == nil {
 		// No cluster to read from (a stopped Cluster); an empty result plus
 		// KindSynced reporting settled is how every other read degrades.
 		return nil, nil
 	}
+	// The factory is already scoped to namespace, so its cluster-wide List is
+	// this namespace's releases — but the namespaced path stays for the
+	// all-namespaces cache, which really does hold every namespace's.
 	lister := f.Core().V1().Secrets().Lister()
 	return listNamespaced(lister.List, lister.Secrets, namespace, labels.Everything())
 }

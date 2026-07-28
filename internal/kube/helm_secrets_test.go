@@ -126,6 +126,118 @@ func TestSharedSecretCacheStaysUnfiltered(t *testing.T) {
 	}
 }
 
+// secretListNamespaces returns the namespace each recorded Secret list was
+// issued against ("" = cluster-wide), which is what proves the scope of the
+// read matched the scope of the screen asking for it.
+func secretListNamespaces(cs interface{ Actions() []k8stesting.Action }) []string {
+	var out []string
+	for _, a := range cs.Actions() {
+		if a.GetVerb() != "list" || a.GetResource().Resource != "secrets" {
+			continue
+		}
+		out = append(out, a.GetNamespace())
+	}
+	return out
+}
+
+// TestListHelmReleaseSecretsScopesToTheNamespace: the type filter narrows
+// which Secrets come back, not how many namespaces are scanned, and release
+// Secrets carry the release's whole gzipped manifest. Listing one namespace's
+// releases cluster-wide was 8.19 MB against 4 MB on the cluster this was
+// measured against — and on a link where the bigger read can't finish inside
+// the API server's 60s window, it never completes at all: the reflector
+// retries the same doomed LIST forever and the Helm list spins for as long as
+// you leave it open.
+func TestListHelmReleaseSecretsScopesToTheNamespace(t *testing.T) {
+	c, cs := newLazyTestCluster(
+		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
+		secretOfType("sh.helm.release.v1.api.v1", "other", HelmReleaseSecretType),
+	)
+	defer c.Stop()
+	if err := c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+		t.Fatalf("ListHelmReleaseSecrets: %v", err)
+	}
+	waitFor(t, "the release-secret informer to list", func() bool {
+		return len(secretListNamespaces(cs)) > 0
+	})
+
+	for _, ns := range secretListNamespaces(cs) {
+		if ns != "default" {
+			t.Fatalf("release Secrets listed in namespace %q, want \"default\" — a cluster-wide read pulls every namespace's release manifests to answer for one", ns)
+		}
+	}
+}
+
+// TestListHelmReleaseSecretsAllNamespacesStaysClusterWide: the scoping above
+// follows the read, it isn't a blanket narrowing. 19a's overview asks for
+// every namespace's releases and must get them.
+func TestListHelmReleaseSecretsAllNamespacesStaysClusterWide(t *testing.T) {
+	c, cs := newLazyTestCluster(
+		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
+		secretOfType("sh.helm.release.v1.api.v1", "other", HelmReleaseSecretType),
+	)
+	defer c.Stop()
+	if err := c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := c.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
+		t.Fatalf("ListHelmReleaseSecrets: %v", err)
+	}
+	waitFor(t, "the release-secret informer to list", func() bool {
+		return len(secretListNamespaces(cs)) > 0
+	})
+	waitFor(t, "the all-namespaces release cache to fill", func() bool {
+		return c.KindSynced(KindHelmRelease)
+	})
+
+	for _, ns := range secretListNamespaces(cs) {
+		if ns != "" {
+			t.Fatalf("all-namespaces release list was scoped to %q", ns)
+		}
+	}
+	objs, err := c.ListHelmReleaseSecrets(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ListHelmReleaseSecrets: %v", err)
+	}
+	if len(objs) != 2 {
+		t.Fatalf("all-namespaces read returned %d release Secrets, want both", len(objs))
+	}
+}
+
+// TestKindSyncedFollowsTheScopeOfTheLastRead: with one cache per namespace,
+// answering off the wrong one is the failure KindSynced exists to prevent —
+// a screen that just read a namespace nothing has cached yet would be told
+// its empty answer is trustworthy and flash "no releases".
+func TestKindSyncedFollowsTheScopeOfTheLastRead(t *testing.T) {
+	c, _ := newLazyTestCluster(
+		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
+	)
+	defer c.Stop()
+	if err := c.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+		t.Fatalf("ListHelmReleaseSecrets: %v", err)
+	}
+	waitFor(t, "the default-namespace release cache to fill", func() bool {
+		return c.KindSynced(KindHelmRelease)
+	})
+
+	// Switching namespaces reads a cache that has not been started at all.
+	c.mu.Lock()
+	c.helmScope = "other"
+	c.mu.Unlock()
+	if c.KindSynced(KindHelmRelease) {
+		t.Fatal("KindSynced answered off another namespace's cache; an empty first read there would render as \"no releases\"")
+	}
+}
+
 // TestHelmReleaseSecretsAfterStop mirrors the lazy-kind contract: a
 // torn-down cluster reads empty rather than starting an informer that could
 // never be stopped.
