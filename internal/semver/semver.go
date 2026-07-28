@@ -42,6 +42,15 @@ func Compare(a, b string) int {
 	return comparePrerelease(apre, bpre)
 }
 
+// Major returns v's major component (0 for anything unparseable). Chart
+// freshness uses it to tell two same-named charts from different repos
+// apart: they are almost never the same chart, and their version series
+// diverge (fluent/fluent-bit is on 0.x while grafana/fluent-bit is on 2.x).
+func Major(v string) int {
+	core, _ := parse(v)
+	return core[0]
+}
+
 // IsPrerelease reports whether v carries a pre-release suffix — the
 // distinction `helm search repo` draws when it offers a chart's newest
 // version, and kute's chart index draws for the same reason.
