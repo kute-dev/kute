@@ -303,6 +303,14 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		parts = append(parts, glyphStyle.Render(glyph)+" "+
 			numStyle.Render(fmt.Sprintf("%d", seg.n))+" "+labelStyle.Render(label))
 	}
+	if counts.Outdated > 0 {
+		// 18a's outdated segment sits after the status counts because it
+		// cross-cuts them — the same release is already counted above as
+		// deployed (or failed, or pending-upgrade).
+		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, resources.StatusWarn))
+		parts = append(parts, glyphStyle.Render(tui.GlyphWarning)+" "+
+			numStyle.Render(fmt.Sprintf("%d", counts.Outdated))+" "+labelStyle.Render("outdated"))
+	}
 	left := strings.Join(parts, "   ")
 	rightText := fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display))
 	switch {
@@ -313,8 +321,14 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	case m.kind == kube.KindHelmRelease:
 		// 18a: "from sh.helm.release.v1 secrets" — names the data source
 		// instead of the usual "<N> <kind>" count, since browsing needs no
-		// helm binary and the strip already names each status.
+		// helm binary and the strip already names each status. The LATEST
+		// column has a second source with its own trustworthiness, so it
+		// gets named too whenever it's missing or stale (chartCacheNote,
+		// computed at load time — never from the clock in here).
 		rightText = "from " + string(kube.HelmReleaseSecretType) + " secrets"
+		if m.chartCacheNote != "" {
+			rightText += " · " + m.chartCacheNote
+		}
 	case m.kind == kube.KindCustomResourceDefinition:
 		// 14b: "28 definitions · 9 API groups · sorted by group" — the
 		// generic "<N> <kind>" wording never names the group count or the
@@ -832,10 +846,19 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 	for i := range cells {
 		switch {
 		case i == 0: // status glyph column
-			if cells[i].Text == "" {
-				cells[i].Text = defaultGlyphFor(r.Status)
+			// GlyphClass is the row's own glyph coloring where a projection
+			// set one, falling back to Status (resources.Row's documented
+			// contract). They differ for exactly one case today: 18a's
+			// outdated release, which stays `deployed` in the strip while
+			// its glyph goes warn-yellow.
+			glyphClass := r.Status
+			if r.GlyphClass != "" {
+				glyphClass = r.GlyphClass
 			}
-			cells[i].Style = st.status[r.Status]
+			if cells[i].Text == "" {
+				cells[i].Text = defaultGlyphFor(glyphClass)
+			}
+			cells[i].Style = st.status[glyphClass]
 			if m.desc.Custom && r.Status == resources.StatusNeutral {
 				// docs/design README.md §14a: a CRD instance with no
 				// Ready/Available condition at all — "never fake

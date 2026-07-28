@@ -232,6 +232,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.applySort()
 	m.pods = msg.pods
 	m.helmReleases = msg.helmReleases
+	m.chartCacheNote = msg.chartCacheNote
 	m.nodeCount = msg.nodeCount
 	m.nodeCapacity = msg.nodeCapacity
 	m.podCountByNode = msg.podCountByNode

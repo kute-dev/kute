@@ -95,7 +95,8 @@ var fixedWidths = map[string]int{
 	"Local":    16, // "localhost:65535"
 	"Uptime":   8,  // "12h34m" + the arrow allowance
 	"Traffic":  22, // "retry 3 · next in 8s" / "idle 12m"
-	"Chart":    22, // "postgresql 12.1.9"
+	"Chart":    20, // "postgresql 12.1.9" — 2 cells narrower than it used to be, given back to STATUS once LATEST joined the row
+	"Latest":   8,  // "12.2.1 ?" — the newest version the local repo cache offers, "?" when two repos disagree
 	"App Ver":  10, // "15.4.0"
 	"Rev":      5,  // revision number, right-aligned ("REV" + the arrow allowance)
 	"Updated":  10, // "3d ago" / "12m ago"

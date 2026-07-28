@@ -327,6 +327,10 @@ type Model struct {
 	// only), keyed by release name — Row only carries display Cells, but
 	// 'v'/'h'/'R' need the chart/values/revision fields it doesn't.
 	helmReleases map[string]kube.HelmRelease
+	// chartCacheNote caveats the LATEST column's data source on the 18a
+	// strip ("repo cache 6d old" / "no helm repo cache"), pre-rendered in
+	// load() because it depends on the clock and Render must not read one.
+	chartCacheNote string
 
 	// nodeMetrics/nodeCapacity/podCountByNode/clusterPodTotal/nodePodHealth
 	// back 11a's Nodes columns and health-strip right side (Node kind only)
@@ -427,6 +431,7 @@ type rowsLoadedMsg struct {
 	podCountByNode  map[string]int
 	clusterPodTotal int
 	nodePodHealth   map[string]resources.HealthCounts
+	chartCacheNote  string
 	err             error
 }
 
@@ -662,6 +667,7 @@ func (m Model) load() tea.Cmd {
 		}
 		var pods map[string]kube.Pod
 		var helmReleases map[string]kube.HelmRelease
+		chartCacheNote := ""
 		nodeCount := 0
 		var nodeCap map[string]nodeCapacity
 		var podCountByNode map[string]int
@@ -679,11 +685,12 @@ func (m Model) load() tea.Cmd {
 			nodeCap, podCountByNode, clusterPodTotal, nodePodHealth = loadNodeExtras(ctx, lister, podDesc.Project)
 		case kube.KindHelmRelease:
 			helmReleases = helmReleasesByName(ctx, lister, ns)
+			chartCacheNote = chartCacheNoteFor(lister, time.Now())
 		}
 		return rowsLoadedMsg{
 			kind: kind, rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
-			nodePodHealth: nodePodHealth,
+			nodePodHealth: nodePodHealth, chartCacheNote: chartCacheNote,
 		}
 	}
 }
@@ -859,6 +866,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.rows = nil
 	m.pods = nil
 	m.helmReleases = nil
+	m.chartCacheNote = ""
 	m.visible = nil
 	m.expandedGroups = nil
 	m.display = nil

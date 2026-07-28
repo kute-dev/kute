@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/kute-dev/kute/internal/config"
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/state"
@@ -74,6 +75,11 @@ type Session struct {
 	// forwards survive one (docs/design README.md §13d: "global across
 	// context switches"). Nil when no cluster is reachable.
 	Forwards *kube.ForwardManager
+	// Charts is the local Helm repo cache behind 18a's LATEST column, built
+	// once at the composition root and — like Forwards — never rebuilt on a
+	// context switch: it describes the user's own disk, not the cluster.
+	// Nil is a working value (every chart version reads unknown).
+	Charts *helmrepo.Cache
 	// Version is kute's own running build version ("0.2.0", no leading
 	// "v") — set once at the composition root from the ldflags-injected
 	// build version (main.go), the "you run X" side of every 28a/28b

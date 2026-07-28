@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/kute-dev/kute/internal/config"
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/state"
@@ -31,6 +32,7 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 	theme := selectTheme(cfg.Theme, userConfig.Theme)
 
 	sess = &tui.Session{
+		Charts:     helmrepo.NewCache(helmrepo.Loader{}),
 		Registry:   resources.DefaultRegistry(),
 		Groups:     resources.DefaultGroups(),
 		State:      sessionState,

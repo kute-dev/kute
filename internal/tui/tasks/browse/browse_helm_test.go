@@ -4,11 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -49,6 +52,135 @@ func TestHelmReleaseHealthStripCountsByStatus(t *testing.T) {
 	}
 }
 
+// outdatedRelease is a release the local repo cache has a newer chart for.
+func outdatedRelease(namespace, name, chart, deployed, available string) *kube.HelmReleaseObject {
+	return kube.NewHelmReleaseObject(kube.HelmRelease{
+		Namespace: namespace, Name: name, Chart: chart, ChartVersion: deployed,
+		AppVersion: "1.0.0", Revision: 3, Status: "deployed",
+	}.WithLatest(available, "testrepo", false))
+}
+
+// TestOutdatedReleasesCountSeparatelyFromStatus is 18a's central claim about
+// the outdated signal: it cross-cuts helm status rather than replacing it. A
+// deployed release that is behind its repo has to keep being counted
+// "deployed" — the strip is about release health, and stapling outdated-ness
+// into it would make a perfectly healthy install look broken.
+func TestOutdatedReleasesCountSeparatelyFromStatus(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindHelmRelease: {
+			outdatedRelease("default", "certs", "cert-manager", "1.14.4", "1.16.2"),
+			outdatedRelease("default", "redis", "redis", "18.1.5", "20.1.3"),
+			helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3),
+		},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	strip := plain(m.healthStripLine(m.Theme(), 120))
+	if !strings.Contains(strip, "3 deployed") {
+		t.Errorf("health strip %q lost the deployed count — outdated must not reclassify a healthy release", strip)
+	}
+	if !strings.Contains(strip, "2 outdated") {
+		t.Errorf("health strip %q missing the outdated count", strip)
+	}
+
+	// The row keeps its deployed status class and says "behind" in the glyph
+	// column alone.
+	row, ok := m.selectedRow()
+	if !ok {
+		t.Fatal("expected a selected row")
+	}
+	if row.Status != resources.StatusOK {
+		t.Errorf("outdated row Status = %v, want %v", row.Status, resources.StatusOK)
+	}
+	if row.GlyphClass != resources.StatusWarn || row.Glyph != tui.GlyphWarning {
+		t.Errorf("outdated row glyph = %q/%v, want %q/%v", row.Glyph, row.GlyphClass, tui.GlyphWarning, resources.StatusWarn)
+	}
+	if got, want := row.Cells[2], "1.16.2"; got != want {
+		t.Errorf("LATEST cell = %q, want %q", got, want)
+	}
+}
+
+// TestUnknownChartRendersAsUnknown: a chart in no configured repo (locally
+// built, OCI, no repo cache at all) must read as an unknown, never as
+// "you're current".
+func TestUnknownChartRendersAsUnknown(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindHelmRelease: {helmRelease("default", "inhouse", "inhouse-chart", "0.3.1", "1.0.0", "deployed", 1)},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	row, ok := m.selectedRow()
+	if !ok {
+		t.Fatal("expected a selected row")
+	}
+	if got, want := row.Cells[2], "–"; got != want {
+		t.Errorf("LATEST cell = %q, want %q", got, want)
+	}
+	if row.Outdated {
+		t.Error("row marked outdated with no version to compare against")
+	}
+	strip := plain(m.healthStripLine(m.Theme(), 120))
+	if strings.Contains(strip, "outdated") {
+		t.Errorf("health strip %q claims outdated releases with nothing to compare against", strip)
+	}
+}
+
+// TestChartCacheNoteCaveatsTheStrip: the LATEST column has a second data
+// source with its own trustworthiness, so a stale or missing repo cache is
+// named on the strip rather than left for the user to assume away.
+func TestChartCacheNoteCaveatsTheStrip(t *testing.T) {
+	tests := []struct {
+		name   string
+		status helmrepo.Status
+		want   string
+	}{
+		{"no cache at all", helmrepo.Status{}, "no helm repo cache"},
+		{"configured but nothing fetched", helmrepo.Status{Configured: true}, "no helm repo cache"},
+		{"stale", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-6 * 24 * time.Hour)}, "repo cache 6d old"},
+		{"fresh", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-2 * time.Hour)}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lister := chartStatusLister{
+				fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+					kube.KindHelmRelease: {helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3)},
+				}},
+				status: tt.status,
+			}
+			session := newSession()
+			session.Location.Kind = kube.KindHelmRelease
+			m := New(Config{Session: session, Lister: lister})
+			m.SetSize(120, 36)
+			m = step(t, m, m.Init()())
+
+			if m.chartCacheNote != tt.want {
+				t.Errorf("chartCacheNote = %q, want %q", m.chartCacheNote, tt.want)
+			}
+			strip := plain(m.healthStripLine(m.Theme(), 120))
+			if tt.want != "" && !strings.Contains(strip, tt.want) {
+				t.Errorf("health strip %q missing the caveat %q", strip, tt.want)
+			}
+		})
+	}
+}
+
+// chartStatusLister is a fakeLister that also reports repo-cache state — the
+// optional ChartIndexReporter seam app's decorator satisfies for real.
+type chartStatusLister struct {
+	fakeLister
+	status helmrepo.Status
+}
+
+func (l chartStatusLister) ChartIndexStatus() helmrepo.Status { return l.status }
+
 // TestHelmReleaseFailedStatusCellCarriesReason confirms a failed release's
 // STATUS cell renders "failed · <reason>" verbatim (docs/design README.md
 // §18a).
@@ -69,7 +201,7 @@ func TestHelmReleaseFailedStatusCellCarriesReason(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a selected row")
 	}
-	if got, want := row.Cells[4], "failed · hook timeout"; got != want {
+	if got, want := row.Cells[5], "failed · hook timeout"; got != want {
 		t.Fatalf("STATUS cell = %q, want %q", got, want)
 	}
 }

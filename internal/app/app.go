@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
 	"github.com/kute-dev/kute/internal/resources"
@@ -62,6 +63,12 @@ func (l forwardAwareLister) ListRaw(ctx context.Context, kind kube.ResourceKind,
 // KindForward, just reading Secrets instead of maintaining its own state.
 type helmAwareLister struct {
 	resources.RawLister
+	// charts answers 18a's LATEST column from the user's own local Helm repo
+	// cache. It is read here, at the one point releases are decoded, so the
+	// annotation reaches every consumer of the kind without each screen
+	// having to know the repo cache exists. nil is a working value (no
+	// index, every LATEST unknown) — see helmrepo.Cache.Index.
+	charts *helmrepo.Cache
 }
 
 // helmSecretLister is implemented by a lister that can hand back just the
@@ -82,11 +89,26 @@ func (l helmAwareLister) ListRaw(ctx context.Context, kind kube.ResourceKind, na
 		return nil, err
 	}
 	releases := kube.LatestHelmReleases(kube.DecodeHelmReleases(secrets))
+	index := l.charts.Index()
 	out := make([]runtime.Object, len(releases))
 	for i, r := range releases {
+		// The deployed version is passed in so a chart name served by two
+		// unrelated repos resolves to the series this release is actually
+		// on, rather than whichever repo happens to number higher.
+		if latest, ok := index.LatestFor(r.Chart, r.ChartVersion); ok {
+			r = r.WithLatest(latest.Version, latest.Repo, latest.Ambiguous)
+		}
 		out[i] = kube.NewHelmReleaseObject(r)
 	}
 	return out, nil
+}
+
+// ChartIndexStatus reports the state of the local Helm repo cache behind the
+// LATEST column, so the 18a strip can caveat a stale or absent one. Another
+// optional seam, and like the rest of them it needs the explicit forward
+// below plus its compile-time assertion.
+func (l helmAwareLister) ChartIndexStatus() helmrepo.Status {
+	return l.charts.Index().Status()
 }
 
 // Synced forwards to the wrapped lister's own Synced — same reasoning as
@@ -142,8 +164,11 @@ func (l helmAwareLister) CountLive(ctx context.Context, kind kube.ResourceKind, 
 // compile-time assertions below). Having a single constructor means there's
 // one composition for those assertions and the lister tests to speak about,
 // rather than five hand-spelled copies that can drift apart.
-func newSessionLister(raw resources.RawLister, forwards *kube.ForwardManager) helmAwareLister {
-	return helmAwareLister{RawLister: forwardAwareLister{RawLister: raw, forwards: forwards}}
+func newSessionLister(raw resources.RawLister, forwards *kube.ForwardManager, charts *helmrepo.Cache) helmAwareLister {
+	return helmAwareLister{
+		RawLister: forwardAwareLister{RawLister: raw, forwards: forwards},
+		charts:    charts,
+	}
 }
 
 // ListHelmReleaseSecrets keeps the seam alive one layer further up, so
@@ -304,6 +329,10 @@ var (
 	_ browse.CacheSyncChecker      = helmAwareLister{}
 	_ tui.LiveCounter              = helmAwareLister{}
 	_ helmhistory.HelmSecretLister = helmAwareLister{}
+	// Only the outermost decorator can answer this one — nothing below it
+	// holds a chart index — but it is the lister screens actually assert
+	// against, so this is the assertion that matters.
+	_ browse.ChartIndexReporter    = helmAwareLister{}
 	_ resources.RawLister          = (*fake.Cluster)(nil)
 	_ kube.Mutator                 = (*fake.Cluster)(nil)
 	_ browse.MetricsReader         = (*fake.Cluster)(nil)
@@ -352,7 +381,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	switch {
 	case cluster != nil:
 		sess.Forwards = kube.NewForwardManager()
-		sess.Lister = newSessionLister(cluster, sess.Forwards)
+		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
 		sess.Metrics = cluster
 		// Snapshot before buildBrowseTask: browse.New's own KindEvent
 		// carve-out (its doc comment) resets Session.Location.Kind to Pod
@@ -387,7 +416,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Location.Namespace = namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(demoCluster.DiscoveredKinds(), demoCluster)
 		sess.Forwards = kube.NewForwardManager()
-		lister := newSessionLister(demoCluster, sess.Forwards)
+		lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
 		sess.Lister = lister
 		sess.Metrics = demoCluster
 		openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
@@ -456,7 +485,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *browse.Model {
 	streamer := liveClusterLogStreamer{cluster: cluster}
 	clusterName, namespace := cluster.Context.ClusterName, cluster.Context.Namespace
-	lister := newSessionLister(cluster, sess.Forwards)
+	lister := newSessionLister(cluster, sess.Forwards, sess.Charts)
 	openLogs := openLogsFunc(sess, cluster, streamer, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, cluster)
 	openExec := openExecFunc(sess, kubectlShellDetector{})
@@ -554,7 +583,7 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 			sess.Forwards = kube.NewForwardManager()
 		}
 		sess.Cluster = cluster
-		sess.Lister = newSessionLister(cluster, sess.Forwards)
+		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
 		sess.Metrics = cluster
 		sess.Location.Context = cluster.Context.ContextName
 		sess.Location.Namespace = cluster.Context.Namespace
@@ -598,7 +627,7 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 			sess.Forwards = kube.NewForwardManager()
 		}
 		sess.Cluster = cluster
-		sess.Lister = newSessionLister(cluster, sess.Forwards)
+		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
 		sess.Metrics = cluster
 		sess.Location.Context = cluster.Context.ContextName
 		sess.Location.Namespace = cluster.Context.Namespace

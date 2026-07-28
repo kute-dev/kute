@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/config"
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/testutil/goldentest"
@@ -313,17 +314,30 @@ func goldenLoadingModel(t *testing.T, width, height int) Model {
 
 func goldenHelmModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindHelmRelease: {
-			helmRelease("nva-stage", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3),
-			helmRelease("nva-stage", "redis", "redis", "18.1.5", "7.2.4", "deployed", 2),
-			helmRelease("nva-stage", "nva-gateway", "kube-prometheus-stack", "58.2.1", "0.73.0", "pending-upgrade", 2),
-			kube.NewHelmReleaseObject(kube.HelmRelease{
-				Namespace: "nva-stage", Name: "broken-app", Chart: "mychart", ChartVersion: "1.0.0",
-				AppVersion: "2.1.0", Revision: 2, Status: "failed", StatusReason: "hook timeout",
-			}),
-		},
-	}}
+	// Mixed on purpose: one release the repo cache has a newer chart for
+	// (deployed *and* outdated — the case the ▲ glyph, the LATEST cell and
+	// the strip's cross-cutting count all have to render at once), one it
+	// knows and finds current, and two it has never heard of.
+	lister := chartStatusLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindHelmRelease: {
+				kube.NewHelmReleaseObject(kube.HelmRelease{
+					Namespace: "nva-stage", Name: "postgresql", Chart: "postgresql", ChartVersion: "12.1.9",
+					AppVersion: "15.4.0", Revision: 3, Status: "deployed",
+				}.WithLatest("12.2.1", "bitnami", false)),
+				kube.NewHelmReleaseObject(kube.HelmRelease{
+					Namespace: "nva-stage", Name: "redis", Chart: "redis", ChartVersion: "18.1.5",
+					AppVersion: "7.2.4", Revision: 2, Status: "deployed",
+				}.WithLatest("18.1.5", "bitnami", false)),
+				helmRelease("nva-stage", "nva-gateway", "kube-prometheus-stack", "58.2.1", "0.73.0", "pending-upgrade", 2),
+				kube.NewHelmReleaseObject(kube.HelmRelease{
+					Namespace: "nva-stage", Name: "broken-app", Chart: "mychart", ChartVersion: "1.0.0",
+					AppVersion: "2.1.0", Revision: 2, Status: "failed", StatusReason: "hook timeout",
+				}),
+			},
+		}},
+		status: helmrepo.Status{Configured: true, Repos: 3, Charts: 40, Oldest: time.Now().Add(-6 * 24 * time.Hour)},
+	}
 	sess := newSession()
 	sess.Location.Namespace = "nva-stage"
 	sess.Location.Kind = kube.KindHelmRelease

@@ -241,7 +241,7 @@ func TestSortArrowRendersOnNarrowFixedColumns(t *testing.T) {
 		header string
 	}{
 		{
-			name: "helm rev", kind: kube.KindHelmRelease, key: "4", header: "REV",
+			name: "helm rev", kind: kube.KindHelmRelease, key: "5", header: "REV",
 			objs: []runtime.Object{
 				helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3),
 				helmRelease("default", "redis", "redis", "18.1.5", "7.2.4", "deployed", 2),

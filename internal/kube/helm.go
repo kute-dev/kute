@@ -30,6 +30,8 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	sigsyaml "sigs.k8s.io/yaml"
+
+	"github.com/kute-dev/kute/internal/semver"
 )
 
 // HelmReleaseSecretType is the Secret.Type Helm 3 stores every release
@@ -61,6 +63,47 @@ type HelmRelease struct {
 	Values   string
 	Manifest string
 	Notes    string
+
+	// LatestVersion/LatestRepo/LatestAmbiguous are 18a's outdated signal:
+	// the newest version of this chart in the user's *local* Helm repo cache
+	// and where it came from. They are not decoded from the release Secret —
+	// nothing in a release records its source repo — they are annotated a
+	// layer up (app's lister decorator) from internal/helmrepo, and stay
+	// zero whenever there's no repo cache to consult. Empty LatestVersion is
+	// an unknown, never "this release is current".
+	LatestVersion   string
+	LatestRepo      string
+	LatestAmbiguous bool
+}
+
+// WithLatest returns a copy of r carrying what a chart index said about its
+// chart. Kept as a setter here — rather than kube reading the index itself —
+// so this package stays free of any dependency on the local-disk Helm repo
+// cache: the two callers that have an index (app's lister decorator and the
+// history screen) look the chart up and hand the answer over.
+func (r HelmRelease) WithLatest(version, repo string, ambiguous bool) HelmRelease {
+	r.LatestVersion, r.LatestRepo, r.LatestAmbiguous = version, repo, ambiguous
+	return r
+}
+
+// Outdated reports whether the repo cache offers a newer version of this
+// release's chart than the one deployed.
+func (r HelmRelease) Outdated() bool {
+	return r.LatestVersion != "" && semver.IsNewer(r.ChartVersion, r.LatestVersion)
+}
+
+// LatestCell renders 18a's LATEST column: the available version, marked when
+// two repos serve this chart name and kute can't tell which one the release
+// came from. An unknown chart (locally built, OCI, no repo cache) renders the
+// em-dash placeholder every other unknown cell in the app uses.
+func (r HelmRelease) LatestCell() string {
+	if r.LatestVersion == "" {
+		return "–"
+	}
+	if r.LatestAmbiguous {
+		return r.LatestVersion + " ?"
+	}
+	return r.LatestVersion
 }
 
 // StatusCell renders 18a's STATUS column text: the bare status word, or

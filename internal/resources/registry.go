@@ -65,7 +65,7 @@ func DefaultRegistry() Registry {
 		{Kind: kube.KindNamespace, Group: GroupCluster, Display: "Namespaces", Icon: "⬡", Columns: []string{"Name", "Status", "Age"}, Describe: "cluster resource partitions", ClusterScoped: true, Project: projectNamespace},
 		{Kind: kube.KindEvent, Group: GroupObservability, Display: "Events", Icon: "∿", Columns: []string{"Type", "Reason", "Object", "Age"}, Describe: "cluster activity and warnings", Project: projectEvent},
 		{Kind: kube.KindForward, Group: GroupCluster, Display: "Forwards", Icon: "⇄", Columns: []string{"Local", "Target", "Namespace", "Uptime", "Traffic"}, FlexColumn: "Target", Describe: "active kubectl port-forward sessions", ClusterScoped: true, Project: projectForward, HealthLabel: forwardHealthLabel},
-		{Kind: kube.KindHelmRelease, Group: GroupCluster, Display: "Helm Releases", Icon: "⎈", Columns: []string{"Release", "Chart", "App Ver", "Rev", "Status", "Updated"}, FlexColumn: "Release", Describe: "deployed Helm chart releases", Project: projectHelmRelease, HealthLabel: helmReleaseHealthLabel},
+		{Kind: kube.KindHelmRelease, Group: GroupCluster, Display: "Helm Releases", Icon: "⎈", Columns: []string{"Release", "Chart", "Latest", "App Ver", "Rev", "Status", "Updated"}, FlexColumn: "Release", Describe: "deployed Helm chart releases", Project: projectHelmRelease, Health: helmReleaseHealth, HealthLabel: helmReleaseHealthLabel},
 	}
 	// CustomResourceDefinition (14b) is always present, like Forward — a
 	// built-in, not a discovered kind — registered here with a nil counter
@@ -130,6 +130,20 @@ func forwardHealthLabel(class StatusClass) string {
 	default:
 		return "other"
 	}
+}
+
+// helmReleaseHealth is 18a's bespoke tally: the usual per-status counts,
+// plus outdated releases counted *across* them. A release that is both
+// deployed and behind its repo shows up in both numbers, which is why
+// Outdated sits outside HealthCounts.Total().
+func helmReleaseHealth(rows []Row) HealthCounts {
+	h := StatusHealth(rows)
+	for _, r := range rows {
+		if r.Outdated {
+			h.Outdated++
+		}
+	}
+	return h
 }
 
 // helmReleaseHealthLabel is 18a's health-strip wording: "3 deployed · 1

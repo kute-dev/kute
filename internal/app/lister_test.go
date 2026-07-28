@@ -2,10 +2,13 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui/tasks/helmhistory"
@@ -47,6 +50,96 @@ func (c *recordingCluster) listed(kind kube.ResourceKind) bool {
 	return false
 }
 
+// releaseCluster hands back one real release Secret, so the decorator's own
+// decode-and-annotate path runs end to end.
+type releaseCluster struct {
+	release kube.HelmRelease
+}
+
+func (c *releaseCluster) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
+	return nil, nil
+}
+
+func (c *releaseCluster) ListHelmReleaseSecrets(context.Context, string) ([]runtime.Object, error) {
+	return []runtime.Object{kube.EncodeHelmReleaseSecret(c.release)}, nil
+}
+
+// chartCache writes a one-repo Helm cache offering chart at version, and
+// returns a Cache over it.
+func chartCache(t *testing.T, chart, version string) *helmrepo.Cache {
+	t.Helper()
+	dir := t.TempDir()
+	cacheDir := filepath.Join(dir, "cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "repositories.yaml")
+	if err := os.WriteFile(configPath, []byte("repositories:\n- name: testrepo\n  url: https://example.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := "apiVersion: v1\nentries:\n  " + chart + ":\n  - name: " + chart + "\n    version: " + version + "\n"
+	if err := os.WriteFile(filepath.Join(cacheDir, "testrepo-index.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return helmrepo.NewCache(helmrepo.Loader{ConfigPath: configPath, CachePath: cacheDir})
+}
+
+// TestListedReleasesCarryTheAvailableChartVersion pins 18a's outdated signal
+// to the one place releases are decoded. Annotating here rather than in each
+// screen is what makes the LATEST column, the strip's outdated count and the
+// 19a overview agree without three copies of the lookup.
+func TestListedReleasesCarryTheAvailableChartVersion(t *testing.T) {
+	cluster := &releaseCluster{release: kube.HelmRelease{
+		Namespace: "default", Name: "certs", Chart: "cert-manager", ChartVersion: "1.14.4",
+		Revision: 3, Status: "deployed",
+	}}
+	lister := newSessionLister(cluster, kube.NewForwardManager(), chartCache(t, "cert-manager", "1.16.2"))
+
+	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default")
+	if err != nil {
+		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
+	}
+	if len(objs) != 1 {
+		t.Fatalf("got %d releases, want 1", len(objs))
+	}
+	release := objs[0].(*kube.HelmReleaseObject).Release
+	if release.LatestVersion != "1.16.2" {
+		t.Errorf("LatestVersion = %q, want 1.16.2", release.LatestVersion)
+	}
+	if release.LatestRepo != "testrepo" {
+		t.Errorf("LatestRepo = %q, want testrepo", release.LatestRepo)
+	}
+	if !release.Outdated() {
+		t.Error("Outdated() = false for 1.14.4 against an available 1.16.2")
+	}
+	if status := lister.ChartIndexStatus(); !status.Configured || status.Repos != 1 {
+		t.Errorf("ChartIndexStatus() = %+v, want a configured single-repo cache", status)
+	}
+}
+
+// TestListedReleasesWithoutAChartIndex covers the common case of no Helm repo
+// cache at all: the release still lists, and simply carries no opinion about
+// what's available. An unknown must never masquerade as "current".
+func TestListedReleasesWithoutAChartIndex(t *testing.T) {
+	cluster := &releaseCluster{release: kube.HelmRelease{
+		Namespace: "default", Name: "certs", Chart: "cert-manager", ChartVersion: "1.14.4",
+		Revision: 3, Status: "deployed",
+	}}
+	lister := newSessionLister(cluster, kube.NewForwardManager(), nil)
+
+	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default")
+	if err != nil {
+		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
+	}
+	release := objs[0].(*kube.HelmReleaseObject).Release
+	if release.LatestVersion != "" || release.Outdated() {
+		t.Errorf("release carries %+v with no chart index, want no opinion", release)
+	}
+	if lister.ChartIndexStatus().Configured {
+		t.Error("ChartIndexStatus().Configured = true with no chart index")
+	}
+}
+
 // narrowlessCluster has a per-kind sync signal but no filtered release cache
 // — the "optional seam absent" shape helmSecretLister documents.
 type narrowlessCluster struct {
@@ -73,7 +166,7 @@ func (c *narrowlessCluster) KindSynced(kind kube.ResourceKind) bool {
 // cache cold until the 'h' key started it mid-session.
 func TestListingHelmReleasesReadsTheReleaseCacheNotEverySecret(t *testing.T) {
 	rec := &recordingCluster{}
-	lister := newSessionLister(rec, kube.NewForwardManager())
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
 	if _, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default"); err != nil {
 		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
@@ -95,7 +188,7 @@ func TestListingHelmReleasesReadsTheReleaseCacheNotEverySecret(t *testing.T) {
 // it isn't using and claims "no releases" about one that is still filling.
 func TestHelmReleaseSyncStateAsksAboutTheReleaseCache(t *testing.T) {
 	rec := &recordingCluster{}
-	lister := newSessionLister(rec, kube.NewForwardManager())
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
 	lister.KindSynced(kube.KindHelmRelease)
 
@@ -111,7 +204,7 @@ func TestHelmReleaseSyncStateAsksAboutTheReleaseCache(t *testing.T) {
 // answer — and KindSynced has to name *that* cache to match.
 func TestDecoratedListerFallsBackWithoutTheReleaseCache(t *testing.T) {
 	plain := &narrowlessCluster{}
-	lister := newSessionLister(plain, kube.NewForwardManager())
+	lister := newSessionLister(plain, kube.NewForwardManager(), nil)
 
 	if _, err := lister.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets should degrade to the shared cache, got: %v", err)

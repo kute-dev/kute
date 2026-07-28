@@ -9,14 +9,54 @@ package browse
 
 import (
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
+
+// ChartIndexReporter is implemented by a lister that also knows the state of
+// the local Helm repo cache the LATEST column is answered from. Declared
+// here, in the package that consumes it, per the repo's seam convention.
+//
+// Exported so app can assert its lister decorators against it at compile
+// time: like every optional seam, a decorator that forgets to forward it
+// still builds — the type assertion below just misses, and the strip
+// silently stops caveating a stale answer.
+type ChartIndexReporter interface {
+	ChartIndexStatus() helmrepo.Status
+}
+
+// chartCacheStale is how old the repo cache gets before the strip starts
+// naming its age. Under a day, "run helm repo update" isn't news.
+const chartCacheStale = 24 * time.Hour
+
+// chartCacheNoteFor renders 18a's caveat on the LATEST column's data source:
+// nothing when the cache is present and fresh, its age once it's stale, and
+// an explicit "no helm repo cache" when there is none — because an all-`–`
+// column must never be read as "everything is up to date".
+//
+// now is passed in because this runs in the load command, not the render
+// path (which stays pure: no clock reads).
+func chartCacheNoteFor(lister resources.RawLister, now time.Time) string {
+	reporter, ok := lister.(ChartIndexReporter)
+	if !ok {
+		return ""
+	}
+	status := reporter.ChartIndexStatus()
+	if !status.Configured || status.Repos == 0 {
+		return "no helm repo cache"
+	}
+	if age := status.Age(now); age >= chartCacheStale {
+		return "repo cache " + shortAge(age) + " old"
+	}
+	return ""
+}
 
 // openReleaseObjects switches kind to Pods with row's release name
 // pre-applied as the filter query — the same "owner match via the existing

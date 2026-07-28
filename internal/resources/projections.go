@@ -734,15 +734,23 @@ func projectHelmRelease(obj runtime.Object) Row {
 	if !r.Updated.IsZero() {
 		updated = shortAge(time.Since(r.Updated)) + " ago"
 	}
-	return Row{
+	row := Row{
 		Namespace: r.Namespace,
 		Name:      r.Name,
 		Cells: []string{
-			r.Name, r.Chart + " " + r.ChartVersion, r.AppVersion,
+			r.Name, r.Chart + " " + r.ChartVersion, r.LatestCell(), r.AppVersion,
 			fmt.Sprintf("%d", r.Revision), r.StatusCell(), updated,
 		},
-		Status: helmReleaseStatusClass(r.Status),
+		Status:   helmReleaseStatusClass(r.Status),
+		Outdated: r.Outdated(),
 	}
+	if row.Outdated {
+		// 18a: an outdated release keeps its real helm status — the strip
+		// still counts it "deployed" — and says so in the glyph column
+		// alone, which is why this sets GlyphClass rather than Status.
+		row.Glyph, row.GlyphClass = "▲", StatusWarn
+	}
+	return row
 }
 
 func projectEvent(obj runtime.Object) Row {

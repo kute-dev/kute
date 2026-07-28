@@ -50,6 +50,14 @@ type Row struct {
 	// outside the display Cells to know which direction to mutate.
 	Cordoned bool
 
+	// Outdated marks an 18a Helm release whose chart has a newer version in
+	// the local repo cache. It rides outside Cells for the same reason
+	// Cordoned does: the health strip and the 19a overview both need the
+	// fact, and it is deliberately *not* folded into Status — a deployed
+	// release that happens to be behind is still deployed, and the strip
+	// must keep counting it that way.
+	Outdated bool
+
 	// NameSuffix is appended after the NAME cell's text (dim, not part of
 	// the filter/sort-relevant Name itself) — 11a's inline control-plane
 	// role tag, e.g. "node-1 (control-plane)".
@@ -69,6 +77,12 @@ type Row struct {
 // implementation (StatusHealth) unless a kind needs bespoke tallying.
 type HealthCounts struct {
 	OK, Warn, Fail, Neutral int
+
+	// Outdated is 18a's extra strip segment. It cross-cuts the four status
+	// buckets rather than joining them (an outdated release is also
+	// deployed), so it is excluded from Total and only ever non-zero for the
+	// kinds whose Health implementation tallies it.
+	Outdated int
 }
 
 // Total is the row count the counts were tallied from.
