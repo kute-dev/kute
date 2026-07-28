@@ -39,10 +39,20 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 		kube.KindControllerRevision,
 		kube.KindPod,
 	},
-	kube.KindIngress:     {kube.KindService, kube.KindPod}, // BACKENDS column
-	kube.KindHelmRelease: {kube.KindSecret},                // releases decode from Secrets
-	kube.KindService:     {kube.KindPod},                   // label-join in the meta editor
+	kube.KindIngress: {kube.KindService, kube.KindPod}, // BACKENDS column
+	kube.KindService: {kube.KindPod},                   // label-join in the meta editor
 }
+
+// Deliberately absent: KindSecret under KindHelmRelease. Releases used to be
+// decoded from the shared Secret cache, so the Helm list did need it — but
+// they have had their own server-side-filtered release cache since
+// docs/lazy-informers.md §5.2, and that cache emits KindHelmRelease change
+// events itself. All the entry did was prefetch the shared, unfiltered
+// cluster-wide Secret cache (12.3 MB on the cluster this was measured
+// against) on the way into a screen that never reads it — reinstating, as a
+// prefetch, the exact read §5.2 removed. On a slow link the two multi-MB
+// LISTs then compete for the same bandwidth and the Helm list is the one
+// left waiting.
 
 // auxKindOf reports whether changed is one of listed's secondary kinds.
 func auxKindOf(listed, changed kube.ResourceKind) bool {

@@ -103,6 +103,29 @@ func TestPrefetchWarmsAuxCaches(t *testing.T) {
 	}
 }
 
+// TestHelmListDoesNotWarmTheSharedSecretCache: releases come from their own
+// server-side-filtered cache (docs/lazy-informers.md §5.2), so the Helm list
+// must not touch KindSecret at all. Reading it here starts the shared,
+// unfiltered cluster-wide Secret informer — 12.3 MB on the cluster this was
+// measured against — for a screen that never reads a single object from it,
+// and on a slow link that read is what the Helm list ends up queued behind.
+func TestHelmListDoesNotWarmTheSharedSecretCache(t *testing.T) {
+	lister := &recordingLister{inner: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindHelmRelease
+	m.desc, _ = m.session.Registry.Descriptor(kube.KindHelmRelease)
+
+	drain(m.resetAndLoad())
+
+	if lister.read(kube.KindSecret) {
+		t.Error("opening the Helm list read KindSecret, starting the shared Secret cache it never reads from")
+	}
+	if auxKindOf(kube.KindHelmRelease, kube.KindSecret) {
+		t.Error("a Secret change must not reload the Helm list; the release cache emits KindHelmRelease itself")
+	}
+}
+
 // drain runs a command and any batched children, so prefetch side effects
 // land before assertions.
 func drain(cmd tea.Cmd) {
