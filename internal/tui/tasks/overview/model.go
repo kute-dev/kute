@@ -108,6 +108,12 @@ type Model struct {
 	podTrouble []resources.Row
 	podHealthy int
 	troubleSel int
+	// helmOutdated are 18a's outdated releases, shown at the *end* of the
+	// TROUBLE panel: a chart behind its repo is the least urgent thing in
+	// there, and unlike everything above it, it isn't a health problem at
+	// all — which is why it rides in its own slice rather than being mixed
+	// into podTrouble.
+	helmOutdated []resources.Row
 
 	changes    []kube.TimelineEntry
 	changesSel int
@@ -148,6 +154,8 @@ type loadedData struct {
 
 	podTrouble []resources.Row
 	podHealthy int
+
+	helmOutdated []resources.Row
 
 	changes []kube.TimelineEntry
 }
@@ -197,11 +205,34 @@ func (m Model) selectedNode() (resources.Row, bool) {
 	return m.nodeTrouble[m.nodesSel], true
 }
 
-func (m Model) selectedTrouble() (resources.Row, bool) {
-	if m.troubleSel < 0 || m.troubleSel >= len(m.podTrouble) {
-		return resources.Row{}, false
+// troubleEntry is one TROUBLE row plus the kind it belongs to. The panel
+// aggregates two kinds now, and `↵` has to land on the right screen for each
+// — a hardcoded KindPod would send an outdated release to the pods table.
+type troubleEntry struct {
+	row  resources.Row
+	kind kube.ResourceKind
+}
+
+// troubleEntries is the panel's full row list in display order: unhealthy
+// pods first (already sorted Fail-then-Warn by load), outdated releases
+// after them.
+func (m Model) troubleEntries() []troubleEntry {
+	out := make([]troubleEntry, 0, len(m.podTrouble)+len(m.helmOutdated))
+	for _, r := range m.podTrouble {
+		out = append(out, troubleEntry{row: r, kind: kube.KindPod})
 	}
-	return m.podTrouble[m.troubleSel], true
+	for _, r := range m.helmOutdated {
+		out = append(out, troubleEntry{row: r, kind: kube.KindHelmRelease})
+	}
+	return out
+}
+
+func (m Model) selectedTrouble() (troubleEntry, bool) {
+	entries := m.troubleEntries()
+	if m.troubleSel < 0 || m.troubleSel >= len(entries) {
+		return troubleEntry{}, false
+	}
+	return entries[m.troubleSel], true
 }
 
 func (m Model) selectedChange() (kube.TimelineEntry, bool) {

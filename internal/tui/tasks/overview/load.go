@@ -108,6 +108,23 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 		data.nsCount = len(nsObjs)
 	}
 
+	// 18a's outdated releases, for the tail of the TROUBLE panel. Reading
+	// this kind here starts the (server-side-filtered) release Secret
+	// informer on first open of the overview — one named kind, deliberately,
+	// not the breadth-first sweep the lazy-informer rule forbids. Nothing
+	// here fails the screen: a cluster with no Helm at all just contributes
+	// no rows.
+	if helmObjs, helmErr := lister.ListRaw(ctx, kube.KindHelmRelease, ""); helmErr == nil {
+		helmDesc, _ := registry.Descriptor(kube.KindHelmRelease)
+		if helmDesc.Project != nil {
+			for _, obj := range helmObjs {
+				if row := helmDesc.Project(obj); row.Outdated {
+					data.helmOutdated = append(data.helmOutdated, row)
+				}
+			}
+		}
+	}
+
 	if rsObjs, rsErr := lister.ListRaw(ctx, kube.KindReplicaSet, ""); rsErr == nil {
 		cutoff := time.Now().Add(-changesWindow)
 		for _, e := range kube.TimelineFromRollouts(rsObjs) {

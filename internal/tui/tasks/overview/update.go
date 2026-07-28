@@ -34,11 +34,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // isOverviewKind reports whether kind's change should trigger a reload —
-// every kind 19a's panels read from (Node/Pod/Namespace/ReplicaSet), not
-// every possible kind change.
+// every kind 19a's panels read from (Node/Pod/Namespace/ReplicaSet, plus
+// HelmRelease for the TROUBLE panel's outdated tail), not every possible
+// kind change. A kind the screen displays but doesn't reload on goes stale
+// on screen, which is what browse's own auxKinds exists to prevent.
 func isOverviewKind(kind kube.ResourceKind) bool {
 	switch kind {
-	case kube.KindNode, kube.KindPod, kube.KindNamespace, kube.KindReplicaSet:
+	case kube.KindNode, kube.KindPod, kube.KindNamespace, kube.KindReplicaSet, kube.KindHelmRelease:
 		return true
 	default:
 		return false
@@ -68,9 +70,10 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.capPodsUsed, m.capPodsTotal = d.capPodsUsed, d.capPodsTotal
 	m.nodeTrouble, m.nodeHealthy = d.nodeTrouble, d.nodeHealthy
 	m.podTrouble, m.podHealthy = d.podTrouble, d.podHealthy
+	m.helmOutdated = d.helmOutdated
 	m.changes = d.changes
 	m.nodesSel = clamp(m.nodesSel, 0, cappedMax(len(m.nodeTrouble)))
-	m.troubleSel = clamp(m.troubleSel, 0, cappedMax(len(m.podTrouble)))
+	m.troubleSel = clamp(m.troubleSel, 0, cappedMax(len(m.troubleEntries())))
 	m.changesSel = clamp(m.changesSel, 0, cappedMax(len(m.changes)))
 	m.state = tui.TaskStateReady
 	m.feedback = ""
@@ -139,7 +142,7 @@ func (m Model) panelHasRows(p panel) bool {
 	case panelNodes:
 		return len(m.nodeTrouble) > 0
 	case panelTrouble:
-		return len(m.podTrouble) > 0
+		return len(m.troubleEntries()) > 0
 	case panelChanges:
 		return len(m.changes) > 0
 	default:
@@ -152,7 +155,7 @@ func (m *Model) moveSelection(delta int) {
 	case panelNodes:
 		m.nodesSel = clamp(m.nodesSel+delta, 0, cappedMax(len(m.nodeTrouble)))
 	case panelTrouble:
-		m.troubleSel = clamp(m.troubleSel+delta, 0, cappedMax(len(m.podTrouble)))
+		m.troubleSel = clamp(m.troubleSel+delta, 0, cappedMax(len(m.troubleEntries())))
 	case panelChanges:
 		m.changesSel = clamp(m.changesSel+delta, 0, cappedMax(len(m.changes)))
 	}
@@ -181,11 +184,11 @@ func (m Model) openSelected() (tea.Model, tea.Cmd, bool) {
 		task, cmd := m.openNodeDetail(row.Name, m.width, m.height)
 		return task, cmd, task != nil
 	case panelTrouble:
-		row, ok := m.selectedTrouble()
+		entry, ok := m.selectedTrouble()
 		if !ok {
 			return nil, nil, false
 		}
-		return nil, m.jumpTo(kube.KindPod, row.Namespace, row.Name), true
+		return nil, m.jumpTo(entry.kind, entry.row.Namespace, entry.row.Name), true
 	case panelChanges:
 		entry, ok := m.selectedChange()
 		if !ok {

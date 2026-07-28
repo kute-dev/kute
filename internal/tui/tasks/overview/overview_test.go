@@ -312,6 +312,101 @@ func TestEnterOnTroublePodBacksAndJumps(t *testing.T) {
 	}
 }
 
+// outdatedRelease is a deployed release whose chart is behind the local repo
+// cache — 18a's outdated signal, as the overview receives it.
+func outdatedRelease(ns, name, chart, deployed, available string) *kube.HelmReleaseObject {
+	return kube.NewHelmReleaseObject(kube.HelmRelease{
+		Namespace: ns, Name: name, Chart: chart, ChartVersion: deployed,
+		AppVersion: "1.0.0", Revision: 3, Status: "deployed",
+	}.WithLatest(available, "testrepo", false))
+}
+
+// TestOutdatedReleasesJoinTheTroublePanel covers the whole path: the load
+// reads the Helm kind, only outdated releases make it in, they sort after the
+// unhealthy pods, and the panel says what's actually behind.
+func TestOutdatedReleasesJoinTheTroublePanel(t *testing.T) {
+	lister := baseLister()
+	lister.objects[kube.KindHelmRelease] = []runtime.Object{
+		outdatedRelease("default", "certs", "cert-manager", "1.14.4", "1.16.2"),
+		// Current: must not appear at all.
+		kube.NewHelmReleaseObject(kube.HelmRelease{
+			Namespace: "default", Name: "redis", Chart: "redis", ChartVersion: "20.1.3",
+			Revision: 1, Status: "deployed",
+		}.WithLatest("20.1.3", "testrepo", false)),
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if len(m.helmOutdated) != 1 || m.helmOutdated[0].Name != "certs" {
+		t.Fatalf("helmOutdated = %+v, want just the outdated release", m.helmOutdated)
+	}
+	entries := m.troubleEntries()
+	if len(entries) == 0 {
+		t.Fatal("no trouble entries")
+	}
+	last := entries[len(entries)-1]
+	if last.kind != kube.KindHelmRelease {
+		t.Errorf("last trouble entry kind = %s, want the release after the unhealthy pods", last.kind)
+	}
+	for _, e := range entries[:len(entries)-1] {
+		if e.kind != kube.KindPod {
+			t.Errorf("unhealthy pods must sort before outdated releases, got %s first", e.kind)
+		}
+	}
+
+	// 60 is the real half-width panel: whatever this says has to survive it.
+	body := plain(strings.Join(m.troubleLines(tui.Dark(), 60), "\n"))
+	if !strings.Contains(body, "certs") || !strings.Contains(body, "→ 1.16.2") {
+		t.Errorf("TROUBLE panel %q doesn't name the release and the version it could move to", body)
+	}
+}
+
+// TestEnterOnOutdatedReleaseJumpsToTheHelmList is the routing half: the panel
+// now aggregates two kinds, and ↵ has to land on the right screen for each.
+func TestEnterOnOutdatedReleaseJumpsToTheHelmList(t *testing.T) {
+	lister := &fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {testNode("node-1", true, false, 4000, 8<<30, 110)},
+		// No unhealthy pods, so the release is the only trouble row.
+		kube.KindPod:         {testPod("default", "web", corev1.PodRunning)},
+		kube.KindHelmRelease: {outdatedRelease("default", "certs", "cert-manager", "1.14.4", "1.16.2")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m.focus = panelTrouble
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "enter"})
+	if cmd == nil {
+		t.Fatal("expected Enter on an outdated release to return a command")
+	}
+	v := reflect.ValueOf(cmd())
+	if v.Kind() != reflect.Slice {
+		t.Fatalf("expected a sequence of commands, got %T", cmd())
+	}
+	var gotoMsg tui.GotoResourceMsg
+	for i := range v.Len() {
+		sub, ok := v.Index(i).Interface().(tea.Cmd)
+		if !ok || sub == nil {
+			continue
+		}
+		if out, ok := sub().(tui.GotoResourceMsg); ok {
+			gotoMsg = out
+		}
+	}
+	if gotoMsg.Kind != kube.KindHelmRelease || gotoMsg.Name != "certs" {
+		t.Fatalf("GotoResourceMsg = %+v, want a HelmRelease jump to certs — a hardcoded Pod kind sends it to the pods table", gotoMsg)
+	}
+}
+
+// TestHelmChangesReloadTheOverview: a kind the screen displays but doesn't
+// reload on goes stale on screen.
+func TestHelmChangesReloadTheOverview(t *testing.T) {
+	if !isOverviewKind(kube.KindHelmRelease) {
+		t.Error("isOverviewKind(HelmRelease) = false — the TROUBLE panel reads it, so it has to reload on it")
+	}
+}
+
 func TestRendersInBothThemes(t *testing.T) {
 	for _, theme := range []tui.Theme{tui.Dark(), tui.Light()} {
 		sess := newSession()

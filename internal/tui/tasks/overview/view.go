@@ -345,13 +345,14 @@ func dimFoldLine(theme tui.Theme, n int, word string) string {
 // 125 pods running' in green").
 func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	lines := []string{sectionTitle(theme, "TROUBLE")}
-	if len(m.podTrouble) == 0 {
+	entries := m.troubleEntries()
+	if len(entries) == 0 {
 		good := lipgloss.NewStyle().Foreground(theme.Good)
 		lines = append(lines, good.Render(fmt.Sprintf("nothing unhealthy · %d pods running", m.podHealthy)))
 		return lines
 	}
 
-	shown := m.podTrouble
+	shown := entries
 	extra := 0
 	if len(shown) > maxPanelRows {
 		extra = len(shown) - maxPanelRows
@@ -359,8 +360,8 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	}
 	focused := m.focusedIndex(panelTrouble, m.troubleSel)
 	rows := make([]components.Row, len(shown))
-	for i, row := range shown {
-		rows[i] = m.troubleRow(theme, row, i == focused)
+	for i, entry := range shown {
+		rows[i] = m.troubleRow(theme, entry, i == focused)
 	}
 	t := components.Table{
 		Columns:     []components.Column{{Min: 2}, {Min: 10, Flex: true}, {Min: 10}, {Min: 14}},
@@ -379,14 +380,24 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	return lines
 }
 
-func (m Model) troubleRow(theme tui.Theme, row resources.Row, selected bool) components.Row {
+func (m Model) troubleRow(theme tui.Theme, entry troubleEntry, selected bool) components.Row {
+	row := entry.row
 	style := selRowStyle(theme, selected)
 	glyphStyle := style(glyphTone(theme, row))
 	name := style(theme.BadText)
 	ns := style(theme.TextDim)
 	status := style(theme.TextSecondary)
 	statusText := row.Name
-	if len(row.Cells) > 2 {
+	switch {
+	case entry.kind == kube.KindHelmRelease:
+		// An outdated release's "what's wrong" is the version gap itself,
+		// not its (perfectly healthy) STATUS cell — 18a's CHART and LATEST
+		// columns, read as one phrase.
+		statusText = helmTroubleText(row)
+		// It isn't unhealthy, so it doesn't get the failing-object red the
+		// pods above it carry.
+		name = style(theme.TextPrimary)
+	case len(row.Cells) > 2:
 		statusText = row.Cells[2]
 	}
 	return components.Row{Cells: []components.Cell{
@@ -395,6 +406,21 @@ func (m Model) troubleRow(theme tui.Theme, row resources.Row, selected bool) com
 		{Text: row.Namespace, Style: ns},
 		{Text: statusText, Style: status},
 	}}
+}
+
+// helmTroubleText names the version an outdated release could move to —
+// "→ 1.16.2", read off 18a's own LATEST cell so the overview never
+// re-derives what the Helm list already decided.
+//
+// Deliberately just the target: this column is 14 cells wide in a half-width
+// panel, and the fuller "cert-manager 1.14.4 → 1.16.2" truncates to
+// "cert-manager …", which says nothing at all. The chart and the version
+// being left behind are both one ↵ away on the Helm list.
+func helmTroubleText(row resources.Row) string {
+	if len(row.Cells) < 3 {
+		return row.Name
+	}
+	return "→ " + row.Cells[2]
 }
 
 // changesLines renders RECENT CHANGES: the ReplicaSet-derived rollout feed

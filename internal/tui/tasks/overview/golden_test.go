@@ -96,6 +96,16 @@ func goldenLister() *fakeLister {
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "observability"}},
 		},
+		// One release behind its repo and one current, so the golden pins
+		// both the outdated tail of TROUBLE and the filtering that keeps a
+		// current release out of it.
+		kube.KindHelmRelease: {
+			outdatedRelease("observability", "grafana", "grafana", "7.3.0", "8.5.2"),
+			kube.NewHelmReleaseObject(kube.HelmRelease{
+				Namespace: "nva-prod", Name: "postgresql", Chart: "postgresql", ChartVersion: "12.1.9",
+				AppVersion: "15.4.0", Revision: 3, Status: "deployed",
+			}.WithLatest("12.1.9", "bitnami", false)),
+		},
 	}}
 }
 
