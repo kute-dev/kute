@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
@@ -50,6 +51,9 @@ func goldenHelmHistoryModel(t *testing.T, width, height int) Model {
 	m := New(Config{
 		Session: sess, Lister: lister, Mutator: &fakeMutator{},
 		Namespace: "production", Name: "postgresql",
+		// The repo has moved on past the deployed 12.1.9, so the golden pins
+		// the strip's newer-chart note alongside the revision count.
+		Charts: helmrepo.NewStaticCache("bitnami", map[string]string{"postgresql": "12.2.1"}),
 	})
 	m.SetSize(width, height)
 	m = step(t, m, m.Init()())

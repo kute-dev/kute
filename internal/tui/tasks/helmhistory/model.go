@@ -17,6 +17,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
@@ -33,6 +34,11 @@ type Config struct {
 	Namespace   string
 	Name        string
 	LoadTimeout time.Duration
+	// Charts is the local Helm repo cache behind the "newer chart available"
+	// note. Nil is a working value — the note simply never appears. New
+	// falls back to Session.Charts, which is where the composition root puts
+	// the one shared cache.
+	Charts *helmrepo.Cache
 }
 
 type Model struct {
@@ -46,6 +52,7 @@ type Model struct {
 
 	namespace string
 	name      string
+	charts    *helmrepo.Cache
 
 	revisions []kube.HelmRelease
 	selected  int
@@ -90,12 +97,16 @@ func New(cfg Config) Model {
 		state = tui.TaskStateError
 		feedback = "no cluster connection"
 	}
+	if cfg.Charts == nil && cfg.Session != nil {
+		cfg.Charts = cfg.Session.Charts
+	}
 	started := time.Now()
 	return Model{
 		width:     tui.DefaultWidth,
 		height:    tui.DefaultHeight,
 		session:   cfg.Session,
 		lister:    cfg.Lister,
+		charts:    cfg.Charts,
 		mutator:   cfg.Mutator,
 		actions:   actions.New(cfg.Mutator),
 		timeout:   cfg.LoadTimeout,
@@ -128,6 +139,7 @@ func (m Model) load() tea.Cmd {
 	namespace := m.namespace
 	name := m.name
 	timeout := m.timeout
+	charts := m.charts
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -141,8 +153,26 @@ func (m Model) load() tea.Cmd {
 		// re-marshal that HelmReleaseHistory would then throw away.
 		mine := kube.HelmReleaseSecretsFor(secrets, namespace, name)
 		history := kube.HelmReleaseHistory(kube.DecodeHelmReleases(mine), namespace, name)
-		return loadedMsg{epoch: epoch, revisions: history}
+		return loadedMsg{epoch: epoch, revisions: annotateLatest(history, charts)}
 	}
+}
+
+// annotateLatest attaches what the local Helm repo cache offers for this
+// chart to the current (newest) revision — the same lookup app's lister
+// decorator does for the 18a list, done here because this screen reads the
+// release Secrets directly rather than through the decorated KindHelmRelease
+// path. Only the newest revision gets it: "behind the repo" is a statement
+// about the release's live state, and an older revision being behind is just
+// what an older revision is.
+func annotateLatest(history []kube.HelmRelease, charts *helmrepo.Cache) []kube.HelmRelease {
+	if len(history) == 0 {
+		return history
+	}
+	current := history[0] // HelmReleaseHistory sorts newest-first
+	if latest, ok := charts.Index().LatestFor(current.Chart, current.ChartVersion); ok {
+		history[0] = current.WithLatest(latest.Version, latest.Repo, latest.Ambiguous)
+	}
+	return history
 }
 
 func (m Model) selectedRevision() (kube.HelmRelease, bool) {

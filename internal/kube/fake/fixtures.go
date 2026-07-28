@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 )
 
@@ -1252,4 +1253,26 @@ func demoHelmReleaseFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.Seed(kube.KindSecret,
 		rev("broken-app", "default", "mychart", "1.0.0", "2.1.0", "failed", "hook timeout", 2, "replicaCount: 2\n", 40*time.Minute),
 	)
+}
+
+// DemoChartIndex is the local-Helm-repo-cache side of the demo: the chart
+// versions --demo pretends the user's `helm repo update` last fetched.
+//
+// It is a fixture rather than the machine's real ~/.cache/helm for the same
+// reason every other demo fixture is one — the demo has to render the same
+// on any laptop, and on most of them a real repo cache has never heard of
+// these charts, so every LATEST cell would read "–" and the feature would be
+// invisible.
+//
+// Deliberately mixed against demoHelmReleaseFixtures' deployed versions:
+// postgresql (12.1.9) and grafana (7.3.0) are behind, redis (18.1.5) is
+// current, and mychart — the failed release — is in no repo at all, so 18a
+// shows an outdated row, a current row and an unknown row at once.
+func DemoChartIndex() *helmrepo.Cache {
+	return helmrepo.NewStaticCache("bitnami", map[string]string{
+		"postgresql":            "12.2.1",
+		"grafana":               "8.5.2",
+		"redis":                 "18.1.5",
+		"kube-prometheus-stack": "58.2.1",
+	})
 }

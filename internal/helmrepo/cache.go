@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Cache is the reusable, concurrency-safe front end to Loader. Every read of
@@ -22,7 +23,11 @@ import (
 type Cache struct {
 	loader Loader
 
-	mu        sync.Mutex
+	mu sync.Mutex
+	// static short-circuits every disk read: the demo cluster's chart
+	// versions are fixtures, not the machine's own Helm setup, and --demo
+	// must render the same on any machine.
+	static    bool
 	loaded    bool
 	signature string
 	index     Index
@@ -35,6 +40,20 @@ type Cache struct {
 // default paths).
 func NewCache(loader Loader) *Cache { return &Cache{loader: loader} }
 
+// NewStaticCache builds a Cache from a fixed chart→version map attributed to
+// one repo, reading no disk at all — how --demo gets a repo cache that looks
+// the same on every machine, and how a test gets one without a temp dir.
+func NewStaticCache(repo string, charts map[string]string) *Cache {
+	idx := Index{
+		charts: make(map[string][]Chart, len(charts)),
+		status: Status{Configured: true, Repos: 1, Charts: len(charts), Oldest: time.Now()},
+	}
+	for name, version := range charts {
+		idx.charts[name] = []Chart{{Version: version, Repo: repo}}
+	}
+	return &Cache{static: true, loaded: true, index: idx}
+}
+
 // Index returns the current view of the repo cache, re-parsing only when the
 // files on disk have changed since the last call. A parse error yields the
 // empty Index — an unreadable Helm setup is a "we don't know", never a
@@ -46,6 +65,9 @@ func (c *Cache) Index() Index {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.static {
+		return c.index
+	}
 	sig := c.loader.signature()
 	if c.loaded && sig == c.signature {
 		return c.index

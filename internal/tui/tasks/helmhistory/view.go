@@ -112,7 +112,63 @@ func (m Model) Strips(width int) []string {
 		word = "revision"
 	}
 	line := count.Render(fmt.Sprintf("%d", len(m.revisions))) + " " + dim.Render(word+" · newest first · current highlighted")
+	if note := m.newerChartNote(theme(m), stripInnerWidth(width)-lipgloss.Width(line)-1); note != "" {
+		// Right-aligned on the count line rather than a line of its own: the
+		// strip is one line by contract (stripLineCount), and this is the
+		// only slot on the screen that isn't per-revision — which is right,
+		// because "a newer chart exists" is a fact about the release, not
+		// about whichever revision the cursor happens to be on.
+		return []string{insetStripLine(padBetween(line, note, stripInnerWidth(width)), width)}
+	}
 	return []string{insetStripLine(line, width)}
+}
+
+// newerChartNote is 18a's outdated signal repeated on the history rail: the
+// version the local repo cache offers, when it's ahead of what's deployed.
+// Empty — no placeholder line — when the release is current, when no repo
+// cache knows the chart, or before the revisions have loaded.
+//
+// It shortens to fit avail rather than being dropped: padBetween discards a
+// right side that doesn't fit outright, so the full phrasing would have made
+// the whole finding vanish at 80 columns. The version is the part that
+// matters, so it's the part that survives.
+func (m Model) newerChartNote(th tui.Theme, avail int) string {
+	current, ok := m.currentRevision()
+	if !ok || !current.Outdated() {
+		return ""
+	}
+	dim := lipgloss.NewStyle().Foreground(th.TextDim)
+	warn := lipgloss.NewStyle().Foreground(th.Warn)
+	version := current.LatestCell()
+
+	forms := []struct{ prefix, suffix string }{
+		{"newer chart available: ", " (" + current.LatestRepo + ")"},
+		{"newer chart available: ", ""},
+		{"→ ", " available"},
+		{"→ ", ""},
+	}
+	if current.LatestRepo == "" || current.LatestAmbiguous {
+		// No single repo to credit (or two repos disagree — LatestCell
+		// already carries the "?" that says so).
+		forms = forms[1:]
+	}
+	for _, f := range forms {
+		if len(f.prefix)+lipgloss.Width(version)+len(f.suffix) <= avail {
+			return dim.Render(f.prefix) + warn.Render(version) + dim.Render(f.suffix)
+		}
+	}
+	return ""
+}
+
+// currentRevision is the release's live state — the highest revision, which
+// is the first row since the rail is newest-first. The chart-version
+// comparison belongs to it and not to the selected row: an older revision
+// being behind the repo is simply what "older revision" means.
+func (m Model) currentRevision() (kube.HelmRelease, bool) {
+	if len(m.revisions) == 0 {
+		return kube.HelmRelease{}, false
+	}
+	return m.revisions[0], true
 }
 
 // statusOverflow reports the selected revision's STATUS text when the rail

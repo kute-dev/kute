@@ -416,6 +416,10 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Location.Namespace = namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(demoCluster.DiscoveredKinds(), demoCluster)
 		sess.Forwards = kube.NewForwardManager()
+		// The demo's chart versions are fixtures too — reading the running
+		// machine's real ~/.cache/helm would make --demo render differently
+		// on every laptop, and mostly render "–".
+		sess.Charts = fake.DemoChartIndex()
 		lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
 		sess.Lister = lister
 		sess.Metrics = demoCluster

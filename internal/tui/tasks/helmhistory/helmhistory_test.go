@@ -2,6 +2,8 @@ package helmhistory
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/verbs"
@@ -95,6 +98,90 @@ func revisionSecret(namespace, name, status string, revision int) *corev1.Secret
 		Namespace: namespace, Name: name, Chart: "postgresql", ChartVersion: "12.1.9",
 		Revision: revision, Status: status,
 	})
+}
+
+// testChartCache writes a one-repo Helm cache offering chart at version.
+func testChartCache(t *testing.T, chart, version string) *helmrepo.Cache {
+	t.Helper()
+	dir := t.TempDir()
+	cacheDir := filepath.Join(dir, "cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "repositories.yaml")
+	if err := os.WriteFile(configPath, []byte("repositories:\n- name: bitnami\n  url: https://example.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := "apiVersion: v1\nentries:\n  " + chart + ":\n  - name: " + chart + "\n    version: " + version + "\n"
+	if err := os.WriteFile(filepath.Join(cacheDir, "bitnami-index.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return helmrepo.NewCache(helmrepo.Loader{ConfigPath: configPath, CachePath: cacheDir})
+}
+
+// TestNewerChartNoteOnTheRail: 18a's outdated signal repeated where a user
+// lands when they want to act on it. The note describes the release's *live*
+// state, so it has to hang off the newest revision and stay put as the
+// cursor moves down the rail into older ones.
+func TestNewerChartNoteOnTheRail(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {
+			revisionSecret("default", "postgresql", "superseded", 1),
+			revisionSecret("default", "postgresql", "deployed", 2),
+		},
+	}}
+	m := New(Config{
+		Session: newSession(), Lister: lister, Namespace: "default", Name: "postgresql",
+		Charts: testChartCache(t, "postgresql", "12.2.1"),
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	strip := plain(strings.Join(m.Strips(120), "\n"))
+	if !strings.Contains(strip, "newer chart available: 12.2.1") {
+		t.Fatalf("strip %q missing the newer-chart note", strip)
+	}
+	if !strings.Contains(strip, "(bitnami)") {
+		t.Errorf("strip %q doesn't name the repo the version came from", strip)
+	}
+
+	// The strip is one line by contract (stripLineCount), whatever it says.
+	if got := len(m.Strips(120)); got != m.stripLineCount() {
+		t.Errorf("Strips returned %d lines, stripLineCount says %d", got, m.stripLineCount())
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "j"})
+	if strip := plain(strings.Join(m.Strips(120), "\n")); !strings.Contains(strip, "newer chart available") {
+		t.Errorf("note vanished when the cursor moved to an older revision: %q", strip)
+	}
+}
+
+// TestNoNoteWhenCurrentOrUnknown: no placeholder, no "up to date" claim —
+// the note is either a real finding or absent.
+func TestNoNoteWhenCurrentOrUnknown(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindSecret: {revisionSecret("default", "postgresql", "deployed", 1)},
+	}}
+	for _, tc := range []struct {
+		name   string
+		charts *helmrepo.Cache
+	}{
+		{"chart is current", testChartCache(t, "postgresql", "12.1.9")},
+		{"chart unknown to every repo", testChartCache(t, "something-else", "9.9.9")},
+		{"no repo cache at all", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(Config{
+				Session: newSession(), Lister: lister, Namespace: "default", Name: "postgresql",
+				Charts: tc.charts,
+			})
+			m.SetSize(120, 36)
+			m = step(t, m, m.Init()())
+			if strip := plain(strings.Join(m.Strips(120), "\n")); strings.Contains(strip, "chart available") {
+				t.Errorf("strip %q claims a newer chart", strip)
+			}
+		})
+	}
 }
 
 func TestLoadSortsRevisionsNewestFirst(t *testing.T) {
