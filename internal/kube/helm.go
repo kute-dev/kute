@@ -466,9 +466,7 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	// Runs later, on the reflector's goroutine — so it takes the lock
 	// itself rather than assuming the one held here.
 	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		if IsPermissionError(err) {
-			c.markKindFailed(KindHelmRelease)
-		}
+		c.noteWatchError(KindHelmRelease, err)
 		c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
 	})
 	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI

@@ -86,9 +86,13 @@ type Cluster struct {
 	// kindInformers is every typed informer registered so far, the handle
 	// KindSynced needs (a lister can't report its own sync state).
 	// kindFailed marks kinds whose watch hit a permanent error, so their
-	// caches are never waited on again.
+	// caches are never waited on again. kindStalled holds the last error
+	// from a cache that is still failing its initial LIST — recoverable, so
+	// it is cleared rather than latched, but until it does recover it is the
+	// difference between a screen showing why it is empty and one spinning.
 	kindInformers map[ResourceKind]cache.SharedIndexInformer
 	kindFailed    map[ResourceKind]bool
+	kindStalled   map[ResourceKind]error
 
 	events  chan ResourceChangedMsg
 	health  *health
@@ -285,9 +289,26 @@ func (c *Cluster) Synced() bool {
 // a kind whose watch failed with a permission error, so a caller gating a
 // loading state on this can never spin forever waiting for a cache that is
 // never going to arrive.
+// Also reports true for a cache whose initial LIST keeps failing, which is
+// settled in the only sense a spinner cares about: it is not about to fill.
+// KindError says why, so the screen can show the failure instead of
+// asserting the cluster is empty. Should a later retry succeed after all, the
+// stall clears itself here and the kind reads as genuinely synced.
 func (c *Cluster) KindSynced(kind ResourceKind) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.kindSyncedLocked(kind) {
+		delete(c.kindStalled, kind)
+		return true
+	}
+	return c.kindStalled[kind] != nil
+}
+
+// kindSyncedLocked is KindSynced's cache-state half, without the stall
+// fallback — the question "has this cache actually filled", which is also
+// what decides whether a watch error is an initial-LIST failure or ordinary
+// post-sync churn.
+func (c *Cluster) kindSyncedLocked(kind ResourceKind) bool {
 	if c.stopCh == nil {
 		return true
 	}
@@ -313,6 +334,56 @@ func (c *Cluster) KindSynced(kind ResourceKind) bool {
 		return false
 	}
 	return true
+}
+
+// KindError reports why kind's cache is empty, when it is empty for a reason
+// other than "the cluster has none of them": the last error from an initial
+// LIST that has yet to succeed. Nil once the cache fills — including for a
+// kind that failed a few times and then recovered.
+//
+// This is the other half of the no-hanging-spinner contract. KindSynced
+// saying "settled" is what gets a screen off its spinner; without a reason to
+// show alongside it, the screen would report an empty cluster instead of a
+// failed read, which is a worse lie than the spinner.
+//
+// Permission failures are deliberately not reported here. They travel their
+// own path (kindFailed, and the Forbidden error a screen's own read returns)
+// with a dedicated permission-denied state at the other end.
+func (c *Cluster) KindError(kind ResourceKind) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kindSyncedLocked(kind) {
+		delete(c.kindStalled, kind)
+		return nil
+	}
+	return c.kindStalled[kind]
+}
+
+// noteWatchError records err against kind, from the reflector's own
+// goroutine. A watch dropping after the cache has filled is ordinary churn —
+// the informer re-establishes it and the screen keeps rendering real data, so
+// it is not this kind's problem. A failure *before* the initial LIST has ever
+// succeeded is: nothing is on screen, nothing is coming, and the reflector
+// will retry the same failing request indefinitely.
+//
+// One failure is enough to say so. The read is retried regardless, and the
+// stall clears the moment a retry lands, so the cost of speaking up early is
+// a message that corrects itself while the alternative is silence for as long
+// as the user is willing to wait.
+func (c *Cluster) noteWatchError(kind ResourceKind, err error) {
+	if IsPermissionError(err) {
+		c.markKindFailed(kind)
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kindSyncedLocked(kind) {
+		return
+	}
+	if c.kindStalled == nil {
+		c.kindStalled = map[ResourceKind]error{}
+	}
+	c.kindStalled[kind] = err
 }
 
 // allStartedKindsSynced reports whether every informer started so far has
@@ -416,6 +487,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName string) error {
 	// whatever the old cluster forbade says nothing about this one.
 	c.kindInformers = nil
 	c.kindFailed = nil
+	c.kindStalled = nil
 	c.metaClient = nil
 	c.helmFactories = nil
 	c.helmInformers = nil

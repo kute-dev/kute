@@ -91,6 +91,15 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		}
+		if err := tui.KindsError(m.lister, kube.KindHelmRelease); err != nil {
+			// The release cache is settled only in the sense that it has
+			// stopped making progress — see tui.KindsError. "No revisions"
+			// about a release the user just opened would be a worse answer
+			// than the read failure that actually happened.
+			m.state = tui.TaskStateError
+			m.feedback = fmt.Sprintf("couldn't load release history: %v — retrying", err)
+			return m, nil
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""

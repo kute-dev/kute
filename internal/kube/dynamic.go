@@ -49,6 +49,15 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionRe
 	//nolint:errcheck // best-effort: a failure just means this cache keeps managedFields
 	_ = informer.Informer().SetTransform(stripManagedFields)
 	k := kind
+	// Same reason the typed informers have one (health.go's
+	// setWatchErrorHandlers): a discovered kind can be forbidden, or its
+	// initial LIST can keep failing, and without this the only symptom is a
+	// screen that never leaves its spinner.
+	//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
+	_ = informer.Informer().SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		c.noteWatchError(k, err)
+		c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
+	})
 	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
 	_, _ = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { c.notify(k) },

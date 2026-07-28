@@ -21,6 +21,35 @@ type CacheSyncChecker interface {
 	Synced() bool
 }
 
+// KindErrorReporter is implemented by a lister that can say why a kind's
+// cache is empty when the reason isn't "there are none of them"
+// (*kube.Cluster: an initial LIST that keeps failing).
+type KindErrorReporter interface {
+	KindError(kind kube.ResourceKind) error
+}
+
+// KindsError returns the first reason any of kinds has no data to show, or
+// nil when the caches are simply empty.
+//
+// It is the companion to KindsSynced, and the two are only correct together.
+// A cache that keeps failing its initial LIST reports *synced* — it is not
+// going to fill, so holding a spinner on it is a spinner that never ends —
+// which on its own would turn a failed read into the confident claim that the
+// cluster has none of this kind. Screens that gate an empty state on
+// KindsSynced ask this next, and show the failure instead.
+func KindsError(lister any, kinds ...kube.ResourceKind) error {
+	kr, ok := lister.(KindErrorReporter)
+	if !ok {
+		return nil
+	}
+	for _, kind := range kinds {
+		if err := kr.KindError(kind); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // KindsSynced reports whether every one of kinds has a cache worth believing.
 //
 // This is what stands between a screen and the worst failure mode of lazy

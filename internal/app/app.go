@@ -138,6 +138,20 @@ func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	return kc.KindSynced(kind)
 }
 
+// KindError answers for the same cache KindSynced does — for
+// KindHelmRelease, whichever one the releases actually came from — so a
+// screen told "settled" here is told why by the same informer.
+func (l helmAwareLister) KindError(kind kube.ResourceKind) error {
+	kr, ok := l.RawLister.(tui.KindErrorReporter)
+	if !ok {
+		return nil
+	}
+	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
+		kind = kube.KindSecret
+	}
+	return kr.KindError(kind)
+}
+
 // CountLive forwards the server-side count; KindHelmRelease is counted from
 // the Secrets that back it. See forwardAwareLister.CountLive for why this
 // forward matters rather than being a formality.
@@ -236,6 +250,22 @@ func (l forwardAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	return true
 }
 
+// KindError forwards the reason a kind's cache has nothing to show, and is
+// load-bearing for the same reason KindSynced is — the two are read as a
+// pair. Unforwarded, a screen gets "settled" from the layer below and no
+// reason from this one, which is precisely the combination that renders a
+// failed read as an empty cluster. Forwards are in-process state that cannot
+// fail to load, so they never have one.
+func (l forwardAwareLister) KindError(kind kube.ResourceKind) error {
+	if kind == kube.KindForward {
+		return nil
+	}
+	if kr, ok := l.RawLister.(tui.KindErrorReporter); ok {
+		return kr.KindError(kind)
+	}
+	return nil
+}
+
 // CountLive forwards the server-side count. Forwards are in-process, so
 // they're counted from the registry rather than the API.
 //
@@ -306,6 +336,7 @@ var (
 	_ whocan.WhoCanReader          = (*kube.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*kube.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
+	_ tui.KindErrorReporter        = (*kube.Cluster)(nil)
 	_ tui.LiveCounter              = (*kube.Cluster)(nil)
 	_ helmhistory.HelmSecretLister = (*kube.Cluster)(nil)
 
@@ -323,10 +354,12 @@ var (
 	// Assert them here so the next omission is a compile error.
 	_ browse.KindSyncChecker       = forwardAwareLister{}
 	_ browse.CacheSyncChecker      = forwardAwareLister{}
+	_ tui.KindErrorReporter        = forwardAwareLister{}
 	_ tui.LiveCounter              = forwardAwareLister{}
 	_ helmhistory.HelmSecretLister = forwardAwareLister{}
 	_ browse.KindSyncChecker       = helmAwareLister{}
 	_ browse.CacheSyncChecker      = helmAwareLister{}
+	_ tui.KindErrorReporter        = helmAwareLister{}
 	_ tui.LiveCounter              = helmAwareLister{}
 	_ helmhistory.HelmSecretLister = helmAwareLister{}
 	// Only the outermost decorator can answer this one — nothing below it

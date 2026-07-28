@@ -2,6 +2,7 @@ package whocan
 
 import (
 	"context"
+	"fmt"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -113,6 +114,14 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			m.state = tui.TaskStateLoading
 			m.feedback = ""
 			return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+		}
+		if err := tui.KindsError(m.rbac, kube.KindRole, kube.KindRoleBinding,
+			kube.KindClusterRole, kube.KindClusterRoleBinding); err != nil {
+			// The same security claim, against a cache that stopped filling
+			// rather than one that never started (see tui.KindsError).
+			m.state = tui.TaskStateError
+			m.feedback = fmt.Sprintf("couldn't load RBAC bindings: %v — retrying", err)
+			return m, nil
 		}
 		m.state = tui.TaskStateEmpty
 	}

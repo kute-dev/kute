@@ -1,6 +1,7 @@
 package events
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -67,6 +68,15 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			m.feedback = ""
 			m.syncRetryGen++
 			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		}
+		if err := tui.KindsError(m.lister, kube.KindEvent); err != nil {
+			// Settled without ever having loaded (see tui.KindsError). A
+			// quiet namespace and an Event cache that can't fill look
+			// identical from here, and only one of them is safe to report
+			// during an incident.
+			m.state = tui.TaskStateError
+			m.feedback = fmt.Sprintf("couldn't load events: %v — retrying", err)
+			return m, nil
 		}
 		m.state = tui.TaskStateEmpty
 	}

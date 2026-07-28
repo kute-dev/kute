@@ -92,6 +92,14 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			m.syncRetryGen++
 			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
 		}
+		if err := tui.KindsError(m.lister, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment); err != nil {
+			// One of those caches is settled only by having given up (see
+			// tui.KindsError) — "a quiet timeline" is the same wrong answer
+			// here as an empty event feed, for the same reason.
+			m.state = tui.TaskStateError
+			m.feedback = fmt.Sprintf("couldn't load the timeline: %v — retrying", err)
+			return m, nil
+		}
 		m.state = tui.TaskStateEmpty
 	}
 	if firstLoad && len(m.rail) > 0 {

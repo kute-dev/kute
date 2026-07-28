@@ -2,6 +2,7 @@ package browse
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -136,6 +137,82 @@ func TestUnsyncedKindStaysLoadingViaKindChecker(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Fatal("expected a retry to be scheduled")
+	}
+}
+
+// stalledLister is a cache that has given up: settled, because nothing more
+// is coming, but with a reason rather than a genuinely empty cluster behind
+// it. *kube.Cluster answers this way for an initial LIST that keeps failing.
+type stalledLister struct {
+	lister fakeLister
+	kind   kube.ResourceKind
+	err    error
+}
+
+func (l *stalledLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if kind == l.kind {
+		return nil, nil
+	}
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l *stalledLister) KindSynced(kube.ResourceKind) bool { return true }
+
+func (l *stalledLister) KindError(kind kube.ResourceKind) error {
+	if kind == l.kind {
+		return l.err
+	}
+	return nil
+}
+
+// TestStalledCacheRendersTheErrorNotAnEmptyCluster: the failure this pairs
+// with is a Helm Releases screen that loaded for over 2000 seconds against a
+// cluster whose release LIST could not finish inside the API server's window.
+// Reporting the cache as settled is what gets the screen off the spinner —
+// but settled-and-empty would then assert there are no releases, which is a
+// claim about the cluster this screen has no evidence for.
+func TestStalledCacheRendersTheErrorNotAnEmptyCluster(t *testing.T) {
+	lister := &stalledLister{
+		kind:   kube.KindHelmRelease,
+		err:    errors.New("stream error when reading response body"),
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindHelmRelease
+	m.desc, _ = m.session.Registry.Descriptor(kube.KindHelmRelease)
+
+	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindHelmRelease, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateError {
+		t.Fatalf("state = %s, want error — the cache stopped filling, it is not empty", m.state)
+	}
+	if !strings.Contains(m.feedback, "stream error") {
+		t.Errorf("feedback = %q, want the read failure that actually happened", m.feedback)
+	}
+	if cmd != nil {
+		t.Error("no retry should be scheduled here; the informer retries underneath and its change event reloads this list")
+	}
+}
+
+// TestStalledUnrelatedKindStillRendersEmpty: the stall belongs to the kind
+// that failed. A working list with genuinely nothing in it must still say so.
+func TestStalledUnrelatedKindStillRendersEmpty(t *testing.T) {
+	lister := &stalledLister{
+		kind:   kube.KindHelmRelease,
+		err:    errors.New("stream error when reading response body"),
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindPod
+
+	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty — the Pod cache is fine and there are no pods", m.state)
 	}
 }
 

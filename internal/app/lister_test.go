@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +25,13 @@ type recordingCluster struct {
 	listedKinds []kube.ResourceKind
 	helmReads   int
 	syncedAsked []kube.ResourceKind
+	errorAsked  []kube.ResourceKind
 }
+
+// errStalledCache stands in for the reason a cache stopped filling — on the
+// cluster this was diagnosed against, a release LIST that could not complete
+// inside the API server's request window.
+var errStalledCache = errors.New("stream error when reading response body")
 
 func (c *recordingCluster) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
 	c.listedKinds = append(c.listedKinds, kind)
@@ -39,6 +46,11 @@ func (c *recordingCluster) ListHelmReleaseSecrets(context.Context, string) ([]ru
 func (c *recordingCluster) KindSynced(kind kube.ResourceKind) bool {
 	c.syncedAsked = append(c.syncedAsked, kind)
 	return true
+}
+
+func (c *recordingCluster) KindError(kind kube.ResourceKind) error {
+	c.errorAsked = append(c.errorAsked, kind)
+	return errStalledCache
 }
 
 func (c *recordingCluster) listed(kind kube.ResourceKind) bool {
@@ -194,6 +206,37 @@ func TestHelmReleaseSyncStateAsksAboutTheReleaseCache(t *testing.T) {
 
 	if len(rec.syncedAsked) != 1 || rec.syncedAsked[0] != kube.KindHelmRelease {
 		t.Fatalf("KindSynced asked about %v, want [%s]", rec.syncedAsked, kube.KindHelmRelease)
+	}
+}
+
+// TestHelmReleaseErrorAsksAboutTheReleaseCache: KindError travels with
+// KindSynced and has to name the same cache. A screen told "settled" by one
+// informer and "no problem" by another renders an empty cluster over a read
+// that failed — the spinner-that-never-ends traded for a lie.
+func TestHelmReleaseErrorAsksAboutTheReleaseCache(t *testing.T) {
+	rec := &recordingCluster{}
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
+
+	if err := lister.KindError(kube.KindHelmRelease); err == nil {
+		t.Fatal("KindError returned nil; the seam is not forwarded through the decorator stack")
+	}
+	if len(rec.errorAsked) != 1 || rec.errorAsked[0] != kube.KindHelmRelease {
+		t.Fatalf("KindError asked about %v, want [%s]", rec.errorAsked, kube.KindHelmRelease)
+	}
+}
+
+// TestForwardsNeverStall: forwards are in-process state with no cache to
+// fail, and the decorator answers for them itself rather than passing the
+// question down to a kind the cluster has never heard of.
+func TestForwardsNeverStall(t *testing.T) {
+	rec := &recordingCluster{}
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
+
+	if err := lister.KindError(kube.KindForward); err != nil {
+		t.Fatalf("KindError(Forward) = %v, want nil", err)
+	}
+	if len(rec.errorAsked) != 0 {
+		t.Fatalf("the forward question reached the cluster as %v", rec.errorAsked)
 	}
 }
 

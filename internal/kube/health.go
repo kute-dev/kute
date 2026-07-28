@@ -303,9 +303,7 @@ func (c *Cluster) setWatchErrorHandlers(handlers map[ResourceKind]cache.SharedIn
 		kind := kind
 		//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
 		_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-			if IsPermissionError(err) {
-				c.markKindFailed(kind)
-			}
+			c.noteWatchError(kind, err)
 			c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
 		})
 	}

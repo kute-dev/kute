@@ -136,6 +136,103 @@ func TestKindSyncedTrueAfterPermissionError(t *testing.T) {
 	}
 }
 
+// TestKindSyncedTrueAfterAStalledInitialList is the same anti-hang guard for
+// the failure that isn't a permission denial: a LIST big enough (or a link
+// slow enough) that the request never completes inside the API server's
+// window. The reflector retries the same doomed request indefinitely, so
+// "not synced yet" is true forever — measured on a real cluster as a Helm
+// Releases screen that had been loading for over 2000 seconds.
+func TestKindSyncedTrueAfterAStalledInitialList(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	streamErr := errors.New("stream error when reading response body, may be caused by closed connection")
+	c.noteWatchError(KindSecret, streamErr)
+
+	if !c.KindSynced(KindSecret) {
+		t.Fatal("KindSynced = false for a cache whose initial LIST keeps failing; nothing is coming, so the spinner never ends")
+	}
+	if got := c.KindError(KindSecret); got == nil {
+		t.Fatal("KindError = nil for a stalled cache; without a reason the screen claims the cluster is empty")
+	}
+	// The stall belongs to the kind that failed, not to the session.
+	if c.KindSynced(KindConfigMap) || c.KindError(KindConfigMap) != nil {
+		t.Fatal("one kind's failed LIST vouched for another")
+	}
+}
+
+// TestStalledKindRecoversWhenTheCacheFinallyFills: the stall is a status, not
+// a verdict. The reflector keeps retrying, and a retry that lands has to
+// leave the kind reading as genuinely synced with no error attached — or one
+// slow LIST would caption a working screen with a failure forever.
+func TestStalledKindRecoversWhenTheCacheFinallyFills(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	c.noteWatchError(KindPod, errors.New("connect: connection refused"))
+	if c.KindError(KindPod) == nil {
+		t.Fatal("precondition: the failed LIST should be recorded")
+	}
+
+	c.registerWatches(KindPod)
+	c.factory.Start(c.stopCh)
+	c.factory.WaitForCacheSync(c.stopCh)
+
+	if err := c.KindError(KindPod); err != nil {
+		t.Fatalf("KindError = %v after the cache filled; the stall must clear", err)
+	}
+	if !c.KindSynced(KindPod) {
+		t.Fatal("KindSynced = false after the cache filled")
+	}
+}
+
+// TestWatchErrorAfterSyncIsNotAStall: a watch dropping once the cache holds
+// data is ordinary churn — the informer re-establishes it and the screen goes
+// on rendering real rows. Reporting that as a load failure would paste an
+// error over a perfectly good table.
+func TestWatchErrorAfterSyncIsNotAStall(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	c.registerWatches(KindPod)
+	c.factory.Start(c.stopCh)
+	c.factory.WaitForCacheSync(c.stopCh)
+
+	c.noteWatchError(KindPod, errors.New("watch closed unexpectedly"))
+	if err := c.KindError(KindPod); err != nil {
+		t.Fatalf("KindError = %v for a post-sync watch drop; the cache still holds data", err)
+	}
+}
+
+// TestStalledPermissionErrorStaysAPermissionError: Forbidden has its own
+// path (kindFailed, and a permission-denied card at the other end). Routing
+// it through the stall channel too would show a load-failure caption where
+// the screen already has a better answer.
+func TestStalledPermissionErrorStaysAPermissionError(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("nope"))
+	c.noteWatchError(KindSecret, forbidden)
+
+	if !c.KindSynced(KindSecret) {
+		t.Fatal("a forbidden kind must still read as settled")
+	}
+	if err := c.KindError(KindSecret); err != nil {
+		t.Fatalf("KindError = %v for a forbidden kind; that failure has its own state", err)
+	}
+	c.mu.Lock()
+	failed := c.kindFailed[KindSecret]
+	c.mu.Unlock()
+	if !failed {
+		t.Fatal("a forbidden watch error no longer marks the kind failed")
+	}
+}
+
 func TestPermissionErrorsAreDistinguishedFromOutages(t *testing.T) {
 	t.Parallel()
 	forbidden := apierrors.NewForbidden(
