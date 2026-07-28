@@ -54,6 +54,9 @@ become a `SwitchContext`-shaped cache rebuild, turning today's instant filter ch
 (one field write) into a loading flash. It trades away features for the same win laziness
 gets for free.
 
+Still true as a default. [§5.5](#55-the-helm-release-cache-scopes-to-the-namespace--done) is
+the one kind that had to break it, and it pays exactly the price named above.
+
 ---
 
 ## 2. What shipped
@@ -426,6 +429,59 @@ cache the Helm screens never read, flashing "no releases".
   changing spec'd copy.
 
 ---
+
+### 5.5 The Helm release cache scopes to the namespace — **done**
+
+§5.2 gave releases their own Secret informer, filtered server-side to
+`type=helm.sh/release.v1`, and that filter is still the right one. What it doesn't narrow
+is *scope*: the informer watched every namespace, so browsing one namespace's releases
+pulled every namespace's. Release Secrets carry the release's whole gzipped manifest, so
+that is not a rounding error — 8.19 MB cluster-wide against 4 MB for the namespace the
+screen was actually showing, on the cluster below.
+
+Over a VPN that difference is the difference between working and not. The cluster-wide
+LIST takes 60–90 s at ~130 KB/s, which straddles the API server's 60 s request window: it
+dies partway through with `stream error: … INTERNAL_ERROR; received from peer`, the
+reflector retries the same doomed request, and the cache never syncs. Reported as a Helm
+Releases screen that had been loading for **over 2000 seconds** while
+`helm list -n aim-uat` answered in 4 s and the same build over SSH *on the node* opened
+instantly — same 8 MB, no VPN in between.
+
+Measured on that cluster, from the workstation:
+
+| read | result |
+|---|---|
+| cluster-wide informer (what shipped in §5.2) | fails at 62.9 s, never syncs |
+| same with `limit=50` | still 62.9 s — RV=0 lists ignore `limit`, served whole from the watch cache |
+| informer scoped to `aim-uat` | 255 Secrets in 13.4 s, synced |
+
+So `ensureHelmSecrets` now takes the namespace being read and keys one informer per
+namespace ("" still meaning all). `KindSynced(KindHelmRelease)` answers for the scope of
+the most recent read, since that is the cache the rows on screen came from.
+
+This is the exception to [Why not namespace-scoped informers](#why-not-namespace-scoped-informers),
+and it pays that section's price honestly: switching namespaces on the Helm list starts a
+second cache and shows a loading state while it fills, where every other kind re-filters
+an existing one instantly. It buys a screen that loads at all. The reasoning doesn't
+generalise — it applies to a kind whose objects are individually large *and* whose screen
+is namespace-scoped in practice. All-namespaces mode still reads cluster-wide: you asked
+for every namespace, the same answer §5.3 gives for the Secrets list.
+
+Two related reads went with it. `browse`'s `auxKinds` still listed `KindSecret` under
+`KindHelmRelease` from before §5.2, so opening the Helm list *prefetched* the shared
+unfiltered cluster-wide Secret cache — reinstating the exact 12.3 MB read §5.2 removed, on
+the way into a screen that never touches it, competing for the same saturated link. And
+`KindSynced` now reports settled for a cache whose initial LIST keeps failing, with
+`KindError` alongside it saying why, because "not synced yet" was true forever here and
+CLAUDE.md's promise that a spinner can never hang wasn't being kept. Every screen that
+gates an empty state on `KindsSynced` asks `KindsError` next and shows the read failure
+instead of claiming the cluster is empty (`browse`, `helmhistory`, `events`, `timeline`,
+`whocan`). The stall is a status, not a verdict: the reflector keeps retrying, a success
+clears it, and the informer's own change event reloads the screen.
+
+`internal/kube/helm.go`, `cluster.go`, `dynamic.go`, `health.go`, `internal/app/app.go`,
+`internal/tui/kindsync.go`, `internal/tui/tasks/browse/{aux,update}.go`,
+`internal/tui/tasks/{helmhistory,events,timeline,whocan}/update.go`
 
 ## Running the measurement
 
