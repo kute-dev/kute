@@ -299,7 +299,7 @@ func TestHelmInformerIsPerNamespaceAndTypeFiltered(t *testing.T) {
 // for an initial LIST that is still failing and may yet succeed, which is a
 // retryable status; a 403 will not change while the process runs, and the two
 // deserve different screens.
-func TestForbiddenKindIsSettledNotPending(t *testing.T) {
+func TestForbiddenKindIsSettledAndSaysWhy(t *testing.T) {
 	c := e2eClusterWithKubeconfig(t, e2ePartialKubeconfig(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
