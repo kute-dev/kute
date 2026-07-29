@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -407,7 +408,11 @@ func demoPrometheusFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 
 	c.Seed(kube.KindDeployment,
 		demoStableDeployment("prometheus-operator", "monitoring", "quay.io/prometheus-operator/prometheus-operator:v0.74.0", 1, crdAge),
-		demoStableDeployment("grafana", "monitoring", "grafana/grafana:10.4.2", 1, crdAge),
+		// Mid-rollout on purpose: it is the workload behind the `grafana`
+		// Helm release, which helm reports as plain `deployed`. Without a
+		// workload that is actually moving, 18a's rollout arrow has nothing
+		// to render in --demo and the signal is invisible.
+		demoRollingDeployment("grafana", "monitoring", "grafana/grafana:10.4.2", 3, crdAge),
 		demoStableDeployment("kube-state-metrics", "monitoring", "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.12.0", 1, crdAge),
 	)
 	c.Seed(kube.KindStatefulSet,
@@ -801,7 +806,11 @@ func demoStatefulSetN(name, ns string, replicas int32, created metav1.Time) *app
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
 		Spec:       appsv1.StatefulSetSpec{Replicas: &replicas},
-		Status:     appsv1.StatefulSetStatus{Replicas: replicas, ReadyReplicas: replicas},
+		// UpdatedReplicas matters as much as ReadyReplicas: a settled
+		// StatefulSet reports every replica on the current revision, and
+		// leaving it zero makes a fully-ready fixture read as permanently
+		// mid-rollout (resources.UnsettledWorkloads, 18a's rollout glyph).
+		Status: appsv1.StatefulSetStatus{Replicas: replicas, ReadyReplicas: replicas, UpdatedReplicas: replicas},
 	}
 }
 
@@ -864,6 +873,22 @@ func demoStableDeployment(name, ns, image string, replicas int32, created metav1
 	}
 }
 
+// demoRollingDeployment is demoStableDeployment part-way through a rollout:
+// the new revision is applied and observed, but only one replica has been
+// replaced so far. Distinct from demoMidRolloutDeployment, which sits in the
+// earlier window where the controller hasn't observed the new generation at
+// all — both are "progressing", and having one of each keeps 9a's ROLLOUT
+// cell honest about the two ways it gets there.
+func demoRollingDeployment(name, ns, image string, replicas int32, created metav1.Time) *appsv1.Deployment {
+	d := demoStableDeployment(name, ns, image, replicas, created)
+	d.Generation = 2
+	d.Status.ObservedGeneration = 2
+	d.Status.UpdatedReplicas = 1
+	d.Status.ReadyReplicas = replicas - 1
+	d.Status.AvailableReplicas = replicas - 1
+	return d
+}
+
 // demoDaemonSetReady is a fully-scheduled, fully-ready DaemonSet — every
 // node in the demo cluster running its pod.
 func demoDaemonSetReady(name, ns string, desired int32, created metav1.Time) *appsv1.DaemonSet {
@@ -873,6 +898,9 @@ func demoDaemonSetReady(name, ns string, desired int32, created metav1.Time) *ap
 			DesiredNumberScheduled: desired,
 			NumberReady:            desired,
 			NumberAvailable:        desired,
+			// Same reason as demoStatefulSetN's UpdatedReplicas: without it
+			// a fully-ready DaemonSet reads as still rolling.
+			UpdatedNumberScheduled: desired,
 		},
 	}
 }
@@ -1224,7 +1252,7 @@ func demoHelmReleaseFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		return kube.EncodeHelmReleaseSecret(kube.HelmRelease{
 			Name: name, Namespace: namespace, Chart: chart, ChartVersion: chartVersion, AppVersion: appVersion,
 			Revision: revision, Status: status, StatusReason: reason, Updated: age(d).Time, Values: values,
-			Manifest: "# Source: " + chart + "/templates/deployment.yaml\n",
+			Manifest: demoReleaseManifest(chart, name),
 		})
 	}
 
@@ -1240,7 +1268,12 @@ func demoHelmReleaseFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		rev("redis", "production", "redis", "18.1.4", "7.2.3", "superseded", "", 1, "architecture: standalone\n", 15*24*time.Hour),
 		rev("redis", "production", "redis", "18.1.5", "7.2.4", "deployed", "", 2, "architecture: standalone\nauth:\n  enabled: true\n", 6*24*time.Hour),
 	)
-	// grafana (monitoring): deployed, single revision.
+	// grafana (monitoring): deployed, single revision — and the one release
+	// whose own workload is still rolling (demoPrometheusFixtures seeds the
+	// grafana Deployment mid-rollout). Helm calls this release `deployed`
+	// because it has applied its manifests; the cluster hasn't finished
+	// acting on them, which is the whole reason 18a carries the rollout
+	// arrow in the glyph column.
 	c.Seed(kube.KindSecret,
 		rev("grafana", "monitoring", "grafana", "7.3.0", "10.4.2", "deployed", "", 1, "adminUser: admin\npersistence:\n  enabled: true\n", 20*24*time.Hour),
 	)
@@ -1253,6 +1286,36 @@ func demoHelmReleaseFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.Seed(kube.KindSecret,
 		rev("broken-app", "default", "mychart", "1.0.0", "2.1.0", "failed", "hook timeout", 2, "replicaCount: 2\n", 40*time.Minute),
 	)
+}
+
+// demoReleaseWorkloads is the workload each demo release's chart renders,
+// as a `kind/name` pair. Real charts render a full manifest of Services,
+// ConfigMaps and RBAC alongside it; only the workloads matter here, because
+// they are the only part 18a's rollout signal reads
+// (kube.HelmReleaseWorkloads).
+//
+// A release absent from this map renders a manifest with no workload at all,
+// which is honest for the demo's own fixtures: broken-app has nothing behind
+// it, and postgresql/redis name no workload the demo cluster actually has.
+// An unresolvable name would simply never match a cache, so it would be a
+// silently dead fixture rather than a wrong one — but a fixture that names
+// something real is the one that proves the join works.
+var demoReleaseWorkloads = map[string]string{
+	"grafana":    "Deployment/grafana",
+	"prometheus": "StatefulSet/prometheus-k8s",
+}
+
+// demoReleaseManifest renders the slice of a real rendered manifest that
+// HelmReleaseWorkloads reads: the source comment every helm template carries,
+// plus the release's own workload document where it has one.
+func demoReleaseManifest(chart, release string) string {
+	manifest := "---\n# Source: " + chart + "/templates/deployment.yaml\n"
+	workload, ok := demoReleaseWorkloads[release]
+	if !ok {
+		return manifest
+	}
+	kind, name, _ := strings.Cut(workload, "/")
+	return manifest + "apiVersion: apps/v1\nkind: " + kind + "\nmetadata:\n  name: " + name + "\n"
 }
 
 // DemoChartIndex is the local-Helm-repo-cache side of the demo: the chart

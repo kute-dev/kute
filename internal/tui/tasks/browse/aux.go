@@ -41,6 +41,15 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 	},
 	kube.KindIngress: {kube.KindService, kube.KindPod}, // BACKENDS column
 	kube.KindService: {kube.KindPod},                   // label-join in the meta editor
+	kube.KindHelmRelease: {
+		// 18a's rollout glyph: a release's workloads settling is a change to
+		// three other kinds and none to the release Secret, so without these
+		// the ▸ would be painted once and never cleared — the release would
+		// read "rolling out" until something unrelated prompted a reload.
+		kube.KindDeployment,
+		kube.KindStatefulSet,
+		kube.KindDaemonSet,
+	},
 }
 
 // Deliberately absent: KindSecret under KindHelmRelease. Releases used to be

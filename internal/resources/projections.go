@@ -751,6 +751,18 @@ func projectHelmRelease(obj runtime.Object) Row {
 		// alone, which is why this sets GlyphClass rather than Status.
 		row.Glyph, row.GlyphClass = "▲", StatusWarn
 	}
+	if r.RolloutPending {
+		// Same rule, second orthogonal signal: helm reports "deployed" as
+		// soon as it has applied the manifests, so a release whose workloads
+		// are still rolling would otherwise render green mid-upgrade. The
+		// STATUS cell and the strip keep helm's own word; the glyph carries
+		// 9a's rollout arrow.
+		//
+		// It outranks ▲ where a release is both: being behind the repo is
+		// the least urgent thing on this screen (§19a says so), and a
+		// rollout is the state that's changing under the user right now.
+		row.Glyph, row.GlyphClass = rolloutArrow, StatusWarn
+	}
 	return row
 }
 

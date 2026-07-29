@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/kube/fake"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui/tasks/helmhistory"
 )
@@ -63,13 +66,15 @@ func (c *recordingCluster) listed(kind kube.ResourceKind) bool {
 }
 
 // releaseCluster hands back one real release Secret, so the decorator's own
-// decode-and-annotate path runs end to end.
+// decode-and-annotate path runs end to end. workloads answers the rolling
+// caches the rollout annotation joins the release's manifest against.
 type releaseCluster struct {
-	release kube.HelmRelease
+	release   kube.HelmRelease
+	workloads map[kube.ResourceKind][]runtime.Object
 }
 
-func (c *releaseCluster) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
-	return nil, nil
+func (c *releaseCluster) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
+	return c.workloads[kind], nil
 }
 
 func (c *releaseCluster) ListHelmReleaseSecrets(context.Context, string) ([]runtime.Object, error) {
@@ -126,6 +131,79 @@ func TestListedReleasesCarryTheAvailableChartVersion(t *testing.T) {
 	}
 	if status := lister.ChartIndexStatus(); !status.Configured || status.Repos != 1 {
 		t.Errorf("ChartIndexStatus() = %+v, want a configured single-repo cache", status)
+	}
+}
+
+// TestListedReleasesCarryTheirWorkloadRolloutState is 18a's "helm is done,
+// Kubernetes isn't" signal, end to end through the decorator that annotates
+// it. Helm flips a release back to `deployed` the moment it has applied the
+// manifests — without --wait it never watches the rollout at all — so a
+// release the user just upgraded reads `deployed` while its pods are still
+// being replaced, and rendered green through the whole rollout.
+func TestListedReleasesCarryTheirWorkloadRolloutState(t *testing.T) {
+	manifest := "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: nva-api\n"
+	release := kube.HelmRelease{
+		Namespace: "nva", Name: "nva", Chart: "nva", ChartVersion: "1.4.2",
+		Revision: 7, Status: "deployed", Manifest: manifest,
+	}
+	deployment := func(updated, ready int32) *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "nva", Name: "nva-api", Generation: 4},
+			Spec:       appsv1.DeploymentSpec{Replicas: ptr32(3)},
+			Status: appsv1.DeploymentStatus{
+				ObservedGeneration: 4, Replicas: 3,
+				UpdatedReplicas: updated, ReadyReplicas: ready, AvailableReplicas: ready,
+			},
+		}
+	}
+
+	rollingOut := func(t *testing.T, d *appsv1.Deployment) bool {
+		t.Helper()
+		cluster := &releaseCluster{
+			release:   release,
+			workloads: map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {d}},
+		}
+		lister := newSessionLister(cluster, kube.NewForwardManager(), nil)
+		objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "nva")
+		if err != nil {
+			t.Fatalf("ListRaw(KindHelmRelease): %v", err)
+		}
+		if len(objs) != 1 {
+			t.Fatalf("got %d releases, want 1", len(objs))
+		}
+		return objs[0].(*kube.HelmReleaseObject).Release.RolloutPending
+	}
+
+	if !rollingOut(t, deployment(1, 2)) {
+		t.Error("RolloutPending = false while the release's own Deployment is mid-rollout — this is the release rendering green through an upgrade")
+	}
+	if rollingOut(t, deployment(3, 3)) {
+		t.Error("RolloutPending = true for a settled Deployment — the rollout arrow would never clear")
+	}
+}
+
+func ptr32(v int32) *int32 { return &v }
+
+// TestDemoHelmReleaseCarriesItsRolloutState keeps --demo honest about the
+// signal: the demo fixtures seed a `deployed` release whose Deployment is
+// still rolling, and the two halves live in different files, so this is what
+// notices when one of them drifts and the arrow quietly stops appearing.
+func TestDemoHelmReleaseCarriesItsRolloutState(t *testing.T) {
+	demo := fake.NewDemo()
+	lister := newSessionLister(demo, kube.NewForwardManager(), nil)
+
+	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "")
+	if err != nil {
+		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
+	}
+	var pending []string
+	for _, obj := range objs {
+		if r := obj.(*kube.HelmReleaseObject).Release; r.RolloutPending {
+			pending = append(pending, r.Name)
+		}
+	}
+	if len(pending) != 1 || pending[0] != "grafana" {
+		t.Errorf("releases mid-rollout in --demo = %v, want just grafana", pending)
 	}
 }
 

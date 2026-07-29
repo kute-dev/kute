@@ -415,6 +415,18 @@ cache the Helm screens never read, flashing "no releases".
   truthful. Strictly better than the old behaviour (which opened them at connect
   regardless), but the column really wants `CountLive` rather than a cache length.
 - **Opening the Secrets list still pulls 12.3 MB.** Inherent — you asked for Secrets.
+- **Reading the Helm kind starts the Deployment/StatefulSet/DaemonSet informers.** 18a's
+  rollout glyph needs them: helm reports a release `deployed` the moment it has applied
+  its manifests, so without reading the workloads a release renders green through the
+  whole rollout the user just triggered. Three named kinds, read once per list (not once
+  per release — `resources.UnsettledWorkloads` returns only the workloads that are
+  moving), and they are three of the smallest kinds on any cluster. Namespaced like every
+  other read, and `browse`'s `auxKinds` reloads on them so the arrow clears. The
+  annotation lives in the lister decorator, so 19a's overview pays it too when it reads
+  releases for its outdated tail — accepted rather than adding a "releases without rollout
+  state" seam to let one caller opt out of three of the cheapest kinds there are. Note this is
+  the *opposite* trade from §5.2's Secret entry — there the extra cache was pure cost for
+  a screen that read nothing from it; here the screen genuinely can't answer without it.
 
 ### 5.4 Not done, deliberately
 

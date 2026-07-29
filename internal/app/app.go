@@ -90,6 +90,9 @@ func (l helmAwareLister) ListRaw(ctx context.Context, kind kube.ResourceKind, na
 	}
 	releases := kube.LatestHelmReleases(kube.DecodeHelmReleases(secrets))
 	index := l.charts.Index()
+	// One read of the three rolling caches for the whole list, not one per
+	// release — see resources.UnsettledWorkloads.
+	unsettled := resources.UnsettledWorkloads(ctx, l.RawLister, namespace)
 	out := make([]runtime.Object, len(releases))
 	for i, r := range releases {
 		// The deployed version is passed in so a chart name served by two
@@ -98,9 +101,28 @@ func (l helmAwareLister) ListRaw(ctx context.Context, kind kube.ResourceKind, na
 		if latest, ok := index.LatestFor(r.Chart, r.ChartVersion); ok {
 			r = r.WithLatest(latest.Version, latest.Repo, latest.Ambiguous)
 		}
+		r = r.WithRollout(rolloutPending(r, unsettled))
 		out[i] = kube.NewHelmReleaseObject(r)
 	}
 	return out, nil
+}
+
+// rolloutPending reports whether any workload r's own manifest declares is
+// still rolling — 18a's "helm says deployed, Kubernetes isn't done" signal.
+//
+// Annotated here, at the one point releases are decoded, for the same reason
+// the chart index is: the answer reaches every consumer of the kind without
+// each screen having to know that a release has workloads behind it.
+func rolloutPending(r kube.HelmRelease, unsettled map[kube.WorkloadRef]struct{}) bool {
+	if len(unsettled) == 0 {
+		return false
+	}
+	for _, ref := range kube.HelmReleaseWorkloads(r) {
+		if _, ok := unsettled[ref]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ChartIndexStatus reports the state of the local Helm repo cache behind the

@@ -64,6 +64,21 @@ type HelmRelease struct {
 	Manifest string
 	Notes    string
 
+	// RolloutPending is 18a's "helm is done, Kubernetes isn't" signal: a
+	// workload this release declares is still rolling out (or hasn't
+	// settled). Helm's own Status goes back to "deployed" the moment the
+	// manifests are applied — without --wait it never reports the rollout at
+	// all — so a release genuinely mid-upgrade reads `deployed` and, before
+	// this, rendered green while its pods were still being replaced.
+	//
+	// Like LatestVersion it is not decoded from the release Secret: answering
+	// it means reading the workload caches, so it is annotated a layer up
+	// (app's lister decorator, via resources.UnsettledWorkloads) where one
+	// read serves the whole list. Zero — no annotation — is "nothing known to
+	// be pending", the same read-only-degrades-to-quiet rule the rest of the
+	// screen follows.
+	RolloutPending bool
+
 	// LatestVersion/LatestRepo/LatestAmbiguous are 18a's outdated signal:
 	// the newest version of this chart in the user's *local* Helm repo cache
 	// and where it came from. They are not decoded from the release Secret —
@@ -83,6 +98,15 @@ type HelmRelease struct {
 // history screen) look the chart up and hand the answer over.
 func (r HelmRelease) WithLatest(version, repo string, ambiguous bool) HelmRelease {
 	r.LatestVersion, r.LatestRepo, r.LatestAmbiguous = version, repo, ambiguous
+	return r
+}
+
+// WithRollout returns a copy of r carrying whether its workloads have
+// settled. Kept as a setter for the same reason as WithLatest: kube decodes
+// the release, and the one caller that can see the workload caches
+// (app's lister decorator) hands the answer over.
+func (r HelmRelease) WithRollout(pending bool) HelmRelease {
+	r.RolloutPending = pending
 	return r
 }
 
