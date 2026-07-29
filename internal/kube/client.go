@@ -154,7 +154,17 @@ func newClientForContext(contextName string) (Client, error) {
 	restConfig.QPS = 50
 	restConfig.Burst = 100
 
-	clientset, err := kubernetes.NewForConfig(restConfig)
+	// GKE/EKS credentials are minted by an exec plugin that would otherwise
+	// be handed this process's stdin and stderr — see execauth.go. Must
+	// happen before the first client is built from this config: that build is
+	// what creates (and globally caches) client-go's Authenticator, freezing
+	// both decisions for the rest of the session.
+	prepareExecProvider(restConfig)
+
+	var clientset *kubernetes.Clientset
+	pluginStderr.capture(func() {
+		clientset, err = kubernetes.NewForConfig(restConfig)
+	})
 	if err != nil {
 		return Client{}, err
 	}
