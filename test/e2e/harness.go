@@ -127,6 +127,20 @@ func ContextName(t *testing.T) string {
 	return cfg.CurrentContext
 }
 
+// NodeNamePrefix returns the prefix every node of the e2e cluster is named
+// with — kind names them "<cluster>-control-plane", "<cluster>-worker", … and
+// the cluster is the context minus kind's own "kind-" prefix.
+//
+// Derived rather than written down because the node names carry the
+// Kubernetes version: they are kute-1.35-* on one leg of the suite and
+// kute-1.36-* on the other. A hard-coded prefix passes on whichever version
+// it was written against and fails on the other, which is precisely what the
+// second version leg exists to catch — and did.
+func NodeNamePrefix(t *testing.T) string {
+	t.Helper()
+	return strings.TrimPrefix(ContextName(t), "kind-")
+}
+
 // PartialKubeconfigPath returns the token kubeconfig for the kute-partial
 // ServiceAccount — cluster-wide read on exactly the kinds kute needs to
 // connect (plus ConfigMaps and Events), and nothing on Secrets, Deployments

@@ -149,7 +149,7 @@ func TestPartialGrantAcrossScreens(t *testing.T) {
 	t.Run("nodes are granted and cluster-scoped", func(t *testing.T) {
 		a.gotoKind(t, "nodes", "Nodes")
 		a.WaitLoaded(Settle)
-		a.WaitFor("kute-1.35", Settle)
+		a.WaitFor(NodeNamePrefix(t), Settle)
 		a.Enter()
 		a.WaitLoaded(Settle)
 		a.WaitFor("ALLOCATED / ALLOCATABLE", Settle)
