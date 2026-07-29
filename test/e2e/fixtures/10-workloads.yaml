@@ -26,10 +26,17 @@ spec:
         - name: server
           image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
           command: ["/bin/sh", "-c"]
-          # KUTE-E2E-LOG-MARKER is what podlogs asserts on: a token that
-          # cannot appear anywhere else in a frame.
+          # Two jobs, both load-bearing. busybox httpd gives §13a a real
+          # listener on 8080, so a port-forward can be checked by fetching
+          # through it rather than by trusting the screen that says it
+          # started — the entire reason the suite runs on kind rather than
+          # kwok. The stdout loop is what §5b asserts on: KUTE-E2E-LOG-MARKER
+          # is a token that cannot appear anywhere else in a frame.
           args:
             - |
+              mkdir -p /www
+              echo "KUTE-E2E-FORWARD-OK" > /www/index.html
+              httpd -f -p 8080 -h /www &
               i=0
               while true; do
                 i=$((i+1))
