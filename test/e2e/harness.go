@@ -435,6 +435,24 @@ func (a *App) WaitGone(substr string, timeout time.Duration) string {
 	return frame
 }
 
+// WaitLoaded waits until no loading state is on screen. Screens spell theirs
+// differently — a pushed detail renders "⣽ Loading app-config...", a list
+// renders "⣻ listing configmaps in kute-e2e…" — so this matches the word
+// case-insensitively rather than making every caller remember which.
+//
+// It is also the anti-hang assertion: a screen whose loading state is gated
+// on the wrong signal never clears it, and fails here.
+func (a *App) WaitLoaded(timeout time.Duration) string {
+	a.t.Helper()
+	frame, ok := a.poll(func(f string) bool {
+		return !strings.Contains(strings.ToLower(f), "loading")
+	}, timeout)
+	if !ok {
+		a.t.Fatalf("still loading after %s; last frame:\n%s", timeout, frame)
+	}
+	return frame
+}
+
 // Never asserts substr does not appear at any point in the window — the only
 // honest way to test a negative about an asynchronous screen. A one-shot
 // check would pass simply by looking too early.
