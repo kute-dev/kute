@@ -1,0 +1,64 @@
+# §23a's routing table is one row per host+path, with the backend resolved
+# live — so the fixture needs a backend that exists (api) and one that does
+# not (checkout has no Service), which is the only way to tell a resolved
+# backend from a rendered string.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: kute-e2e
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: kute-e2e
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: kute-e2e
+spec:
+  rules:
+    - host: shop.kute-e2e.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8080
+    - host: admin.kute-e2e.test
+      http:
+        paths:
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
+                port:
+                  number: 8080

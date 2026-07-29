@@ -1,0 +1,90 @@
+# The two workloads every flow test walks. Images are pinned by digest so a
+# re-run of an existing cluster is the same cluster, not a new one.
+#
+# api writes to stdout forever: that is what makes §5b (logs), §10a (exec)
+# and §13a (port-forward) genuinely exercisable — kind has a real kubelet, so
+# these are not simulated the way they would be on kwok.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: kute-e2e
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: server
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c"]
+          # KUTE-E2E-LOG-MARKER is what podlogs asserts on: a token that
+          # cannot appear anywhere else in a frame.
+          args:
+            - |
+              i=0
+              while true; do
+                i=$((i+1))
+                echo "KUTE-E2E-LOG-MARKER request $i served"
+                sleep 2
+              done
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: APP_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: mode
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+        # A second container so `x` (§10a exec) opens the container picker
+        # rather than execing straight in.
+        - name: sidecar
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c", "while true; do sleep 30; done"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+# worker exits non-zero on every start, so its pods reach CrashLoopBackOff
+# within a few seconds: status derivation, poddetail's termination banner and
+# the timeline's restart entries all need a genuinely unhealthy pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: kute-e2e
+  labels:
+    app: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: worker
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c", "echo worker starting; exit 1"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi

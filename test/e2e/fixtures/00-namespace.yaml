@@ -1,0 +1,8 @@
+# Every fixture object lives in kute-e2e, so a run never depends on — or
+# disturbs — whatever else is on the cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kute-e2e
+  labels:
+    app.kubernetes.io/part-of: kute-e2e

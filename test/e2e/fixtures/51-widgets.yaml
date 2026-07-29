@@ -1,0 +1,35 @@
+# One Ready widget and one that is not, so §14d's status derivation has both
+# sides to show. Applied only after the CRD reports Established.
+apiVersion: kute.dev/v1
+kind: Widget
+metadata:
+  name: sprocket
+  namespace: kute-e2e
+spec:
+  size: large
+  colour: cerulean
+status:
+  phase: Running
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: WidgetSpinning
+      message: sprocket is spinning at nominal speed
+      lastTransitionTime: "2026-07-20T14:32:00Z"
+---
+apiVersion: kute.dev/v1
+kind: Widget
+metadata:
+  name: flange
+  namespace: kute-e2e
+spec:
+  size: small
+  colour: vermilion
+status:
+  phase: Degraded
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: FlangeJammed
+      message: flange will not disengage
+      lastTransitionTime: "2026-07-20T14:35:00Z"

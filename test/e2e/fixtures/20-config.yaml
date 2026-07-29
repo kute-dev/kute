@@ -1,0 +1,30 @@
+# §27a wants both shapes of ConfigMap value in one object: a short one the
+# grid edits in place on `↵`, and a folded multi-line one that can only be
+# edited through `e`'s buffer editor.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: kute-e2e
+data:
+  mode: production
+  log-level: info
+  nginx.conf: |
+    server {
+      listen 8080;
+      server_name shop.kute-e2e.test;
+      location / {
+        proxy_pass http://api:8080;
+      }
+    }
+---
+# §27b: the masked KEY/VALUE/SIZE grid, ctrl-x unmasking, and add/remove key.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+  namespace: kute-e2e
+type: Opaque
+stringData:
+  api-token: KUTE-E2E-SECRET-VALUE
+  database-url: postgres://kute:hunter2@db.kute-e2e.svc:5432/shop

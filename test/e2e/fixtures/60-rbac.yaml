@@ -1,0 +1,34 @@
+# The restricted identity every 403 path is tested through: it may list and
+# get Pods in kute-e2e and nothing else, anywhere. Everything kute reads
+# beyond that — Namespaces, Nodes, Deployments, Secrets, Events — comes back
+# Forbidden, which is exactly the state CLAUDE.md says must never degrade
+# into a hung spinner or a false "this cluster has none of that kind".
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kute-restricted
+  namespace: kute-e2e
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kute-restricted
+  namespace: kute-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kute-restricted
+  namespace: kute-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kute-restricted
+subjects:
+  - kind: ServiceAccount
+    name: kute-restricted
+    namespace: kute-e2e
