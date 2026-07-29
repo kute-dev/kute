@@ -14,12 +14,13 @@
 #   scripts/e2e-cluster.sh fixtures      re-apply the fixtures to a running cluster
 #   scripts/e2e-cluster.sh kubeconfig    (re)write the admin kubeconfig only
 #   scripts/e2e-cluster.sh restricted-kubeconfig
-#                                        (re)mint the kute-restricted token kubeconfig
+#                                        (re)mint both restricted token kubeconfigs
 #
 # Env:
 #   K8S_VERSION                     1.35 (default) or 1.36 — picks kind/config-<v>.yaml
 #   KUTE_E2E_KUBECONFIG             default <repo>/.kube/e2e.config
 #   KUTE_E2E_RESTRICTED_KUBECONFIG  default <repo>/.kube/e2e-restricted.config
+#   KUTE_E2E_PARTIAL_KUBECONFIG  default <repo>/.kube/e2e-partial.config
 #
 # Both default *outside* .kube/config, which mise.toml points KUBECONFIG at and
 # which holds the developer's own contexts: an e2e run must never rewrite the
@@ -30,6 +31,7 @@ set -euo pipefail
 K8S_VERSION="${K8S_VERSION:-1.35}"
 NAMESPACE=kute-e2e
 RESTRICTED_SA=kute-restricted
+PARTIAL_SA=kute-partial
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIND_CONFIG="${REPO_ROOT}/kind/config-${K8S_VERSION}.yaml"
@@ -37,6 +39,7 @@ FIXTURE_DIR="${REPO_ROOT}/test/e2e/fixtures"
 
 KUTE_E2E_KUBECONFIG="${KUTE_E2E_KUBECONFIG:-${REPO_ROOT}/.kube/e2e.config}"
 KUTE_E2E_RESTRICTED_KUBECONFIG="${KUTE_E2E_RESTRICTED_KUBECONFIG:-${REPO_ROOT}/.kube/e2e-restricted.config}"
+KUTE_E2E_PARTIAL_KUBECONFIG="${KUTE_E2E_PARTIAL_KUBECONFIG:-${REPO_ROOT}/.kube/e2e-partial.config}"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -86,15 +89,17 @@ apply_fixtures() {
   done
 }
 
-mint_restricted_kubeconfig() {
-  log "minting a token kubeconfig for ${NAMESPACE}/${RESTRICTED_SA}"
+# mint_sa_kubeconfig <serviceaccount> <destination>
+mint_sa_kubeconfig() {
+  local sa="$1" dest="$2"
+  log "minting a token kubeconfig for ${NAMESPACE}/${sa}"
   local server ca token
   server="$(kc config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
   ca="$(kc config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
-  token="$(kc -n "$NAMESPACE" create token "$RESTRICTED_SA" --duration=24h)"
+  token="$(kc -n "$NAMESPACE" create token "$sa" --duration=24h)"
 
-  mkdir -p "$(dirname "$KUTE_E2E_RESTRICTED_KUBECONFIG")"
-  cat >"$KUTE_E2E_RESTRICTED_KUBECONFIG" <<EOF
+  mkdir -p "$(dirname "$dest")"
+  cat >"$dest" <<EOF
 apiVersion: v1
 kind: Config
 clusters:
@@ -107,15 +112,20 @@ contexts:
     context:
       cluster: ${CLUSTER_NAME}
       namespace: ${NAMESPACE}
-      user: ${RESTRICTED_SA}
+      user: ${sa}
 current-context: ${CONTEXT}
 users:
-  - name: ${RESTRICTED_SA}
+  - name: ${sa}
     user:
       token: ${token}
 EOF
-  chmod 600 "$KUTE_E2E_RESTRICTED_KUBECONFIG"
-  log "restricted kubeconfig → ${KUTE_E2E_RESTRICTED_KUBECONFIG}"
+  chmod 600 "$dest"
+  log "${sa} kubeconfig → ${dest}"
+}
+
+mint_restricted_kubeconfigs() {
+  mint_sa_kubeconfig "$RESTRICTED_SA" "$KUTE_E2E_RESTRICTED_KUBECONFIG"
+  mint_sa_kubeconfig "$PARTIAL_SA" "$KUTE_E2E_PARTIAL_KUBECONFIG"
 }
 
 up() {
@@ -127,7 +137,7 @@ up() {
   fi
   write_kubeconfig
   apply_fixtures
-  mint_restricted_kubeconfig
+  mint_restricted_kubeconfigs
   log "ready — go test -tags e2e ./test/e2e/... ./internal/kube/..."
 }
 
@@ -138,7 +148,7 @@ down() {
   else
     log "no kind cluster ${CLUSTER_NAME} to delete"
   fi
-  rm -f "$KUTE_E2E_KUBECONFIG" "$KUTE_E2E_RESTRICTED_KUBECONFIG"
+  rm -f "$KUTE_E2E_KUBECONFIG" "$KUTE_E2E_RESTRICTED_KUBECONFIG" "$KUTE_E2E_PARTIAL_KUBECONFIG"
 }
 
 case "${1:-up}" in
@@ -147,6 +157,6 @@ case "${1:-up}" in
   recreate) down; up ;;
   fixtures) apply_fixtures ;;
   kubeconfig) write_kubeconfig ;;
-  restricted-kubeconfig) mint_restricted_kubeconfig ;;
+  restricted-kubeconfig) mint_restricted_kubeconfigs ;;
   *) die "unknown command: $1 (up|down|recreate|fixtures|kubeconfig|restricted-kubeconfig)" ;;
 esac

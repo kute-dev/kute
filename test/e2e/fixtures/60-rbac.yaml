@@ -1,8 +1,17 @@
-# The restricted identity every 403 path is tested through: it may list and
-# get Pods in kute-e2e and nothing else, anywhere. Everything kute reads
-# beyond that — Namespaces, Nodes, Deployments, Secrets, Events — comes back
-# Forbidden, which is exactly the state CLAUDE.md says must never degrade
-# into a hung spinner or a false "this cluster has none of that kind".
+# Two restricted identities, because 403 reaches kute two very different ways.
+#
+# Both grants are cluster-scoped, and that is not an accident: kute's
+# informers list every kind cluster-wide regardless of which namespace is
+# selected (the namespace is a filter applied to the cache, not to the LIST).
+# A Role bound only in kute-e2e therefore does not let kute read pods at all —
+# the reflector's cluster-scope LIST is denied — which is why an earlier
+# version of this fixture could not get the app past its connect screen.
+---
+# kute-restricted may list and get Pods in kute-e2e and nothing else,
+# anywhere. Namespace is one of the three eager informers, so this identity is
+# refused at *connect*: the app never reaches a resource screen at all. What
+# it tests is that the 4c recovery screen names the RBAC denial verbatim
+# instead of hanging on a spinner or claiming the cluster is empty.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -31,4 +40,48 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: kute-restricted
+    namespace: kute-e2e
+---
+# kute-partial can read exactly the kinds kute needs to connect, plus a couple
+# more, and nothing else: no Secrets, no Deployments, no Ingresses. It is the
+# identity that exercises the *per-kind* 403 paths, which only exist once the
+# app is actually running — a kind that is settled-but-forbidden must not read
+# as a cluster with none of them, and must not spin forever either.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kute-partial
+  namespace: kute-e2e
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kute-partial
+rules:
+  - apiGroups: [""]
+    # namespaces/pods/nodes are the three eager informers; configmaps and
+    # events give the run at least one lazily-started kind that succeeds, so
+    # a failure on Secrets is visibly about Secrets rather than about
+    # everything.
+    resources: ["namespaces", "pods", "pods/log", "nodes", "configmaps", "events"]
+    verbs: ["list", "get", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    # CRD discovery runs at connect for every identity, and a denial there is
+    # not a per-kind failure — it is taken as the cluster being unreachable.
+    # Granting it keeps this identity's *other* denials isolated to the kinds
+    # they are about.
+    resources: ["customresourcedefinitions"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kute-partial
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kute-partial
+subjects:
+  - kind: ServiceAccount
+    name: kute-partial
     namespace: kute-e2e

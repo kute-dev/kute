@@ -119,6 +119,17 @@ func ContextName(t *testing.T) string {
 	return cfg.CurrentContext
 }
 
+// PartialKubeconfigPath returns the token kubeconfig for the kute-partial
+// ServiceAccount — cluster-wide read on exactly the kinds kute needs to
+// connect (plus ConfigMaps and Events), and nothing on Secrets, Deployments
+// or Ingresses. The identity the per-kind 403 paths are tested through.
+func PartialKubeconfigPath() string {
+	if p := os.Getenv("KUTE_E2E_PARTIAL_KUBECONFIG"); p != "" {
+		return p
+	}
+	return filepath.Join(repoRoot(), ".kube", "e2e-partial.config")
+}
+
 func repoRoot() string {
 	// This file is <root>/test/e2e/harness.go and tests run in their own
 	// package directory, so the root is two levels up from the working
