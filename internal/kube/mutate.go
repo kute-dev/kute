@@ -165,10 +165,10 @@ func (c *Cluster) RolloutRestart(ctx context.Context, kind ResourceKind, namespa
 	if name == "" {
 		return fmt.Errorf("cannot restart rollout: empty name")
 	}
-	patch := []byte(fmt.Sprintf(
+	patch := fmt.Appendf(nil,
 		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
 		time.Now().Format(time.RFC3339),
-	))
+	)
 	var err error
 	switch kind {
 	case KindStatefulSet:
@@ -259,7 +259,7 @@ func (c *Cluster) RolloutUndo(ctx context.Context, namespace, name string, toRev
 	if err != nil {
 		return fmt.Errorf("encode revision %d template: %w", toRevision, err)
 	}
-	patch := []byte(fmt.Sprintf(`{"spec":{"template":%s}}`, templateJSON))
+	patch := fmt.Appendf(nil, `{"spec":{"template":%s}}`, templateJSON)
 	_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 	return err
 }
