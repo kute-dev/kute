@@ -115,8 +115,8 @@ edit on whichever side loses. Detail and citations in
 
 ## 7. Incidental, found while working
 
-None is an audit finding; each was wrong in the tree when it was written down. The first is
-fixed and kept here for the record, since the two open questions underneath it came out of
+None is an audit finding; each was wrong in the tree when it was written down. The first two
+are fixed and kept here for the record, since the open question underneath them came out of
 the same investigation.
 
 - ~~**A forbidden kind is indistinguishable from an empty one at the UI seam.**~~ **Fixed.**
@@ -135,18 +135,22 @@ the same investigation.
   both levels: `internal/tui/kindsync_test.go` and `browse_sync_test.go` for the seam and the
   screen, `rbac_test.go` end-to-end against a real refused LIST.
 
-  Two related facts came out of the same run. **Both are still open**, and both want a
-  decision rather than a blind fix:
+  Two related facts came out of the same run. One is fixed, one is still open:
   - kute's informers list every kind **cluster-wide** regardless of the selected namespace, so
     a namespace-scoped identity — the ordinary shape of a developer's access on a shared
     cluster — cannot use kute at all. Worth knowing before beta; possibly a documented
     requirement rather than a bug.
-  - `kube/health.go`'s `onWatchError` classifies authentication errors
-    (`ConnUnauthenticated`) but not authorization ones, so a single kind's 403 flips the whole
-    connection to `ConnReconnecting` and drops the app to the 4c recovery screen. With the
-    false-empty fixed this is no longer a race between two wrong answers — the `/livez` ping
-    recovers the connection state and 4b's card takes over — but a momentary "cluster is
-    unreachable" for what is purely a permission boundary is still the wrong word.
+  - ~~`kube/health.go`'s `onWatchError` classifies authentication errors
+    (`ConnUnauthenticated`) but not authorization ones~~ — **fixed.** A single kind's 403 used
+    to flip the whole connection to `ConnReconnecting` and replace every working screen with
+    the 4c "cluster is unreachable" recovery screen and a backoff countdown that could not
+    help: there is nothing to reconnect to, and the reflector is refused again on every retry.
+    Often for a kind the user never asked for, since the eager set and CRD discovery both run
+    unprompted. `onWatchError` now returns on `IsPermissionError` without touching connection
+    state — the distinction `IsAuthenticationError`'s own doc comment already draws — and the
+    denial reaches the screen that asked for that kind via `noteWatchError`/`KindForbidden`
+    instead. `recordPing` is deliberately left alone: a 403 on `/livez` really does mean kute
+    cannot tell whether the cluster is healthy, which is a whole-connection fact.
 - **`execpicker`'s "will run" line ellipsizes at the panel's fixed 56 cells**, so for a
   realistic pod name the trailing `-- bash` is cut off. §10a calls that line "copyable
   documentation", which it currently isn't for most pods. Wrapping it to two lines inside

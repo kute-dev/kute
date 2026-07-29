@@ -484,3 +484,78 @@ func TestCredentialErrorMessageCapsLength(t *testing.T) {
 		t.Errorf("credentialErrorMessage length = %d, want capped at %d", len(got), maxCredentialErrorText)
 	}
 }
+
+func forbiddenWatchErr(resource string) error {
+	return apierrors.NewForbidden(schema.GroupResource{Resource: resource}, "", errors.New("nope"))
+}
+
+// TestOnWatchErrorIgnoresADenial: a 403 is not a connection fact. The cluster
+// is reachable and knows exactly who you are — it has refused one kind's
+// LIST, which is the per-kind distinction IsAuthenticationError's doc comment
+// draws against a 401.
+//
+// Reported as an outage, one forbidden kind replaced every working screen
+// with "cluster is unreachable" and a backoff countdown that could not help.
+// Often a kind the user never asked for: the eager set and CRD discovery both
+// run unprompted, so on a partially-granted cluster this fired before the
+// first keypress.
+func TestOnWatchErrorIgnoresADenial(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(forbiddenWatchErr("deployments"), true, time.Now())
+
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Fatalf("Phase = %v, want Connected — a refused LIST says nothing about the connection", got.Phase)
+	}
+	select {
+	case msg := <-h.ch:
+		t.Errorf("a denial emitted a connection-state change (%v); it belongs to the kind, not the cluster", msg.Phase)
+	default:
+	}
+}
+
+// TestOnWatchErrorDenialLeavesAnOutageAlone: ignoring a denial must not mean
+// clearing state either. If the link really is down, a forbidden kind's
+// reflector failing alongside it is no evidence of recovery.
+func TestOnWatchErrorDenialLeavesAnOutageAlone(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("connect: connection refused"), true, time.Now())
+	before := h.get()
+	if before.Phase != ConnReconnecting {
+		t.Fatalf("precondition: Phase = %v, want Reconnecting", before.Phase)
+	}
+
+	h.onWatchError(forbiddenWatchErr("secrets"), true, time.Now())
+
+	if got := h.get(); got.Phase != ConnReconnecting || got.Err != before.Err {
+		t.Fatalf("ConnState = %+v after a denial mid-outage, want the outage untouched (%+v)", got, before)
+	}
+}
+
+// TestOnWatchErrorStillReportsRealOutages is the guard on the guard: the
+// denial branch must not swallow anything else. A refused connection carries
+// the word "connection", not "forbidden", and has to keep flipping the phase.
+func TestOnWatchErrorStillReportsRealOutages(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("dial tcp 10.0.0.1:443: connect: connection refused"), true, time.Now())
+
+	if got := h.get(); got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting — this one really is an outage", got.Phase)
+	}
+}
+
+// TestOnWatchErrorAuthenticationStillWins: a 401 is a whole-connection fact
+// and keeps its own phase. Ordering matters — a credential failure whose
+// message happens to contain "forbidden" must not be reclassified as a
+// per-kind denial and silently dropped.
+func TestOnWatchErrorAuthenticationStillWins(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("getting credentials: exec: token is forbidden"), true, time.Now())
+
+	if got := h.get(); got.Phase != ConnUnauthenticated {
+		t.Fatalf("Phase = %v, want Unauthenticated — no credential means no connection at all", got.Phase)
+	}
+}

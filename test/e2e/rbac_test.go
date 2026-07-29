@@ -69,12 +69,35 @@ func TestReadableKindsWorkUnderAPartialGrant(t *testing.T) {
 	a.WaitLoaded(Settle)
 }
 
-// TestForbiddenKindDoesNotHang: Secrets are not granted to kute-partial. The
-// screen must settle rather than spin, whatever else it decides to show.
-func TestForbiddenKindDoesNotHang(t *testing.T) {
+// TestForbiddenKindIsScopedToThatKind: Secrets are not granted to
+// kute-partial. The denial has to stay the Secrets screen's problem — it must
+// not hang, must not read as an empty cluster, and must not take the rest of
+// the app down with it.
+//
+// The last of those is the one worth spelling out. A 403 arrives on a
+// reflector's goroutine, and routing it into the connection state made one
+// refused kind replace every working screen with "cluster is unreachable" and
+// a backoff countdown that could not help. Often a kind the user never asked
+// for, since the eager set and CRD discovery both run unprompted.
+func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 	a.WaitFor("api-", Connect)
 
 	a.gotoKind(t, "secrets", "Secrets")
 	a.WaitLoaded(Settle)
+
+	// 4b's card, naming the kind that was refused.
+	a.WaitForAll(Settle, "403 Forbidden", "secrets", "kute-partial")
+
+	// The connection is not the thing that failed, and the header must not
+	// say it was. Checked over a window, because the misreport arrived
+	// asynchronously from the reflector rather than in the frame the
+	// keypress produced.
+	a.Never("unreachable", 8*time.Second)
+
+	// And a readable kind still reads, after the denial rather than before
+	// it: the app is usable, minus the one kind this identity cannot see.
+	a.Esc()
+	a.gotoKind(t, "pods", "Pods")
+	a.WaitFor("api-", Settle)
 }

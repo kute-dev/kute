@@ -200,6 +200,26 @@ func (h *health) onWatchError(err error, synced bool, now time.Time) {
 		h.setUnauthenticated(err, 0, prev)
 		return
 	}
+	if IsPermissionError(err) {
+		// A 403 is not a connection fact, and this handler only reports
+		// connection facts. The cluster is reachable and it knows who you
+		// are; it has answered one kind's LIST with "no", which is exactly
+		// the per-kind distinction IsAuthenticationError's doc comment draws
+		// against a 401.
+		//
+		// Reporting it here made one forbidden kind — often a kind the user
+		// never asked for, since the eager set and CRD discovery both run
+		// unprompted — replace every working screen with "cluster is
+		// unreachable" and a backoff countdown that could not help: there is
+		// nothing to reconnect to, and the reflector will be refused again
+		// on every retry for as long as the process lives.
+		//
+		// The denial is not dropped. Cluster.noteWatchError, called
+		// immediately before this at every one of the three call sites,
+		// latches it per-kind for KindForbidden, so the screen that reads
+		// that kind shows 4b's card while the rest of the app carries on.
+		return
+	}
 	if h.inConnectGrace(synced, err, now) {
 		return
 	}
