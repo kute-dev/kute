@@ -494,6 +494,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if verbs.NodeShell.HiddenWhileOffline(m.offline()) {
 			return m, nil
 		}
+		if reason, blocked := m.selectedNodeShellUnavailable(); blocked {
+			// The key stays on the keybar on every cluster (docs/
+			// managed-clusters.md §3: a clear error naming the reason, not a
+			// hidden key), so pressing it here has to answer.
+			m.execFeedback = reason
+			return m, nil
+		}
 		if cmd, ok := m.selectedNodeShell(); ok {
 			return m, cmd
 		}
@@ -906,6 +913,20 @@ func execCmd(namespace, pod, container string) tea.Cmd {
 // pushed, so browse stays the active task and handles its own
 // nodeShellResultMsg. ok is false when nothing applies (not the Nodes kind,
 // no row selected), so 's' stays a no-op.
+// selectedNodeShellUnavailable reports the reason the selected Nodes row
+// can't host a node shell (EKS Fargate, GKE Autopilot — resolved when the row
+// was projected, from the node's own labels), and whether there is one.
+func (m Model) selectedNodeShellUnavailable() (string, bool) {
+	if m.kind != kube.KindNode || m.state != tui.TaskStateReady {
+		return "", false
+	}
+	row, ok := m.selectedRow()
+	if !ok || row.NodeShellUnavailable == "" {
+		return "", false
+	}
+	return row.NodeShellUnavailable, true
+}
+
 func (m Model) selectedNodeShell() (tea.Cmd, bool) {
 	if m.kind != kube.KindNode || m.state != tui.TaskStateReady {
 		return nil, false

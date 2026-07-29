@@ -114,3 +114,34 @@ func keybarKeys(kb tui.Keybar) []string {
 	}
 	return out
 }
+
+// docs/managed-clusters.md §3: node shell can't work on GKE Autopilot or EKS
+// Fargate, and the honest handling is an error naming the reason rather than
+// a key that quietly does nothing (or worse, hands kubectl a command the
+// platform will refuse after the screen has already been torn down).
+func TestNodeShellExplainsItselfOnFargate(t *testing.T) {
+	node := nodeObj("fargate-ip-10-0-1-23.eu-west-1.compute.internal", true, false)
+	node.Labels = map[string]string{"eks.amazonaws.com/compute-type": "fargate"}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {node},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindNode
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "s"})
+	if cmd != nil {
+		t.Error("'s' ran kubectl debug against a Fargate node")
+	}
+	m = *updated.(*Model)
+	note := m.Keybar().RightNote
+	if !strings.Contains(note, "EKS Fargate") {
+		t.Errorf("Keybar RightNote = %q, want it to name EKS Fargate", note)
+	}
+	// The key itself stays advertised — it works on every other cluster.
+	if hints := strings.Join(keybarKeys(m.Keybar()), " "); !strings.Contains(hints, "node shell") {
+		t.Errorf("node-shell hint disappeared: %q", hints)
+	}
+}

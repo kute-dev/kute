@@ -618,13 +618,14 @@ func projectNode(obj runtime.Object) Row {
 	// the same pattern Pod's CPU/MEM placeholders use (resources.Cells'
 	// metrics param).
 	return Row{
-		Name:       name,
-		Cells:      []string{name, statusText, "–", "–", "–", "–", n.Status.NodeInfo.KubeletVersion, shortAge(age)},
-		Status:     class,
-		Glyph:      glyph,
-		GlyphClass: class,
-		Cordoned:   cordoned,
-		NameSuffix: nameSuffix,
+		Name:                 name,
+		Cells:                []string{name, statusText, "–", "–", "–", "–", n.Status.NodeInfo.KubeletVersion, shortAge(age)},
+		Status:               class,
+		Glyph:                glyph,
+		GlyphClass:           class,
+		Cordoned:             cordoned,
+		NameSuffix:           nameSuffix,
+		NodeShellUnavailable: kube.NodeShellUnavailable(name, n.Labels),
 	}
 }
 

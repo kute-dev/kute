@@ -172,3 +172,30 @@ func TestNodeShellResultFeedbackSurfacesInKeybar(t *testing.T) {
 		t.Fatalf("expected node-shell feedback in Keybar RightNote, got %q", note)
 	}
 }
+
+// The 11b twin of browse's TestNodeShellExplainsItselfOnFargate (docs/
+// managed-clusters.md §3): on GKE Autopilot the privileged host-namespace
+// container kubectl debug needs is rejected by admission, so 's' says why
+// instead of tearing the screen down for a command that can't work.
+func TestNodeShellExplainsItselfOnAutopilot(t *testing.T) {
+	node := testNode("gk3-autopilot-cluster-default-pool-bcd71fbe-6qh9")
+	node.Labels = map[string]string{"cloud.google.com/gke-nodepool": "default-pool"}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {node},
+	}}
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		NodeName: "gk3-autopilot-cluster-default-pool-bcd71fbe-6qh9",
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "s"})
+	if cmd != nil {
+		t.Error("'s' ran kubectl debug against an Autopilot node")
+	}
+	m = *updated.(*Model)
+	if note := m.Keybar().RightNote; !strings.Contains(note, "GKE Autopilot") {
+		t.Errorf("Keybar RightNote = %q, want it to name GKE Autopilot", note)
+	}
+}

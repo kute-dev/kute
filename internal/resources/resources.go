@@ -50,6 +50,13 @@ type Row struct {
 	// outside the display Cells to know which direction to mutate.
 	Cordoned bool
 
+	// NodeShellUnavailable is why the 11a node-shell verb can't work on this
+	// Node (EKS Fargate, GKE Autopilot), or "" when it can. It rides here
+	// for the same reason Cordoned does: the answer lives in the node's
+	// labels, which the display Cells don't carry, and browse needs it at
+	// keypress time — see kube.NodeShellUnavailable.
+	NodeShellUnavailable string
+
 	// Outdated marks an 18a Helm release whose chart has a newer version in
 	// the local repo cache. It rides outside Cells for the same reason
 	// Cordoned does: the health strip and the 19a overview both need the
