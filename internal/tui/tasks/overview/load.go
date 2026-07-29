@@ -122,6 +122,9 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 					data.helmOutdated = append(data.helmOutdated, row)
 				}
 			}
+			// Same cache-order reason as the two lists above: this tail of
+			// the panel must not reshuffle between reloads either.
+			sortTrouble(data.helmOutdated)
 		}
 	}
 
@@ -132,7 +135,19 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 				data.changes = append(data.changes, e)
 			}
 		}
-		sort.Slice(data.changes, func(i, j int) bool { return data.changes[i].Time.After(data.changes[j].Time) })
+		// Newest first, then namespace/object — ReplicaSet-derived rollout
+		// entries routinely share a timestamp (one `kubectl apply` touching
+		// several deployments), and the cache order behind them is unstable,
+		// so time alone leaves those runs reshuffling on every reload.
+		sort.SliceStable(data.changes, func(i, j int) bool {
+			if !data.changes[i].Time.Equal(data.changes[j].Time) {
+				return data.changes[i].Time.After(data.changes[j].Time)
+			}
+			if data.changes[i].Namespace != data.changes[j].Namespace {
+				return data.changes[i].Namespace < data.changes[j].Namespace
+			}
+			return data.changes[i].Object < data.changes[j].Object
+		})
 	}
 
 	return data, nil
@@ -142,6 +157,13 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 // namespace/name within each — "unhealthy-first" (docs/design README.md
 // §19a) applied to the aggregated trouble list itself, not just relative to
 // a healthy tail already dropped.
+//
+// The namespace/name tie-break is not cosmetic. These rows are projected
+// straight off the informer caches here rather than through resources.List,
+// so they arrive in the store's map-iteration order — a different order on
+// every reload. Ranking by status alone left same-status rows to shuffle on
+// every watch event, which both makes the panel unreadable and moves the row
+// under the selection out from under it.
 func sortTrouble(rows []resources.Row) {
 	rank := func(s resources.StatusClass) int {
 		switch s {
@@ -157,7 +179,10 @@ func sortTrouble(rows []resources.Row) {
 		if ri, rj := rank(rows[i].Status), rank(rows[j].Status); ri != rj {
 			return ri < rj
 		}
-		return false
+		if rows[i].Namespace != rows[j].Namespace {
+			return rows[i].Namespace < rows[j].Namespace
+		}
+		return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
 	})
 }
 

@@ -407,6 +407,63 @@ func TestHelmChangesReloadTheOverview(t *testing.T) {
 	}
 }
 
+// TestTroublePanelOrderSurvivesCacheOrder: the panel projects rows straight
+// off the informer caches, which hand them back in map-iteration order — a
+// different order on every reload. Ranking by status alone left same-status
+// rows reshuffling on every watch event, so the panel visibly jumped and the
+// selection landed on a different object than the one it was on.
+func TestTroublePanelOrderSurvivesCacheOrder(t *testing.T) {
+	// Same objects, opposite cache orders — what two consecutive reloads of
+	// one unchanged cluster can legitimately return.
+	pods := []runtime.Object{
+		testPod("ns2", "cache-1", corev1.PodPending),
+		testPod("ns1", "worker-1", corev1.PodPending),
+		testPod("ns1", "api-1", corev1.PodPending),
+		testPod("ns1", "zoo-1", corev1.PodFailed),
+		testPod("ns1", "alpha-1", corev1.PodFailed),
+	}
+	reversed := make([]runtime.Object, len(pods))
+	for i, p := range pods {
+		reversed[len(pods)-1-i] = p
+	}
+
+	order := func(objs []runtime.Object) []string {
+		lister := baseLister()
+		lister.objects[kube.KindPod] = objs
+		lister.objects[kube.KindHelmRelease] = []runtime.Object{
+			outdatedRelease("ns2", "certs", "cert-manager", "1.14.4", "1.16.2"),
+			outdatedRelease("ns1", "cache", "redis", "18.1.5", "20.1.3"),
+		}
+		m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+		m.SetSize(120, 36)
+		m = step(t, m, m.Init()())
+		var names []string
+		for _, e := range m.troubleEntries() {
+			names = append(names, e.row.Namespace+"/"+e.row.Name)
+		}
+		for _, r := range m.nodeTrouble {
+			names = append(names, "node/"+r.Name)
+		}
+		return names
+	}
+
+	first, second := order(pods), order(reversed)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("trouble order depends on cache order:\n first  = %v\n second = %v", first, second)
+	}
+	want := []string{
+		// Fail before Warn, namespace then name within each rank.
+		"ns1/alpha-1", "ns1/zoo-1",
+		"ns1/api-1", "ns1/worker-1", "ns2/cache-1",
+		// Outdated releases keep their own tail, sorted the same way.
+		"ns1/cache", "ns2/certs",
+		"node/node-b", "node/node-c",
+	}
+	if !reflect.DeepEqual(first, want) {
+		t.Errorf("trouble order = %v, want %v", first, want)
+	}
+}
+
 func TestRendersInBothThemes(t *testing.T) {
 	for _, theme := range []tui.Theme{tui.Dark(), tui.Light()} {
 		sess := newSession()
