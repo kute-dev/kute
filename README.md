@@ -88,6 +88,33 @@ kute authenticates exactly the way `kubectl` does, from the same kubeconfig: cli
 
 One difference worth knowing about: kute holds the terminal, so a credential plugin can never prompt you. When a plugin's own login has expired, kute says so — with the plugin's own message — and stops retrying rather than re-running it every couple of seconds. Re-authenticate in another shell (`aws sso login`, `gcloud auth login`, …) and press `r`.
 
+### Permissions
+
+**kute reads cluster-wide.** It watches each kind once across the whole cluster and filters by namespace in memory, so switching namespaces is instant and costs no extra API traffic. The consequence is that a token scoped to a single namespace — a `Role` and `RoleBinding`, with nothing bound at cluster scope — is not enough: kute is refused on its first read and can't get started. See [#9](https://github.com/kute-dev/kute/issues/9) if that's your situation.
+
+The minimum to launch is cluster-wide read on three kinds:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kute
+rules:
+  # Namespaces, Pods and Nodes are read at connect — the breadcrumb, the
+  # namespace palette, the default landing screen and the node counts.
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "pods/log", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # Discovery. Without it kute still runs; it just never finds your CRDs.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+```
+
+Everything past those three is read on demand, when you first open a screen that needs it — so grant whatever you want to browse (`apps`, `configmaps`, `services`, `events`, `secrets` for Helm releases, and so on) and no more. A kind you haven't been granted isn't a broken cluster: that screen shows a 403 card naming the exact resource and verb, and the rest of kute keeps working.
+
+If your cluster already binds the built-in `view` role, a cluster-wide binding of it covers most of this. It does **not** include `nodes`, `secrets` or `customresourcedefinitions`, so the node-derived screens, Helm releases and custom kinds will come up empty or refused until you add them.
+
 ## Configuration
 
 kute reads `~/.config/kute/config.yaml`. Every key is optional — with no file at all, kute runs with the defaults below.
