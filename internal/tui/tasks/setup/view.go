@@ -41,7 +41,11 @@ func (m Model) Header() tui.HeaderState {
 
 	var conn tui.ConnBadge
 	if m.state == Unreachable {
-		conn = tui.ConnBadge{Text: tui.GlyphProbing + " connecting failed", Style: lipgloss.NewStyle().Foreground(theme.Bad)}
+		text := tui.GlyphProbing + " connecting failed"
+		if m.conn.NeedsCredentials() {
+			text = tui.GlyphProbing + " credentials expired"
+		}
+		conn = tui.ConnBadge{Text: text, Style: lipgloss.NewStyle().Foreground(theme.Bad)}
 	} else {
 		conn = tui.ConnBadge{Text: tui.GlyphCompleted + " no cluster", Style: dim}
 	}
@@ -67,11 +71,18 @@ func (m Model) Keybar() tui.Keybar {
 			hints = append(hints, tui.KeyHint{Key: "↵", Label: "connect to selected"})
 		}
 		hints = append(hints, verbs.Context.Hint(), verbs.Retry.Hint(), tui.KeyHint{Key: "e", Label: "edit kubeconfig path"})
+		note := "probing other kubeconfig contexts in the background"
+		if m.conn.NeedsCredentials() {
+			// kute can't run the login for you — it deliberately holds the
+			// terminal away from the credential plugin (kube/execauth.go) —
+			// so the note has to say where the fix happens.
+			note = "re-authenticate in another shell, then press r"
+		}
 		return tui.Keybar{
 			Pill:       tui.ModeNoCluster,
 			PillText:   "NO CLUSTER",
 			Groups:     [][]tui.KeyHint{hints},
-			RightNote:  "probing other kubeconfig contexts in the background",
+			RightNote:  note,
 			RightHints: []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}},
 		}
 	default:
@@ -162,7 +173,13 @@ func (m Model) unreachableBody(width, height int) string {
 	if ctx == "" {
 		ctx = "cluster"
 	}
-	left := bad.Render(tui.GlyphFailed) + " " + title.Render(ctx+" is unreachable")
+	headline := ctx + " is unreachable"
+	if m.conn.NeedsCredentials() {
+		// The cluster is answering; the credential isn't. Saying
+		// "unreachable" here sends the user off checking VPNs and DNS.
+		headline = ctx + " needs re-authentication"
+	}
+	left := bad.Render(tui.GlyphFailed) + " " + title.Render(headline)
 	right := faint.Render(retryCountdown(m.conn, m.now))
 
 	errText := m.conn.Err
@@ -220,7 +237,7 @@ func (m Model) switchContextLines(theme tui.Theme, bw int) []string {
 
 	lines := make([]string, 0, len(rows))
 	for i, row := range rows {
-		glyph, status, tone := switchRowStatus(row, m.probes[row.name])
+		glyph, status, tone := switchRowStatus(row, m.probes[row.name], m.conn.NeedsCredentials())
 		fg := lipgloss.NewStyle()
 		switch tone {
 		case switchToneGood:
@@ -285,8 +302,16 @@ const (
 // illustrative one-word "timeout") — every other context reads its own
 // probes entry: "probing…" before a result lands, "reachable · Nms" on
 // success, "unreachable" on error (docs/design README.md §4c).
-func switchRowStatus(row switchContextRow, probe kube.ProbeResult) (glyph, status string, tone switchTone) {
+func switchRowStatus(row switchContextRow, probe kube.ProbeResult, needsCreds bool) (glyph, status string, tone switchTone) {
 	if row.current {
+		// needsCreds swaps the current row's one word, for the same reason
+		// the headline changes: the context is reachable, its credential
+		// isn't valid, and a sibling context may well share the same
+		// expired login — so naming the real problem matters more here than
+		// anywhere else on this screen.
+		if needsCreds {
+			return tui.GlyphFailed, "current · credentials expired", switchToneBad
+		}
 		return tui.GlyphFailed, "current · unreachable", switchToneBad
 	}
 	switch {
@@ -459,6 +484,13 @@ func (m Model) editLines(theme tui.Theme, bw int) []string {
 // now — a zero conn (no ConnStateMsg observed yet) renders a neutral
 // placeholder instead of "retrying in 0s".
 func retryCountdown(conn kube.ConnState, now time.Time) string {
+	if conn.NeedsCredentials() {
+		// No attempt counter and no NextRetryAt in this phase, by design:
+		// nothing is retrying, and saying so is the point. Kept short
+		// because padBetween drops the whole right-hand segment rather than
+		// wrapping it once the two sides don't fit the 64-column block.
+		return "not retrying · r to recheck"
+	}
 	if conn.Attempt == 0 {
 		return "connecting…"
 	}

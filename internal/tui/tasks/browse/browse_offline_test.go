@@ -207,3 +207,38 @@ func TestPermissionDeniedRendersCardAndCopiesError(t *testing.T) {
 	}
 	_ = updated
 }
+
+// An expired credential is an offline state like any other for the table and
+// the mutating-verb gate, but the banner must not offer a backoff countdown
+// that isn't running: the health loop stops pinging in this phase, and the
+// user's next move is another shell, not waiting.
+func TestUnauthenticatedBannerSaysReauthenticateInsteadOfCountingDown(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, kube.ConnStateMsg{
+		Phase: kube.ConnUnauthenticated,
+		Err:   "Error loading SSO Token: Token has expired",
+	})
+
+	if !m.offline() {
+		t.Fatal("offline() = false while unauthenticated — the mutating-verb gate keys off it")
+	}
+	banner := plain(m.Strips(120)[0])
+	if !strings.Contains(banner, "Token has expired") {
+		t.Errorf("banner = %q, want the credential plugin's own message", banner)
+	}
+	if !strings.Contains(banner, "re-authenticate in another shell") {
+		t.Errorf("banner = %q, want the re-authenticate hint", banner)
+	}
+	if strings.Contains(banner, "next in") {
+		t.Errorf("banner = %q, want no backoff countdown — nothing is retrying", banner)
+	}
+	if !strings.Contains(banner, "r retry") {
+		t.Errorf("banner = %q, want the explicit retry key", banner)
+	}
+}

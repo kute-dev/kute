@@ -233,6 +233,12 @@ exit 255
 	if err := livez(t, client); err == nil {
 		t.Fatal("livez succeeded with a failing credential plugin")
 	}
+	// The whole point of classifying it: this is not a network outage, so
+	// the health loop must not sit in Reconnecting re-running the plugin.
+	if err := livez(t, client); !IsAuthenticationError(err) {
+		t.Errorf("IsAuthenticationError(%v) = false, want true", err)
+	}
+
 	out := CredentialPluginOutput()
 	if !strings.Contains(out, "Token has expired") {
 		t.Errorf("CredentialPluginOutput() = %q, want the plugin's own stderr", out)

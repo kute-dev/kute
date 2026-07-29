@@ -303,3 +303,40 @@ func TestRetryFailedMsgShowsError(t *testing.T) {
 		t.Fatalf("body should show the retry error:\n%s", plain(m.Render()))
 	}
 }
+
+// 4c for an expired credential: the cluster is answering, so "unreachable"
+// would send the user off checking VPNs and DNS. The screen names the real
+// problem, drops the retry countdown (nothing is retrying), and keeps 'r' as
+// the way back in once they've re-authenticated elsewhere.
+func TestUnreachableScreenNamesExpiredCredentials(t *testing.T) {
+	m := New(Config{
+		Session:     &tui.Session{Theme: tui.Dark()},
+		State:       Unreachable,
+		ClusterName: "prod-eks",
+		Conn: kube.ConnState{
+			Phase: kube.ConnUnauthenticated,
+			Err:   "Error loading SSO Token: Token has expired",
+		},
+	})
+	m.SetSize(120, 36)
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "prod-eks needs re-authentication") {
+		t.Errorf("view lacks the re-authentication headline:\n%s", view)
+	}
+	if strings.Contains(view, "prod-eks is unreachable") {
+		t.Errorf("view still calls the cluster unreachable:\n%s", view)
+	}
+	if !strings.Contains(view, "Token has expired") {
+		t.Errorf("view lacks the credential plugin's own message:\n%s", view)
+	}
+	if !strings.Contains(view, "not retrying") {
+		t.Errorf("view lacks the not-retrying note:\n%s", view)
+	}
+	if !strings.Contains(view, "credentials expired") {
+		t.Errorf("view lacks the header badge's credentials-expired text:\n%s", view)
+	}
+	if !strings.Contains(view, "re-authenticate in another shell, then press r") {
+		t.Errorf("view lacks the keybar's recovery note:\n%s", view)
+	}
+}

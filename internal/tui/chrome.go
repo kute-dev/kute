@@ -53,8 +53,15 @@ type ConnBadge struct {
 // (podlogs' following/paused, setup's connecting-failed) build their own.
 func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnBadge {
 	if conn.Offline() {
+		// "disconnected" would be a lie for an expired credential: the
+		// cluster is answering, it just doesn't know who we are, and the fix
+		// is re-authenticating rather than waiting.
+		text := GlyphProbing + " disconnected"
+		if conn.NeedsCredentials() {
+			text = GlyphProbing + " credentials expired"
+		}
 		return ConnBadge{
-			Text:  GlyphProbing + " disconnected",
+			Text:  text,
 			Style: lipgloss.NewStyle().Foreground(theme.Bad),
 		}
 	}

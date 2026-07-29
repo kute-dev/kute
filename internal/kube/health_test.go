@@ -3,10 +3,15 @@ package kube
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestBackoffDelaySchedule(t *testing.T) {
@@ -337,5 +342,145 @@ func TestHealthResetPreservesChannelIdentity(t *testing.T) {
 	}
 	if got.Attempt != 0 {
 		t.Fatalf("Attempt after reset = %d, want 0", got.Attempt)
+	}
+}
+
+// unauthorized is a real apiserver 401 as client-go surfaces it.
+func unauthorized() error {
+	return apierrors.NewUnauthorized("Unauthorized")
+}
+
+// credentialPluginFailure is what client-go's exec round tripper returns when
+// the plugin binary itself fails — no HTTP status involved, so no typed
+// apierror to match on.
+func credentialPluginFailure() error {
+	return fmt.Errorf(`Get "https://example.eks.amazonaws.com/livez": getting credentials: exec: executable aws failed with exit code 255`)
+}
+
+func TestHealthPingClassifies401AsUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(12*time.Millisecond, unauthorized(), true, time.Now())
+
+	got := h.get()
+	if got.Phase != ConnUnauthenticated {
+		t.Fatalf("Phase = %v, want Unauthenticated", got.Phase)
+	}
+	if !got.Offline() {
+		t.Error("Offline() = false, want true — the 4a banner and mutating-verb gate key off it")
+	}
+	if !got.NeedsCredentials() {
+		t.Error("NeedsCredentials() = false, want true")
+	}
+	if got.Attempt != 0 || !got.NextRetryAt.IsZero() {
+		t.Errorf("Attempt/NextRetryAt = %d/%v, want no scheduled retry", got.Attempt, got.NextRetryAt)
+	}
+}
+
+func TestHealthPingClassifiesCredentialPluginFailureAsUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(0, credentialPluginFailure(), true, time.Now())
+
+	got := h.get()
+	if got.Phase != ConnUnauthenticated {
+		t.Fatalf("Phase = %v, want Unauthenticated — a plugin that can't mint a token is not a network outage", got.Phase)
+	}
+	if !strings.Contains(got.Err, "exit code 255") {
+		t.Errorf("Err = %q, want the plugin failure verbatim", got.Err)
+	}
+}
+
+func TestHealthStopsPollingWhileUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	if h.pausesPolling() {
+		t.Fatal("pausesPolling() = true while connected")
+	}
+	h.recordPing(0, unauthorized(), true, time.Now())
+	if !h.pausesPolling() {
+		t.Error("pausesPolling() = false while unauthenticated, want the ping loop to stop re-running the plugin")
+	}
+	// …but an explicit retry that succeeds still gets us out.
+	h.recordPing(5*time.Millisecond, nil, true, time.Now())
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Errorf("Phase = %v after a successful retry, want Connected", got.Phase)
+	}
+}
+
+func TestHealthWatchErrorDoesNotChurnWhileUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(unauthorized(), true, time.Now())
+	if got := h.get(); got.Phase != ConnUnauthenticated {
+		t.Fatalf("Phase = %v, want Unauthenticated", got.Phase)
+	}
+	// Drain the initial transition, then prove the reflectors' own retries
+	// don't queue a message apiece.
+	<-h.ch
+	h.onWatchError(unauthorized(), true, time.Now())
+	h.onWatchError(errors.New("dial tcp: connection refused"), true, time.Now())
+	select {
+	case msg := <-h.ch:
+		t.Errorf("watch errors re-emitted %v while already unauthenticated", msg.Phase)
+	default:
+	}
+}
+
+func TestHealthRetryReemitsUnauthenticated(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.recordPing(0, unauthorized(), true, time.Now())
+	<-h.ch
+	// 4a/4c's 'r' pings again; a still-failing credential has to say so.
+	h.recordPing(0, unauthorized(), true, time.Now())
+	select {
+	case msg := <-h.ch:
+		if msg.Phase != ConnUnauthenticated {
+			t.Errorf("Phase = %v, want Unauthenticated", msg.Phase)
+		}
+	default:
+		t.Error("an explicit retry produced no state change at all")
+	}
+}
+
+func TestIsAuthenticationError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"401", unauthorized(), true},
+		{"credential plugin failure", credentialPluginFailure(), true},
+		{"403 is a permission denial, not an auth one", apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "p", errors.New("nope")), false},
+		{"timeout", context.DeadlineExceeded, false},
+		{"refused", errors.New("dial tcp 10.0.0.1:443: connect: connection refused"), false},
+	}
+	for _, tt := range tests {
+		if got := IsAuthenticationError(tt.err); got != tt.want {
+			t.Errorf("%s: IsAuthenticationError = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestCredentialErrorMessagePrefersPluginStderr(t *testing.T) {
+	pluginStderr.append([]byte("Error loading SSO Token:\n  Token has expired\n"))
+	got := credentialErrorMessage(unauthorized())
+	if got != "Error loading SSO Token: Token has expired" {
+		t.Errorf("credentialErrorMessage = %q, want the plugin's stderr flattened to one line", got)
+	}
+	// Consumed, so the next failure can't inherit it.
+	if got := credentialErrorMessage(unauthorized()); got != "Unauthorized" {
+		t.Errorf("credentialErrorMessage = %q, want client-go's own message once stderr is spent", got)
+	}
+}
+
+func TestCredentialErrorMessageCapsLength(t *testing.T) {
+	pluginStderr.append([]byte(strings.Repeat("x", maxCredentialErrorText+50)))
+	got := credentialErrorMessage(nil)
+	if len(got) > maxCredentialErrorText+len("…") {
+		t.Errorf("credentialErrorMessage length = %d, want capped at %d", len(got), maxCredentialErrorText)
 	}
 }

@@ -195,9 +195,18 @@ func (m Model) offlineBannerLine(theme tui.Theme, width int) string {
 	}
 	left := warn.Render(tui.GlyphWarning) + fill.Render(" ") + text.Render(errText)
 
-	next := max(m.conn.NextRetryAt.Sub(m.now), 0)
-	right := dim.Render(fmt.Sprintf("retry %d · next in %ds", m.conn.Attempt, int(next.Round(time.Second).Seconds()))) +
-		fill.Render("   ") + key.Render("r") + fill.Render(" ") + dim.Render("retry now") +
+	// An expired credential has no scheduled retry to count down to (the
+	// health loop stops pinging), so the countdown segment is replaced by
+	// what the user actually has to do — 'r' stays, as the way back in once
+	// they've done it elsewhere.
+	status := fmt.Sprintf("retry %d · next in %ds", m.conn.Attempt, int(max(m.conn.NextRetryAt.Sub(m.now), 0).Round(time.Second).Seconds()))
+	retryLabel := "retry now"
+	if m.conn.NeedsCredentials() {
+		status = "re-authenticate in another shell"
+		retryLabel = "retry"
+	}
+	right := dim.Render(status) +
+		fill.Render("   ") + key.Render("r") + fill.Render(" ") + dim.Render(retryLabel) +
 		fill.Render("   ") + key.Render("c") + fill.Render(" ") + dim.Render("switch context")
 
 	return insetStripLineFill(padBetweenFill(left, right, stripInnerWidth(width), fill), width, fill)

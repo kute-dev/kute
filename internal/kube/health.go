@@ -18,6 +18,19 @@ const (
 	ConnReconnecting ConnPhase = "reconnecting"
 	ConnFailed       ConnPhase = "failed"
 	ConnNoCluster    ConnPhase = "no-cluster"
+
+	// ConnUnauthenticated is "there is no usable credential for this
+	// cluster" — a 401 from the apiserver, or an exec credential plugin that
+	// couldn't mint a token at all (an expired `aws sso login` session, a
+	// `gcloud` re-auth the plugin can't prompt for because kute holds the
+	// terminal). It is deliberately not Reconnecting: on a cert-based
+	// cluster a 401 really is something broken and worth retrying, but on
+	// GKE/EKS it means a plugin failed, and re-running a plugin that just
+	// failed is not a retry strategy — it burns the link every two seconds
+	// while telling the user "reconnecting", which is the wrong sentence.
+	// The recovery is a human one (re-authenticate in another shell), so
+	// this phase stops the ping loop and waits for 4a/4c's explicit r.
+	ConnUnauthenticated ConnPhase = "unauthenticated"
 )
 
 // ConnState is a snapshot of connection health, fanned out on ConnStateMsg
@@ -40,8 +53,14 @@ type ConnStateMsg ConnState
 // predicate every "disconnected"/OFFLINE treatment (4a banner, header badge,
 // mutating-verb gate) shares.
 func (s ConnState) Offline() bool {
-	return s.Phase == ConnReconnecting || s.Phase == ConnFailed
+	return s.Phase == ConnReconnecting || s.Phase == ConnFailed || s.Phase == ConnUnauthenticated
 }
+
+// NeedsCredentials reports whether the outage is an authentication one, for
+// the surfaces that say *why* rather than just that the cluster is offline:
+// the header badge, 4a's banner (which has no backoff countdown to show
+// here), and 4c's title. Everything else keeps treating it as Offline().
+func (s ConnState) NeedsCredentials() bool { return s.Phase == ConnUnauthenticated }
 
 const (
 	pingInterval   = 2 * time.Second // matches the "sync 2s" header chip
@@ -170,7 +189,15 @@ func (h *health) set(s ConnState) {
 // constrained link is reporting congestion, not an outage.
 func (h *health) onWatchError(err error, synced bool, now time.Time) {
 	prev := h.get()
-	if prev.Phase == ConnReconnecting {
+	if prev.Phase == ConnReconnecting || prev.Phase == ConnUnauthenticated {
+		// Already unauthenticated: reflectors go on retrying their watches
+		// on their own schedule, and each failure would otherwise re-emit
+		// the same message. The ping loop, driven by the user's r, owns
+		// getting out of this phase.
+		return
+	}
+	if IsAuthenticationError(err) {
+		h.setUnauthenticated(err, 0, prev)
 		return
 	}
 	if h.inConnectGrace(synced, err, now) {
@@ -215,6 +242,13 @@ func (c *Cluster) startHealthLoop(stopCh <-chan struct{}) {
 		case <-stopCh:
 			return
 		case <-ticker.C:
+			// The one phase the ticker doesn't drive: an expired credential
+			// comes back when the user re-authenticates elsewhere, not when
+			// two more seconds pass, and every ping in between re-runs the
+			// failing credential plugin. RetryNow (4a/4c's r) is the way out.
+			if c.health.pausesPolling() {
+				continue
+			}
 			c.ping()
 		case <-c.health.retry:
 			c.ping()
@@ -241,6 +275,15 @@ func (h *health) recordPing(latency time.Duration, err error, synced bool, now t
 		return
 	}
 
+	if IsAuthenticationError(err) {
+		// Unconditionally re-emitted, unlike onWatchError's silent case:
+		// while unauthenticated the ticker stops pinging, so the only way to
+		// reach this line twice is the user pressing r — which has to
+		// produce a visible answer even when the answer is the same.
+		h.setUnauthenticated(err, latency, prev)
+		return
+	}
+
 	if h.inConnectGrace(synced, err, now) {
 		return
 	}
@@ -259,6 +302,25 @@ func (h *health) recordPing(latency time.Duration, err error, synced bool, now t
 		FetchedAt:   prev.FetchedAt,
 	})
 }
+
+// setUnauthenticated records a credential failure. Attempt and NextRetryAt
+// are deliberately left zero: there is no scheduled retry to count down to,
+// and 4a/4c read exactly that to swap the backoff countdown for the
+// re-authenticate hint.
+func (h *health) setUnauthenticated(err error, latency time.Duration, prev ConnState) {
+	h.set(ConnState{
+		Phase:     ConnUnauthenticated,
+		Latency:   latency,
+		Err:       credentialErrorMessage(err),
+		FetchedAt: prev.FetchedAt,
+	})
+}
+
+// pausesPolling reports whether the periodic /livez ping should be skipped —
+// true only while unauthenticated, where each ping re-runs a credential
+// plugin that has already failed and cannot succeed until the user does
+// something outside kute. An explicit RetryNow always pings regardless.
+func (h *health) pausesPolling() bool { return h.get().Phase == ConnUnauthenticated }
 
 // inConnectGrace reports whether a failed probe should be swallowed as
 // startup congestion rather than reported as an outage. Deliberately blind to

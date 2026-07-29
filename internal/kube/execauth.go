@@ -2,9 +2,11 @@ package kube
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/rest"
 )
 
@@ -178,3 +180,60 @@ func (s *stderrCapture) take() string {
 // client-go itself discards. Empty when there is no exec plugin, or when it
 // said nothing.
 func CredentialPluginOutput() string { return pluginStderr.take() }
+
+// credentialFailurePrefix is what client-go's exec round tripper prefixes
+// every failure to obtain a credential with (exec.go's roundTripper.RoundTrip:
+// `fmt.Errorf("getting credentials: %v", err)`). Matching the string is
+// unlovely, but it is the only handle: the wrapped error is a plain
+// fmt.Errorf with nothing to type-assert or errors.Is against, and a plugin
+// that never produced a token never produced a 401 either — there is no
+// apierrors form of "the SSO session expired".
+const credentialFailurePrefix = "getting credentials:"
+
+// IsAuthenticationError classifies err as "kute has no usable credential for
+// this cluster" — either the credential plugin couldn't mint one, or the
+// apiserver rejected the one it minted.
+//
+// It is deliberately separate from IsPermissionError: a 403 means the cluster
+// knows who you are and says no, which is a per-kind fact the 4b card
+// reports; a 401 means it doesn't know who you are at all, which is a
+// whole-connection fact — and, unlike a dropped TCP connection, one that
+// retrying cannot fix.
+func IsAuthenticationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if apierrors.IsUnauthorized(err) {
+		return true
+	}
+	return strings.Contains(err.Error(), credentialFailurePrefix)
+}
+
+// credentialErrorMessage renders err for ConnState.Err. The credential
+// plugin's own stderr wins when there is any: it is the only text that names
+// what the user has to run (`aws sso login`, `gcloud auth login`), and
+// guessing that from the provider is exactly the guess kute shouldn't make.
+// client-go's own message — "exec: executable aws failed with exit code 255"
+// — is the fallback, and the whole message for a plain 401.
+//
+// The result is always one line: ConnState.Err renders into 4a's
+// single-line banner, where an embedded newline would break the strip.
+func credentialErrorMessage(err error) string {
+	text := strings.TrimSpace(CredentialPluginOutput())
+	if text == "" {
+		if err == nil {
+			return "credentials rejected"
+		}
+		text = err.Error()
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > maxCredentialErrorText {
+		text = text[:maxCredentialErrorText] + "…"
+	}
+	return text
+}
+
+// maxCredentialErrorText caps the banner text. A plugin that dumps a stack
+// trace shouldn't push the retry hints off the end of the line; the 4c
+// screen's own error box wraps, so nothing needs the full text on one row.
+const maxCredentialErrorText = 300
