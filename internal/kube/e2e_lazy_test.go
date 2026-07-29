@@ -284,18 +284,21 @@ func TestHelmInformerIsPerNamespaceAndTypeFiltered(t *testing.T) {
 	}
 }
 
-// TestForbiddenKindIsSettledNotPending is the anti-hang half of the rule a
-// forbidden cache has to satisfy: under an identity that cannot read a kind,
-// KindSynced reports settled, so a loading state gated on it comes off its
-// spinner instead of waiting for a cache that is never going to fill.
+// TestForbiddenKindIsSettledAndSaysWhy pins both halves of the rule a
+// forbidden cache has to satisfy, against a real apiserver refusing a real
+// LIST.
 //
-// It does *not* assert KindError. Permission failures deliberately travel
-// their own path — markKindFailed, plus the Forbidden error a screen's own
-// read returns — rather than the kindStalled map KindError reads, which is
-// for an initial LIST that is still failing but might yet succeed. Asserting
-// a non-nil KindError here would be testing against the code's stated design,
-// so this pins the two things that actually distinguish "forbidden" from
-// "the cluster has none of these": settled, and marked failed.
+// Settled, so a loading state gated on KindSynced comes off its spinner
+// rather than waiting for a cache that is never going to fill — and, at the
+// same time, carrying the denial through KindForbidden, so the screen that
+// just came off its spinner has something to say other than "the cluster has
+// none of these". Settled without a reason was the whole bug: every input to
+// browse's empty state was true and the sentence it produced was false.
+//
+// KindError stays nil throughout, and that is not an oversight. That map is
+// for an initial LIST that is still failing and may yet succeed, which is a
+// retryable status; a 403 will not change while the process runs, and the two
+// deserve different screens.
 func TestForbiddenKindIsSettledNotPending(t *testing.T) {
 	c := e2eClusterWithKubeconfig(t, e2ePartialKubeconfig(t))
 
@@ -316,12 +319,20 @@ func TestForbiddenKindIsSettledNotPending(t *testing.T) {
 	// And settled *because it is known not to be coming*, not because the
 	// informer reported a successful empty LIST. Without this the assertion
 	// above would pass just as well for a kind that genuinely has none.
-	waitForKindFailed(t, c, KindDeployment, 60*time.Second)
+	denial := waitForKindForbidden(t, c, KindDeployment, 60*time.Second)
+	if !IsPermissionError(denial) {
+		t.Fatalf("KindForbidden(Deployment) = %v, want the apiserver's own Forbidden", denial)
+	}
 
 	// KindError stays nil for a permission failure, by design. Pinned so the
-	// two paths can't be quietly merged without this test having an opinion.
+	// retryable and permanent paths can't be quietly merged.
 	if err := c.KindError(KindDeployment); err != nil {
-		t.Fatalf("KindError(Deployment) = %v, want nil: permission failures travel markKindFailed, not kindStalled", err)
+		t.Fatalf("KindError(Deployment) = %v, want nil: a denial is not a retryable stall", err)
+	}
+
+	// And a kind this identity can read is untouched by its neighbour's 403.
+	if err := c.KindForbidden(KindPod); err != nil {
+		t.Fatalf("KindForbidden(Pod) = %v, want nil — the partial SA can list pods", err)
 	}
 }
 
@@ -338,7 +349,7 @@ func TestReadableKindSurvivesAForbiddenNeighbour(t *testing.T) {
 	if _, err := c.ListRaw(ctx, KindDeployment, e2eNamespace); err != nil {
 		t.Fatalf("ListRaw(Deployment): %v", err)
 	}
-	waitForKindFailed(t, c, KindDeployment, 60*time.Second)
+	_ = waitForKindForbidden(t, c, KindDeployment, 60*time.Second)
 
 	waitForKindSynced(t, c, KindPod, 60*time.Second)
 	if err := c.KindError(KindPod); err != nil {
@@ -367,21 +378,17 @@ func waitForKindSynced(t *testing.T, c *Cluster, kind ResourceKind, timeout time
 	}
 }
 
-// waitForKindFailed waits for kind to be marked permanently failed — the
-// permission path's own signal, set from the reflector's goroutine when its
-// watch reports a 403.
-func waitForKindFailed(t *testing.T, c *Cluster, kind ResourceKind, timeout time.Duration) {
+// waitForKindForbidden waits for kind's denial to be recorded — set from the
+// reflector's own goroutine when its watch comes back 403 — and returns it.
+func waitForKindForbidden(t *testing.T, c *Cluster, kind ResourceKind, timeout time.Duration) error {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		c.mu.Lock()
-		failed := c.kindFailed[kind]
-		c.mu.Unlock()
-		if failed {
-			return
+		if err := c.KindForbidden(kind); err != nil {
+			return err
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s was never marked failed within %s — a forbidden cache that reads as merely empty is a lie about the cluster", kind, timeout)
+			t.Fatalf("KindForbidden(%s) stayed nil for %s — a forbidden cache that reads as merely empty is a lie about the cluster", kind, timeout)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

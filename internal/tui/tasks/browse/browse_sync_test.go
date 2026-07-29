@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -281,5 +283,86 @@ func TestLaunchStaysLoadingUntilCacheSynced(t *testing.T) {
 	}
 	if !strings.Contains(plain(m.Render()), "api-0") {
 		t.Fatalf("expected the table to show the pod once synced:\n%s", plain(m.Render()))
+	}
+}
+
+// silentlyForbiddenLister is *kube.Cluster under an identity that may not
+// list one kind. Unlike browse_offline_test.go's forbiddenLister — a
+// one-shot read that returns the 403 — this is the informer-backed shape,
+// where the read *succeeds* with nothing in it and the cache reports settled
+// because it is never going to fill. Nothing about the read says anything
+// went wrong; only KindForbidden knows.
+type silentlyForbiddenLister struct {
+	kind   kube.ResourceKind
+	err    error
+	lister fakeLister
+}
+
+func (l *silentlyForbiddenLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if kind == l.kind {
+		return nil, nil
+	}
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l *silentlyForbiddenLister) KindSynced(kube.ResourceKind) bool { return true }
+
+func (l *silentlyForbiddenLister) KindForbidden(kind kube.ResourceKind) error {
+	if kind == l.kind {
+		return l.err
+	}
+	return nil
+}
+
+// TestForbiddenKindRendersThePermissionCard is the regression the end-to-end
+// suite found: under an identity whose reads are Forbidden, browse rendered
+// its empty state — "no pods in <ns> · the namespace exists and you can read
+// it — there's just nothing here" — under a green connected header. Every
+// input to that sentence was technically true (settled cache, no error, zero
+// rows) and the sentence itself was false.
+func TestForbiddenKindRendersThePermissionCard(t *testing.T) {
+	lister := &silentlyForbiddenLister{
+		kind:   kube.KindPod,
+		err:    apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", errors.New("nope")),
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindPod
+
+	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — every read was refused", m.state)
+	}
+	if view := plain(m.View().Content); strings.Contains(view, "no pods in") {
+		t.Fatalf("the empty state's claim about the cluster survived a denial:\n%s", view)
+	}
+	// Permanent for the session, so there is no retry to promise and none
+	// to schedule.
+	if cmd != nil {
+		t.Error("a retry was scheduled for a denial; RBAC will not change while the process runs")
+	}
+}
+
+// TestForbiddenUnrelatedKindStillRendersEmpty: the denial belongs to the kind
+// that was refused. A readable list with genuinely nothing in it must still
+// say so — otherwise this fix trades one false claim for a different one.
+func TestForbiddenUnrelatedKindStillRendersEmpty(t *testing.T) {
+	lister := &silentlyForbiddenLister{
+		kind:   kube.KindSecret,
+		err:    apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("nope")),
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindPod
+
+	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty — Pods are readable and there are none", m.state)
 	}
 }

@@ -125,7 +125,8 @@ func TestKindSyncedTrueAfterPermissionError(t *testing.T) {
 	if c.KindSynced(KindHorizontalPodAutoscaler) {
 		t.Fatal("precondition: unregistered kind should not report synced")
 	}
-	c.markKindFailed(KindHorizontalPodAutoscaler)
+	c.markKindFailed(KindHorizontalPodAutoscaler, apierrors.NewForbidden(
+		schema.GroupResource{Resource: "horizontalpodautoscalers"}, "", errors.New("nope")))
 
 	if !c.KindSynced(KindHorizontalPodAutoscaler) {
 		t.Fatal("KindSynced = false after a permission failure; the cache will never arrive")
@@ -225,11 +226,15 @@ func TestStalledPermissionErrorStaysAPermissionError(t *testing.T) {
 	if err := c.KindError(KindSecret); err != nil {
 		t.Fatalf("KindError = %v for a forbidden kind; that failure has its own state", err)
 	}
-	c.mu.Lock()
-	failed := c.kindFailed[KindSecret]
-	c.mu.Unlock()
-	if !failed {
-		t.Fatal("a forbidden watch error no longer marks the kind failed")
+	// The denial travels KindForbidden instead, carrying the reason — which
+	// is what lets a screen say "you may not read this" rather than "there
+	// are none".
+	if got := c.KindForbidden(KindSecret); !IsPermissionError(got) {
+		t.Fatalf("KindForbidden = %v for a forbidden kind, want the denial itself", got)
+	}
+	// And says nothing about a kind that was never refused.
+	if got := c.KindForbidden(KindPod); got != nil {
+		t.Fatalf("KindForbidden(Pod) = %v, want nil — only Secret was refused", got)
 	}
 }
 

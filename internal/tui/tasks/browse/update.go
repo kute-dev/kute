@@ -254,14 +254,23 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
 		if err := tui.KindsError(m.lister, append([]kube.ResourceKind{m.kind}, auxKinds[m.kind]...)...); err != nil {
-			// Settled, but with nothing to show and a reason why: the cache
-			// backing this list keeps failing its initial LIST. Saying so
+			// Settled, but with nothing to show and a reason why. Saying so
 			// beats the two alternatives — a spinner that outlives the
 			// user's patience, or "no <kind>", which is a claim about the
-			// cluster this screen is in no position to make. The read is
-			// still being retried underneath, and a success emits a change
-			// event that reloads this list, so the error is a status, not a
-			// dead end.
+			// cluster this screen is in no position to make.
+			if kube.IsPermissionError(err) {
+				// A denial is permanent for the session, so this is 4b's
+				// card rather than the retrying line below: there is no
+				// retry underneath to promise, and RBAC will not change
+				// while the process runs.
+				m.state = tui.TaskStatePermissionDenied
+				m.feedback = err.Error()
+				return m, nil
+			}
+			// A stalled initial LIST, on the other hand, really is still
+			// being retried underneath, and a success emits a change event
+			// that reloads this list — so the error is a status, not a dead
+			// end.
 			m.state = tui.TaskStateError
 			m.feedback = fmt.Sprintf("couldn't load %s: %v — retrying", lowerDisplay(m.desc.Display), err)
 			return m, nil

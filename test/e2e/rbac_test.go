@@ -34,11 +34,22 @@ func TestForbiddenKindNeverRendersAsEmpty(t *testing.T) {
 	// server is perfectly reachable, it is this identity that is refused —
 	// so the connection state recovers to "connected" while every informer
 	// stays forbidden. It is at *that* point, some seconds in, that the
-	// empty state appears. A one-shot check here passes by looking too early.
+	// empty state used to appear. A one-shot check here passes by looking
+	// too early, which is exactly how this went unnoticed.
 	a.Never("you can read it", 20*time.Second)
 	if frame := a.Frame(); strings.Contains(frame, falseEmpty) {
 		t.Fatalf("every read this identity makes is Forbidden, and the screen reports an empty namespace:\n%s", frame)
 	}
+
+	// And the right answer is on screen, not merely the absence of the wrong
+	// one: 4b's card, with the apiserver's own words and a way forward.
+	a.WaitForAll(Settle,
+		"403 Forbidden",
+		"forbidden",
+		"kute-restricted",
+		"w who-can",
+		"r retry",
+	)
 }
 
 // TestReadableKindsWorkUnderAPartialGrant is the other side: an identity with

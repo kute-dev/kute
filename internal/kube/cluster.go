@@ -85,13 +85,18 @@ type Cluster struct {
 
 	// kindInformers is every typed informer registered so far, the handle
 	// KindSynced needs (a lister can't report its own sync state).
-	// kindFailed marks kinds whose watch hit a permanent error, so their
-	// caches are never waited on again. kindStalled holds the last error
-	// from a cache that is still failing its initial LIST — recoverable, so
-	// it is cleared rather than latched, but until it does recover it is the
-	// difference between a screen showing why it is empty and one spinning.
+	// kindFailed holds the error from a watch that hit a permanent failure —
+	// today only "you may not list this" — so those caches are never waited
+	// on again. It keeps the error rather than a bare bool because the
+	// screen has to say *why* it has nothing: settled with no reason
+	// attached is indistinguishable from a kind the cluster genuinely has
+	// none of, which is a claim this app has no basis for making. Read
+	// through KindForbidden. kindStalled holds the last error from a cache
+	// that is still failing its initial LIST — recoverable, so it is cleared
+	// rather than latched, but until it does recover it is the difference
+	// between a screen showing why it is empty and one spinning.
 	kindInformers map[ResourceKind]cache.SharedIndexInformer
-	kindFailed    map[ResourceKind]bool
+	kindFailed    map[ResourceKind]error
 	kindStalled   map[ResourceKind]error
 
 	events  chan ResourceChangedMsg
@@ -312,7 +317,7 @@ func (c *Cluster) kindSyncedLocked(kind ResourceKind) bool {
 	if c.stopCh == nil {
 		return true
 	}
-	if c.kindFailed[kind] {
+	if c.kindFailed[kind] != nil {
 		return true
 	}
 	if kind == KindHelmRelease {
@@ -372,7 +377,7 @@ func (c *Cluster) KindError(kind ResourceKind) error {
 // as the user is willing to wait.
 func (c *Cluster) noteWatchError(kind ResourceKind, err error) {
 	if IsPermissionError(err) {
-		c.markKindFailed(kind)
+		c.markKindFailed(kind, err)
 		return
 	}
 	c.mu.Lock()
@@ -398,7 +403,7 @@ func (c *Cluster) allStartedKindsSynced() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for kind, inf := range c.kindInformers {
-		if !c.kindFailed[kind] && !inf.HasSynced() {
+		if c.kindFailed[kind] == nil && !inf.HasSynced() {
 			return false
 		}
 	}
@@ -407,7 +412,7 @@ func (c *Cluster) allStartedKindsSynced() bool {
 			return false
 		}
 	}
-	if !c.kindFailed[KindHelmRelease] {
+	if c.kindFailed[KindHelmRelease] == nil {
 		for _, inf := range c.helmInformers {
 			if !inf.HasSynced() {
 				return false
@@ -420,13 +425,35 @@ func (c *Cluster) allStartedKindsSynced() bool {
 // markKindFailed records that kind's watch reported an error the cache will
 // never recover from on its own — today only "you may not list this",
 // which is a permanent answer for the session, not a transient outage.
-func (c *Cluster) markKindFailed(kind ResourceKind) {
+func (c *Cluster) markKindFailed(kind ResourceKind, err error) {
 	c.mu.Lock()
 	if c.kindFailed == nil {
-		c.kindFailed = map[ResourceKind]bool{}
+		c.kindFailed = map[ResourceKind]error{}
 	}
-	c.kindFailed[kind] = true
+	c.kindFailed[kind] = err
 	c.mu.Unlock()
+}
+
+// KindForbidden reports the denial behind a kind whose cache will stay empty
+// because this identity may not list it, or nil for any other reason a cache
+// is empty.
+//
+// It is the missing half of the pair KindSynced/KindError form. A forbidden
+// cache reports *settled* — it is never going to fill, so a spinner gated on
+// it would outlive the user — and KindError deliberately stays nil for it,
+// because that map is for an initial LIST that is still failing and may yet
+// succeed, which a 403 will not. Between them that left a screen with
+// "settled, no reason, no rows", and the only sentence available for those
+// three facts is "the cluster has none of this kind" — which is false, and
+// which the empty state stated outright, under a green connected header.
+//
+// Latched for the session on purpose: RBAC does not change under a running
+// process, and a screen that reverted to claiming emptiness on the next
+// reload would be the same lie with a delay.
+func (c *Cluster) KindForbidden(kind ResourceKind) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.kindFailed[kind]
 }
 
 // CurrentNamespace and CurrentContext expose the active scope for switchers.

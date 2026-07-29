@@ -61,7 +61,7 @@ port-forward, qualitative, one user, one auth mode
 | GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape — same as above; the remaining unknowns are the metrics shape and Autopilot's admission rules | manual |
 | kind or k3s | the smallest realistic cluster; no metrics-server by default | automated — `test/e2e`, every PR ([`e2e-plan.md`](e2e-plan.md)) |
 | A large cluster (5k+ pods) | table paging, informer memory, and whether lazy start holds up | automated — `scale_test.go` on kwok, nightly |
-| A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card | automated — `rbac_test.go`; **currently failing**, see §7 |
+| A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card | automated — `rbac_test.go`; found and fixed the false-empty bug in §7 |
 | A cluster with no metrics-server | that CPU/MEM render `–` everywhere rather than lying or crashing | automated — `metrics_test.go` |
 
 *Acceptance:* each row walked through the everyday flows (list → detail → logs → events →
@@ -115,34 +115,38 @@ edit on whichever side loses. Detail and citations in
 
 ## 7. Incidental, found while working
 
-None is an audit finding; all are wrong in the tree right now.
+None is an audit finding; each was wrong in the tree when it was written down. The first is
+fixed and kept here for the record, since the two open questions underneath it came out of
+the same investigation.
 
-- **A forbidden kind is indistinguishable from an empty one at the UI seam.** Found by
-  `test/e2e/rbac_test.go`, which fails on it today. Under an identity whose reads are all
-  Forbidden, kute renders the Pods list's empty state — *"no pods in kute-e2e · the namespace
-  exists and you can read it — there's just nothing here"* — under a green `● connected`
-  header. That is the claim CLAUDE.md forbids outright ("An empty state is a claim about the
-  cluster").
+- ~~**A forbidden kind is indistinguishable from an empty one at the UI seam.**~~ **Fixed.**
+  Found by `test/e2e/rbac_test.go`: under an identity whose reads are all Forbidden, kute
+  rendered the Pods list's empty state — *"no pods in kute-e2e · the namespace exists and you
+  can read it — there's just nothing here"* — under a green `● connected` header, which is the
+  claim CLAUDE.md forbids outright ("An empty state is a claim about the cluster").
 
-  The mechanism is a gap, not a wrong decision. `Cluster.markKindFailed` records the 403, and
-  it is deliberately kept out of `KindError` (which is for an initial LIST that may yet
-  succeed) — but nothing exported reads `kindFailed`, so `browse` sees *synced, no error, zero
-  objects* and can only conclude the cluster is empty. The fix is an accessor — say
-  `KindForbidden(kind)` — surfaced through `tui.KindsError`'s existing gate, so the 4b card
-  renders where the empty state does now.
+  The mechanism was a gap rather than a wrong decision. `Cluster.markKindFailed` recorded the
+  403, deliberately kept out of `KindError` (which is for an initial LIST that may yet
+  succeed) — but nothing exported read `kindFailed`, so `browse` saw *synced, no error, zero
+  objects* and had only one sentence available for those three facts. `kindFailed` now holds
+  the error rather than a bool, `Cluster.KindForbidden` exposes it, `tui.KindsError` consults
+  it ahead of the retryable channel, and `browse` routes a denial to `TaskStatePermissionDenied`
+  — so 4b's card renders where the empty state did, with the apiserver's own words. Covered at
+  both levels: `internal/tui/kindsync_test.go` and `browse_sync_test.go` for the seam and the
+  screen, `rbac_test.go` end-to-end against a real refused LIST.
 
-  Two related facts came out of the same run, both worth deciding on rather than fixing
-  blind:
+  Two related facts came out of the same run. **Both are still open**, and both want a
+  decision rather than a blind fix:
   - kute's informers list every kind **cluster-wide** regardless of the selected namespace, so
     a namespace-scoped identity — the ordinary shape of a developer's access on a shared
     cluster — cannot use kute at all. Worth knowing before beta; possibly a documented
     requirement rather than a bug.
   - `kube/health.go`'s `onWatchError` classifies authentication errors
     (`ConnUnauthenticated`) but not authorization ones, so a single kind's 403 flips the whole
-    connection to `ConnReconnecting` and drops the app to the 4c recovery screen. Which of
-    the two screens you get — false-empty or false-unreachable — depends on whether the
-    `/livez` ping has recovered the connection state yet, so today it is a race between two
-    wrong answers.
+    connection to `ConnReconnecting` and drops the app to the 4c recovery screen. With the
+    false-empty fixed this is no longer a race between two wrong answers — the `/livez` ping
+    recovers the connection state and 4b's card takes over — but a momentary "cluster is
+    unreachable" for what is purely a permission boundary is still the wrong word.
 - **`execpicker`'s "will run" line ellipsizes at the panel's fixed 56 cells**, so for a
   realistic pod name the trailing `-- bash` is cut off. §10a calls that line "copyable
   documentation", which it currently isn't for most pods. Wrapping it to two lines inside

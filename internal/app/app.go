@@ -174,6 +174,22 @@ func (l helmAwareLister) KindError(kind kube.ResourceKind) error {
 	return kr.KindError(kind)
 }
 
+// KindForbidden answers for the same cache KindSynced and KindError do. A
+// release list served from the shared Secret cache is forbidden exactly when
+// Secrets are, so the substitution has to happen here too — otherwise the
+// Helm list is told "settled, nothing wrong" about a cache it may not read,
+// and renders an empty release list for a namespace it cannot see.
+func (l helmAwareLister) KindForbidden(kind kube.ResourceKind) error {
+	fr, ok := l.RawLister.(tui.KindForbiddenReporter)
+	if !ok {
+		return nil
+	}
+	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
+		kind = kube.KindSecret
+	}
+	return fr.KindForbidden(kind)
+}
+
 // CountLive forwards the server-side count; KindHelmRelease is counted from
 // the Secrets that back it. See forwardAwareLister.CountLive for why this
 // forward matters rather than being a formality.
@@ -288,6 +304,20 @@ func (l forwardAwareLister) KindError(kind kube.ResourceKind) error {
 	return nil
 }
 
+// KindForbidden forwards the denial behind an empty cache, and is
+// load-bearing for exactly the reason KindError is — it is the third member
+// of the set a screen reads before deciding it may say "none". Forwards are
+// in-process state with no API server to refuse them, so they never are.
+func (l forwardAwareLister) KindForbidden(kind kube.ResourceKind) error {
+	if kind == kube.KindForward {
+		return nil
+	}
+	if fr, ok := l.RawLister.(tui.KindForbiddenReporter); ok {
+		return fr.KindForbidden(kind)
+	}
+	return nil
+}
+
 // CountLive forwards the server-side count. Forwards are in-process, so
 // they're counted from the registry rather than the API.
 //
@@ -359,6 +389,7 @@ var (
 	_ overview.NodeMetricsReader   = (*kube.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*kube.Cluster)(nil)
+	_ tui.KindForbiddenReporter    = (*kube.Cluster)(nil)
 	_ tui.LiveCounter              = (*kube.Cluster)(nil)
 	_ helmhistory.HelmSecretLister = (*kube.Cluster)(nil)
 
@@ -377,11 +408,13 @@ var (
 	_ browse.KindSyncChecker       = forwardAwareLister{}
 	_ browse.CacheSyncChecker      = forwardAwareLister{}
 	_ tui.KindErrorReporter        = forwardAwareLister{}
+	_ tui.KindForbiddenReporter    = forwardAwareLister{}
 	_ tui.LiveCounter              = forwardAwareLister{}
 	_ helmhistory.HelmSecretLister = forwardAwareLister{}
 	_ browse.KindSyncChecker       = helmAwareLister{}
 	_ browse.CacheSyncChecker      = helmAwareLister{}
 	_ tui.KindErrorReporter        = helmAwareLister{}
+	_ tui.KindForbiddenReporter    = helmAwareLister{}
 	_ tui.LiveCounter              = helmAwareLister{}
 	_ helmhistory.HelmSecretLister = helmAwareLister{}
 	// Only the outermost decorator can answer this one — nothing below it

@@ -28,6 +28,18 @@ type KindErrorReporter interface {
 	KindError(kind kube.ResourceKind) error
 }
 
+// KindForbiddenReporter is implemented by a lister that can say a kind's
+// cache is empty because this identity may not list it (*kube.Cluster: a
+// watch that came back Forbidden).
+//
+// Separate from KindErrorReporter because the two answers are not the same
+// answer. A stalled initial LIST is being retried and may yet succeed, so a
+// screen says "couldn't load — retrying"; a denial will not change while the
+// process runs, so a screen says so and offers the 4b card instead.
+type KindForbiddenReporter interface {
+	KindForbidden(kind kube.ResourceKind) error
+}
+
 // KindsError returns the first reason any of kinds has no data to show, or
 // nil when the caches are simply empty.
 //
@@ -37,7 +49,19 @@ type KindErrorReporter interface {
 // which on its own would turn a failed read into the confident claim that the
 // cluster has none of this kind. Screens that gate an empty state on
 // KindsSynced ask this next, and show the failure instead.
+//
+// A denial outranks a stall, and is checked across every kind first rather
+// than kind-by-kind: with one kind forbidden and another merely stalling, the
+// permanent reason is the one worth showing, whichever order the caller
+// happened to list them in.
 func KindsError(lister any, kinds ...kube.ResourceKind) error {
+	if fr, ok := lister.(KindForbiddenReporter); ok {
+		for _, kind := range kinds {
+			if err := fr.KindForbidden(kind); err != nil {
+				return err
+			}
+		}
+	}
 	kr, ok := lister.(KindErrorReporter)
 	if !ok {
 		return nil
