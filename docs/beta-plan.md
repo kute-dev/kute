@@ -59,7 +59,7 @@ port-forward, qualitative, one user, one auth mode
 | --- | --- | --- |
 | EKS | `aws eks get-token` exec-credential plugin — see [`managed-clusters.md`](managed-clusters.md); the auth failure class is now handled and unit-tested against fixture plugins, so this row is down to a manual walk for discovery differences and Fargate | manual |
 | GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape — same as above; the remaining unknowns are the metrics shape and Autopilot's admission rules | manual |
-| kind or k3s | the smallest realistic cluster; no metrics-server by default | automated — `test/e2e`, every PR ([`e2e-plan.md`](e2e-plan.md)) |
+| kind or k3s | the smallest realistic cluster; no metrics-server by default | automated — `test/e2e`, every PR on k8s 1.35 and nightly on 1.36 ([`e2e-plan.md`](e2e-plan.md)) |
 | A large cluster (5k+ pods) | table paging, informer memory, and whether lazy start holds up | automated — `scale_test.go` on kwok, nightly |
 | A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card | automated — `rbac_test.go`; found and fixed the false-empty bug in §7 |
 | A cluster with no metrics-server | that CPU/MEM render `–` everywhere rather than lying or crashing | automated — `metrics_test.go` |
@@ -69,7 +69,10 @@ timeline → a mutating verb) with results written down, not just "worked". The 
 walk exactly that flow — `flow_test.go` is it, run against a real kind cluster — so what is
 left for them is reading the numbers, not repeating the walk. First measurements, kwok, 5,000
 pods across 50 nodes: connect to a populated frame **503 ms**, heap after the eager caches
-fill **36.4 MiB**, goto palette open **32 ms**.
+fill **36.4 MiB**, goto palette open **32 ms**. Both Kubernetes versions have been walked
+locally: 1.35 and 1.36 each pass the full suite. Running the two legs on one machine needs
+`fs.inotify.max_user_instances` raised to 512 — the kernel default of 128 is not enough for
+two multi-node kind clusters, and `scripts/e2e-cluster.sh` warns before walking into it.
 
 ## 3. Decide §17a (YAML edit mode)
 
