@@ -57,8 +57,8 @@ port-forward, qualitative, one user, one auth mode
 
 | Target | What it actually tests |
 | --- | --- |
-| EKS | `aws eks get-token` exec-credential plugin — a whole auth failure class untested |
-| GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape |
+| EKS | `aws eks get-token` exec-credential plugin — see [`managed-clusters.md`](managed-clusters.md); the auth failure class is now handled and unit-tested against fixture plugins, so this row is down to a manual walk for discovery differences and Fargate |
+| GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape — same as above; the remaining unknowns are the metrics shape and Autopilot's admission rules |
 | kind or k3s | the smallest realistic cluster; no metrics-server by default |
 | A large cluster (5k+ pods) | table paging, informer memory, and whether lazy start holds up |
 | A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card |
