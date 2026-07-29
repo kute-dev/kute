@@ -128,10 +128,34 @@ mint_restricted_kubeconfigs() {
   mint_sa_kubeconfig "$PARTIAL_SA" "$KUTE_E2E_PARTIAL_KUBECONFIG"
 }
 
+# preflight_inotify warns before a create that is likely to fail for a reason
+# the resulting error never names.
+#
+# Each kind node consumes several inotify instances, and the kernel default of
+# 128 per user is not enough for two multi-node clusters at once. The second
+# create dies inside `kubeadm init` with "cannot obtain client without
+# bootstrap … client rate limiter Wait returned an error: context deadline
+# exceeded", which reads like a slow machine and is nothing of the sort. This
+# is exactly what the verification steps in docs/e2e-plan.md walk into: they
+# ask you to bring up 1.36 while 1.35 is still running.
+preflight_inotify() {
+  local others limit
+  others="$(kind get clusters 2>/dev/null | grep -vx "$CLUSTER_NAME" | grep -c . || true)"
+  [[ "$others" -gt 0 ]] || return 0
+  limit="$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo 0)"
+  [[ "$limit" -gt 0 && "$limit" -lt 512 ]] || return 0
+
+  log "warning: ${others} other kind cluster(s) are running and fs.inotify.max_user_instances is ${limit}."
+  log "         kubeadm is likely to time out bootstrapping the control plane. Either:"
+  log "           sudo sysctl -w fs.inotify.max_user_instances=512   # kind's own recommendation"
+  log "         or delete the other cluster(s) first."
+}
+
 up() {
   if cluster_exists; then
     log "kind cluster ${CLUSTER_NAME} already exists — topping it up"
   else
+    preflight_inotify
     log "creating kind cluster ${CLUSTER_NAME} (k8s ${K8S_VERSION})"
     kind create cluster --config "$KIND_CONFIG" --wait 180s
   fi
