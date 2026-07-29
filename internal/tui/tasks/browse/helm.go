@@ -32,30 +32,83 @@ type ChartIndexReporter interface {
 	ChartIndexStatus() helmrepo.Status
 }
 
-// chartCacheStale is how old the repo cache gets before the strip starts
-// naming its age. Under a day, "run helm repo update" isn't news.
+// chartCacheStale is how old the repo cache gets before its age stops being
+// a footnote and becomes a warning. Under a day, "run helm repo update" isn't
+// news.
 const chartCacheStale = 24 * time.Hour
 
-// chartCacheNoteFor renders 18a's caveat on the LATEST column's data source:
-// nothing when the cache is present and fresh, its age once it's stale, and
-// an explicit "no helm repo cache" when there is none — because an all-`–`
-// column must never be read as "everything is up to date".
+// chartCacheNote is 18a's caveat on the LATEST column's data source: how old
+// the local repo cache the column is answered from actually is.
+//
+// The strip names it in every state — an all-`–` LATEST column must never be
+// readable as "everything is up to date", and silence when the cache is fresh
+// left no way to tell "checked, and you're current" from "never checked".
+// Fresh renders dim; missing or stale turns Theme.Warn and carries the
+// command that fixes it.
+//
+// Resolved as fields rather than a finished string because the view picks a
+// form by available width and colors the pieces differently — while the clock
+// stays out of the render path.
+type chartCacheNote struct {
+	// text is the full form ("no helm repo cache", "repo cache 6d old").
+	text string
+	// short is the narrow-terminal form ("no repo cache", "cache 6d old"),
+	// which on an 80-column strip is the only one that fits beside the
+	// health counts.
+	short string
+	// remedy names the command that fixes it ("run helm repo add"), empty
+	// while the cache is fresh and there's nothing to fix.
+	remedy string
+	// warn marks the missing and stale states, which render in Theme.Warn
+	// rather than the strip's usual Theme.TextDim.
+	warn bool
+}
+
+func (n chartCacheNote) empty() bool { return n.text == "" }
+
+// chartCacheNoteFor resolves the note from the lister's repo-cache status.
+// The zero value — no note at all — is what a lister that doesn't report one
+// gets, which is every kind but Helm releases.
 //
 // now is passed in because this runs in the load command, not the render
 // path (which stays pure: no clock reads).
-func chartCacheNoteFor(lister resources.RawLister, now time.Time) string {
+func chartCacheNoteFor(lister resources.RawLister, now time.Time) chartCacheNote {
 	reporter, ok := lister.(ChartIndexReporter)
 	if !ok {
-		return ""
+		return chartCacheNote{}
 	}
 	status := reporter.ChartIndexStatus()
 	if !status.Configured || status.Repos == 0 {
-		return "no helm repo cache"
+		return chartCacheNote{
+			text:   "no helm repo cache",
+			short:  "no repo cache",
+			remedy: "run helm repo add",
+			warn:   true,
+		}
 	}
-	if age := status.Age(now); age >= chartCacheStale {
-		return "repo cache " + shortAge(age) + " old"
+	note := chartCacheNote{
+		text:  "repo cache " + chartCacheAge(status.Age(now)) + " old",
+		short: "cache " + chartCacheAge(status.Age(now)) + " old",
 	}
-	return ""
+	if status.Age(now) < time.Minute {
+		// --demo's static cache is minted at startup, and a real one right
+		// after `helm repo update` is seconds old: "repo cache 0s old" reads
+		// like a defect rather than the best case.
+		note.text, note.short = "repo cache just updated", "cache fresh"
+	}
+	if status.Age(now) >= chartCacheStale {
+		note.remedy, note.warn = "run helm repo update", true
+	}
+	return note
+}
+
+// chartCacheAge is shortAge with a floor of one minute, so the sub-minute
+// bucket ("0s") never reaches a user-facing sentence.
+func chartCacheAge(age time.Duration) string {
+	if age < time.Minute {
+		age = time.Minute
+	}
+	return shortAge(age)
 }
 
 // openReleaseObjects switches kind to Pods with row's release name

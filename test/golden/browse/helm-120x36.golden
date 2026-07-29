@@ -1,6 +1,6 @@
   kute │ microk8s-cluster › nva-stage › Helm Releases (g to jump)                                          ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated   from helm.sh/release.v1 secrets · repo cache 6d old  
+  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated              repo cache 6d old — run helm repo update  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      RELEASE                           CHART                 LATEST    APP VER       REV  STATUS               UPDATED  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

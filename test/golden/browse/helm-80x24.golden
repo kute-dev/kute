@@ -1,6 +1,6 @@
   kute │ microk8s-cluster › nva-stage › Helm Releases (g to jump)  ● connected  
 ────────────────────────────────────────────────────────────────────────────────
-  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated                
+  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated  cache 6d old  
 ────────────────────────────────────────────────────────────────────────────────
      RELEASE    CHART                 LATEST    APP VER       REV  STATUS      …
 ────────────────────────────────────────────────────────────────────────────────

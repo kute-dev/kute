@@ -7,11 +7,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -134,18 +136,24 @@ func TestUnknownChartRendersAsUnknown(t *testing.T) {
 }
 
 // TestChartCacheNoteCaveatsTheStrip: the LATEST column has a second data
-// source with its own trustworthiness, so a stale or missing repo cache is
-// named on the strip rather than left for the user to assume away.
+// source with its own trustworthiness, so the strip names how fresh the local
+// repo cache is in every state. A missing or stale one is a warning carrying
+// the command that fixes it; a fresh one is a plain footnote, because silence
+// left no way to tell "checked, and you're current" from "never checked".
 func TestChartCacheNoteCaveatsTheStrip(t *testing.T) {
 	tests := []struct {
-		name   string
-		status helmrepo.Status
-		want   string
+		name       string
+		status     helmrepo.Status
+		want       string
+		wantRemedy string
+		wantWarn   bool
 	}{
-		{"no cache at all", helmrepo.Status{}, "no helm repo cache"},
-		{"configured but nothing fetched", helmrepo.Status{Configured: true}, "no helm repo cache"},
-		{"stale", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-6 * 24 * time.Hour)}, "repo cache 6d old"},
-		{"fresh", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-2 * time.Hour)}, ""},
+		{"no cache at all", helmrepo.Status{}, "no helm repo cache", "run helm repo add", true},
+		{"configured but nothing fetched", helmrepo.Status{Configured: true}, "no helm repo cache", "run helm repo add", true},
+		{"stale", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-6 * 24 * time.Hour)}, "repo cache 6d old", "run helm repo update", true},
+		{"a day old is already stale", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-25 * time.Hour)}, "repo cache 1d old", "run helm repo update", true},
+		{"fresh", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-2 * time.Hour)}, "repo cache 2h old", "", false},
+		{"seconds old reads as just updated, not 0s", helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now()}, "repo cache just updated", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,15 +169,89 @@ func TestChartCacheNoteCaveatsTheStrip(t *testing.T) {
 			m.SetSize(120, 36)
 			m = step(t, m, m.Init()())
 
-			if m.chartCacheNote != tt.want {
-				t.Errorf("chartCacheNote = %q, want %q", m.chartCacheNote, tt.want)
+			note := m.chartCacheNote
+			if note.text != tt.want {
+				t.Errorf("chartCacheNote.text = %q, want %q", note.text, tt.want)
+			}
+			if note.remedy != tt.wantRemedy {
+				t.Errorf("chartCacheNote.remedy = %q, want %q", note.remedy, tt.wantRemedy)
+			}
+			if note.warn != tt.wantWarn {
+				t.Errorf("chartCacheNote.warn = %v, want %v", note.warn, tt.wantWarn)
 			}
 			strip := plain(m.healthStripLine(m.Theme(), 120))
-			if tt.want != "" && !strings.Contains(strip, tt.want) {
+			if !strings.Contains(strip, tt.want) {
 				t.Errorf("health strip %q missing the caveat %q", strip, tt.want)
+			}
+			if tt.wantRemedy != "" && !strings.Contains(strip, tt.wantRemedy) {
+				t.Errorf("health strip %q names a problem without its fix %q", strip, tt.wantRemedy)
 			}
 		})
 	}
+}
+
+// TestChartCacheWarningSurvivesANarrowStrip: padBetween drops a right side
+// that doesn't fit rather than truncating it, so the widest thing on that
+// side used to take the cache warning down with it — leaving an all-`–`
+// LATEST column at 80 columns with nothing saying why. The data source is
+// constant and the note varies, so the note outranks it at every width.
+func TestChartCacheWarningSurvivesANarrowStrip(t *testing.T) {
+	m := goldenHelmModel(t, 120, 36) // four releases, a 6-day-old repo cache
+	for _, width := range []int{120, 110, 100, 90, 80} {
+		strip := plain(m.healthStripLine(m.Theme(), width))
+		if !strings.Contains(strip, "cache 6d old") {
+			t.Errorf("width %d: health strip %q dropped the repo-cache warning", width, strip)
+		}
+	}
+	if strip := plain(m.healthStripLine(m.Theme(), 160)); !strings.Contains(strip, "from helm.sh/release.v1 secrets · repo cache 6d old — run helm repo update") {
+		t.Errorf("width 160 has room for source and warning both, got %q", strip)
+	}
+	if strip := plain(m.healthStripLine(m.Theme(), 120)); !strings.Contains(strip, "repo cache 6d old — run helm repo update") || strings.Contains(strip, "helm.sh/release.v1") {
+		t.Errorf("width 120: the data source should be the first thing dropped, got %q", strip)
+	}
+	if strip := plain(m.healthStripLine(m.Theme(), 80)); !strings.Contains(strip, "cache 6d old") {
+		t.Errorf("width 80: the short form should survive, got %q", strip)
+	}
+}
+
+// TestChartCacheNoteWarnsInColor pins the missing/stale note to Theme.Warn
+// and the fresh one to the strip's usual Theme.TextDim, in both themes — a
+// warning rendered in the same dim as the label beside it isn't one.
+func TestChartCacheNoteWarnsInColor(t *testing.T) {
+	stale := helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-6 * 24 * time.Hour)}
+	fresh := helmrepo.Status{Configured: true, Repos: 2, Oldest: time.Now().Add(-2 * time.Hour)}
+	themes := map[string]tui.Theme{"dark": tui.Dark(), "light": tui.Light()}
+	for name, theme := range themes {
+		t.Run(name, func(t *testing.T) {
+			staleStrip := goldentest.Truecolor(helmStripModel(t, stale).healthStripLine(theme, 120))
+			wantWarn := goldentest.Truecolor(lipgloss.NewStyle().Foreground(theme.Warn).Render("repo cache 6d old — run helm repo update"))
+			if !strings.Contains(staleStrip, wantWarn) {
+				t.Errorf("stale cache note not rendered in Theme.Warn\nstrip: %q\nwant substring: %q", staleStrip, wantWarn)
+			}
+			freshStrip := goldentest.Truecolor(helmStripModel(t, fresh).healthStripLine(theme, 120))
+			wantDim := goldentest.Truecolor(lipgloss.NewStyle().Foreground(theme.TextDim).Render("repo cache 2h old"))
+			if !strings.Contains(freshStrip, wantDim) {
+				t.Errorf("fresh cache note not rendered in Theme.TextDim\nstrip: %q\nwant substring: %q", freshStrip, wantDim)
+			}
+		})
+	}
+}
+
+// helmStripModel is a loaded single-release Helm list reporting status as its
+// repo-cache state.
+func helmStripModel(t *testing.T, status helmrepo.Status) Model {
+	t.Helper()
+	lister := chartStatusLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindHelmRelease: {helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3)},
+		}},
+		status: status,
+	}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	return step(t, m, m.Init()())
 }
 
 // chartStatusLister is a fakeLister that also reports repo-cache state — the

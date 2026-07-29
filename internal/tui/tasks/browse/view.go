@@ -313,22 +313,17 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	}
 	left := strings.Join(parts, "   ")
 	rightText := fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display))
+	helm := false
 	switch {
 	case m.kind == kube.KindNode:
 		rightText = m.nodeSummaryText()
 	case m.kind == kube.KindForward:
 		rightText = m.forwardSummaryText()
 	case m.kind == kube.KindHelmRelease:
-		// 18a: "from sh.helm.release.v1 secrets" — names the data source
-		// instead of the usual "<N> <kind>" count, since browsing needs no
-		// helm binary and the strip already names each status. The LATEST
-		// column has a second source with its own trustworthiness, so it
-		// gets named too whenever it's missing or stale (chartCacheNote,
-		// computed at load time — never from the clock in here).
-		rightText = "from " + string(kube.HelmReleaseSecretType) + " secrets"
-		if m.chartCacheNote != "" {
-			rightText += " · " + m.chartCacheNote
-		}
+		// 18a's right side is two data sources rather than the usual
+		// "<N> <kind>" count, and helmStripRight owns it because they aren't
+		// all one color — see its doc comment.
+		helm = true
 	case m.kind == kube.KindCustomResourceDefinition:
 		// 14b: "28 definitions · 9 API groups · sorted by group" — the
 		// generic "<N> <kind>" wording never names the group count or the
@@ -343,11 +338,66 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
 	}
+	suffix := ""
 	if m.grouped() {
-		rightText += fmt.Sprintf(" · %d namespaces", distinctNamespaces(m.rows))
+		suffix = fmt.Sprintf(" · %d namespaces", distinctNamespaces(m.rows))
 	}
-	right := labelStyle.Render(rightText)
-	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
+	inner := stripInnerWidth(width)
+	right := labelStyle.Render(rightText + suffix)
+	if helm {
+		right = helmStripRight(theme, m.chartCacheNote, suffix, inner-lipgloss.Width(left)-3)
+	}
+	return insetStripLine(padBetween(left, right, inner), width)
+}
+
+// helmStripRight renders 18a's strip right side: the data source, plus the
+// note caveating the repo cache the LATEST column is answered from.
+//
+// Both are caveats, but of different kinds. "from helm.sh/release.v1 secrets"
+// says what this list *is* — decoded release Secrets in this namespace, so
+// releases on Helm's ConfigMap or SQL storage backends aren't here, and no
+// helm binary was run to build it. True, and identical on every render. The
+// cache note is the one that varies and the one a user acts on, so it
+// outranks the source at every width: padBetween drops a right side that
+// doesn't fit, and below ~110 columns what it used to drop was the warning,
+// leaving an all-`–` LATEST column with nothing saying why.
+//
+// note is resolved at load time (chartCacheNoteFor) because it reads the
+// clock; this stays pure.
+func helmStripRight(theme tui.Theme, note chartCacheNote, suffix string, avail int) string {
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	noteStyle := dim
+	if note.warn {
+		noteStyle = lipgloss.NewStyle().Foreground(theme.Warn)
+	}
+	source := "from " + string(kube.HelmReleaseSecretType) + " secrets"
+	if note.empty() {
+		return dim.Render(source + suffix)
+	}
+	render := func(source, text, remedy string) string {
+		out := ""
+		if source != "" {
+			out = dim.Render(source + " · ")
+		}
+		if remedy != "" {
+			text += " — " + remedy
+		}
+		return out + noteStyle.Render(text) + dim.Render(suffix)
+	}
+	// Widest first, shedding the least important part each rung: the source,
+	// then the remedy, then the note's own wording. The last rung is what an
+	// 80-column strip has room for beside the health counts.
+	forms := []string{render(source, note.text, note.remedy)}
+	if note.remedy != "" {
+		forms = append(forms, render("", note.text, note.remedy))
+	}
+	forms = append(forms, render("", note.text, ""), render("", note.short, ""))
+	for _, form := range forms {
+		if lipgloss.Width(form) <= avail {
+			return form
+		}
+	}
+	return forms[len(forms)-1]
 }
 
 // distinctNamespaces counts the unique namespaces represented in rows, for
