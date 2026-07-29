@@ -12,6 +12,14 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
+	// Registers the OIDC auth provider, so a kubeconfig user with an
+	// `auth-provider: {name: oidc}` block (Rancher, Dex, Keycloak) resolves
+	// instead of failing with "no Auth Provider found for name \"oidc\"".
+	// Since Kubernetes 1.26 removed the in-tree gcp/azure providers, oidc is
+	// the only thing this package still registers — GKE, EKS and AKS all
+	// come through the exec-plugin path (execauth.go) and need nothing here.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 // PathCheck is one kubeconfig location kute looked at and why it didn't

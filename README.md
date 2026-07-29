@@ -82,6 +82,12 @@ Run `kute` with no arguments and it opens on the context you last used, in the n
 
 Everything else is a keystroke: `?` from any screen lists the keys for that screen plus the global ones.
 
+### Authentication
+
+kute authenticates exactly the way `kubectl` does, from the same kubeconfig: client certificates, bearer tokens, OIDC (Rancher, Dex, Keycloak), and exec credential plugins — `gke-gcloud-auth-plugin` for GKE, `aws eks get-token` for EKS, `kubelogin` for AAD-authenticated AKS. The plugin binary has to be on your `PATH`, as it does for `kubectl`; kute bundles no cloud SDKs.
+
+One difference worth knowing about: kute holds the terminal, so a credential plugin can never prompt you. When a plugin's own login has expired, kute says so — with the plugin's own message — and stops retrying rather than re-running it every couple of seconds. Re-authenticate in another shell (`aws sso login`, `gcloud auth login`, …) and press `r`.
+
 ## Configuration
 
 kute reads `~/.config/kute/config.yaml`. Every key is optional — with no file at all, kute runs with the defaults below.
