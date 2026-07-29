@@ -55,17 +55,21 @@ Every piece of real-cluster evidence today comes from one AKS cluster over an SS
 port-forward, qualitative, one user, one auth mode
 ([`lazy-informers.md`](lazy-informers.md) §"Observed on the real cluster").
 
-| Target | What it actually tests |
-| --- | --- |
-| EKS | `aws eks get-token` exec-credential plugin — see [`managed-clusters.md`](managed-clusters.md); the auth failure class is now handled and unit-tested against fixture plugins, so this row is down to a manual walk for discovery differences and Fargate |
-| GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape — same as above; the remaining unknowns are the metrics shape and Autopilot's admission rules |
-| kind or k3s | the smallest realistic cluster; no metrics-server by default |
-| A large cluster (5k+ pods) | table paging, informer memory, and whether lazy start holds up |
-| A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card |
-| A cluster with no metrics-server | that CPU/MEM render `–` everywhere rather than lying or crashing |
+| Target | What it actually tests | Covered by |
+| --- | --- | --- |
+| EKS | `aws eks get-token` exec-credential plugin — see [`managed-clusters.md`](managed-clusters.md); the auth failure class is now handled and unit-tested against fixture plugins, so this row is down to a manual walk for discovery differences and Fargate | manual |
+| GKE | `gke-gcloud-auth-plugin`, plus a different metrics-server shape — same as above; the remaining unknowns are the metrics shape and Autopilot's admission rules | manual |
+| kind or k3s | the smallest realistic cluster; no metrics-server by default | automated — `test/e2e`, every PR ([`e2e-plan.md`](e2e-plan.md)) |
+| A large cluster (5k+ pods) | table paging, informer memory, and whether lazy start holds up | automated — `scale_test.go` on kwok, nightly |
+| A restricted ServiceAccount | the 403 paths on *every* screen, not just `browse`'s 4b card | automated — `rbac_test.go`; **currently failing**, see §7 |
+| A cluster with no metrics-server | that CPU/MEM render `–` everywhere rather than lying or crashing | automated — `metrics_test.go` |
 
 *Acceptance:* each row walked through the everyday flows (list → detail → logs → events →
-timeline → a mutating verb) with results written down, not just "worked".
+timeline → a mutating verb) with results written down, not just "worked". The automated rows
+walk exactly that flow — `flow_test.go` is it, run against a real kind cluster — so what is
+left for them is reading the numbers, not repeating the walk. First measurements, kwok, 5,000
+pods across 50 nodes: connect to a populated frame **503 ms**, heap after the eager caches
+fill **36.4 MiB**, goto palette open **32 ms**.
 
 ## 3. Decide §17a (YAML edit mode)
 
@@ -111,8 +115,34 @@ edit on whichever side loses. Detail and citations in
 
 ## 7. Incidental, found while working
 
-Neither is an audit finding; both are wrong in the tree right now.
+None is an audit finding; all are wrong in the tree right now.
 
+- **A forbidden kind is indistinguishable from an empty one at the UI seam.** Found by
+  `test/e2e/rbac_test.go`, which fails on it today. Under an identity whose reads are all
+  Forbidden, kute renders the Pods list's empty state — *"no pods in kute-e2e · the namespace
+  exists and you can read it — there's just nothing here"* — under a green `● connected`
+  header. That is the claim CLAUDE.md forbids outright ("An empty state is a claim about the
+  cluster").
+
+  The mechanism is a gap, not a wrong decision. `Cluster.markKindFailed` records the 403, and
+  it is deliberately kept out of `KindError` (which is for an initial LIST that may yet
+  succeed) — but nothing exported reads `kindFailed`, so `browse` sees *synced, no error, zero
+  objects* and can only conclude the cluster is empty. The fix is an accessor — say
+  `KindForbidden(kind)` — surfaced through `tui.KindsError`'s existing gate, so the 4b card
+  renders where the empty state does now.
+
+  Two related facts came out of the same run, both worth deciding on rather than fixing
+  blind:
+  - kute's informers list every kind **cluster-wide** regardless of the selected namespace, so
+    a namespace-scoped identity — the ordinary shape of a developer's access on a shared
+    cluster — cannot use kute at all. Worth knowing before beta; possibly a documented
+    requirement rather than a bug.
+  - `kube/health.go`'s `onWatchError` classifies authentication errors
+    (`ConnUnauthenticated`) but not authorization ones, so a single kind's 403 flips the whole
+    connection to `ConnReconnecting` and drops the app to the 4c recovery screen. Which of
+    the two screens you get — false-empty or false-unreachable — depends on whether the
+    `/livez` ping has recovered the connection state yet, so today it is a race between two
+    wrong answers.
 - **`execpicker`'s "will run" line ellipsizes at the panel's fixed 56 cells**, so for a
   realistic pod name the trailing `-- bash` is cut off. §10a calls that line "copyable
   documentation", which it currently isn't for most pods. Wrapping it to two lines inside
