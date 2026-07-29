@@ -23,7 +23,7 @@ func TestEverydayFlow(t *testing.T) {
 	// workloads have to reach the frame, including the one that is meant to
 	// be broken.
 	a.WaitForAll(Connect, "api-", "worker-", "kute-e2e")
-	a.WaitFor("CrashLoopBackOff", Settle)
+	a.waitForWorkerUnready(t)
 
 	// --- pod detail (§5a) --------------------------------------------------
 	pod := a.selectAPIPod(t)
@@ -153,4 +153,73 @@ func firstMatch(frame, prefix string) string {
 		}
 	}
 	return ""
+}
+
+// TestCrashLoopingWorkloadSurfaces is what the worker fixture exists for
+// beyond a red row in the list. A container that exits non-zero on every
+// start produces state no fake generates for free — a termination record with
+// a real exit code, a restart count the kubelet keeps incrementing, and a
+// backoff the API server reports — and three screens are supposed to say so.
+func TestCrashLoopingWorkloadSurfaces(t *testing.T) {
+	a := Launch(t)
+	a.WaitFor("worker-", Connect)
+
+	a.waitForWorkerUnready(t)
+
+	a.filterTo(t, "worker-")
+	pod := firstMatch(a.Frame(), "worker-")
+	if pod == "" {
+		t.Fatalf("no worker- pod row:\n%s", a.Frame())
+	}
+	a.Enter()
+	a.WaitLoaded(Settle)
+
+	// §5a's termination banner: the exit code and reason from the last
+	// termination, which only exists because a real container really ran and
+	// really failed.
+	// Same reasoning as waitForWorkerUnready: the header's status word is
+	// whatever the container was doing when this screen fetched the pod, so
+	// it is not something to assert on. The termination record is — it
+	// persists across the whole backoff, and it is the part that only exists
+	// because a real container really ran and really failed.
+	a.WaitForAll(Settle,
+		pod,
+		"Last termination",
+		"exit 1",
+		"restarts",
+	)
+
+	// §16b's timeline merges the restarts and the events into one feed. The
+	// restart entry carries the same exit code, from a different source.
+	a.Press("t")
+	a.WaitLoaded(Settle)
+	a.WaitForAll(Settle, "Timeline", "Restarted", "exit 1")
+	// And the rollout rail alongside it, which is the other half of 16b.
+	a.WaitFor("ROLLOUT HISTORY", Settle)
+}
+
+// waitForWorkerUnready waits for the crash-looping fixture's row to show it is
+// not ready.
+//
+// Deliberately not a wait for the literal "CrashLoopBackOff". That word is the
+// container's *waiting* reason, so it is absent for the few seconds per cycle
+// the container is actually running and failing — and, because the list only
+// redraws when a watch event arrives, a frame captured during one of those
+// windows stays on screen until the next restart. With the backoff capped at
+// five minutes, that is far longer than any assertion here should wait. The
+// RDY column is the stable statement of the same fact: a container that exits
+// on every start never becomes ready.
+func (a *App) waitForWorkerUnready(t *testing.T) {
+	t.Helper()
+	frame, ok := a.poll(func(f string) bool {
+		for _, line := range strings.Split(f, "\n") {
+			if strings.Contains(line, "worker-") && strings.Contains(line, "0/1") {
+				return true
+			}
+		}
+		return false
+	}, Settle)
+	if !ok {
+		t.Fatalf("the worker fixture never showed as unready:\n%s", frame)
+	}
 }

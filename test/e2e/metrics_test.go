@@ -50,6 +50,11 @@ func TestNoMetricsServerRendersUnknown(t *testing.T) {
 
 	t.Run("node detail", func(t *testing.T) {
 		a.gotoKind(t, "nodes", "Nodes")
+		// gotoKind only waits for the breadcrumb, which is on screen before
+		// the rows are. Opening a row means waiting for a row: under load,
+		// ↵ on an empty list opens nothing and the assertions below then
+		// wait out their timeout against the list they never left.
+		a.WaitFor("kute-1.35", Settle)
 		a.Enter()
 		a.WaitLoaded(Settle)
 		// The allocated/allocatable bars are computed from pod *requests*,

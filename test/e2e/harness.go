@@ -22,6 +22,14 @@
 //     check goes through WaitFor, which polls the latest frame against a
 //     deadline. A bare strings.Contains on the first frame is a race by
 //     construction.
+//   - No assertions on transient state. Polling does not help when the value
+//     itself comes and goes: a crash-looping container's status is
+//     "CrashLoopBackOff" only while it waits, and the list redraws only when
+//     a watch event arrives — so a frame captured mid-restart holds a stale
+//     word for as long as the backoff, which caps at five minutes. Assert the
+//     durable statement of the same fact (the RDY column, the termination
+//     record) instead. The same applies to opening a row: wait for the row,
+//     not for the breadcrumb, or ↵ lands on a list that has not filled yet.
 //
 // No test here may call t.Parallel: Launch isolates HOME and the XDG
 // directories with t.Setenv, which is process-global.
@@ -444,6 +452,44 @@ func (a *App) WaitGone(substr string, timeout time.Duration) string {
 		a.t.Fatalf("%q was still on screen after %s; last frame:\n%s", substr, timeout, frame)
 	}
 	return frame
+}
+
+// WaitForWrapped waits for substr to appear ignoring line wrapping, panel
+// borders and column padding.
+//
+// Card bodies are hard-wrapped to the panel width, and the break lands
+// wherever the width says — mid-token as often as not. A 403's identity
+// arrives as `…:kute-` on one line and `partial" cannot…` on the next, so no
+// amount of substring matching finds "kute-partial" in the frame. This
+// removes whitespace and the box-drawing verticals from both haystack and
+// needle, which rejoins a broken token at the cost of not being able to say
+// anything about layout — so use it for *content* assertions only, and
+// ordinary WaitFor for anything positional.
+func (a *App) WaitForWrapped(substr string, timeout time.Duration) string {
+	a.t.Helper()
+	want := flattenFrame(substr)
+	frame, ok := a.poll(func(f string) bool {
+		return strings.Contains(flattenFrame(f), want)
+	}, timeout)
+	if !ok {
+		a.t.Fatalf("never saw %q (ignoring wrapping) within %s; last frame:\n%s", substr, timeout, frame)
+	}
+	return frame
+}
+
+// flattenFrame strips everything a wrap can insert: spaces, newlines and the
+// panel borders a wrapped line is sandwiched between.
+func flattenFrame(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case ' ', '\t', '\n', '\r', '│', '║', '|':
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // WaitLoaded waits until no loading state is on screen. Screens spell theirs

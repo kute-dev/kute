@@ -46,10 +46,10 @@ func TestForbiddenKindNeverRendersAsEmpty(t *testing.T) {
 	a.WaitForAll(Settle,
 		"403 Forbidden",
 		"forbidden",
-		"kute-restricted",
 		"w who-can",
 		"r retry",
 	)
+	a.WaitForWrapped(`kute-e2e:kute-restricted`, Settle)
 }
 
 // TestReadableKindsWorkUnderAPartialGrant is the other side: an identity with
@@ -86,8 +86,9 @@ func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 	a.gotoKind(t, "secrets", "Secrets")
 	a.WaitLoaded(Settle)
 
-	// 4b's card, naming the kind that was refused.
-	a.WaitForAll(Settle, "403 Forbidden", "secrets", "kute-partial")
+	// 4b's card, naming the kind that was refused and the identity refused.
+	a.WaitForAll(Settle, "403 Forbidden", "secrets")
+	a.WaitForWrapped(`kute-e2e:kute-partial`, Settle)
 
 	// The connection is not the thing that failed, and the header must not
 	// say it was. Checked over a window, because the misreport arrived
@@ -98,6 +99,91 @@ func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 	// And a readable kind still reads, after the denial rather than before
 	// it: the app is usable, minus the one kind this identity cannot see.
 	a.Esc()
+	a.gotoKind(t, "pods", "Pods")
+	a.WaitFor("api-", Settle)
+}
+
+// TestPartialGrantAcrossScreens walks the screens a partially-granted
+// identity can reach and the ones it cannot, in one session, asserting the
+// boundary holds in both directions.
+//
+// The point is the pairing. A suite that only checked the granted screens
+// would pass with 403 handling entirely absent; one that only checked the
+// refused screens would pass with the app broken for everyone. Every screen
+// here has to either show real data or say plainly that it may not — and
+// none may hang, because a permission failure settles a cache without ever
+// filling it.
+func TestPartialGrantAcrossScreens(t *testing.T) {
+	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
+	a.WaitFor("api-", Connect)
+
+	t.Run("granted screens render real data", func(t *testing.T) {
+		// Pod detail, and the log stream — pods/log is granted separately
+		// from pods, so this is its own permission.
+		pod := a.selectAPIPod(t)
+		a.Enter()
+		a.WaitLoaded(Settle)
+		a.WaitForAll(Settle, pod, "server", "sidecar")
+
+		a.Press("l")
+		a.WaitFor("KUTE-E2E-LOG-MARKER", Settle)
+		a.Esc()
+		a.WaitFor(pod, Settle)
+
+		// Events and the timeline, both granted.
+		a.Press("e")
+		a.WaitLoaded(Settle)
+		a.WaitFor("Started", Settle)
+		a.Esc()
+		a.WaitFor(pod, Settle)
+
+		a.Press("t")
+		a.WaitLoaded(Settle)
+		a.WaitFor("Timeline", Settle)
+		a.Esc()
+		a.WaitFor(pod, Settle)
+		a.Esc()
+		a.WaitFor("api-", Settle)
+	})
+
+	t.Run("nodes are granted and cluster-scoped", func(t *testing.T) {
+		a.gotoKind(t, "nodes", "Nodes")
+		a.WaitLoaded(Settle)
+		a.WaitFor("kute-1.35", Settle)
+		a.Enter()
+		a.WaitLoaded(Settle)
+		a.WaitFor("ALLOCATED / ALLOCATABLE", Settle)
+		a.Esc()
+		a.WaitFor("Nodes", Settle)
+	})
+
+	t.Run("refused kinds say so and do not hang", func(t *testing.T) {
+		// Deployments, Secrets and Ingresses are all outside the grant, and
+		// each has to land on 4b's card naming its own resource — not a
+		// spinner, and not an empty list.
+		for _, kind := range []struct{ query, resource string }{
+			{"deployments", "deployments"},
+			{"secrets", "secrets"},
+			{"ingresses", "ingresses"},
+		} {
+			a.Press("g")
+			a.Type(kind.query)
+			a.Enter()
+			a.WaitLoaded(Settle)
+			a.WaitForAll(Settle, "403 Forbidden", kind.resource)
+			// The identity goes through the wrap-tolerant matcher: the card
+			// breaks "kute-partial" across two lines at some widths and not
+			// others, purely on where the resource name pushes the wrap.
+			a.WaitForWrapped(`kute-e2e:kute-partial`, Settle)
+			if frame := a.Frame(); strings.Contains(frame, "No resources found") {
+				t.Fatalf("%s rendered as an empty cluster rather than a refusal:\n%s", kind.query, frame)
+			}
+			a.Esc()
+		}
+	})
+
+	// Still usable at the end of all that: the boundary is a boundary, not a
+	// cumulative degradation.
 	a.gotoKind(t, "pods", "Pods")
 	a.WaitFor("api-", Settle)
 }
