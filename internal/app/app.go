@@ -1193,9 +1193,18 @@ func Run() error {
 // events into the program (real cluster or --demo fake, whichever is
 // active) and saves session state on exit.
 func RunWithConfig(cfg Config) error {
+	return run(cfg)
+}
+
+// run is RunWithConfig's body with the tea.Program's options left to the
+// caller. The end-to-end harness (test/e2e) drives the program headlessly —
+// WithInput/WithOutput/WithWindowSize over pipes rather than a terminal —
+// and has to run *this* startup sequence, goroutines and all, rather than a
+// copy of it that drifts out of step with the real one.
+func run(cfg Config, opts ...tea.ProgramOption) error {
 	silenceKlog()
 	model, cluster, demoCluster := NewModel(cfg)
-	program := tea.NewProgram(model)
+	program := tea.NewProgram(model, opts...)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
