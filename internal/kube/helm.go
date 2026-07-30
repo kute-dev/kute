@@ -197,12 +197,36 @@ type helmReleaseData struct {
 	Namespace string         `json:"namespace"`
 }
 
+// maxHelmReleasePayload caps how much a single release Secret is allowed to
+// gunzip to.
+//
+// The apiserver caps a Secret's data at 1 MiB, but that bounds the
+// *compressed* bytes: gzip's ratio runs to roughly 1000:1 on repetitive
+// input, so a Secret well inside the API's limit can decompress to hundreds
+// of megabytes. Nothing asks whether helm wrote a `helm.sh/release.v1`
+// Secret before kute reads it — browsing a namespace is enough — and a TUI
+// has nowhere to report an out-of-memory kill to. So the read is bounded and
+// an over-large payload becomes an ordinary decode error, which
+// DecodeHelmReleases already knows how to skip.
+//
+// 32 MiB is ~40× the largest compressed payload the API will store, so it is
+// not a limit a real release can reach; a chart big enough to would have hit
+// helm's own storage limit first.
+const maxHelmReleasePayload = 32 << 20
+
 // DecodeHelmReleaseSecret decodes one release revision Secret. Helm stores
 // the release payload base64-encoded a *second* time (on top of the Secret
 // API's own wire-format encoding, which client-go already reverses into
 // secret.Data), then gzip-compressed, then JSON — this reverses exactly
 // that: base64 decode, gunzip, unmarshal.
 func DecodeHelmReleaseSecret(secret *corev1.Secret) (HelmRelease, error) {
+	return decodeHelmReleaseSecret(secret, maxHelmReleasePayload)
+}
+
+// decodeHelmReleaseSecret is DecodeHelmReleaseSecret with the payload cap as
+// a parameter, so a test can exercise the limit without building — or
+// decompressing — 32 MiB to do it.
+func decodeHelmReleaseSecret(secret *corev1.Secret, maxPayload int64) (HelmRelease, error) {
 	if secret.Type != HelmReleaseSecretType {
 		return HelmRelease{}, fmt.Errorf("secret %s/%s is not a %s release", secret.Namespace, secret.Name, HelmReleaseSecretType)
 	}
@@ -219,9 +243,15 @@ func DecodeHelmReleaseSecret(secret *corev1.Secret) (HelmRelease, error) {
 		return HelmRelease{}, fmt.Errorf("gunzip release: %w", err)
 	}
 	defer func() { _ = gz.Close() }()
-	jsonBytes, err := io.ReadAll(gz)
+	// One byte past the cap, so hitting it is distinguishable from a payload
+	// that merely ends there — silently truncating would hand json.Unmarshal
+	// a cut-off document and report it as malformed JSON.
+	jsonBytes, err := io.ReadAll(io.LimitReader(gz, maxPayload+1))
 	if err != nil {
 		return HelmRelease{}, fmt.Errorf("read release: %w", err)
+	}
+	if int64(len(jsonBytes)) > maxPayload {
+		return HelmRelease{}, fmt.Errorf("release %s/%s decompresses past the %d-byte limit", secret.Namespace, secret.Name, maxPayload)
 	}
 	var data helmReleaseData
 	if err := json.Unmarshal(jsonBytes, &data); err != nil {
@@ -259,13 +289,19 @@ func DecodeHelmReleaseSecret(secret *corev1.Secret) (HelmRelease, error) {
 // best-effort tolerance projectForward/podsByName already apply to a
 // partially-unexpected object list).
 func DecodeHelmReleases(objs []runtime.Object) []HelmRelease {
+	return decodeHelmReleases(objs, maxHelmReleasePayload)
+}
+
+// decodeHelmReleases is DecodeHelmReleases with the per-Secret payload cap
+// as a parameter — see decodeHelmReleaseSecret.
+func decodeHelmReleases(objs []runtime.Object, maxPayload int64) []HelmRelease {
 	out := make([]HelmRelease, 0, len(objs))
 	for _, obj := range objs {
 		secret, ok := obj.(*corev1.Secret)
 		if !ok || secret.Type != HelmReleaseSecretType {
 			continue
 		}
-		r, err := DecodeHelmReleaseSecret(secret)
+		r, err := decodeHelmReleaseSecret(secret, maxPayload)
 		if err != nil {
 			continue
 		}

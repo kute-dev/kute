@@ -1,6 +1,10 @@
 package kube
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -153,5 +157,104 @@ func TestHelmReleaseSecretsForNarrowsBeforeDecode(t *testing.T) {
 	history := HelmReleaseHistory(DecodeHelmReleases(got), "production", "postgresql")
 	if len(history) != 3 || history[0].Revision != 4 {
 		t.Fatalf("history after filtering = %+v, want 3 revisions newest-first", history)
+	}
+}
+
+// zipBombSecret is a release Secret whose payload is small on the wire and
+// huge once gunzipped: `size` bytes of a repeated character, which gzip
+// stores in a few hundred.
+//
+// The payload is a *valid* release document, not noise. A bomb that also
+// happens to be malformed JSON would be rejected by the unmarshal step even
+// with no cap in place, so the test asserting the cap would pass whether or
+// not the cap exists — the exact thing this file's other tests exist to
+// avoid.
+func zipBombSecret(t *testing.T, size int) *corev1.Secret {
+	t.Helper()
+	var gzBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzBuf)
+	write := func(b []byte) {
+		if _, err := gz.Write(b); err != nil {
+			t.Fatalf("building the bomb: %v", err)
+		}
+	}
+	write([]byte(`{"name":"bomb","namespace":"production","version":1,"manifest":"`))
+	chunk := bytes.Repeat([]byte("A"), 64<<10)
+	for written := 0; written < size; written += len(chunk) {
+		write(chunk[:min(len(chunk), size-written)])
+	}
+	write([]byte(`"}`))
+	if err := gz.Close(); err != nil {
+		t.Fatalf("closing the bomb: %v", err)
+	}
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "sh.helm.release.v1.bomb.v1", Namespace: "production"},
+		Type:       HelmReleaseSecretType,
+		Data:       map[string][]byte{"release": []byte(base64.StdEncoding.EncodeToString(gzBuf.Bytes()))},
+	}
+}
+
+// TestDecodeHelmReleaseSecretBoundsTheDecompressedPayload covers the one
+// place kute's memory use is decided by data it didn't produce.
+//
+// The apiserver caps a Secret at 1 MiB of *compressed* data, and gzip runs
+// to ~1000:1 on repetitive input, so a Secret comfortably inside that limit
+// can gunzip to hundreds of megabytes. Nothing checks that helm wrote a
+// `helm.sh/release.v1` Secret before kute decodes it — browsing the
+// namespace is enough — so an unbounded read here is an out-of-memory kill
+// triggered by an object anyone with write access to a namespace can create.
+func TestDecodeHelmReleaseSecretBoundsTheDecompressedPayload(t *testing.T) {
+	t.Parallel()
+	// 4 MiB of payload against a 1 MiB cap: the ratio that matters, at a
+	// size the test can afford. The real cap is maxHelmReleasePayload.
+	secret := zipBombSecret(t, 4<<20)
+	if wire := len(secret.Data["release"]); wire > 64<<10 {
+		t.Fatalf("the bomb is %d bytes on the wire; it is supposed to be small", wire)
+	}
+
+	if _, err := decodeHelmReleaseSecret(secret, 1<<20); err == nil {
+		t.Fatal("a 4 MiB payload decoded against a 1 MiB cap; the read is unbounded")
+	} else if !strings.Contains(err.Error(), "limit") {
+		t.Errorf("error should name the limit, got: %v", err)
+	}
+
+	// The list read has to survive one, not just refuse it: 18a renders
+	// every release in the namespace, and one oversized Secret must not cost
+	// the user the rest of the screen.
+	good := EncodeHelmReleaseSecret(HelmRelease{Name: "postgresql", Namespace: "production", Revision: 1})
+	got := decodeHelmReleases([]runtime.Object{secret, good}, 1<<20)
+	if len(got) != 1 || got[0].Name != "postgresql" {
+		t.Fatalf("decodeHelmReleases returned %+v, want just the good release", got)
+	}
+}
+
+// TestDecodeHelmReleaseSecretAcceptsAPayloadUpToTheLimit is the other half:
+// the cap must not be a truncation. A payload that ends exactly at the limit
+// is legitimate and has to decode, not come back as malformed JSON.
+func TestDecodeHelmReleaseSecretAcceptsAPayloadUpToTheLimit(t *testing.T) {
+	t.Parallel()
+	secret := EncodeHelmReleaseSecret(HelmRelease{
+		Name: "postgresql", Namespace: "production", Revision: 2,
+		Manifest: strings.Repeat("m", 32<<10),
+	})
+	raw, err := base64.StdEncoding.DecodeString(string(secret.Data["release"]))
+	if err != nil {
+		t.Fatalf("decoding the fixture: %v", err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("gunzipping the fixture: %v", err)
+	}
+	payload, err := io.ReadAll(gz)
+	if err != nil {
+		t.Fatalf("reading the fixture: %v", err)
+	}
+
+	got, err := decodeHelmReleaseSecret(secret, int64(len(payload)))
+	if err != nil {
+		t.Fatalf("a payload exactly at the cap failed to decode: %v", err)
+	}
+	if got.Name != "postgresql" || got.Revision != 2 {
+		t.Fatalf("decoded %+v, want the fixture back", got)
 	}
 }
