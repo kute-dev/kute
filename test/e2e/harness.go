@@ -53,6 +53,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/app"
 	"github.com/kute-dev/kute/internal/testutil/goldentest"
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 )
 
 const (
@@ -629,7 +630,7 @@ func encodeKey(key string) (string, bool) {
 func isolateEnv(t *testing.T, o options) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
