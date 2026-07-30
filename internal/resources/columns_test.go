@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,40 +27,88 @@ func TestStatusHealthTallies(t *testing.T) {
 	}
 }
 
-func TestDefaultRegistryEveryDescriptorHasHealthAndDescribe(t *testing.T) {
+// TestDefaultRegistryEveryDescriptorIsComplete is what makes "resource kinds
+// are registry entries, not bespoke screens" an enforced invariant rather
+// than a stated one: registering a kind with no columns or no projection
+// fails here instead of rendering a blank list.
+//
+// It ranges over Kinds() deliberately. The hardcoded list this replaced had
+// drifted to 14 of the 17 registered kinds, silently skipping the three most
+// recently added ones — the failure mode a hardcoded list always has.
+//
+// The assertions are the fields Register does *not* backfill. Health and
+// HealthLabel are absent for that reason: registry.go fills both in when
+// nil, so a `d.Health == nil` check can never fail for anything registered
+// through the normal path.
+func TestDefaultRegistryEveryDescriptorIsComplete(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
-	for _, kind := range []kube.ResourceKind{
-		kube.KindPod, kube.KindDeployment, kube.KindDaemonSet, kube.KindStatefulSet,
-		kube.KindReplicaSet, kube.KindJob, kube.KindCronJob, kube.KindService,
-		kube.KindConfigMap, kube.KindSecret, kube.KindPersistentVolumeClaim,
-		kube.KindNode, kube.KindNamespace, kube.KindEvent,
-	} {
+	kinds := reg.Kinds()
+	if len(kinds) == 0 {
+		t.Fatal("DefaultRegistry() registered no kinds")
+	}
+	for _, kind := range kinds {
 		d, ok := reg.Descriptor(kind)
 		if !ok {
-			t.Fatalf("missing descriptor for %s", kind)
+			t.Fatalf("Kinds() returned %s but Descriptor() doesn't know it", kind)
 		}
-		if d.Health == nil {
-			t.Errorf("%s: Health is nil", kind)
+		if d.Kind != kind {
+			t.Errorf("%s: registered under the wrong key (Descriptor.Kind = %s)", kind, d.Kind)
 		}
 		if d.Describe == "" {
 			t.Errorf("%s: Describe is empty", kind)
 		}
+		if d.Display == "" {
+			t.Errorf("%s: Display is empty", kind)
+		}
+		if len(d.Columns) == 0 {
+			t.Errorf("%s: Columns is empty", kind)
+		}
+		if d.Project == nil {
+			t.Errorf("%s: Project is nil", kind)
+		}
+		if d.FlexColumn != "" && !slices.Contains(d.Columns, d.FlexColumn) {
+			t.Errorf("%s: FlexColumn %q names no column in %v", kind, d.FlexColumn, d.Columns)
+		}
 	}
 }
 
+// TestDefaultRegistryClusterScopedKinds partitions every registered kind by
+// scope rather than spot-checking a few, so adding a kind can't slip through
+// unclassified: a kind missing from want fails outright.
 func TestDefaultRegistryClusterScopedKinds(t *testing.T) {
 	t.Parallel()
-	reg := DefaultRegistry()
-	for _, kind := range []kube.ResourceKind{kube.KindNode, kube.KindNamespace} {
-		d, _ := reg.Descriptor(kind)
-		if !d.ClusterScoped {
-			t.Errorf("%s should be ClusterScoped", kind)
-		}
+	want := map[kube.ResourceKind]bool{
+		kube.KindPod:                      false,
+		kube.KindDeployment:               false,
+		kube.KindDaemonSet:                false,
+		kube.KindStatefulSet:              false,
+		kube.KindReplicaSet:               false,
+		kube.KindJob:                      false,
+		kube.KindCronJob:                  false,
+		kube.KindService:                  false,
+		kube.KindIngress:                  false,
+		kube.KindConfigMap:                false,
+		kube.KindSecret:                   false,
+		kube.KindPersistentVolumeClaim:    false,
+		kube.KindEvent:                    false,
+		kube.KindHelmRelease:              false,
+		kube.KindNode:                     true,
+		kube.KindNamespace:                true,
+		kube.KindForward:                  true,
+		kube.KindCustomResourceDefinition: true,
 	}
-	d, _ := reg.Descriptor(kube.KindPod)
-	if d.ClusterScoped {
-		t.Errorf("Pod should not be ClusterScoped")
+	reg := DefaultRegistry()
+	for _, kind := range reg.Kinds() {
+		wantScoped, known := want[kind]
+		if !known {
+			t.Errorf("%s is registered but this test doesn't say whether it's cluster-scoped", kind)
+			continue
+		}
+		d, _ := reg.Descriptor(kind)
+		if d.ClusterScoped != wantScoped {
+			t.Errorf("%s: ClusterScoped = %v, want %v", kind, d.ClusterScoped, wantScoped)
+		}
 	}
 }
 
