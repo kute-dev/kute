@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 	"github.com/kute-dev/kute/internal/tui/components/palette"
 )
 
@@ -91,7 +92,7 @@ func TestContextItemsSetsRightTone(t *testing.T) {
 // padBetweenStyled's hint-fit budget silently drops the whole right hint.
 func TestKubeconfigPathAbbreviatesHome(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("KUBECONFIG", filepath.Join(home, "dev", "proj", ".kube", "config"))
 
 	got := kubeconfigPath()

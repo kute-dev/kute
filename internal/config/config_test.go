@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 )
 
 func TestLoadMissingFileYieldsNothingProd(t *testing.T) {
@@ -102,7 +104,7 @@ func TestIsProdNameHeuristicNotApplied(t *testing.T) {
 // testing.T.Setenv's restriction, matching context_test.go's
 // writeContextTestKubeconfig).
 func TestSetProdPersistsAndRoundTrips(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 
 	c := Load()
 	if c.IsProd("prod-eks") {
@@ -135,7 +137,7 @@ func TestSetProdPersistsAndRoundTrips(t *testing.T) {
 // (and doesn't error) when the requested status already holds — toggling
 // off a context that's already off, or on one already on.
 func TestSetProdNoopWhenStatusUnchanged(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 
 	c := Config{ProdContexts: []string{"prod-eks"}}
 	if err := c.SetProd("dev-kind", false); err != nil {

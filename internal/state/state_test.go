@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 )
 
 func TestLoadMissingFileReturnsZeroValue(t *testing.T) {
@@ -175,7 +177,7 @@ func TestPathHonorsXDGStateHome(t *testing.T) {
 func TestPathFallsBackToHomeLocalState(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	got := Path()
 	want := filepath.Join(home, ".local", "state", "kute", "state.json")
 	if got != want {

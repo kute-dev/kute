@@ -11,6 +11,7 @@ import (
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -117,7 +118,7 @@ func TestRootModelCOpensContextPaletteWithProdTagAndCurrent(t *testing.T) {
 // re-probe/refreshContextPalette, which resets Sel to the alt-tab target.
 func TestRootModelContextCtrlPTogglesProdAndPersists(t *testing.T) {
 	writeContextTestKubeconfig(t)
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 
 	sess := &tui.Session{
 		Theme:    tui.Dark(),
