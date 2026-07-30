@@ -593,24 +593,32 @@ func highlightQuoted(text string, base, highlight lipgloss.Style) string {
 // there's deliberately no auto-retry, only the manual 'r'.
 func (m Model) permissionDeniedBody(width, height int) string {
 	theme := m.Theme()
-	title := lipgloss.NewStyle().Foreground(theme.Bad).Bold(true)
-	meta := lipgloss.NewStyle().Foreground(theme.TextFaint)
-	body := lipgloss.NewStyle().Foreground(theme.TextSecondary)
-	entity := lipgloss.NewStyle().Foreground(theme.Warn)
-	key := lipgloss.NewStyle().Foreground(theme.Accent)
-	label := lipgloss.NewStyle().Foreground(theme.TextSecondary)
-	note := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	// Every span inside the card carries the card's own background: a
+	// foreground-only style ends its run with a full SGR reset, which drops
+	// the background for the rest of the line and leaves the card patchy.
+	// The card's fill is only invisible-when-wrong while it matches the page.
+	onCard := func(fg color.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(fg).Background(theme.ErrCardBg)
+	}
+	title := onCard(theme.Bad).Bold(true)
+	meta := onCard(theme.TextFaint)
+	body := onCard(theme.TextSecondary)
+	entity := onCard(theme.Warn)
+	key := onCard(theme.Accent)
+	label := onCard(theme.TextSecondary)
+	note := onCard(theme.TextFaint)
+	footerNote := lipgloss.NewStyle().Foreground(theme.TextFaint)
 
 	recover := func(k, l, n string) string {
-		line := key.Render(k) + " " + label.Render(l)
+		line := key.Render(k) + label.Render(" "+l)
 		if n != "" {
-			line += " " + note.Render("— "+n)
+			line += note.Render(" — "+n)
 		}
 		return line
 	}
 
 	lines := []string{
-		title.Render("403 Forbidden") + "  " + meta.Render(lowerDisplay(m.desc.Display)+" · list"),
+		title.Render("403 Forbidden") + meta.Render("  "+lowerDisplay(m.desc.Display)+" · list"),
 		highlightQuoted(m.feedback, body, entity),
 		"",
 		recover("g", "jump to another kind", "everything else still works"),
@@ -627,7 +635,7 @@ func (m Model) permissionDeniedBody(width, height int) string {
 		Padding(1, 2).
 		Width(min(60, max(width-8, 20)))
 	card := components.Card(strings.Join(lines, "\n"), cardStyle, width, height-2)
-	footer := note.Render("last successful list: never · RBAC errors are not retried automatically")
+	footer := footerNote.Render("last successful list: never · RBAC errors are not retried automatically")
 	return card + "\n" + components.Pad(strings.Repeat(" ", max((width-lipgloss.Width(footer))/2, 0))+footer, width)
 }
 

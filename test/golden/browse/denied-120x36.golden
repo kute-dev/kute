@@ -8,19 +8,19 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                             ╭────────────────────────────────────────────────────────────╮                             
-                             │                                                            │                             
-                             │  403 Forbidden  secrets · list                             │                             
-                             │  secrets is forbidden: User "dev-readonly" cannot list     │                             
-                             │  resource "secrets" in namespace "nva-stage"               │                             
-                             │                                                            │                             
-                             │  g jump to another kind — everything else still works      │                             
-                             │  c switch context — another context may grant access       │                             
-                             │  w who-can — see who does have access                      │                             
-                             │  y copy error — paste to your cluster admin                │                             
-                             │  r retry                                                   │                             
-                             │                                                            │                             
-                             ╰────────────────────────────────────────────────────────────╯                             
+                                                                                                                        
+                                                                                                                        
+                                403 Forbidden  secrets · list                                                           
+                                secrets is forbidden: User "dev-readonly" cannot list                                   
+                                resource "secrets" in namespace "nva-stage"                                             
+                                                                                                                        
+                                g jump to another kind — everything else still works                                    
+                                c switch context — another context may grant access                                     
+                                w who-can — see who does have access                                                    
+                                y copy error — paste to your cluster admin                                              
+                                r retry                                                                                 
+                                                                                                                        
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
