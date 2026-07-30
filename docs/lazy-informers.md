@@ -503,3 +503,17 @@ scripts/measure-cluster-payload.sh --context X  # a specific one
 ```
 
 Read-only. Needs `kubectl` and `python3`.
+
+## Keeping the numbers true
+
+The figures above were measured once, against one cluster, and a document
+cannot fail a build. `internal/kube/payload_budget_test.go` restates the three
+that carry the design — connect's payload (§3), the per-namespace Helm scope
+(§5.5), and the managedFields strip (§4) — as budgets over a fake clientset's
+recorded actions, priced in bytes against fixtures built with the shapes above
+(schema-heavy CRDs, manifest-heavy release Secrets, managedFields-heavy pods).
+
+It complements rather than replaces `lazy_test.go`/`helm_secrets_test.go`,
+which assert *which* resource was listed, with what selector and in what
+scope. A read can keep all three and still get much more expensive; this is
+the axis that catches that.
