@@ -1,41 +1,69 @@
 package update
 
 import (
-	"path/filepath"
+	"runtime"
 	"strings"
 )
 
-// InstallInfo is 28b's "installed via" box: which of kute's two real
-// distribution channels (README.md's Install section) produced the running
-// binary, and the exact command to re-run to upgrade.
+// InstallInfo is 28b's "installed via" box: which of kute's distribution
+// channels (README.md's Install section) produced the running binary, and the
+// exact command to re-run to upgrade.
 type InstallInfo struct {
-	Manager string // "homebrew" | "curl"
+	Manager string // "homebrew" | "scoop" | "curl" | "powershell"
 	Command string
 }
 
 const (
-	homebrewCommand = "brew install kute-dev/tap/kute"
-	curlCommand     = "curl -fsSL https://kute.dev/install.sh | sh"
+	homebrewCommand   = "brew install kute-dev/tap/kute"
+	scoopCommand      = "scoop update kute"
+	curlCommand       = "curl -fsSL https://kute.dev/install.sh | sh"
+	powershellCommand = "irm https://kute.dev/install.ps1 | iex"
 )
 
 // DetectInstall classifies execPath (typically os.Executable(), already
 // resolved through filepath.EvalSymlinks so a Homebrew-managed symlink into
 // /Cellar/ or /opt/homebrew/ is recognized even when the resolved path
-// itself is what's inspected here, not a symlink) into one of kute's two
-// real install channels. Anything that isn't clearly Homebrew is attributed
-// to the install script — the only other channel README.md documents, and
-// re-running it is also the correct upgrade path (there's no separate
-// "plain binary, no command" case to fall back to).
+// itself is what's inspected here, not a symlink) into one of kute's real
+// install channels.
 func DetectInstall(execPath string) InstallInfo {
-	if isHomebrewPath(execPath) {
+	return detectInstall(execPath, runtime.GOOS)
+}
+
+// detectInstall takes goos rather than reading runtime.GOOS so the Windows
+// branches stay table-testable from any host. Anything a package manager
+// doesn't claim is attributed to the install script for the platform —
+// re-running it is also the correct upgrade path there, so there's no
+// separate "plain binary, no command" case to fall back to.
+func detectInstall(execPath, goos string) InstallInfo {
+	switch {
+	case isHomebrewPath(execPath):
 		return InstallInfo{Manager: "homebrew", Command: homebrewCommand}
+	case isScoopPath(execPath):
+		return InstallInfo{Manager: "scoop", Command: scoopCommand}
+	case goos == "windows":
+		return InstallInfo{Manager: "powershell", Command: powershellCommand}
+	default:
+		return InstallInfo{Manager: "curl", Command: curlCommand}
 	}
-	return InstallInfo{Manager: "curl", Command: curlCommand}
 }
 
 func isHomebrewPath(execPath string) bool {
-	p := filepath.ToSlash(execPath)
+	p := slashPath(execPath)
 	return strings.Contains(p, "/Cellar/") ||
 		strings.Contains(p, "/homebrew/") ||
 		strings.Contains(p, "linuxbrew")
+}
+
+// isScoopPath matches both scoop layouts — the per-user default under
+// %USERPROFILE%\scoop and a `scoop install -g` under %ProgramData%\scoop —
+// since both put the shim's target at <root>/apps/<name>/<version>/.
+func isScoopPath(execPath string) bool {
+	return strings.Contains(slashPath(execPath), "/scoop/apps/")
+}
+
+// slashPath normalizes separators without filepath.ToSlash, which is a no-op
+// on Unix — so a Windows path handed to it from a Linux test (or from a
+// WSL-visible install) keeps its backslashes and matches nothing.
+func slashPath(execPath string) string {
+	return strings.ReplaceAll(execPath, `\`, "/")
 }
