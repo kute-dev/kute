@@ -60,7 +60,7 @@ func TestReadableKindsWorkUnderAPartialGrant(t *testing.T) {
 	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 
 	a.WaitForAll(Connect, "api-", "worker-", "kute-e2e")
-	a.WaitFor("CrashLoopBackOff", Settle)
+	a.waitForWorkerUnready(t)
 
 	// ConfigMaps are granted, and are not eager — so this is a lazily
 	// started informer filling under a restricted identity.

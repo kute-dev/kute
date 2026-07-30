@@ -79,12 +79,18 @@ apply_fixtures() {
 
   # worker is *meant* to crash, so there is no rollout to wait on — wait for
   # the crash itself instead, which is what the status-derivation tests read.
-  log "waiting for worker to reach CrashLoopBackOff"
-  local deadline=$((SECONDS + 180))
-  until kc -n "$NAMESPACE" get pods -l app=worker \
-    -o jsonpath='{.items[*].status.containerStatuses[*].state.waiting.reason}' 2>/dev/null |
-    grep -q CrashLoopBackOff; do
-    [[ $SECONDS -lt $deadline ]] || die "worker never reached CrashLoopBackOff"
+  #
+  # Gate on the restart count, not on state.waiting.reason=CrashLoopBackOff.
+  # The waiting reason is transient in the same way test/e2e/harness.go warns
+  # about: a busy runner can leave the container reported as Terminated for the
+  # whole backoff, so a poll for the word misses it on every tick while the pod
+  # is demonstrably restarting. The count only ever goes up.
+  log "waiting for worker to start restarting"
+  local deadline=$((SECONDS + 180)) restarts
+  until restarts="$(kc -n "$NAMESPACE" get pods -l app=worker \
+    -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' 2>/dev/null)"
+    [[ "${restarts:-0}" -ge 2 ]]; do
+    [[ $SECONDS -lt $deadline ]] || die "worker never restarted (count=${restarts:-none})"
     sleep 3
   done
 }
