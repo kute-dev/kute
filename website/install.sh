@@ -27,6 +27,16 @@ main() {
 	case "$(uname -s)" in
 		Linux) os="linux" ;;
 		Darwin) os="darwin" ;;
+		# Git Bash, MSYS2 and Cygwin are where a Windows user lands after
+		# copying the curl one-liner off the website. There is a Windows
+		# build; it just isn't installed from here.
+		MINGW*|MSYS*|CYGWIN*)
+			fail "Windows is not installed from this script. Use PowerShell:
+    irm https://kute.dev/install.ps1 | iex
+  or Scoop:
+    scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket
+    scoop install kute"
+			;;
 		*) fail "unsupported OS: $(uname -s)" ;;
 	esac
 
