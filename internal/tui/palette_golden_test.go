@@ -12,6 +12,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/testutil/goldentest"
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -86,16 +87,20 @@ func goldenNamespaceModel(t *testing.T, width, height int) tui.Model {
 	return updated.(tui.Model)
 }
 
-// goldenContextKubeconfigPath writes the fixture kubeconfig to a fixed path
-// rather than context_test.go's own t.TempDir()-based helper — t.TempDir()
-// embeds the running test's name, and the 7a palette's right hint renders
-// that path verbatim (kubeconfigPath() in context.go), so a name-derived
-// path would make the golden differ between TestGenerateGoldenPaletteFixtures
-// and TestGoldenPaletteFixtures even though nothing else about the render
-// changed.
+// goldenContextKubeconfigPath writes the fixture kubeconfig to ~/.kube/config
+// under a redirected home, so the only part of it the 7a palette's right hint
+// renders (kubeconfigPath() in context.go abbreviates a path under $HOME to
+// `~/…`) is the fixed tail. The path below the home dir is what has to be
+// stable, not the home dir itself: t.TempDir() embeds the running test's name,
+// which would make the golden differ between TestGenerateGoldenPaletteFixtures
+// and TestGoldenPaletteFixtures, and an absolute temp path differs per
+// platform (`/tmp/…` vs `C:\Users\RUNNER~1\…`), which broke this fixture on
+// Windows.
 func goldenContextKubeconfigPath(t *testing.T) string {
 	t.Helper()
-	dir := filepath.Join(os.TempDir(), "kute-golden-context-kubeconfig")
+	home := t.TempDir()
+	testenv.SetHome(t, home)
+	dir := filepath.Join(home, ".kube")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}

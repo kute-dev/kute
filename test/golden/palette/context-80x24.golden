@@ -1,7 +1,7 @@
 browse                                                                          
                                                                                 
             ╭─────────────────────────────────────────────────────╮             
-            │ ctx › type to filter contexts  /tmp/kute-golden-co… │             
+            │ ctx › type to filter contexts  ~/.kube/config · 3 … │             
             │─────────────────────────────────────────────────────│             
             │ CONTEXT             NAMESPACE       STATUS          │             
             │─────────────────────────────────────────────────────│             
