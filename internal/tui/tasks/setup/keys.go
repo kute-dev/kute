@@ -1,6 +1,8 @@
 package setup
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -57,9 +59,18 @@ func (m *Model) startEdit() {
 	m.pathInput.SetStyles(tui.TextInputStyles(m.Theme()))
 	m.pathInput.Prompt = ""
 	m.pathInput.SetValue(m.kubeconfigPath)
+	m.syncPathInputWidth()
 	m.pathInput.CursorEnd()
 	m.pathInput.Focus()
 	m.retryErr = nil
+}
+
+// syncPathInputWidth gives the buffer the same text column editLines renders
+// it into (blockWidth, less the two-space indent), so a value longer than the
+// block — which is what a pasted path usually is — scrolls horizontally with
+// the cursor in view instead of being truncated at the frame's edge.
+func (m *Model) syncPathInputWidth() {
+	m.pathInput.SetWidth(max(blockWidth(m.width)-2, 8))
 }
 
 // doRetry is 'r”s plain retry (path=="") and the edit input's submit
@@ -87,7 +98,10 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.editing = false
 		m.pathInput.Blur()
-		return m.doRetry(m.pathInput.Value())
+		// Trimmed because a pasted path arrives with whatever whitespace the
+		// source had around it (textinput collapses its newlines to spaces),
+		// and " /path/to/config " is not a path.
+		return m.doRetry(strings.TrimSpace(m.pathInput.Value()))
 	default:
 		var cmd tea.Cmd
 		m.pathInput, cmd = m.pathInput.Update(msg)

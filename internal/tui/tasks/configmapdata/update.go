@@ -15,8 +15,8 @@ import (
 )
 
 // focusedInput returns whichever of the add row's two buffers currently has
-// focus, per a.onValue — shared by the tea.PasteMsg router and
-// updateAddKey's own default case.
+// focus, per a.onValue — shared by pasteTarget and updateAddKey's own default
+// case.
 func (a *addKeyState) focusedInput() *textinput.Model {
 	if a.onValue {
 		return &a.valueInput
@@ -24,7 +24,26 @@ func (a *addKeyState) focusedInput() *textinput.Model {
 	return &a.keyInput
 }
 
+// pasteTarget is whichever add/edit buffer is open, for tui.RoutePaste. The
+// 'e' multi-line editor takes the textarea variant, so a pasted multi-line
+// value keeps its line breaks instead of being flattened the way a
+// single-line field has to flatten them.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	switch {
+	case m.adding != nil:
+		return tui.PasteInto(m.adding.focusedInput())
+	case m.editing != nil:
+		return tui.PasteInto(&m.editing.valueInput)
+	case m.multiline != nil:
+		return tui.PasteIntoArea(&m.multiline.textarea)
+	}
+	return nil
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -52,20 +71,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
 		return m, m.handleResult(msg)
-	case tea.PasteMsg:
-		// textinput/textarea.Update already handle tea.PasteMsg internally
-		// (both this bracketed-paste path and their own ctrl+v OS-clipboard
-		// read), so this case only needs to route to the right buffer.
-		switch {
-		case m.adding != nil:
-			input := m.adding.focusedInput()
-			*input, _ = input.Update(msg)
-		case m.editing != nil:
-			m.editing.valueInput, _ = m.editing.valueInput.Update(msg)
-		case m.multiline != nil:
-			m.multiline.textarea, _ = m.multiline.textarea.Update(msg)
-		}
-		return m, nil
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}

@@ -14,7 +14,25 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
+// pasteTarget is the '/' pods-filter buffer while it's open. Node
+// detail's other confirms (cordon/drain) are y/N cards with no text field, so
+// they have nothing to paste into. The filter re-applies inside the closure so
+// a pasted query narrows the pods table as a typed one does.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if !m.filterActive {
+		return nil
+	}
+	insert := tui.PasteInto(&m.filterInput)
+	return func(s string) {
+		insert(s)
+		m.recomputeFiltered()
+	}
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)

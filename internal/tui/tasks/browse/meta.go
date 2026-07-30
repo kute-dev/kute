@@ -450,6 +450,27 @@ func metaKeyExists(t *metaTarget, isAnnotation bool, key string) bool {
 // every printable character must reach the buffer, never a shortcut);
 // everything else here is navigation mode, which never accepts typed text at
 // all, so its single-letter shortcuts (y, n) can never shadow a value.
+// metaPasteTarget mirrors updateMetaKey's own three-way split: the add row's
+// focused buffer while adding, the selected row's value buffer while editing,
+// and nothing in navigation mode — which never accepts typed text either.
+func (m *Model) metaPasteTarget() tui.PasteTarget {
+	t := m.pendingMeta
+	switch {
+	case t.adding != metaAddNone:
+		if t.addOnValue {
+			return tui.PasteInto(&t.addValueInput)
+		}
+		return tui.PasteInto(&t.addKeyInput)
+	case t.editing:
+		r := t.selectedRow()
+		if r == nil {
+			return nil
+		}
+		return tui.PasteInto(&r.input)
+	}
+	return nil
+}
+
 func (m *Model) updateMetaKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	t := m.pendingMeta
 	if t.adding != metaAddNone {

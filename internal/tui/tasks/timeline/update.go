@@ -15,7 +15,29 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
+// pasteTarget is the '/' filter buffer while it's open, or 16b's
+// type-the-name confirm buffer while a PROD-tier confirmation is up (the same
+// gate updateConfirmKey routes typed keys through). The filter re-applies
+// inside the closure so a pasted query narrows the timeline as a typed one
+// does.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if m.actionsCtl.Tier() == actions.TierModal {
+		return m.actionsCtl.PasteTarget()
+	}
+	if !m.filterActive {
+		return nil
+	}
+	insert := tui.PasteInto(&m.filterInput)
+	return func(s string) {
+		insert(s)
+		m.recomputeVisible()
+	}
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)

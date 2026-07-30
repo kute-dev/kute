@@ -280,6 +280,49 @@ func TestEditKubeconfigPathFlow(t *testing.T) {
 	}
 }
 
+// TestPasteIntoKubeconfigPath pins the two ways a paste reaches the path
+// buffer: the terminal's own bracketed paste (tea.PasteMsg, not key presses)
+// and the ctrl+v chord, both routed by tui.RoutePaste. Enter trims the
+// whitespace a pasted path carries (textinput collapses its newlines to
+// spaces), since " /path " is not a path.
+func TestPasteIntoKubeconfigPath(t *testing.T) {
+	var gotPath string
+	m := New(Config{
+		State:     NoConfig,
+		Reconnect: func(p string) tea.Cmd { gotPath = p; return nil },
+	})
+	m = step(t, m, tea.KeyPressMsg{Text: "k"})
+
+	m = step(t, m, tea.PasteMsg{Content: "/pasted/kube/config\n"})
+	if got := m.pathInput.Value(); got != "/pasted/kube/config " {
+		t.Fatalf("pathInput after bracketed paste = %q, want %q", got, "/pasted/kube/config ")
+	}
+
+	// ctrl+v answers with the clipboard read, whose reply comes back as the
+	// same tea.PasteMsg the bracketed path delivers.
+	m2 := New(Config{State: NoConfig})
+	m2 = step(t, m2, tea.KeyPressMsg{Text: "k"})
+	_, cmd := m2.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'v'})
+	if cmd == nil {
+		t.Fatal("ctrl+v while editing returned no Cmd, want the clipboard read")
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if gotPath != "/pasted/kube/config" {
+		t.Fatalf("Reconnect path = %q, want the trimmed %q", gotPath, "/pasted/kube/config")
+	}
+}
+
+// TestPasteOutsideEditIsIgnored: a stray paste with no buffer open must not
+// panic or leak into the path, and must leave the screen alone.
+func TestPasteOutsideEditIsIgnored(t *testing.T) {
+	m := New(Config{State: NoConfig, KubeconfigPath: "/x"})
+	m = step(t, m, tea.PasteMsg{Content: "/junk"})
+	if m.editing || m.pathInput.Value() != "" {
+		t.Fatalf("editing=%v pathInput=%q after a paste with no buffer open, want both zero", m.editing, m.pathInput.Value())
+	}
+}
+
 func TestEditEscCancels(t *testing.T) {
 	m := New(Config{State: NoConfig, KubeconfigPath: "/x"})
 	m = step(t, m, tea.KeyPressMsg{Text: "k"})

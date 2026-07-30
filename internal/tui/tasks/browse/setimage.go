@@ -158,6 +158,22 @@ func (m *Model) selectSetImageContainer(idx int) {
 	t.historyIdx = matchHistoryIndex(t)
 }
 
+// setImagePasteTarget is the image/tag buffer — the field most likely to be
+// filled from the clipboard, since a digest or a CI-produced tag is not
+// something anyone retypes. Re-matches the history rail after insertion,
+// exactly as the typed path does.
+func (m *Model) setImagePasteTarget() tui.PasteTarget {
+	t := m.pendingSetImage
+	insert := tui.PasteInto(&t.input)
+	return func(s string) {
+		before := t.input.Value()
+		insert(s)
+		if t.input.Value() != before {
+			t.historyIdx = matchHistoryIndex(t)
+		}
+	}
+}
+
 // updateSetImageKey routes keys while pendingSetImage's panel is showing.
 func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	t := m.pendingSetImage

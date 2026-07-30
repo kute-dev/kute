@@ -410,6 +410,21 @@ func containerUsage(metrics map[string]map[string]kube.PodMetrics, pods []*corev
 	return cpuMilli, memBytes, ok
 }
 
+// setResourcesPasteTarget is the selected field's quantity buffer (one of the
+// four request/limit fields), clearing that field's unset/invalid flags after
+// insertion the same way the typed path does.
+func (m *Model) setResourcesPasteTarget() tui.PasteTarget {
+	f := &m.pendingSetResources.fields[m.pendingSetResources.fieldIdx]
+	insert := tui.PasteInto(&f.input)
+	return func(s string) {
+		before := f.input.Value()
+		insert(s)
+		if f.input.Value() != before {
+			f.unset, f.invalid = false, false
+		}
+	}
+}
+
 // updateSetResourcesKey routes keys while pendingSetResources's panel is
 // showing.
 func (m *Model) updateSetResourcesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

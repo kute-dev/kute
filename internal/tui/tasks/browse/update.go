@@ -14,7 +14,49 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
+// pasteTarget resolves which of browse's many buffers a paste belongs to. The
+// chain mirrors updateKey's own precedence branch for branch, including the
+// branches that own the keyboard but have no text field (an inline y/N
+// confirm, the edit/stop-all prompts): those return nil, so a paste is
+// swallowed rather than falling through to a panel underneath — the same
+// answer updateKey gives a stray keypress.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	switch {
+	case m.actions.Active():
+		if !m.typingDeleteName() {
+			return nil // inline y/N confirm: nothing to paste into
+		}
+		return m.actions.PasteTarget()
+	case m.pendingEdit != nil, m.pendingStopAllForwards:
+		return nil
+	case m.pendingScale != nil:
+		return m.scalePasteTarget()
+	case m.pendingSetImage != nil:
+		return m.setImagePasteTarget()
+	case m.pendingSetResources != nil:
+		return m.setResourcesPasteTarget()
+	case m.pendingMeta != nil:
+		return m.metaPasteTarget()
+	case m.pendingBulkDelete != nil:
+		if m.pendingBulkDelete.tier != actions.TierModal {
+			return nil // non-prod bulk delete is a plain y/N, no buffer
+		}
+		return tui.PasteDigits(tui.PasteInto(&m.pendingBulkDelete.typedInput))
+	case m.filterActive && !m.filterListFocused:
+		insert := tui.PasteInto(&m.filterInput)
+		return func(s string) {
+			before := m.filterInput.Value()
+			insert(s)
+			m.applyFilterFromInput(before)
+		}
+	}
+	return nil
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -609,7 +651,7 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 // outright, and "esc" still cancels the whole confirm either way. Everything
 // else is swallowed so movement/filter can't act underneath.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if pending := m.actions.Pending(); m.actions.Tier() == actions.TierModal && pending != nil && isDeleteVerb(pending.Scope.Verb) {
+	if m.typingDeleteName() {
 		return m.updateModalConfirmKey(msg)
 	}
 	switch msg.String() {
@@ -713,21 +755,29 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		before := m.filterInput.Value()
 		m.filterInput, cmd = m.filterInput.Update(msg)
-		if after := m.filterInput.Value(); after != before {
-			// Sync Session.Location.Filter directly rather than going
-			// through setFilter, which forces the cursor to the end —
-			// right for a wholesale replace (setFilter's other callers) but
-			// wrong here, where the edit that just landed may have been a
-			// mid-string insert/delete.
-			if m.session != nil {
-				m.session.Location.Filter = after
-			}
-			m.clearOrigin()
-			m.recomputeVisible()
-		}
+		m.applyFilterFromInput(before)
 		return m, cmd
 	}
 	return m, nil
+}
+
+// applyFilterFromInput re-applies the filter after an in-place edit of the
+// query buffer — typing, or a paste (pasteTarget) — when the value actually
+// changed from before. Shared so the two paths can't drift.
+func (m *Model) applyFilterFromInput(before string) {
+	after := m.filterInput.Value()
+	if after == before {
+		return
+	}
+	// Sync Session.Location.Filter directly rather than going through
+	// setFilter, which forces the cursor to the end — right for a wholesale
+	// replace (setFilter's other callers) but wrong here, where the edit that
+	// just landed may have been a mid-string insert/delete.
+	if m.session != nil {
+		m.session.Location.Filter = after
+	}
+	m.clearOrigin()
+	m.recomputeVisible()
 }
 
 // openSelectedLogs pushes the log-stream screen for the selected row (Pods

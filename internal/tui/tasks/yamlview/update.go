@@ -12,7 +12,24 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
+// pasteTarget is the '/' search buffer while it's open, jumping to the
+// first match inside the closure exactly as updateSearchKey does after a typed
+// character.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if !m.searchActive {
+		return nil
+	}
+	insert := tui.PasteInto(&m.searchInput)
+	return func(s string) {
+		insert(s)
+		m.jumpToMatch()
+	}
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)

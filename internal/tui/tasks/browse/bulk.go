@@ -35,7 +35,8 @@ type bulkDeleteTarget struct {
 	// unused for TierInline. Never rendered via its own View() (components.
 	// TypeCountModal keeps its own bespoke progress-counter look, reading
 	// Value() as a plain string), so it's never styled — this exists purely
-	// for HandleTypeKey-equivalent input handling (Home/End/paste), matching
+	// for HandleTypeKey-equivalent input handling (Home/End; paste arrives
+	// via pasteTarget), matching
 	// actions.Controller's own typedInput.
 	typedInput textinput.Model
 }

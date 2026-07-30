@@ -142,6 +142,9 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)
 	m.width, m.height = size.Width, size.Height
+	if m.editing {
+		m.syncPathInputWidth()
+	}
 }
 
 // CapturingInput reports whether the kubeconfig-path input is open, so the

@@ -539,10 +539,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, keycastTick()
 		}
 		return m, nil
+	case tea.PasteMsg, tea.ClipboardMsg:
+		// An overlay owns text entry while it's up, so a paste has to be
+		// claimed here — falling through would insert it into the task
+		// rendered *underneath* the palette, e.g. browse's filter box.
+		if cmd, ok := m.pasteQuery(msg); ok {
+			return m, tea.Batch(cmd, rewatch)
+		}
+		if m.helpOpen || m.quitConfirm {
+			return m, rewatch // no buffer to paste into; swallow
+		}
+		// Otherwise it belongs to the active task, reached below.
 	case tea.KeyPressMsg:
 		var keycastCmd tea.Cmd
 		if m.keycastEnabled {
 			keycastCmd = m.keycast.record(msg, time.Now())
+		}
+		// After the keycast record (the chord still shows in a demo) and
+		// before handleShellKey, which would otherwise route ctrl+v through
+		// the palette's own key handling.
+		if cmd, ok := m.pasteQuery(msg); ok {
+			return m, tea.Batch(cmd, keycastCmd)
 		}
 		if _, ok := m.task.(Screen); ok && !taskCapturingInput(m.task) {
 			if handled, next, cmd := m.handleShellKey(msg); handled {
@@ -858,14 +875,37 @@ func recentPickHint() []palette.FooterSpan {
 
 // typeKey routes a keypress that isn't one of the palette's own chords into
 // the query box's textinput.Model — this is where backspace, left/right,
-// Home/End, Ctrl-arrow word-jump, and paste all arrive for free — then
+// Home/End and Ctrl-arrow word-jump arrive for free (paste does not — see
+// pasteQuery, since a bracketed paste is never a keypress) — then
 // re-filters, common to every scope's default typing/editing path.
 func (m *Model) typeKey(msg tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
 	m.palette.Input, cmd = m.palette.Input.Update(msg)
+	return m.afterQueryEdit(cmd)
+}
+
+// afterQueryEdit re-filters the palette after any edit to the query box —
+// shared by typeKey's typing and pasteQuery's paste, since a pasted query has
+// to re-rank the list exactly as a typed one does.
+func (m *Model) afterQueryEdit(cmd tea.Cmd) tea.Cmd {
 	m.palette.Browse = m.palette.Scope == palette.ScopeGoto && m.palette.Query() == ""
 	m.refreshPalette()
 	return cmd
+}
+
+// pasteQuery routes a paste into the open palette's query box. Reports false
+// when there's no palette open or msg isn't a paste, leaving the caller to
+// carry on — including the case that matters most: with no overlay open a
+// paste belongs to the active task's own buffer, not to the shell.
+func (m *Model) pasteQuery(msg tea.Msg) (tea.Cmd, bool) {
+	if m.palette == nil {
+		return nil, false
+	}
+	cmd, ok := RoutePaste(msg, PasteInto(&m.palette.Input))
+	if !ok {
+		return nil, false
+	}
+	return m.afterQueryEdit(cmd), true
 }
 
 // startContextProbe (re)opens the 7a context palette's data: reset probe

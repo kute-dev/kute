@@ -44,8 +44,9 @@ type Controller struct {
 	// "N/M" progress-counter + "█" cursor look (a deliberate departure from
 	// every other text-entry site in the app), reading TypedName() as a
 	// plain string — this exists purely so HandleTypeKey gets Home/End/
-	// Ctrl-arrow word-jump/paste for free instead of hand-rolling a 10th
-	// implementation.
+	// Ctrl-arrow word-jump for free instead of hand-rolling a 10th
+	// implementation. Paste reaches it through PasteTarget, not from here:
+	// a bracketed paste is never a keypress.
 	typedInput textinput.Model
 	// forceArmed stages a pending TierInline Pod "delete" for force-delete
 	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
@@ -183,9 +184,10 @@ func (c *Controller) Cancel() {
 
 // HandleTypeKey routes a keypress that isn't one of the type-the-name
 // modal's own chords (esc/enter/ctrl-k, intercepted by the caller first)
-// into the type-ahead buffer — this is where Home/End, Ctrl-arrow word-jump,
-// and paste all arrive for free. A no-op unless a TierModal confirmation is
-// active.
+// into the type-ahead buffer — this is where Home/End and Ctrl-arrow
+// word-jump arrive for free. A no-op unless a TierModal confirmation is
+// active. Paste does *not* arrive here (it isn't a keypress at all) — see
+// PasteTarget.
 func (c *Controller) HandleTypeKey(msg tea.KeyPressMsg) tea.Cmd {
 	if c.state != tui.TaskStateConfirming || c.tier != TierModal {
 		return nil
@@ -193,6 +195,18 @@ func (c *Controller) HandleTypeKey(msg tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
 	c.typedInput, cmd = c.typedInput.Update(msg)
 	return cmd
+}
+
+// PasteTarget exposes the type-ahead buffer to the screen's paste router
+// (tui.RoutePaste), or nil when no TierModal confirmation is active. Pasting
+// the name is deliberately allowed: the gate is "you produced the exact
+// name", not "you typed it by hand" — the same bar GitHub's repo-delete and
+// Terraform Cloud's destroy prompts set.
+func (c *Controller) PasteTarget() tui.PasteTarget {
+	if c.state != tui.TaskStateConfirming || c.tier != TierModal {
+		return nil
+	}
+	return tui.PasteInto(&c.typedInput)
 }
 
 // Escalate switches a pending Pod "delete" into a "force-delete" (ctrl-k,

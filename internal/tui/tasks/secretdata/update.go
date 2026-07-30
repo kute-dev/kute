@@ -15,8 +15,8 @@ import (
 )
 
 // focusedAddInput returns whichever of the add row's two buffers currently
-// has focus, per a.onValue — shared by the tea.PasteMsg router and
-// updateAddKey's own default case.
+// has focus, per a.onValue — shared by pasteTarget and updateAddKey's own
+// default case.
 func (a *addKeyState) focusedInput() *textinput.Model {
 	if a.onValue {
 		return &a.valueInput
@@ -24,7 +24,25 @@ func (a *addKeyState) focusedInput() *textinput.Model {
 	return &a.keyInput
 }
 
+// pasteTarget is whichever add/edit buffer is open, for tui.RoutePaste.
+// docs/design README.md §27b keys this screen with "ctrl-v paste (never
+// echoed to scrollback)": the app renders full-alt-screen (tui.Model.View
+// sets AltScreen), so nothing that lands here reaches scrollback regardless
+// of which paste path delivered it.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	switch {
+	case m.adding != nil:
+		return tui.PasteInto(m.adding.focusedInput())
+	case m.editing != nil:
+		return tui.PasteInto(&m.editing.valueInput)
+	}
+	return nil
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -48,24 +66,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
 		return m, m.handleResult(msg)
-	case tea.PasteMsg:
-		// docs/design README.md §27b: "ctrl-v paste (never echoed to
-		// scrollback)" — the app renders full-alt-screen (tui.Model.View
-		// sets AltScreen), so nothing a real terminal's bracketed-paste
-		// delivers here ever touches scrollback regardless; this just
-		// routes the pasted text into whichever add/edit buffer has focus.
-		// textinput.Update already handles tea.PasteMsg internally (both
-		// this bracketed-paste path and its own ctrl+v OS-clipboard read),
-		// so this case only needs to route to the right buffer, not
-		// re-implement insertion.
-		switch {
-		case m.adding != nil:
-			input := m.adding.focusedInput()
-			*input, _ = input.Update(msg)
-		case m.editing != nil:
-			m.editing.valueInput, _ = m.editing.valueInput.Update(msg)
-		}
-		return m, nil
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}

@@ -26,6 +26,15 @@ func isDeleteVerb(verb string) bool {
 	return verb == "delete" || verb == "force-delete"
 }
 
+// typingDeleteName reports whether the type-the-name modal is the active
+// confirm surface — i.e. whether there's a text buffer on screen at all.
+// updateConfirmKey routes keys by it and pasteTarget routes pastes by it, so
+// the two can't disagree about where typed input is going.
+func (m Model) typingDeleteName() bool {
+	pending := m.actions.Pending()
+	return m.actions.Tier() == actions.TierModal && pending != nil && isDeleteVerb(pending.Scope.Verb)
+}
+
 // isProd reports whether the active session's current context is tagged
 // prod in ~/.config/kute/config.yaml — the same source 7a's context
 // palette PROD tag reads (internal/tui/context.go).

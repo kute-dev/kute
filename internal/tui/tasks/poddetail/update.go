@@ -18,7 +18,20 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
+// pasteTarget is the type-the-name confirm buffer while a PROD-tier delete
+// modal is up — the same gate updateConfirmKey routes typed keys through. 5a
+// has no other text entry.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if m.actions.Tier() != actions.TierModal {
+		return nil
+	}
+	return m.actions.PasteTarget()
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)

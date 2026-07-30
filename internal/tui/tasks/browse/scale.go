@@ -129,6 +129,23 @@ func (m *Model) beginScale(delta int32) bool {
 	return true
 }
 
+// scalePasteTarget is the replica-count buffer. Digit-gated like the typed
+// path, and it honours the same §17b rule the first typed digit does: before
+// anything has been typed the paste *replaces* the pre-filled count rather
+// than inserting into it, so pasting "12" over a "3" gives 12, not 312.
+func (m *Model) scalePasteTarget() tui.PasteTarget {
+	t := m.pendingScale
+	return tui.PasteDigits(func(s string) {
+		if !t.typed {
+			t.input.SetValue(s)
+			t.input.CursorEnd()
+			t.typed = true
+			return
+		}
+		tui.PasteInto(&t.input)(s)
+	})
+}
+
 // updateScaleKey routes keys while pendingScale's prompt is showing.
 func (m *Model) updateScaleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	t := m.pendingScale

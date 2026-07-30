@@ -8,7 +8,20 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
+// pasteTarget is the local-port buffer of the row being edited. Digit-gated
+// like the typed path: CharLimit 5 still applies on top, so a paste that's
+// too long is truncated rather than making a nonsense port.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if !m.editing() {
+		return nil
+	}
+	return tui.PasteDigits(tui.PasteInto(&m.rows[m.selected].editInput))
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -99,9 +112,10 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.startSelected()
 	default:
 		// Digits only, matching this field's port-number semantics — any
-		// keypress whose Text carries a non-digit rune (typed or pasted) is
-		// dropped rather than forwarded, everything else (backspace, left/
-		// right, Home/End, Ctrl-arrow word-jump) reaches the textinput.
+		// keypress whose Text carries a non-digit rune is dropped rather than
+		// forwarded, everything else (backspace, left/right, Home/End,
+		// Ctrl-arrow word-jump) reaches the textinput. A pasted value gets the
+		// same rule from pasteTarget's tui.PasteDigits.
 		for _, r := range msg.Text {
 			if r < '0' || r > '9' {
 				return m, nil

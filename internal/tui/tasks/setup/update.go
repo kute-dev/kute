@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // RetryFailedMsg reports a failed Reconnect attempt: setup stays on screen
@@ -14,6 +15,9 @@ import (
 type RetryFailedMsg struct{ Err error }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
@@ -38,4 +42,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKey(msg)
 	}
 	return m, nil
+}
+
+// pasteTarget is the kubeconfig-path buffer while 'k'/'e' has it open — a
+// pasted path (usually with the newline the copy came with, which enter's
+// TrimSpace drops) is the normal way to fill this field.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if !m.editing {
+		return nil
+	}
+	return tui.PasteInto(&m.pathInput)
 }
