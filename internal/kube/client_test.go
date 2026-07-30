@@ -5,7 +5,41 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/kute-dev/kute/internal/testutil/testenv"
 )
+
+// twoContextKubeconfig is the shared two-context fixture: ctx-a (the file's
+// own current-context) and ctx-b.
+const twoContextKubeconfig = `apiVersion: v1
+kind: Config
+current-context: ctx-a
+clusters:
+- name: cluster-a
+  cluster:
+    server: https://127.0.0.1:16440
+- name: cluster-b
+  cluster:
+    server: https://127.0.0.1:16441
+contexts:
+- name: ctx-a
+  context:
+    cluster: cluster-a
+    namespace: ns-a
+    user: user-a
+- name: ctx-b
+  context:
+    cluster: cluster-b
+    namespace: ns-b
+    user: user-b
+users:
+- name: user-a
+  user: {}
+- name: user-b
+  user: {}
+`
 
 // TestBuildConfigLookupErrorPaths pins 10b's "LOOKED IN" box data (mvp-plan.md
 // Phase 4): each path kute checked, and why it didn't work.
@@ -66,34 +100,7 @@ func TestBuildConfigLookupErrorPaths(t *testing.T) {
 func TestNewClientForContextHonorsExplicitOverride(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
-	kubeconfig := `apiVersion: v1
-kind: Config
-current-context: ctx-a
-clusters:
-- name: cluster-a
-  cluster:
-    server: https://127.0.0.1:16440
-- name: cluster-b
-  cluster:
-    server: https://127.0.0.1:16441
-contexts:
-- name: ctx-a
-  context:
-    cluster: cluster-a
-    namespace: ns-a
-    user: user-a
-- name: ctx-b
-  context:
-    cluster: cluster-b
-    namespace: ns-b
-    user: user-b
-users:
-- name: user-a
-  user: {}
-- name: user-b
-  user: {}
-`
-	if err := os.WriteFile(path, []byte(kubeconfig), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(twoContextKubeconfig), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	t.Setenv("KUBECONFIG", path)
@@ -146,6 +153,57 @@ func TestKubeconfigSourcePrecedence(t *testing.T) {
 	SetKubeconfigPath("")
 	if path, _ := kubeconfigSource(); path != "/tmp/from-env" {
 		t.Errorf("kubeconfigSource() = %q after clearing the flag, want the env path", path)
+	}
+}
+
+// TestKubeconfigLoadingRulesDropTheLegacyMigration pins the one thing
+// kubeconfigLoadingRules does beyond resolving a path: it clears clientcmd's
+// legacy migration rule, which Load() would otherwise run — a *file copy* —
+// before every read, including reads that explicitly named another file.
+//
+// The failure it prevents is Windows-only (see kubeconfigLoadingRules's own
+// comment: there, source and destination are two different homes' config
+// files, and a missing destination directory turns the read into an error —
+// the 7a palette rendered "0 contexts"), so this asserts the rule's absence
+// rather than the behaviour, which is the only form that has teeth on every
+// platform. The skip guards against the assertion going vacuous if upstream
+// ever retires the migration on its own.
+func TestKubeconfigLoadingRulesDropTheLegacyMigration(t *testing.T) {
+	if len(clientcmd.NewDefaultClientConfigLoadingRules().MigrationRules) == 0 {
+		t.Skip("clientcmd no longer ships migration rules; nothing left to clear")
+	}
+	if rules := kubeconfigLoadingRules(); len(rules.MigrationRules) != 0 {
+		t.Errorf("MigrationRules = %v, want none — reading a kubeconfig must never copy one", rules.MigrationRules)
+	}
+}
+
+// TestAvailableContextsWithHomeKubeconfig covers the exact shape the 7a
+// palette's golden fixtures set up — $HOME/.kube/config populated, and
+// $KUBECONFIG pointing at a file — which on Windows made the migration rule
+// above fire with a live source and a missing destination, and left
+// AvailableContexts returning an error instead of the file's contexts.
+func TestAvailableContextsWithHomeKubeconfig(t *testing.T) {
+	home := t.TempDir()
+	testenv.SetHome(t, home)
+	dir := filepath.Join(home, ".kube")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	path := filepath.Join(dir, "config")
+	if err := os.WriteFile(path, []byte(twoContextKubeconfig), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+	t.Setenv("KUBECONFIG", path)
+
+	names, current, err := AvailableContexts()
+	if err != nil {
+		t.Fatalf("AvailableContexts() = %v", err)
+	}
+	if len(names) != 2 || names[0] != "ctx-a" || names[1] != "ctx-b" {
+		t.Errorf("names = %v, want [ctx-a ctx-b]", names)
+	}
+	if current != "ctx-a" {
+		t.Errorf("current = %q, want ctx-a", current)
 	}
 }
 

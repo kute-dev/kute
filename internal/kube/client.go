@@ -64,6 +64,35 @@ func explicitKubeconfigPath() string {
 	return path
 }
 
+// kubeconfigLoadingRules builds the loading rules every kubeconfig read in
+// this package shares: the resolved file (--kubeconfig, else $KUBECONFIG,
+// else ~/.kube/config) as the explicit path, and — deliberately — no
+// migration rules.
+//
+// clientcmd's defaults carry a legacy migration rule: "if ~/.kube/config is
+// missing but the pre-1.0 location has one, copy it across". Load() runs it
+// before reading anything, including when ExplicitPath points at a completely
+// different file, so it fires on every read kute does. On Windows its source
+// is %HOME%\.kube\config while its destination is homedir.HomeDir()'s pick of
+// %HOME%/%HOMEDRIVE%%HOMEPATH%/%USERPROFILE% — routinely two different files,
+// so reading any kubeconfig would copy one home's config over another's, and
+// when the destination's .kube directory doesn't exist the copy fails and the
+// read returns *that* error instead of the config. That is what emptied the
+// 7a context palette on Windows CI ("0 contexts", straight from
+// AvailableContexts erroring out) as soon as a test redirected $HOME. kute
+// reads kubeconfigs; it has no business writing one as a side effect, on any
+// platform.
+func kubeconfigLoadingRules() *clientcmd.ClientConfigLoadingRules {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.MigrationRules = nil
+	if explicit := explicitKubeconfigPath(); explicit != "" {
+		rules.ExplicitPath = explicit
+	} else if path := defaultKubeconfigPath(); path != "" {
+		rules.ExplicitPath = path
+	}
+	return rules
+}
+
 // defaultKubeconfigPath is ~/.kube/config, or "" when the home directory
 // can't be determined.
 func defaultKubeconfigPath() string {
@@ -132,14 +161,9 @@ func NewClientForContext(contextName string) (Client, error) {
 }
 
 func newClientForContext(contextName string) (Client, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules := kubeconfigLoadingRules()
 	explicitPath, explicitLabel := kubeconfigSource()
 	defaultPath := defaultKubeconfigPath()
-	if explicitPath != "" {
-		loadingRules.ExplicitPath = explicitPath
-	} else if defaultPath != "" {
-		loadingRules.ExplicitPath = defaultPath
-	}
 
 	configOverrides := &clientcmd.ConfigOverrides{}
 	if contextName != "" {
@@ -267,13 +291,7 @@ func KubeconfigPath() (string, bool) {
 // current-context name, for the context switcher. It reads the merged kubeconfig
 // without contacting any cluster.
 func AvailableContexts() (names []string, current string, err error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if explicit := explicitKubeconfigPath(); explicit != "" {
-		loadingRules.ExplicitPath = explicit
-	} else if path := defaultKubeconfigPath(); path != "" {
-		loadingRules.ExplicitPath = path
-	}
-	raw, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{}).RawConfig()
+	raw, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(kubeconfigLoadingRules(), &clientcmd.ConfigOverrides{}).RawConfig()
 	if err != nil {
 		return nil, "", err
 	}
