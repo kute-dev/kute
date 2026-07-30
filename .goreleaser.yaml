@@ -42,6 +42,24 @@ release:
   extra_files:
     - glob: ./.release/changelog.json
 
+# Windows's counterpart to the homebrew cask. Scoop takes the windows zip
+# archives as-is, so nothing above changes. `directory: bucket` is not
+# optional-looking cosmetics: scoop expects manifests under bucket/, and
+# goreleaser defaults to the repository root.
+scoops:
+  - name: kute
+    directory: bucket
+    homepage: "https://github.com/kute-dev/kute"
+    description: "A TUI Kubernetes console, built with Bubble Tea and Lip Gloss."
+    license: "Apache-2.0"
+    repository:
+      owner: kute-dev
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_BUCKET_TOKEN }}"
+    commit_author:
+      name: kute-release-bot
+      email: releases@kute.dev
+
 homebrew_casks:
   - name: kute
     binaries:
