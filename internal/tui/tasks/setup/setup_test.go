@@ -2,6 +2,7 @@ package setup
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +112,28 @@ func TestNoConfigBodyShowsLookedInBox(t *testing.T) {
 	}
 	if !strings.Contains(body, "no cluster") {
 		t.Errorf("header badge should read no cluster:\n%s", body)
+	}
+}
+
+// TestNoConfigBodyFindsLookupErrorInsideAJoin pins the LOOKED IN box against
+// an errors.Join'd cause. Unwrap() []error is the tree a hand-rolled
+// single-error walk cannot follow, and getting it wrong is silent: the box
+// degrades to one "unknown error" line, which is exactly the screen a user
+// with no kubeconfig is looking at.
+func TestNoConfigBodyFindsLookupErrorInsideAJoin(t *testing.T) {
+	lookup := &kube.ConfigLookupError{Paths: []kube.PathCheck{
+		{Label: "$KUBECONFIG", Reason: "not set"},
+	}}
+	joined := fmt.Errorf("build cluster: %w", errors.Join(errors.New("probe failed"), lookup))
+	m := New(Config{Session: &tui.Session{Theme: tui.Dark()}, State: NoConfig, Err: joined})
+	m.SetSize(120, 30)
+
+	body := plain(m.Render())
+	if strings.Contains(body, "unknown error") {
+		t.Errorf("joined lookup error was not unwrapped:\n%s", body)
+	}
+	if !strings.Contains(body, "$KUBECONFIG") || !strings.Contains(body, "not set") {
+		t.Errorf("body missing the $KUBECONFIG row:\n%s", body)
 	}
 }
 

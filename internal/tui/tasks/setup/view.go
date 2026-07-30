@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -452,21 +453,15 @@ func (m Model) lookedInLines(theme tui.Theme) []string {
 	return out
 }
 
-// asConfigLookupError unwraps err looking for a *kube.ConfigLookupError,
-// following the standard errors.Unwrap chain (Cluster/client construction
-// may wrap it).
+// asConfigLookupError unwraps err looking for a *kube.ConfigLookupError
+// (Cluster/client construction may wrap it).
+//
+// errors.AsType, not a hand-rolled Unwrap() error walk: the hand-rolled
+// version only followed single-error chains, so an errors.Join'd config
+// error — one lookup failure gathered up beside anything else — defeated it
+// and the LOOKED IN box degraded to a bare "unknown error" line.
 func asConfigLookupError(err error) (*kube.ConfigLookupError, bool) {
-	for err != nil {
-		if lookup, ok := err.(*kube.ConfigLookupError); ok {
-			return lookup, true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return nil, false
-		}
-		err = u.Unwrap()
-	}
-	return nil, false
+	return errors.AsType[*kube.ConfigLookupError](err)
 }
 
 // editLines renders the inline kubeconfig-path input (shown by 'e'/'k')
