@@ -185,7 +185,7 @@ Each screen subscribed only to the kind it displayed.
 
 One `auxKinds` table names each kind's secondary kinds, driving both reload and prefetch.
 
-`browse/aux.go`, `browse/update.go`, `poddetail/update.go`, `routetable/update.go`
+`browse/auxkinds.go`, `browse/update.go`, `poddetail/update.go`, `routetable/update.go`
 
 ### 668464d — managedFields transform
 

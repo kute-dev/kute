@@ -141,7 +141,7 @@ is `TextFaint` and its "no status semantics · NAME + AGE only" strip copy rende
 (`sort.go:56-60`, `crdGroupCell`).
 
 **Scale, routing** — 17b's HPA note has a real backing kind
-(`kube/kinds.go:64-71`, `browse/aux.go:30`), Ingress joined the unhealthy-first set
+(`kube/kinds.go:64-71`, `browse/auxkinds.go:30`), Ingress joined the unhealthy-first set
 (`sort.go:25`), TLS-strip secrets are selectable and open on `↵`
 (`openSelectedTLSSecret`), and a Gateway listener's `↵` filters to its attached routes
 (`selectedListenerRouteFilter`).
