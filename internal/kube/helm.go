@@ -19,6 +19,7 @@ import (
 	"io"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -367,7 +368,7 @@ func HelmRollback(ctx context.Context, namespace, name string, toRevision int) e
 	}
 	args := []string{"rollback", name}
 	if toRevision > 0 {
-		args = append(args, fmt.Sprintf("%d", toRevision))
+		args = append(args, strconv.Itoa(toRevision))
 	}
 	args = append(args, "-n", namespace)
 	cmd := exec.CommandContext(ctx, "helm", args...)
@@ -424,7 +425,7 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 				"owner":   "helm",
 				"name":    r.Name,
 				"status":  r.Status,
-				"version": fmt.Sprintf("%d", r.Revision),
+				"version": strconv.Itoa(r.Revision),
 			},
 			CreationTimestamp: metav1.NewTime(r.Updated),
 		},

@@ -102,7 +102,7 @@ func TestEditResultFeedbackSurfacesInKeybar(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, editResultMsg{err: errExitStatus{}})
+	m = step(t, m, editResultMsg{err: exitStatusError{}})
 	kb := m.Keybar()
 	if kb.RightNote == "" {
 		t.Fatal("expected the edit-exit feedback in Keybar RightNote")

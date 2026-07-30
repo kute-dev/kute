@@ -70,6 +70,7 @@ func eventsForScope(ctx context.Context, src EventsReader, lister resources.RawL
 	if err != nil {
 		// Best-effort: still show the primary object's own events rather
 		// than failing the whole load over the owned-pods lookup.
+		//nolint:nilerr // deliberate — see above.
 		return primary, nil
 	}
 	out := append([]kube.Event(nil), primary...)

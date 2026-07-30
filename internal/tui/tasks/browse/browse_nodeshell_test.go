@@ -63,15 +63,15 @@ func TestNodeShellExitFeedbackSurfacesInKeybar(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, nodeShellResultMsg{err: errExit{}})
+	m = step(t, m, nodeShellResultMsg{err: exitError{}})
 	if note := m.Keybar().RightNote; !strings.Contains(note, "node shell exited") {
 		t.Fatalf("expected node-shell feedback in Keybar RightNote, got %q", note)
 	}
 }
 
-type errExit struct{}
+type exitError struct{}
 
-func (errExit) Error() string { return "exit status 1" }
+func (exitError) Error() string { return "exit status 1" }
 
 // TestNodeShellRefusedWhileOffline pins the 4a gate for 's': NodeShell is a
 // Mutating verb (kubectl debug creates a privileged node-debugger pod, so it

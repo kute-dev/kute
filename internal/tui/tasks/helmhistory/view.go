@@ -2,6 +2,7 @@ package helmhistory
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,7 +112,7 @@ func (m Model) Strips(width int) []string {
 	if len(m.revisions) == 1 {
 		word = "revision"
 	}
-	line := count.Render(fmt.Sprintf("%d", len(m.revisions))) + " " + dim.Render(word+" · newest first · current highlighted")
+	line := count.Render(strconv.Itoa(len(m.revisions))) + " " + dim.Render(word+" · newest first · current highlighted")
 	if note := m.newerChartNote(theme(m), stripInnerWidth(width)-lipgloss.Width(line)-1); note != "" {
 		// Right-aligned on the count line rather than a line of its own: the
 		// strip is one line by contract (stripLineCount), and this is the
@@ -327,7 +328,7 @@ func (m Model) railBody(theme tui.Theme, width, height int) string {
 	for i, rev := range m.revisions {
 		glyphStyle, glyph := statusGlyph(theme, rev.Status)
 		revStyle := dim
-		revText := fmt.Sprintf("%d", rev.Revision)
+		revText := strconv.Itoa(rev.Revision)
 		if i == 0 {
 			revStyle = current
 			revText += " (current)"

@@ -1,6 +1,9 @@
 package yamlview
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func classesOf(tokens []Token) []TokenClass {
 	out := make([]TokenClass, len(tokens))
@@ -11,11 +14,11 @@ func classesOf(tokens []Token) []TokenClass {
 }
 
 func textOf(tokens []Token) string {
-	s := ""
+	var s strings.Builder
 	for _, t := range tokens {
-		s += t.Text
+		s.WriteString(t.Text)
 	}
-	return s
+	return s.String()
 }
 
 func TestTokenizeLineKeyWithQuotedString(t *testing.T) {

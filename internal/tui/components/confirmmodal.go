@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -119,7 +120,7 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed, actionVerb strin
 // gate that themselves (browse's updateBulkDeleteKey), this component is
 // purely presentational, same contract as TypeNameModal.
 func TypeCountModal(title, objectsLine, detailLine string, count int, typed string, prod bool, styles TypeModalStyles, width, height int) string {
-	target := fmt.Sprintf("%d", count)
+	target := strconv.Itoa(count)
 	titleLine := styles.Title.Render(title)
 
 	body := []string{}

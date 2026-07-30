@@ -382,7 +382,6 @@ func isTimeout(err error) bool {
 // falling through to the 4b "you can't list this" card.
 func (c *Cluster) setWatchErrorHandlers(handlers map[ResourceKind]cache.SharedIndexInformer) {
 	for kind, informer := range handlers {
-		kind := kind
 		//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
 		_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 			c.noteWatchError(kind, err)

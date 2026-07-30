@@ -1,7 +1,7 @@
 package whocan
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -84,7 +84,7 @@ func (m Model) questionLine(theme tui.Theme, width int) string {
 	if len(m.result.Subjects) == 1 {
 		subjectWord = "subject"
 	}
-	right := count.Render(fmt.Sprintf("%d", len(m.result.Subjects))) + " " + dim.Render(subjectWord)
+	right := count.Render(strconv.Itoa(len(m.result.Subjects))) + " " + dim.Render(subjectWord)
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 

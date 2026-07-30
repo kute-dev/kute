@@ -93,16 +93,16 @@ func TestExecResultFeedbackSurfacesInKeybar(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, execResultMsg{err: errExitStatus{}})
+	m = step(t, m, execResultMsg{err: exitStatusError{}})
 	kb := m.Keybar()
 	if kb.RightNote == "" {
 		t.Fatal("expected the exec-exit feedback in Keybar RightNote")
 	}
 }
 
-type errExitStatus struct{}
+type exitStatusError struct{}
 
-func (errExitStatus) Error() string { return "exit status 127" }
+func (exitStatusError) Error() string { return "exit status 127" }
 
 // TestExecRefusedWhileOffline pins the 4a invariant for 'x': Exec is a
 // Mutating verb, so a broken connection must refuse it outright rather than

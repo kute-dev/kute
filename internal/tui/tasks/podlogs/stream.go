@@ -186,6 +186,9 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 			return scanErr
 		}
 		if ctx.Err() != nil {
+			//nolint:nilerr // a cancelled context is the viewer closing, not a
+			// stream failure — reporting it would put an error banner on a
+			// screen the user just left.
 			return nil
 		}
 

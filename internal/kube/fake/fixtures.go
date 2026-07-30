@@ -7,8 +7,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -771,7 +771,7 @@ func demoReplicaSetRevision(name, ns, deployment, image string, revision int, cr
 			// stamps on every ReplicaSet it owns — tasks/timeline's 16b
 			// revision rail reads it (kube.TimelineFromRollouts), so demo
 			// mode needs it too for that rail to have anything to show.
-			Annotations: map[string]string{"deployment.kubernetes.io/revision": fmt.Sprintf("%d", revision)},
+			Annotations: map[string]string{"deployment.kubernetes.io/revision": strconv.Itoa(revision)},
 		},
 		Spec: appsv1.ReplicaSetSpec{
 			Replicas: &replicas,

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -289,7 +290,7 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 		// CPU is intentionally left blank — the mockup's pinned
 		// "all namespaces" row has no cluster-wide CPU-share value.
 		Cols: []palette.Cell{
-			{Text: fmt.Sprintf("%d", totalCount), Tone: palette.ToneSecondary},
+			{Text: strconv.Itoa(totalCount), Tone: palette.ToneSecondary},
 			healthCell(totalHealth),
 			{},
 		},
@@ -317,7 +318,7 @@ func namespaceCols(count int, health resources.HealthCounts) []palette.Cell {
 		}
 	}
 	return []palette.Cell{
-		{Text: fmt.Sprintf("%d", count), Tone: palette.ToneSecondary},
+		{Text: strconv.Itoa(count), Tone: palette.ToneSecondary},
 		healthCell(health),
 		{Text: "–", Tone: palette.ToneGhost},
 	}

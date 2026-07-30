@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -210,7 +211,7 @@ func projectPod(obj runtime.Object) Row {
 	return Row{
 		Namespace:  ns,
 		Name:       name,
-		Cells:      []string{name, readyLabel, status, fmt.Sprintf("%d", restarts), "–", "–", node, shortAge(age)},
+		Cells:      []string{name, readyLabel, status, strconv.Itoa(int(restarts)), "–", "–", node, shortAge(age)},
 		Status:     class,
 		Glyph:      glyph,
 		GlyphClass: class,
@@ -360,7 +361,7 @@ func projectDaemonSet(obj runtime.Object) Row {
 	return Row{
 		Namespace: ns,
 		Name:      name,
-		Cells:     []string{name, readyLabel, fmt.Sprintf("%d", d.Status.NumberAvailable), shortAge(age)},
+		Cells:     []string{name, readyLabel, strconv.Itoa(int(d.Status.NumberAvailable)), shortAge(age)},
 		Status:    status,
 	}
 }
@@ -382,7 +383,7 @@ func projectReplicaSet(obj runtime.Object) Row {
 	}
 	ns, name, age := metaOf(obj)
 	readyLabel, status := readyRatio(r.Status.ReadyReplicas, int32ptr(r.Spec.Replicas))
-	return Row{Namespace: ns, Name: name, Cells: []string{name, readyLabel, fmt.Sprintf("%d", r.Status.Replicas), shortAge(age)}, Status: status}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, readyLabel, strconv.Itoa(int(r.Status.Replicas)), shortAge(age)}, Status: status}
 }
 
 func projectJob(obj runtime.Object) Row {
@@ -400,7 +401,7 @@ func projectJob(obj runtime.Object) Row {
 	if j.Status.Failed > 0 {
 		status = StatusFail
 	}
-	return Row{Namespace: ns, Name: name, Cells: []string{name, completions, fmt.Sprintf("%d", j.Status.Active), shortAge(age)}, Status: status}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, completions, strconv.Itoa(int(j.Status.Active)), shortAge(age)}, Status: status}
 }
 
 func projectCronJob(obj runtime.Object) Row {
@@ -415,7 +416,7 @@ func projectCronJob(obj runtime.Object) Row {
 		suspended = "True"
 		status = StatusNeutral
 	}
-	return Row{Namespace: ns, Name: name, Cells: []string{name, c.Spec.Schedule, suspended, fmt.Sprintf("%d", len(c.Status.Active)), shortAge(age)}, Status: status}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, c.Spec.Schedule, suspended, strconv.Itoa(len(c.Status.Active)), shortAge(age)}, Status: status}
 }
 
 func projectService(obj runtime.Object) Row {
@@ -426,7 +427,7 @@ func projectService(obj runtime.Object) Row {
 	ns, name, age := metaOf(obj)
 	ports := make([]string, 0, len(s.Spec.Ports))
 	for _, p := range s.Spec.Ports {
-		ports = append(ports, fmt.Sprintf("%d", p.Port))
+		ports = append(ports, strconv.Itoa(int(p.Port)))
 	}
 	return Row{Namespace: ns, Name: name, Cells: []string{name, string(s.Spec.Type), s.Spec.ClusterIP, strings.Join(ports, ","), shortAge(age)}, Status: StatusOK}
 }
@@ -518,7 +519,7 @@ func projectConfigMap(obj runtime.Object) Row {
 		return metaRow(obj)
 	}
 	ns, name, age := metaOf(obj)
-	return Row{Namespace: ns, Name: name, Cells: []string{name, fmt.Sprintf("%d", len(c.Data)+len(c.BinaryData)), shortAge(age)}, Status: StatusNeutral}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, strconv.Itoa(len(c.Data) + len(c.BinaryData)), shortAge(age)}, Status: StatusNeutral}
 }
 
 func projectSecret(obj runtime.Object) Row {
@@ -527,7 +528,7 @@ func projectSecret(obj runtime.Object) Row {
 		return metaRow(obj)
 	}
 	ns, name, age := metaOf(obj)
-	return Row{Namespace: ns, Name: name, Cells: []string{name, string(s.Type), fmt.Sprintf("%d", len(s.Data)), shortAge(age)}, Status: StatusNeutral}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, string(s.Type), strconv.Itoa(len(s.Data)), shortAge(age)}, Status: StatusNeutral}
 }
 
 func projectPVC(obj runtime.Object) Row {
@@ -740,7 +741,7 @@ func projectHelmRelease(obj runtime.Object) Row {
 		Name:      r.Name,
 		Cells: []string{
 			r.Name, r.Chart + " " + r.ChartVersion, r.LatestCell(), r.AppVersion,
-			fmt.Sprintf("%d", r.Revision), r.StatusCell(), updated,
+			strconv.Itoa(r.Revision), r.StatusCell(), updated,
 		},
 		Status:   helmReleaseStatusClass(r.Status),
 		Outdated: r.Outdated(),

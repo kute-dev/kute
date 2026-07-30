@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,7 +163,7 @@ func compactExpiry(full string) string {
 // Service can't be read, rather than erroring the whole row).
 func backendPortText(ctx context.Context, lister resources.RawLister, ns, svcName string, port networkingv1.ServiceBackendPort) string {
 	if port.Number != 0 {
-		return fmt.Sprintf("%d", port.Number)
+		return strconv.Itoa(int(port.Number))
 	}
 	if port.Name == "" {
 		return "-"
@@ -176,7 +177,7 @@ func backendPortText(ctx context.Context, lister resources.RawLister, ns, svcNam
 			}
 			for _, sp := range svc.Spec.Ports {
 				if sp.Name == port.Name {
-					return fmt.Sprintf("%d", sp.Port)
+					return strconv.Itoa(int(sp.Port))
 				}
 			}
 		}
@@ -364,7 +365,7 @@ func routeRowsFromRoute(ctx context.Context, lister resources.RawLister, ns stri
 			}
 			portText := "-"
 			if ref.port != 0 {
-				portText = fmt.Sprintf("%d", ref.port)
+				portText = strconv.FormatInt(ref.port, 10)
 			}
 			rows = append(rows, routeRow{
 				match: match, backendNS: ns, backendName: ref.name,

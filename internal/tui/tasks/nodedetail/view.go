@@ -3,6 +3,7 @@ package nodedetail
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 	"time"
 
@@ -278,7 +279,7 @@ func (m Model) allocationBlock(theme tui.Theme) []string {
 		title,
 		allocationBarLine("cpu", m.allocated.cpuMilli, m.allocatable.cpuMilli, theme, func(v int64) string { return fmt.Sprintf("%dm", v) }),
 		allocationBarLine("mem", m.allocated.memBytes, m.allocatable.memBytes, theme, formatBytes),
-		allocationBarLine("pods", int64(len(m.pods)), m.allocatable.pods, theme, func(v int64) string { return fmt.Sprintf("%d", v) }),
+		allocationBarLine("pods", int64(len(m.pods)), m.allocatable.pods, theme, func(v int64) string { return strconv.FormatInt(v, 10) }),
 		"",
 	}
 	lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("TAINTS"))
@@ -515,7 +516,7 @@ func (m Model) podHealthStripLine(theme tui.Theme, width int) string {
 		}
 		glyphStyle := lipgloss.NewStyle().Foreground(podGlyphColor(theme, seg.class))
 		parts = append(parts, glyphStyle.Render(podDefaultGlyph(seg.class))+" "+
-			numStyle.Render(fmt.Sprintf("%d", seg.n))+" "+labelStyle.Render(desc.HealthLabel(seg.class)))
+			numStyle.Render(strconv.Itoa(seg.n))+" "+labelStyle.Render(desc.HealthLabel(seg.class)))
 	}
 	left := strings.Join(parts, "   ")
 	right := labelStyle.Render(fmt.Sprintf("%d pods", len(rows)))

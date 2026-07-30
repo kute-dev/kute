@@ -8,6 +8,8 @@ package browse
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -170,7 +172,7 @@ func (m Model) nodeMetricCell(name string, cpu bool, st rowCellStyles) component
 func (m Model) nodePodsCell(name string) string {
 	cap, ok := m.nodeCapacity[name]
 	if !ok || cap.pods == 0 {
-		return fmt.Sprintf("%d", m.podCountByNode[name])
+		return strconv.Itoa(m.podCountByNode[name])
 	}
 	return fmt.Sprintf("%d/%d", m.podCountByNode[name], cap.pods)
 }
@@ -202,11 +204,7 @@ func (m Model) nodeHealthCell(name string, st rowCellStyles) components.Cell {
 	if len(parts) == 0 {
 		return components.Cell{Text: "–", Style: st.dim}
 	}
-	text := parts[0]
-	for _, p := range parts[1:] {
-		text += st.dim.Render(" ") + p
-	}
-	return components.Cell{Text: text}
+	return components.Cell{Text: strings.Join(parts, st.dim.Render(" "))}
 }
 
 // nodeVersionColumn finds Version's position within a Node row's Cells, so

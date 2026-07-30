@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,10 +129,10 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 	rollouts, restarts, warnings := m.counts()
 	parts := make([]string, 0, 3)
 	if rollouts > 0 {
-		parts = append(parts, rollout.Render(tui.GlyphRollout)+" "+num.Render(fmt.Sprintf("%d", rollouts))+" "+dim.Render(pluralize(rollouts, "rollout")))
+		parts = append(parts, rollout.Render(tui.GlyphRollout)+" "+num.Render(strconv.Itoa(rollouts))+" "+dim.Render(pluralize(rollouts, "rollout")))
 	}
-	parts = append(parts, restart.Render(tui.GlyphRestarts)+" "+num.Render(fmt.Sprintf("%d", restarts))+" "+dim.Render("restarts"))
-	parts = append(parts, warn.Render(tui.GlyphWarning)+" "+num.Render(fmt.Sprintf("%d", warnings))+" "+dim.Render("warnings"))
+	parts = append(parts, restart.Render(tui.GlyphRestarts)+" "+num.Render(strconv.Itoa(restarts))+" "+dim.Render("restarts"))
+	parts = append(parts, warn.Render(tui.GlyphWarning)+" "+num.Render(strconv.Itoa(warnings))+" "+dim.Render("warnings"))
 
 	left := strings.Join(parts, "   ")
 	right := dim.Render(windowLabel(m.window) + " · merged feed")

@@ -266,7 +266,7 @@ func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
 
 func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
 	secret := secretObj("aim-stage", "aim-secrets", nil)
-	mut := &fakeMutator{secret: secret, err: errFake{}}
+	mut := &fakeMutator{secret: secret, err: fakeError{}}
 	m := newModel(t, newSession(), secret, mut)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -297,9 +297,9 @@ func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
 	}
 }
 
-type errFake struct{}
+type fakeError struct{}
 
-func (errFake) Error() string { return "secret is immutable" }
+func (fakeError) Error() string { return "secret is immutable" }
 
 func TestShiftTabReturnsFocusFromValueToKey(t *testing.T) {
 	secret := secretObj("aim-stage", "aim-secrets", nil)
@@ -426,7 +426,7 @@ func TestEditProdRequiresConfirmThenApplies(t *testing.T) {
 
 func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
 	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
-	mut := &fakeMutator{secret: secret, err: errFake{}}
+	mut := &fakeMutator{secret: secret, err: fakeError{}}
 	m := newModel(t, newSession(), secret, mut)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})

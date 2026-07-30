@@ -2,6 +2,7 @@ package routetable
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -468,7 +469,7 @@ func (m Model) listenersTable(width, height int) string {
 			{Text: l.protoPort, Style: dim},
 			{Text: l.hostname, Style: dim},
 			{Text: l.tlsText, Style: tls},
-			{Text: fmt.Sprintf("%d", l.attached), Style: dim},
+			{Text: strconv.Itoa(l.attached), Style: dim},
 		}})
 	}
 

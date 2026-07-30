@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -105,7 +106,7 @@ func gotoCountText(count int) string {
 	if count == countUnknown {
 		return "–"
 	}
-	return fmt.Sprintf("%d", count)
+	return strconv.Itoa(count)
 }
 
 // gotoAliasEntry pairs an alias letter with its kind — the fixed daily-kind

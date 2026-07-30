@@ -125,16 +125,16 @@ func TestExecResultFeedbackSurfacesInKeybar(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, execResultMsg{err: errExitStatus{}})
+	m = step(t, m, execResultMsg{err: exitStatusError{}})
 	kb := m.Keybar()
 	if kb.RightNote == "" {
 		t.Fatal("expected the exec-exit feedback in Keybar RightNote")
 	}
 }
 
-type errExitStatus struct{}
+type exitStatusError struct{}
 
-func (errExitStatus) Error() string { return "exit status 127" }
+func (exitStatusError) Error() string { return "exit status 127" }
 
 // TestNodeShellKeyRunsDirectly confirms 's' hands the tty to kubectl debug
 // for the node itself: nodedetail stays the active task and the Cmd is the
@@ -167,7 +167,7 @@ func TestNodeShellResultFeedbackSurfacesInKeybar(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, nodeShellResultMsg{err: errExitStatus{}})
+	m = step(t, m, nodeShellResultMsg{err: exitStatusError{}})
 	if note := m.Keybar().RightNote; !strings.Contains(note, "node shell exited") {
 		t.Fatalf("expected node-shell feedback in Keybar RightNote, got %q", note)
 	}

@@ -1,0 +1,60 @@
+# The enabled set is pinned explicitly rather than left to
+# `default: standard`. With no config at all CI ran whatever the installed
+# golangci-lint version happened to default to, so a version bump silently
+# changed what got checked — the point of this file is that the checks are a
+# reviewed list, not a moving one.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # The five that used to run by default.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Error handling. errorlint and nilerr both guard the same class of bug
+    # this repo has already hit once (a hand-rolled Unwrap walk that missed
+    # errors.Join trees, see setup/view.go).
+    - errorlint
+    - errname
+    - nilerr
+    - exhaustive
+    - copyloopvar
+    - perfsprint
+
+  settings:
+    exhaustive:
+      # Opt-in per switch (//exhaustive:enforce), not repo-wide.
+      #
+      # Repo-wide was tried and is wrong here on both enum families this
+      # codebase has. kube.ResourceKind is ~30 members and the registry, not
+      # a switch, is the source of truth for it — every kind switch in the
+      # tree deliberately names the two or three kinds that get bespoke
+      # treatment (which kinds open a routing table, which get a short
+      # keybar pill), and a new kind *not* appearing in them is the correct
+      # default, so enforcing totality would mean 11 no-op cases asserting
+      # the opposite of the invariant. The small closed enums (Scope, Tone,
+      # StatusClass, displayRowKind) all share one shape too: a variable
+      # pre-set to the neutral value immediately above the switch, which the
+      # switch then overrides for the interesting members — the fallthrough
+      # is already stated, one line up and more legibly than a bare case
+      # clause would state it.
+      #
+      # So it stays wired but silent, for the switch that genuinely must be
+      # total — where a missed member is a wrong answer rather than the
+      # neutral one — to mark itself.
+      explicit-exhaustive-switch: true
+      default-signifies-exhaustive: true
+    perfsprint:
+      # fmt.Errorf with a %w is error wrapping, not string formatting.
+      errorf: false
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling

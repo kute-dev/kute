@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -290,7 +291,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		// 20a: "strip's first slot becomes ▪ N marked" — takes over the
 		// leading segment rather than fighting the health counts for room.
 		markStyle := lipgloss.NewStyle().Foreground(theme.Accent)
-		parts = append(parts, markStyle.Render(tui.GlyphMarked)+" "+numStyle.Render(fmt.Sprintf("%d", n))+" "+labelStyle.Render("marked"))
+		parts = append(parts, markStyle.Render(tui.GlyphMarked)+" "+numStyle.Render(strconv.Itoa(n))+" "+labelStyle.Render("marked"))
 	}
 	for _, seg := range segments {
 		if seg.n == 0 {
@@ -310,7 +311,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 			glyph = tui.GlyphProbing
 		}
 		parts = append(parts, glyphStyle.Render(glyph)+" "+
-			numStyle.Render(fmt.Sprintf("%d", seg.n))+" "+labelStyle.Render(label))
+			numStyle.Render(strconv.Itoa(seg.n))+" "+labelStyle.Render(label))
 	}
 	if counts.Outdated > 0 {
 		// 18a's outdated segment sits after the status counts because it
@@ -318,7 +319,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		// deployed (or failed, or pending-upgrade).
 		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, resources.StatusWarn))
 		parts = append(parts, glyphStyle.Render(tui.GlyphWarning)+" "+
-			numStyle.Render(fmt.Sprintf("%d", counts.Outdated))+" "+labelStyle.Render("outdated"))
+			numStyle.Render(strconv.Itoa(counts.Outdated))+" "+labelStyle.Render("outdated"))
 	}
 	left := strings.Join(parts, "   ")
 	rightText := fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display))

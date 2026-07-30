@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -297,7 +298,7 @@ func projectCRD(counter InstanceCounter) func(obj runtime.Object) Row {
 			Name: name,
 			Cells: []string{
 				name, dk.Group, versionsCell(dk.Versions), scopeCell(dk.ClusterScoped),
-				fmt.Sprintf("%d", count), shortAge(age),
+				strconv.Itoa(count), shortAge(age),
 			},
 			Status: class, Glyph: glyph, GlyphClass: class,
 			// Key carries the discovered instance kind's ResourceKind

@@ -385,7 +385,7 @@ func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
 
 func TestFailedEditRestoresEditModeWithErrorAndAttemptedValue(t *testing.T) {
 	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
-	mut := &fakeMutator{cm: cm, err: errFake{}}
+	mut := &fakeMutator{cm: cm, err: fakeError{}}
 	m := newModel(t, newSession(), cm, mut, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
@@ -411,9 +411,9 @@ func TestFailedEditRestoresEditModeWithErrorAndAttemptedValue(t *testing.T) {
 	}
 }
 
-type errFake struct{}
+type fakeError struct{}
 
-func (errFake) Error() string { return "configmap is immutable" }
+func (fakeError) Error() string { return "configmap is immutable" }
 
 func TestMultilineRowFoldsAndEOpensBufferEditor(t *testing.T) {
 	cm := cmObj("aim-stage", "aim-config", map[string]string{

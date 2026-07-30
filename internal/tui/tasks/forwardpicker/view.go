@@ -2,6 +2,7 @@ package forwardpicker
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -112,7 +113,7 @@ func (m Model) portLine(theme tui.Theme, i int, row portRow) string {
 		glyphStyle = glyphStyle.Background(bg)
 	}
 
-	label := fmt.Sprintf("%d", row.Port)
+	label := strconv.Itoa(int(row.Port))
 	if row.Name != "" {
 		label += "/" + row.Name
 	}

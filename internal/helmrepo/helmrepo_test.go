@@ -1,9 +1,11 @@
 package helmrepo
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,12 +21,13 @@ func repoCache(t *testing.T, indexes map[string]string) Loader {
 		t.Fatal(err)
 	}
 
-	config := "apiVersion: \"\"\nrepositories:\n"
+	var config strings.Builder
+	config.WriteString("apiVersion: \"\"\nrepositories:\n")
 	for repo := range indexes {
-		config += "- name: " + repo + "\n  url: https://example.test/" + repo + "\n"
+		fmt.Fprintf(&config, "- name: %s\n  url: https://example.test/%s\n", repo, repo)
 	}
 	configPath := filepath.Join(dir, "repositories.yaml")
-	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(config.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for repo, body := range indexes {
@@ -40,17 +43,18 @@ func repoCache(t *testing.T, indexes map[string]string) Loader {
 
 // index builds an index.yaml body offering each chart the given versions.
 func index(charts map[string][]string) string {
-	body := "apiVersion: v1\nentries:\n"
+	var body strings.Builder
+	body.WriteString("apiVersion: v1\nentries:\n")
 	for name, versions := range charts {
-		body += "  " + name + ":\n"
+		fmt.Fprintf(&body, "  %s:\n", name)
 		for _, v := range versions {
-			body += "  - name: " + name + "\n    version: " + v + "\n    appVersion: \"1.0\"\n" +
-				"    description: a chart that exists only to be parsed\n" +
-				"    digest: 0000000000000000000000000000000000000000000000000000000000000000\n"
+			fmt.Fprintf(&body, "  - name: %s\n    version: %s\n    appVersion: \"1.0\"\n"+
+				"    description: a chart that exists only to be parsed\n"+
+				"    digest: 0000000000000000000000000000000000000000000000000000000000000000\n", name, v)
 		}
 	}
-	body += "generated: \"2026-07-01T00:00:00Z\"\n"
-	return body
+	body.WriteString("generated: \"2026-07-01T00:00:00Z\"\n")
+	return body.String()
 }
 
 func TestLoadNoHelmSetup(t *testing.T) {

@@ -15,7 +15,6 @@ func TestFormatCPU(t *testing.T) {
 		"2":     "2",
 	}
 	for input, want := range cases {
-		input, want := input, want
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			q := resource.MustParse(input)
@@ -35,7 +34,6 @@ func TestFormatMemory(t *testing.T) {
 		"1073741824": "1Gi",
 	}
 	for input, want := range cases {
-		input, want := input, want
 		t.Run(input, func(t *testing.T) {
 			t.Parallel()
 			q := resource.MustParse(input)

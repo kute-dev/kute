@@ -3,6 +3,7 @@ package overview
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -214,7 +215,7 @@ func (m Model) capacityLines(theme tui.Theme) []string {
 		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextDim).Render("cpu / mem — no metrics-server installed"))
 	}
 	if m.capPodsTotal > 0 {
-		lines = append(lines, allocationBarLine("pods", m.capPodsUsed, m.capPodsTotal, theme, func(v int64) string { return fmt.Sprintf("%d", v) }))
+		lines = append(lines, allocationBarLine("pods", m.capPodsUsed, m.capPodsTotal, theme, func(v int64) string { return strconv.FormatInt(v, 10) }))
 	} else {
 		// No node reports an Allocatable pods capacity (fake/demo fixtures,
 		// or a real node whose kubelet hasn't reported yet) — a "N / 0" bar

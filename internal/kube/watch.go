@@ -253,7 +253,6 @@ func (c *Cluster) registerWatchesLocked(kinds ...ResourceKind) {
 	// informer is already running).
 	c.setWatchErrorHandlers(handlers)
 	for kind, informer := range handlers {
-		kind := kind
 		//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
 		_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(any) { c.notify(kind) },

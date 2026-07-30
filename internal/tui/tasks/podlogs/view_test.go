@@ -22,7 +22,7 @@ func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
 		t.Fatalf("empty view missing feedback:\n%s", view)
 	}
 
-	_, _ = model.Update(streamErrorMsg{err: errString("pods/log is forbidden")})
+	_, _ = model.Update(streamErrorMsg{err: stringError("pods/log is forbidden")})
 	if view := model.Render(); !strings.Contains(view, "Permission denied") {
 		t.Fatalf("permission view missing feedback:\n%s", view)
 	}
@@ -124,6 +124,6 @@ func TestStatusLineReflectsFollowAndPauseState(t *testing.T) {
 	}
 }
 
-type errString string
+type stringError string
 
-func (e errString) Error() string { return string(e) }
+func (e stringError) Error() string { return string(e) }

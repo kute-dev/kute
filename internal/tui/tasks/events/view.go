@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -156,9 +157,9 @@ func (m Model) summaryLine(theme tui.Theme, width int) string {
 	num := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 
 	warnings, normal := m.counts()
-	left := warnStyle.Render(tui.GlyphWarning) + " " + num.Render(fmt.Sprintf("%d", warnings)) + " " + dim.Render("warnings")
+	left := warnStyle.Render(tui.GlyphWarning) + " " + num.Render(strconv.Itoa(warnings)) + " " + dim.Render("warnings")
 	if !m.warningsOnly {
-		left += "   " + dim.Render(tui.GlyphCompleted) + " " + num.Render(fmt.Sprintf("%d", normal)) + " " + dim.Render("normal")
+		left += "   " + dim.Render(tui.GlyphCompleted) + " " + num.Render(strconv.Itoa(normal)) + " " + dim.Render("normal")
 	}
 	right := dim.Render(windowLabel(m.window) + " · deduped · warnings first")
 	return fillLine(padBetween(left, right, width, false, theme), width, false, theme)
@@ -369,7 +370,7 @@ func (m Model) renderGroupRow(theme tui.Theme, g kube.EventGroup, selected bool,
 	}
 	countText := ""
 	if g.Count > 1 {
-		countText = fmt.Sprintf("%d", g.Count)
+		countText = strconv.Itoa(int(g.Count))
 	}
 
 	msgLines := wrapMessage(g.Message, msgW)
