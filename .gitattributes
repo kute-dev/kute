@@ -1,0 +1,10 @@
+# Golden fixtures are compared byte-for-byte against rendered TUI output,
+# which always emits LF. Git for Windows defaults to core.autocrlf=true and
+# actions/checkout does not override it, so without this every one of the 177
+# fixtures checks out as CRLF and every comparison test fails on Windows —
+# with a diff that looks like a rendering change and isn't.
+*.golden -text
+
+# Keep shell scripts LF so they stay runnable from git-bash/WSL on a Windows
+# checkout, where CRLF makes the shebang line fail to parse.
+*.sh text eol=lf
