@@ -3,6 +3,7 @@ package helmrepo
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -290,24 +291,81 @@ func TestNilCacheIsUsable(t *testing.T) {
 	}
 }
 
+// The expectations go through filepath.Join rather than literal "/" strings
+// so this runs on Windows, where the separator is "\".
 func TestDefaultPathsFollowHelmEnv(t *testing.T) {
-	t.Setenv("HELM_REPOSITORY_CONFIG", "/somewhere/repositories.yaml")
-	t.Setenv("HELM_REPOSITORY_CACHE", "/somewhere/cache")
-	if got := defaultConfigPath(); got != "/somewhere/repositories.yaml" {
-		t.Errorf("defaultConfigPath() = %q", got)
+	base := filepath.Join(string(filepath.Separator), "somewhere")
+
+	t.Setenv("HELM_REPOSITORY_CONFIG", filepath.Join(base, "repositories.yaml"))
+	t.Setenv("HELM_REPOSITORY_CACHE", filepath.Join(base, "cache"))
+	if got, want := defaultConfigPath(), filepath.Join(base, "repositories.yaml"); got != want {
+		t.Errorf("defaultConfigPath() = %q, want %q", got, want)
 	}
-	if got := defaultCachePath(); got != "/somewhere/cache" {
-		t.Errorf("defaultCachePath() = %q", got)
+	if got, want := defaultCachePath(), filepath.Join(base, "cache"); got != want {
+		t.Errorf("defaultCachePath() = %q, want %q", got, want)
 	}
 
+	// HELM_*_HOME outranks XDG, and helm uses it verbatim — no "helm"
+	// segment appended, unlike every other branch.
 	t.Setenv("HELM_REPOSITORY_CONFIG", "")
 	t.Setenv("HELM_REPOSITORY_CACHE", "")
-	t.Setenv("XDG_CONFIG_HOME", "/xdg/config")
-	t.Setenv("XDG_CACHE_HOME", "/xdg/cache")
-	if got := defaultConfigPath(); got != "/xdg/config/helm/repositories.yaml" {
-		t.Errorf("defaultConfigPath() = %q, want the XDG path", got)
+	t.Setenv("HELM_CONFIG_HOME", filepath.Join(base, "helmconf"))
+	t.Setenv("HELM_CACHE_HOME", filepath.Join(base, "helmcache"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(base, "xdg", "config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(base, "xdg", "cache"))
+	if got, want := defaultConfigPath(), filepath.Join(base, "helmconf", "repositories.yaml"); got != want {
+		t.Errorf("defaultConfigPath() = %q, want the HELM_CONFIG_HOME path %q", got, want)
 	}
-	if got := defaultCachePath(); got != "/xdg/cache/helm/repository" {
-		t.Errorf("defaultCachePath() = %q, want the XDG path", got)
+	if got, want := defaultCachePath(), filepath.Join(base, "helmcache", "repository"); got != want {
+		t.Errorf("defaultCachePath() = %q, want the HELM_CACHE_HOME path %q", got, want)
+	}
+
+	t.Setenv("HELM_CONFIG_HOME", "")
+	t.Setenv("HELM_CACHE_HOME", "")
+	if got, want := defaultConfigPath(), filepath.Join(base, "xdg", "config", "helm", "repositories.yaml"); got != want {
+		t.Errorf("defaultConfigPath() = %q, want the XDG path %q", got, want)
+	}
+	if got, want := defaultCachePath(), filepath.Join(base, "xdg", "cache", "helm", "repository"); got != want {
+		t.Errorf("defaultCachePath() = %q, want the XDG path %q", got, want)
+	}
+}
+
+// The platform fallbacks are what a real user hits — no XDG vars are set on
+// macOS or Windows — and they are the branch most easily broken by accident,
+// since CI only ever exercised the Linux one.
+func TestPlatformHelmDirs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("HELM_CONFIG_HOME", "")
+	t.Setenv("HELM_CACHE_HOME", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home directory: %v", err)
+	}
+
+	var wantConfig, wantCache string
+	switch runtime.GOOS {
+	case "windows":
+		// helm's pkg/helmpath/lazypath_windows.go: %APPDATA% and %TEMP%.
+		appData, tmp := os.Getenv("APPDATA"), os.Getenv("TEMP")
+		if appData == "" || tmp == "" {
+			t.Skip("APPDATA or TEMP is unset")
+		}
+		wantConfig = filepath.Join(appData, "helm")
+		wantCache = filepath.Join(tmp, "helm")
+	case "darwin":
+		wantConfig = filepath.Join(home, "Library", "Preferences", "helm")
+		wantCache = filepath.Join(home, "Library", "Caches", "helm")
+	default:
+		wantConfig = filepath.Join(home, ".config", "helm")
+		wantCache = filepath.Join(home, ".cache", "helm")
+	}
+
+	if got := helmConfigDir(); got != wantConfig {
+		t.Errorf("helmConfigDir() = %q, want %q", got, wantConfig)
+	}
+	if got := helmCacheDir(); got != wantCache {
+		t.Errorf("helmCacheDir() = %q, want %q", got, wantCache)
 	}
 }

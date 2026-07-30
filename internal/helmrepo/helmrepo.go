@@ -319,12 +319,27 @@ func defaultCachePath() string {
 }
 
 // helmConfigDir/helmCacheDir mirror helm's own helmpath resolution
-// (XDG first, then the platform default) rather than Go's os.UserConfigDir,
-// which disagrees with helm on macOS — helm puts its config under
-// ~/Library/Preferences, not ~/Library/Application Support.
+// (pkg/helmpath/lazypath.go: HELM_*_HOME, then XDG, then the platform
+// default) rather than Go's os.UserConfigDir/os.UserCacheDir, which disagree
+// with helm on both macOS — helm puts its config under ~/Library/Preferences,
+// not ~/Library/Application Support — and Windows, where helm uses %APPDATA%
+// and %TEMP% rather than %LOCALAPPDATA%. helm is not a dependency here, so
+// these are reimplemented; keep them in step with lazypath_windows.go and
+// lazypath_darwin.go upstream.
+//
+// The one asymmetry is helm's, not ours: a HELM_*_HOME override is used
+// verbatim, while an XDG or default base gets "helm" appended.
 func helmConfigDir() string {
+	if h := os.Getenv("HELM_CONFIG_HOME"); h != "" {
+		return h
+	}
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 		return filepath.Join(x, "helm")
+	}
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "helm")
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -337,8 +352,16 @@ func helmConfigDir() string {
 }
 
 func helmCacheDir() string {
+	if h := os.Getenv("HELM_CACHE_HOME"); h != "" {
+		return h
+	}
 	if x := os.Getenv("XDG_CACHE_HOME"); x != "" {
 		return filepath.Join(x, "helm")
+	}
+	if runtime.GOOS == "windows" {
+		if tmp := os.Getenv("TEMP"); tmp != "" {
+			return filepath.Join(tmp, "helm")
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
