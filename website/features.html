@@ -353,6 +353,23 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
+      <p class="code-or">On Windows, with PowerShell</p>
+      <div class="code-block">
+        <div><span class="prompt">&gt;</span><span class="cmd">irm</span> https://kute.dev/install.ps1 | <span class="cmd">iex</span></div>
+        <button class="copy-btn" data-copy="irm https://kute.dev/install.ps1 | iex" aria-label="Copy command">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <p class="code-or">Or with Scoop</p>
+      <div class="code-block">
+        <div>
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop bucket add</span> kute-dev https://github.com/kute-dev/scoop-bucket</div>
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop install</span> kute</div>
+        </div>
+        <button class="copy-btn" data-copy="scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket&#10;scoop install kute" aria-label="Copy commands">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
       <div class="install-ctas">
         <a class="btn btn-ghost" href="https://github.com/kute-tui/kute" target="_blank" rel="noopener">View on GitHub</a>
         <a class="btn btn-ghost" href="index.html#surface">Back to overview</a>

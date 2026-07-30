@@ -67,6 +67,19 @@ Or with Homebrew:
 brew install kute-dev/tap/kute
 ```
 
+On Windows, with PowerShell:
+
+```powershell
+irm https://kute.dev/install.ps1 | iex
+```
+
+Or with Scoop:
+
+```powershell
+scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket
+scoop install kute
+```
+
 ## Usage
 
 Run `kute` with no arguments and it opens on the context you last used, in the namespace you left it in. The flags below pin a starting point instead — useful in a script, an alias, or when reproducing something for a bug report.
