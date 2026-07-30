@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -82,6 +83,11 @@ func contextNames() []string {
 // padBetweenStyled's "drop the hint if it doesn't fit" fallback silently
 // blanks the whole right-hint — shortening it here is what keeps it on
 // screen in practice, not just cosmetic.
+//
+// The abbreviated form is slash-separated on every platform: `~` is a unix
+// convention we're already borrowing on Windows, and `~\.kube\config` reads
+// as neither one thing nor the other. The unabbreviated fallback keeps the
+// platform's own separators, since that one is a real path a user may copy.
 func kubeconfigPath() string {
 	p, ok := kube.KubeconfigPath()
 	if !ok {
@@ -89,7 +95,7 @@ func kubeconfigPath() string {
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		if rest, ok := strings.CutPrefix(p, home); ok {
-			return "~" + rest
+			return filepath.ToSlash("~" + rest)
 		}
 	}
 	return p

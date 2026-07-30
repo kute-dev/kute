@@ -96,7 +96,9 @@ func TestKubeconfigPathAbbreviatesHome(t *testing.T) {
 	t.Setenv("KUBECONFIG", filepath.Join(home, "dev", "proj", ".kube", "config"))
 
 	got := kubeconfigPath()
-	want := filepath.Join("~", "dev", "proj", ".kube", "config")
+	// Slash-separated on every platform, including Windows — see
+	// kubeconfigPath's own comment.
+	want := "~/dev/proj/.kube/config"
 	if got != want {
 		t.Fatalf("kubeconfigPath() = %q, want %q", got, want)
 	}
