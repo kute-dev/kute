@@ -101,4 +101,26 @@ jobs:
       - name: Run GoReleaser check
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
+          # Keep in step with release.yml's version by hand.
+          version: "2.17.1"
           args: check
+      # `check` validates the config's shape, not that the tools it shells
+      # out to exist: syft missing from PATH renders identically until a tag
+      # is pushed. A snapshot build runs the sbom pipe for real. Signing is
+      # skipped because keyless cosign needs an OIDC identity no PR has, and
+      # the tokens are dummies because the scoop/homebrew stanzas resolve
+      # {{ .Env.* }} even on a run that publishes nothing.
+      - name: Run GoReleaser (snapshot)
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: "2.17.1"
+          args: release --snapshot --clean --skip=publish,sign
+        env:
+          HOMEBREW_TAP_TOKEN: dummy
+          SCOOP_BUCKET_TOKEN: dummy
+      - name: Check the snapshot produced an SBOM per archive
+        run: |
+          archives=$(find dist -name 'kute_*.tar.gz' -o -name 'kute_*.zip' | wc -l)
+          sboms=$(find dist -name '*.sbom.json' | wc -l)
+          echo "archives=${archives} sboms=${sboms}"
+          [ "$archives" -gt 0 ] && [ "$archives" -eq "$sboms" ]
