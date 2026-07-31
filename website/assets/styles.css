@@ -247,7 +247,6 @@ p { margin: 0; }
   gap: 16px;
 }
 .section-head p { color: var(--text-secondary); font-size: 17px; }
-.section-head.left { align-items: flex-start; text-align: left; margin-left: 0; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -439,7 +438,6 @@ p { margin: 0; }
 .term-crumb .hint { color: var(--text-faint); font-size: 11px; }
 .term-status { color: var(--text-faint); font-size: 12px; display: flex; gap: 14px; align-items: center; }
 .term-status .live { color: var(--good); }
-.term-status .down { color: var(--bad); }
 
 .term-strip {
   padding: 7px 16px;
@@ -452,7 +450,6 @@ p { margin: 0; }
   flex-wrap: wrap;
   gap: 8px;
 }
-.term-strip .stale { color: var(--warn); }
 .term-strip .g-good { color: var(--good); }
 .term-strip .g-warn { color: var(--warn); }
 .term-strip .g-bad { color: var(--bad); }
@@ -492,11 +489,10 @@ p { margin: 0; }
 }
 .term-row.sel { background: var(--sel-bg); border-left-color: var(--accent); }
 .term-row.sel .name { color: var(--text); }
-.term-row.stale { opacity: .5; filter: saturate(.6); }
 .term-row .dot.good, .term-row .g-good { color: var(--good); }
 .term-row .dot.warn, .term-row .g-warn { color: var(--warn); }
 .term-row .dot.bad, .term-row .g-bad { color: var(--bad); }
-.term-row .dot.info, .term-row .g-info { color: var(--info); }
+.term-row .g-info { color: var(--info); }
 .term-row .name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .term-row .dim { color: var(--text-faint); }
 .term-row .right { text-align: right; }
@@ -521,7 +517,6 @@ p { margin: 0; }
   font-weight: 600;
   font-size: 11px;
 }
-.term-keybar .pill.offline { background: rgba(239,106,106,.15); color: var(--bad-soft); }
 .term-keybar .pill.confirm { background: rgba(239,106,106,.18); color: var(--bad-soft); }
 .term-keybar .pill.allns { background: rgba(106,168,239,.15); color: var(--info); }
 
@@ -605,8 +600,8 @@ p { margin: 0; }
 .term-group-collapsed .g-note { color: var(--text-faint); font-weight: 400; }
 
 /* extra dot/glyph colors used on the features page mockups */
-.term-row .dot.ghost, .term-row .g-ghost { color: var(--text-ghost); }
-.term-row .dot.accent, .term-row .g-accent { color: var(--accent-hi); }
+.term-row .dot.ghost { color: var(--text-ghost); }
+.term-row .dot.accent { color: var(--accent-hi); }
 
 /* alternate column counts for .term-row, used by mockups that aren't the pods table shape */
 .term-row.term-grid-4 { grid-template-columns: 22px 1.6fr 1fr 100px; }
@@ -922,15 +917,6 @@ p { margin: 0; }
 .feature-more .surf-row { grid-template-columns: minmax(160px, 260px) 1fr; font-family: var(--font-mono); }
 .feature-more .surf-desc { text-align: left; }
 
-@media (max-width: 960px) {
-  .flagship-dual { grid-template-columns: 1fr; }
-}
-@media (max-width: 720px) {
-  .page-header { padding: 140px 0 48px; }
-  .feature-more .surf-row { grid-template-columns: 1fr; row-gap: 2px; }
-  .feature-more .surf-desc { text-align: left; }
-}
-
 /* ---------- footer ---------- */
 footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
 .footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
@@ -948,6 +934,7 @@ footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
+  .flagship-dual { grid-template-columns: 1fr; }
   .deepdive-row, .deepdive-row.reverse { grid-template-columns: 1fr; gap: 36px; }
   .deepdive-row.reverse .deepdive-copy { order: 0; }
   .bento { grid-template-columns: repeat(2, 1fr); }
@@ -968,6 +955,9 @@ footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
 }
 
 @media (max-width: 720px) {
+  .page-header { padding: 140px 0 48px; }
+  .feature-more .surf-row { grid-template-columns: 1fr; row-gap: 2px; }
+  .feature-more .surf-desc { text-align: left; }
   .nav-links {
     display: none;
     position: absolute;
