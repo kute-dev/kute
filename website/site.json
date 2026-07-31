@@ -2,9 +2,10 @@
   "comment": [
     "Per-page data for cmd/site. Body content lives in pages/<slug>.html;",
     "the shared shell, nav and install panel live in templates/.",
-    "navIconsHidden and footerTag differ across pages only because the",
-    "hand-maintained copies had drifted — see the Phase 2 note in main.go."
+    "footerTag is site-level: it is one string for the whole site, so the",
+    "copies cannot drift apart again."
   ],
+  "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
   "pages": [
     {
       "slug": "index",
@@ -15,8 +16,6 @@
       "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
       "twitterDescription": "Your cluster, in plain sight. Modern Kubernetes TUI.",
       "home": true,
-      "navIconsHidden": false,
-      "footerTag": "Your cluster, in plain sight.",
       "install": {
         "id": "install",
         "secondHref": "features.html",
@@ -32,8 +31,6 @@
       "ogDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
       "twitterDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
       "home": false,
-      "navIconsHidden": true,
-      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
       "install": {
         "id": "",
         "secondHref": "index.html#surface",
@@ -49,8 +46,6 @@
       "ogDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
       "twitterDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
       "home": false,
-      "navIconsHidden": true,
-      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
       "install": {
         "id": "",
         "secondHref": "features.html",
@@ -66,8 +61,6 @@
       "ogDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "twitterDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "home": false,
-      "navIconsHidden": true,
-      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
       "install": null
     }
   ]

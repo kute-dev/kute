@@ -52,12 +52,12 @@ type page struct {
 	OGDescription      string        `json:"ogDescription"`
 	TwitterDescription string        `json:"twitterDescription"`
 	Home               bool          `json:"home"`
-	NavIconsHidden     bool          `json:"navIconsHidden"`
-	FooterTag          string        `json:"footerTag"`
 	Install            *installPanel `json:"install"`
 
 	// Body is the page-unique markup, read from pages/<slug>.html.
-	Body string `json:"-"`
+	// FooterTag is site-level; it is copied onto every page at load.
+	Body      string `json:"-"`
+	FooterTag string `json:"-"`
 }
 
 // AnchorPrefix is empty on the landing page, whose section anchors are local,
@@ -69,18 +69,11 @@ func (p page) AnchorPrefix() string {
 	return "index.html"
 }
 
-// IconAttr is the aria-hidden attribute for the nav's decorative icons. The
-// landing page's copies were written without it; kept per-page so the two
-// stay byte-identical to what they replaced, and fixing that is a data change.
-func (p page) IconAttr() string {
-	if p.NavIconsHidden {
-		return ` aria-hidden="true"`
-	}
-	return ""
-}
-
 type site struct {
-	Pages []page `json:"pages"`
+	// FooterTag is one string for the whole site rather than a per-page
+	// field: the hand-maintained copies had already drifted apart once.
+	FooterTag string `json:"footerTag"`
+	Pages     []page `json:"pages"`
 }
 
 func main() {
@@ -124,6 +117,7 @@ func run(root, outDir string) error {
 			return err
 		}
 		p.Body = string(body)
+		p.FooterTag = s.FooterTag
 
 		var buf bytes.Buffer
 		if err := tmpl.ExecuteTemplate(&buf, "page.html", p); err != nil {
