@@ -34,10 +34,17 @@
           {{template "copyicon"}}
         </button>
       </div>
+      <p class="install-note">
+        Six builds — Linux, macOS and Windows, each on x86-64 and arm64; the script
+        detects yours, and corrects for Rosetta and WOW64. Set <code>KUTE_VERSION</code>
+        to pin a release or <code>KUTE_INSTALL_DIR</code> to change where the binary
+        lands. Both installers verify the checksum, and the signature too when
+        <code>cosign</code> is present — <a href="/verify.html">how to check it yourself</a>.
+      </p>
       <div class="install-ctas">
         <a class="btn btn-ghost" href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">View on GitHub</a>
         <a class="btn btn-ghost" href="{{.Install.SecondHref}}">{{.Install.SecondLabel}}</a>
-        <a class="btn btn-ghost" href="/verify.html">Verify a release</a>
+        <a class="btn btn-ghost" href="{{.Install.ThirdHref}}">{{.Install.ThirdLabel}}</a>
       </div>
     </div>
   </div>

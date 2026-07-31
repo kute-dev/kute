@@ -22,7 +22,9 @@
       "install": {
         "id": "install",
         "secondHref": "/features.html",
-        "secondLabel": "See what's inside"
+        "secondLabel": "See what's inside",
+        "thirdHref": "/verify.html",
+        "thirdLabel": "Verify a release"
       }
     },
     {
@@ -37,7 +39,9 @@
       "install": {
         "id": "",
         "secondHref": "/index.html#surface",
-        "secondLabel": "Back to overview"
+        "secondLabel": "Back to overview",
+        "thirdHref": "/verify.html",
+        "thirdLabel": "Verify a release"
       }
     },
     {
@@ -52,7 +56,9 @@
       "install": {
         "id": "",
         "secondHref": "/features.html",
-        "secondLabel": "See what's inside"
+        "secondLabel": "See what's inside",
+        "thirdHref": "/verify.html",
+        "thirdLabel": "Verify a release"
       }
     },
     {
@@ -64,7 +70,13 @@
       "ogDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "twitterDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "home": false,
-      "install": null
+      "install": {
+        "id": "",
+        "secondHref": "/features.html",
+        "secondLabel": "See what's inside",
+        "thirdHref": "https://github.com/kute-dev/kute/releases",
+        "thirdLabel": "All releases"
+      }
     },
     {
       "slug": "404",

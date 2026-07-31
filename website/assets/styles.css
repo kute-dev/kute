@@ -867,6 +867,19 @@ p { margin: 0; }
 .copy-btn svg { width: 15px; height: 15px; }
 .copy-btn.copied { color: var(--good); border-color: var(--good); }
 
+/* Scoped to beat `.install-panel > p` above, which would otherwise set the
+   colour and clamp this to the lead paragraph's 480px. This one is a dense
+   footnote: wider, smaller and quieter than the sentence above it. */
+.install-panel > p.install-note {
+  margin: 22px auto 0;
+  max-width: 620px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-faint);
+}
+.install-note a { color: var(--accent-hi); }
+.install-note a:hover { text-decoration: underline; }
+
 .install-ctas { margin-top: 26px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
 
 /* ---------- features page ---------- */

@@ -6,9 +6,11 @@
 // footer tagline than the other three, and its nav icons were missing the
 // aria-hidden the same icons had elsewhere.
 //
-// Page-unique body content lives in website/pages/<slug>.html and is emitted
-// verbatim. Everything shared lives in website/templates/. Per-page data is
-// website/site.json.
+// Page-unique body content lives in website/pages/<slug>.html. Everything
+// shared lives in website/templates/, and per-page data in website/site.json.
+// Bodies are themselves templates, so a page can quote a value that has to
+// stay in step with something outside it — the release version the verify
+// page's worked example uses — but they are otherwise emitted as written.
 //
 // This uses text/template rather than html/template deliberately. There is no
 // untrusted input here — the inputs are this repo's own hand-written HTML —
@@ -33,6 +35,8 @@ type installPanel struct {
 	ID          string `json:"id"`
 	SecondHref  string `json:"secondHref"`
 	SecondLabel string `json:"secondLabel"`
+	ThirdHref   string `json:"thirdHref"`
+	ThirdLabel  string `json:"thirdLabel"`
 }
 
 // IDAttr renders the id attribute, including its leading space, or nothing.
