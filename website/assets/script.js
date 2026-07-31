@@ -12,24 +12,50 @@
   var toggle = document.querySelector('.nav-toggle');
   var links = document.querySelector('.nav-links');
   if (toggle && links) {
-    toggle.addEventListener('click', function () {
-      var open = links.classList.toggle('open');
+    var setOpen = function (open) {
+      links.classList.toggle('open', open);
       links.style.display = open ? 'flex' : '';
+      // The button's own state, not just the panel's: without this a screen
+      // reader announces the same thing whether the menu is open or shut.
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    toggle.addEventListener('click', function () {
+      setOpen(!links.classList.contains('open'));
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && links.classList.contains('open')) {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+    // An open menu covering the section you just jumped to is a trap on a
+    // phone, so following a link closes it.
+    links.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('a')) setOpen(false);
     });
   }
 
   // Theme toggle (dark/light), persisted
   var themeBtn = document.querySelector('[data-theme-toggle]');
   var root = document.documentElement;
+  var currentTheme = function () {
+    return root.getAttribute('data-theme') ||
+      (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  };
   var stored = localStorage.getItem('kute-theme');
   if (stored) root.setAttribute('data-theme', stored);
   if (themeBtn) {
+    // Name the action rather than the control: a static "Toggle theme" never
+    // told anyone which theme they were in or what pressing it would do.
+    var relabel = function () {
+      themeBtn.setAttribute('aria-label',
+        currentTheme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+    };
+    relabel();
     themeBtn.addEventListener('click', function () {
-      var current = root.getAttribute('data-theme') ||
-        (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-      var next = current === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      localStorage.setItem('kute-theme', next);
+      root.setAttribute('data-theme', currentTheme() === 'dark' ? 'light' : 'dark');
+      localStorage.setItem('kute-theme', root.getAttribute('data-theme'));
+      relabel();
     });
   }
 

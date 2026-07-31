@@ -19,10 +19,13 @@
 <meta name="twitter:description" content="{{.TwitterDescription}}">
 </head>
 <body>
+<a class="skip-link" href="#main">Skip to content</a>
 
 {{template "nav" .}}
 
+<main id="main">
 {{.Body}}{{if .Install}}{{template "install" .}}{{end}}
+</main>
 
 <footer>
   <div class="wrap">

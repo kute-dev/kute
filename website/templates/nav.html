@@ -1,7 +1,7 @@
-{{define "nav"}}<nav class="nav">
+{{define "nav"}}<nav class="nav" aria-label="Main">
   <div class="wrap">
     <a href="index.html" class="brand"><span class="mark">❯</span>kute</a>
-    <div class="nav-links">
+    <div class="nav-links" id="nav-links">
       <a href="{{.AnchorPrefix}}#problem">Problem</a>
       <a href="{{.AnchorPrefix}}#approach">Approach</a>
       <a href="{{.AnchorPrefix}}#principles">Principles</a>
@@ -21,7 +21,7 @@
       </a>
       <a class="btn btn-primary btn-sm" href="{{.AnchorPrefix}}#install">Install</a>
     </div>
-    <button class="nav-toggle" aria-label="Menu">
+    <button class="nav-toggle" aria-label="Menu" aria-expanded="false" aria-controls="nav-links">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
   </div>

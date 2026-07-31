@@ -126,6 +126,40 @@ img, svg { display: block; max-width: 100%; }
 
 ::selection { background: var(--sel-bg); color: var(--accent-hi); }
 
+/* ---------- focus ----------
+   Links here have their underline removed, and several controls drop their
+   background and border, so the UA default ring is the only affordance a
+   keyboard user gets and it is close to invisible on some of them. The ring
+   is offset so it lands on the page background rather than on the control,
+   which keeps it legible over the filled primary button too. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.skip-link {
+  /* fixed, not absolute: absolute positions it against the document, so a
+     user who tabs into it after scrolling gets a control parked far above
+     the viewport. */
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 200;
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+  /* Off-screen until focused rather than display:none, which would take it
+     out of the tab order and defeat the point. */
+  transform: translateY(-200%);
+}
+/* :focus, not :focus-visible — however this link receives focus it has to
+   become visible, or it is a control the user cannot see they are on. */
+.skip-link:focus { transform: translateY(0); }
+
 .wrap {
   max-width: var(--max-width);
   margin: 0 auto;
