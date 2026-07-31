@@ -12,7 +12,9 @@
    held to that. Keep any new value above 4.5:1 on both backgrounds.
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+/* Fonts are linked from the page head, not @import-ed here: an @import is not
+   discoverable until this file has downloaded and parsed, which serialises the
+   whole third-party round trip behind it. See templates/page.html. */
 
 :root {
   /* kute Theme — dark (source of truth: internal/tui theme + docs/design/README.md,
@@ -115,6 +117,21 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  /* .reveal starts fully transparent and is faded in by IntersectionObserver.
+     Suppressing the transition without also restoring opacity would leave
+     every section permanently invisible — the guard has to undo the start
+     state, not just the animation. */
+  .reveal { opacity: 1; transform: none; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 body {
   margin: 0;

@@ -11,7 +11,23 @@
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/assets/styles.css">
+<script>
+// Runs before first paint, deliberately blocking and inline. The deferred
+// script at end-of-body sets this too, but by then the page has already
+// painted, so anyone with a stored light theme saw a dark flash on every
+// navigation. Wrapped because localStorage throws outright when site data is
+// blocked, and this must never be the thing that stops the page rendering.
+try { var t = localStorage.getItem('kute-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<noscript>
+<!-- .reveal sections start transparent and are faded in by script; without
+     it every one of them stays invisible and the page reads as empty. -->
+<style>.reveal { opacity: 1 !important; transform: none !important; }</style>
+</noscript>
 <meta name="theme-color" content="#0b0b10" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f7f7fa" media="(prefers-color-scheme: light)">
 {{if .Canonical}}<meta property="og:site_name" content="kute">
