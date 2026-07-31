@@ -80,6 +80,30 @@ scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket
 scoop install kute
 ```
 
+<details>
+<summary>Verify the download</summary>
+
+Release archives are signed with a keyless [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) identity bound to the release workflow, ship an SPDX SBOM, and carry a GitHub build provenance attestation. Both installers verify the signature automatically when `cosign` is on your `PATH`, and always verify the checksum.
+
+```sh
+VERSION=0.4.0
+FILE=kute_${VERSION}_linux_amd64.tar.gz
+BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}
+curl -fsSLO "${BASE}/${FILE}"
+curl -fsSLO "${BASE}/${FILE}.sig"
+curl -fsSLO "${BASE}/${FILE}.pem"
+
+cosign verify-blob \
+  --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  --signature "${FILE}.sig" --certificate "${FILE}.pem" \
+  "${FILE}"
+```
+
+Success is `Verified OK`. [`docs/verifying-releases.md`](docs/verifying-releases.md) covers provenance (`gh attestation verify`), the SBOM, and what the installers do on a machine without cosign.
+
+</details>
+
 ## Usage
 
 Run `kute` with no arguments and it opens on the context you last used, in the namespace you left it in. The flags below pin a starting point instead — useful in a script, an alias, or when reproducing something for a bug report.
@@ -186,7 +210,7 @@ go run ./cmd/kute --demo   # demo mode, no cluster needed
 
 ## Platforms
 
-Prebuilt binaries (with checksums) are published for Linux, macOS, and Windows on amd64/arm64. Exact toolchain versions for building from source are pinned in `mise.toml` — `mise install` picks them up automatically.
+Prebuilt binaries are published for Linux, macOS, and Windows on amd64/arm64 — each with a checksum, a cosign signature and an SBOM ([how to check them](docs/verifying-releases.md)). Exact toolchain versions for building from source are pinned in `mise.toml` — `mise install` picks them up automatically.
 
 ## Project status
 

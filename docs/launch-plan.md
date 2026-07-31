@@ -26,11 +26,11 @@ are about whether the artifact is trustworthy and whether a user can get back of
 
 ---
 
-## 1. The trust chain
+## 1. The trust chain — **done, pending its first signed tag**
 
 `checksums.txt` is fetched from the same host, over the same channel, as the archive it
-describes — both installers verify it (`website/install.sh:78-87`,
-`install.ps1:75-84`), which proves the download wasn't corrupted in transit. It does not
+describes — both installers verify it (`website/install.sh:120-131`,
+`install.ps1:150-166`), which proves the download wasn't corrupted in transit. It does not
 prove the release is yours: anyone who can tamper with one file can tamper with both.
 
 This matters more here than for most tools. kute reads kubeconfigs, holds cluster
@@ -38,15 +38,34 @@ credentials in memory, and can delete production workloads on a keypress. A
 `curl | sh` install with no signature is the weakest link in that chain, and it is hard
 to retrofit after 1.0 because users' verification habits form at install time.
 
-- cosign keyless signing of archives and checksums.
-- `sboms:` (syft) in `.goreleaser.yaml`.
-- `actions/attest-build-provenance` in `release.yml`.
-- A verify snippet in the README, next to the install commands.
+- ✅ cosign keyless signing of **archives and checksums** — two `signs:` entries rather than
+  one `artifacts: all`, which would also sign every SBOM. Signing the archives themselves
+  (not just the manifest) is what makes verification one command against the file the user
+  actually downloaded.
+- ✅ `sboms:` (syft) in `.goreleaser.yaml`, one `.sbom.json` per archive. Both tools are
+  pinned in `mise.toml`, which is how they reach the release job's `PATH`.
+- ✅ `actions/attest-build-provenance` in `release.yml`, over `dist/checksums.txt` so one
+  attestation covers every artifact. Needed `id-token: write` (also what makes cosign
+  keyless) and `attestations: write`.
+- ✅ A verify snippet in the README next to the install commands, the full reference in
+  [`verifying-releases.md`](verifying-releases.md), and `website/verify.html` on kute.dev —
+  which is the URL the installers print.
+- ✅ **Both installers verify the signature themselves** when `cosign` is on `PATH`, beyond
+  what this section asked for: `curl | sh` is the weakest link named above, and a snippet
+  only reaches people who read it. Absent cosign, or on a release published before signing,
+  they print a note and fall through to the checksum — so a missing `.sig` is a warning
+  rather than an error. Closing that gap needs a strict opt-in
+  (`KUTE_REQUIRE_SIGNATURE`), which is not built.
 
-`govulncheck.yml` already covers the dependency half of supply chain.
+`govulncheck.yml` already covers the dependency half of supply chain. `ci.yml`'s
+`goreleaser-check` job now also runs a snapshot build, because `goreleaser check` validates
+the config's shape and would not notice syft missing from `PATH`.
 
 *Acceptance:* `cosign verify-blob` against a published release succeeds with the
-documented `--certificate-identity`, and fails against a modified archive.
+documented `--certificate-identity`, and fails against a modified archive. **The negative
+half is proven** (a garbage signature aborts both installers with nothing written); the
+positive half needs the first signed tag, since keyless signing can't be reproduced off
+CI — `v0.4.0-beta.1` is the first release that will carry signatures.
 
 ## 2. Security disclosure path — **done**
 

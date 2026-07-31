@@ -42,7 +42,11 @@ through kute:
 - Anything that writes outside its documented paths, or writes credentials into a file
   that documents itself as not holding them.
 - The update check and the installers (`install.sh`, `install.ps1`), including the
-  integrity of what they fetch.
+  integrity of what they fetch. Release archives are signed with a keyless cosign identity
+  bound to the release workflow and carry a build provenance attestation —
+  [`docs/verifying-releases.md`](docs/verifying-releases.md) is how to check one, and a
+  verification failure you can't explain belongs on the advisory form above rather than in
+  a public issue.
 
 **Not vulnerabilities** — these are the tool working as designed, and reports about them
 will be closed with a pointer back here:
