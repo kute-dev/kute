@@ -495,3 +495,22 @@ func TestNewFallsBackToPodWhenRestoredKindIsEvent(t *testing.T) {
 		t.Fatalf("expected the Pods breadcrumb, got:\n%s", view)
 	}
 }
+
+// Session.Location is the authoritative answer to "where is the user", and
+// a first launch has nothing persisted to restore. New has to mirror the
+// kind it resolved for itself, or Location says "(none)" while the screen
+// shows Pods — which is what the crash report used to record.
+func TestNewMirrorsTheDefaultKindIntoLocation(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	session := newSession()
+	session.Location.Kind = ""
+
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+
+	if session.Location.Kind != kube.KindPod {
+		t.Fatalf("Session.Location.Kind = %q, want Pod — the kind browse actually rendered", session.Location.Kind)
+	}
+}

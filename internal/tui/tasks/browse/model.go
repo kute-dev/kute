@@ -500,9 +500,17 @@ func New(cfg Config) Model {
 	if !ok || kind == kube.KindEvent {
 		kind = kube.KindPod
 		desc, _ = reg.Descriptor(kind)
-		if cfg.Session != nil {
-			cfg.Session.Location.Kind = kind
-		}
+	}
+	// Mirror the resolved kind back unconditionally, not just in the
+	// fallback branch above: Session.Location is documented as the
+	// authoritative answer to "where is the user", and switchKind already
+	// keeps it that way for every later change. A first launch that never
+	// navigates used to leave it empty while this screen showed Pods, which
+	// is a Location that disagrees with the screen — harmless until
+	// something read it and reported "(none)", which is what the crash
+	// report did.
+	if cfg.Session != nil {
+		cfg.Session.Location.Kind = kind
 	}
 
 	theme := tui.Dark()
