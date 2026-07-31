@@ -3,6 +3,14 @@ set -eu
 
 repo="kute-dev/kute"
 bin="kute"
+verify_docs="https://kute.dev/verify.html"
+
+# The keyless signing identity is the release workflow itself. Matched by
+# regexp rather than by exact tag so this script never needs to know which
+# version it just fetched; the anchor is what keeps it to that one workflow
+# in that one repo.
+cert_identity="^https://github\.com/${repo}/\.github/workflows/release\.yml@refs/tags/"
+cert_issuer="https://token.actions.githubusercontent.com"
 
 fail() {
 	printf 'kute install: %s\n' "$1" >&2
@@ -15,6 +23,36 @@ need() {
 
 cleanup() {
 	[ -n "${tmp:-}" ] && rm -rf "$tmp"
+}
+
+# The checksum verified below proves the archive matches a manifest that came
+# down the same wire as the archive; only the signature says the release is
+# ours. cosign is not a dependency of this script, so a machine without it
+# gets a note and the checksum — a stronger check that nobody can run is not
+# stronger. Same for a release predating signing: don't fail an install that
+# used to work.
+verify_signature() {
+	if ! command -v cosign >/dev/null 2>&1; then
+		printf 'note: cosign not found; verified checksum only.\n'
+		printf '      %s explains how to check the signature.\n' "$verify_docs"
+		return 0
+	fi
+
+	if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/${archive}.sig" "${base_url}/${archive}.sig" 2>/dev/null ||
+		! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/${archive}.pem" "${base_url}/${archive}.pem" 2>/dev/null; then
+		printf 'note: %s publishes no signature; verified checksum only.\n' "$version"
+		return 0
+	fi
+
+	cosign verify-blob \
+		--certificate-identity-regexp "$cert_identity" \
+		--certificate-oidc-issuer "$cert_issuer" \
+		--signature "${tmp}/${archive}.sig" \
+		--certificate "${tmp}/${archive}.pem" \
+		"${tmp}/${archive}" >/dev/null 2>&1 ||
+		fail "signature verification failed for ${archive} — do not run it; see ${verify_docs}"
+
+	printf 'Verified signature (cosign, keyless).\n'
 }
 
 main() {
@@ -76,6 +114,8 @@ main() {
 
 	curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/${archive}" "${base_url}/${archive}" || fail "download failed: ${base_url}/${archive}"
 	curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/checksums.txt" "${base_url}/checksums.txt" || fail "download failed: ${base_url}/checksums.txt"
+
+	verify_signature
 
 	(
 		cd "$tmp"

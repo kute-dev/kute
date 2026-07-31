@@ -5,8 +5,9 @@
 
 .DESCRIPTION
     The Windows counterpart to https://kute.dev/install.sh. Downloads the
-    release archive for this machine's architecture, verifies it against the
-    release's checksums.txt, and installs kute.exe.
+    release archive for this machine's architecture, verifies its cosign
+    signature when cosign is installed, verifies it against the release's
+    checksums.txt, and installs kute.exe.
 
         irm https://kute.dev/install.ps1 | iex
 
@@ -21,9 +22,72 @@ $ErrorActionPreference = 'Stop'
 # and it costs roughly an order of magnitude in download time.
 $ProgressPreference = 'SilentlyContinue'
 
+# The checksum verified below proves the archive matches a manifest that came
+# down the same wire as the archive; only the signature says the release is
+# ours. cosign is not a dependency of this script, so a machine without it
+# gets a note and the checksum — a stronger check that nobody can run is not
+# stronger. Same for a release predating signing: don't fail an install that
+# used to work.
+function Confirm-KuteSignature {
+    param(
+        [string]$BaseUrl,
+        [string]$Archive,
+        [string]$ArchivePath,
+        [string]$Version,
+        [string]$VerifyDocs
+    )
+
+    if (-not (Get-Command cosign -ErrorAction SilentlyContinue)) {
+        Write-Host 'note: cosign not found; verified checksum only.'
+        Write-Host "      $VerifyDocs explains how to check the signature."
+        return
+    }
+
+    $sigPath = "$ArchivePath.sig"
+    $certPath = "$ArchivePath.pem"
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Archive.sig" -OutFile $sigPath
+        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Archive.pem" -OutFile $certPath
+    } catch {
+        Write-Host "note: $Version publishes no signature; verified checksum only."
+        return
+    }
+
+    # The keyless signing identity is the release workflow itself. Matched by
+    # regexp rather than by exact tag so this script never needs to know which
+    # version it just fetched; the anchor is what keeps it to that one
+    # workflow in that one repo.
+    $identity = '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/'
+    $issuer = 'https://token.actions.githubusercontent.com'
+
+    # cosign writes "Verified OK" to stderr on *success*, and PowerShell 5.1
+    # turns a native command's stderr into error records — which under the
+    # script's ErrorActionPreference = 'Stop' throws NativeCommandError on a
+    # verification that passed. Drop to 'Continue' for the call itself and
+    # judge the result by $LASTEXITCODE, which is the only honest signal here.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & cosign verify-blob `
+            --certificate-identity-regexp $identity `
+            --certificate-oidc-issuer $issuer `
+            --signature $sigPath `
+            --certificate $certPath `
+            $ArchivePath 2>&1 | Out-Null
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "kute install: signature verification failed for $Archive — do not run it; see $VerifyDocs"
+    }
+
+    Write-Host 'Verified signature (cosign, keyless).'
+}
+
 function Install-Kute {
     $repo = 'kute-dev/kute'
     $bin = 'kute.exe'
+    $verifyDocs = 'https://kute.dev/verify.html'
 
     # 5.1 still negotiates TLS 1.0 by default, which github.com refuses.
     [Net.ServicePointManager]::SecurityProtocol =
@@ -79,6 +143,9 @@ function Install-Kute {
         } catch {
             throw "kute install: download failed from ${baseUrl}: $($_.Exception.Message)"
         }
+
+        Confirm-KuteSignature -BaseUrl $baseUrl -Archive $archive `
+            -ArchivePath $archivePath -Version $version -VerifyDocs $verifyDocs
 
         # checksums.txt is "<sha256>  <filename>"; the binary-mode marker is
         # a "*" prefix on the name, which sha256sum writes and goreleaser
