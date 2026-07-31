@@ -116,9 +116,21 @@ function Install-Kute {
     if (-not $version) { $version = 'latest' }
     if ($version -eq 'latest') {
         Write-Host 'Resolving latest kute release...'
-        $latest = Invoke-RestMethod -UseBasicParsing `
-            -Uri "https://api.github.com/repos/$repo/releases/latest"
-        $version = $latest.tag_name
+        # Follow the /releases/latest redirect rather than calling the REST
+        # API: the API is rate-limited to 60 requests/hour per unauthenticated
+        # IP, so behind a corporate NAT or on a shared CI runner this step
+        # fails intermittently. install.sh resolves it the same way.
+        $latestUrl = "https://github.com/$repo/releases/latest"
+        $resp = Invoke-WebRequest -UseBasicParsing -Method Head -Uri $latestUrl
+        # BaseResponse is an HttpWebResponse on Windows PowerShell 5.1 and an
+        # HttpResponseMessage on PowerShell 6+; the final URL after the
+        # redirect lives under a different property on each.
+        if ($resp.BaseResponse.PSObject.Properties['ResponseUri']) {
+            $finalUri = $resp.BaseResponse.ResponseUri
+        } else {
+            $finalUri = $resp.BaseResponse.RequestMessage.RequestUri
+        }
+        $version = ($finalUri.AbsolutePath -split '/')[-1]
     }
     if ($version -match '^\d') { $version = "v$version" }
     if ($version -notmatch '^v\d') {
