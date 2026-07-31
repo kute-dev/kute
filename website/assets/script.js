@@ -42,7 +42,15 @@
     return root.getAttribute('data-theme') ||
       (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
   };
-  var stored = localStorage.getItem('kute-theme');
+  // localStorage throws, not returns null, when site data is blocked (Safari
+  // private mode). Unguarded it killed this whole IIFE, and since the copy
+  // buttons and scroll reveal are registered further down, a storage
+  // exception left every .reveal section stuck at opacity 0 — a blank page.
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var stored = store.get('kute-theme');
   if (stored) root.setAttribute('data-theme', stored);
   if (themeBtn) {
     // Name the action rather than the control: a static "Toggle theme" never
@@ -54,23 +62,64 @@
     relabel();
     themeBtn.addEventListener('click', function () {
       root.setAttribute('data-theme', currentTheme() === 'dark' ? 'light' : 'dark');
-      localStorage.setItem('kute-theme', root.getAttribute('data-theme'));
+      store.set('kute-theme', root.getAttribute('data-theme'));
       relabel();
     });
   }
 
-  // Copy-to-clipboard for install command
+  // Copy-to-clipboard for install commands.
+  // A live region carries the result: swapping the icon says nothing to a
+  // screen reader, and the button's own label stays "Copy command" either way.
+  var announcer = document.createElement('div');
+  announcer.setAttribute('aria-live', 'polite');
+  announcer.setAttribute('role', 'status');
+  announcer.className = 'visually-hidden';
+  document.body.appendChild(announcer);
+
+  var TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+
+  var copyText = function (text) {
+    // navigator.clipboard is undefined outside a secure context, so over
+    // file:// or plain http this throws rather than rejecting.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('copy unavailable'));
+    });
+  };
+
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    // Captured once, at wire-up. Reading it inside the handler meant a second
+    // click during the 1600ms window captured the tick and restored *that*,
+    // leaving the button stuck as a checkmark.
+    var original = btn.innerHTML;
+    var timer = null;
     btn.addEventListener('click', function () {
-      var text = btn.getAttribute('data-copy');
-      navigator.clipboard.writeText(text).then(function () {
+      copyText(btn.getAttribute('data-copy')).then(function () {
         btn.classList.add('copied');
-        var original = btn.innerHTML;
-        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
-        setTimeout(function () {
+        btn.innerHTML = TICK;
+        announcer.textContent = 'Copied to clipboard';
+        clearTimeout(timer);
+        timer = setTimeout(function () {
           btn.classList.remove('copied');
           btn.innerHTML = original;
+          announcer.textContent = '';
         }, 1600);
+      }).catch(function () {
+        // Previously an unhandled rejection: the button simply did nothing
+        // and never said why.
+        announcer.textContent = 'Copy failed — select the command and copy it manually';
       });
     });
   });

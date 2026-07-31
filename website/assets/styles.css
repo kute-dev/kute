@@ -184,6 +184,21 @@ img, svg { display: block; max-width: 100%; }
    become visible, or it is a control the user cannot see they are on. */
 .skip-link:focus { transform: translateY(0); }
 
+/* Announced but not drawn. Not display:none, which removes it from the
+   accessibility tree along with the live-region updates it carries. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .wrap {
   max-width: var(--max-width);
   margin: 0 auto;
