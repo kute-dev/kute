@@ -19,4 +19,7 @@ kubeconfig*
 scripts/.bin/
 dist/
 .release/
-site
+# Anchored: unanchored "site" matches any path segment of that name, which
+# silently ignored the whole cmd/site/ package — existing files stayed tracked,
+# so nothing broke until someone added a new one there.
+/site
