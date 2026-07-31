@@ -29,6 +29,45 @@ archives:
 checksum:
   name_template: checksums.txt
 
+sboms:
+  - artifacts: archive
+
+# Signed with a keyless cosign identity bound to the release workflow's OIDC
+# token, so the certificate says which workflow at which tag produced the
+# artifact — that is the part checksums.txt cannot carry, since it travels
+# over the same channel as the file it describes.
+#
+# Two entries rather than one `artifacts: all`: that would also sign every
+# SBOM, doubling the asset count for a file nobody verifies on its own. The
+# archives are signed so verification is one command against the file the
+# user actually downloaded; checksums.txt is signed for anyone who prefers
+# to verify the manifest and hash from it.
+signs:
+  - id: archives
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: archive
+    output: true
+  - id: checksums
+    cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
 changelog:
   sort: asc
   filters:
