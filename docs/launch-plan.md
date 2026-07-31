@@ -48,22 +48,27 @@ to retrofit after 1.0 because users' verification habits form at install time.
 *Acceptance:* `cosign verify-blob` against a published release succeeds with the
 documented `--certificate-identity`, and fails against a modified archive.
 
-## 2. Security disclosure path
+## 2. Security disclosure path — **done**
 
-There is no `SECURITY.md` and no private channel.
+There was no `SECURITY.md` and no private channel.
 
-This is now an active hazard rather than an omission, because
+This became an active hazard rather than an omission when
 [`diagnostics.md`](diagnostics.md) shipped: the bug form tells people to attach a crash
 report to a **public issue**, and those files name contexts, clusters and namespaces.
 That is the right instruction for a crash and exactly wrong for a vulnerability. The two
 paths have to be visibly different.
 
-- `SECURITY.md` with GitHub private advisories as the channel and a supported-versions
-  line.
-- One line at the top of `bug_report.yml`: not for security issues → here.
+- ✅ GitHub private vulnerability reporting **enabled on the repository** — it was off,
+  so the advisory form would have 404'd for every reporter a `SECURITY.md` sent there.
+- ✅ [`SECURITY.md`](../SECURITY.md): the private channel, a supported-versions line, and
+  an explicit scope — including the "not vulnerabilities" list, which exists so that
+  *kute deletes things* and *diagnostics files name namespaces* get closed with a
+  pointer rather than argued each time.
+- ✅ A security contact link in the issue chooser (`config.yml`), and a warning at the
+  top of `bug_report.yml` saying this form is public.
 
 *Acceptance:* a reporter looking at the issue chooser can tell in one read which path is
-theirs.
+theirs — the security link sits above every other option.
 
 ## 3. `latest` must mean stable
 

@@ -7,6 +7,8 @@ body:
   - type: markdown
     attributes:
       value: |
+        ⚠️ **Not for security vulnerabilities.** This form is public, and it asks you to attach diagnostics naming your clusters and namespaces. Report privately instead: https://github.com/kute-dev/kute/security/advisories/new — see [SECURITY.md](https://github.com/kute-dev/kute/blob/main/SECURITY.md).
+
         Use this form for reproducible bugs. For questions or troubleshooting help, start a Discussion instead: https://github.com/kute-dev/kute/discussions
 
         **If kute crashed**, it wrote a crash report and printed its path. Attach that file — it already contains everything the fields below ask for. Reports are written to `$XDG_STATE_HOME/kute/` (`~/.local/state/kute/` by default) as `kute-crash-<timestamp>.log`.

@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/kute-dev/kute/security/advisories/new
+    about: Private disclosure, not a public issue. kute holds cluster credentials — please do not open an issue for this.
   - name: Questions and help
     url: https://github.com/kute-dev/kute/discussions/categories/q-a
     about: Ask usage questions or get help from maintainers and the community.
