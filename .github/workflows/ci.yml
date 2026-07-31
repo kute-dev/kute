@@ -25,6 +25,10 @@ jobs:
         run: go vet ./...
       - name: golangci-lint
         run: golangci-lint run
+      # deploy-pages.yml renders the site on push to main, where a broken
+      # template would fail after review rather than during it.
+      - name: Render the website
+        run: go run ./cmd/site
       - name: go test
         run: go test -race -shuffle=on -count=1 ./...
   # The release builds a windows/amd64 and windows/arm64 binary, so something

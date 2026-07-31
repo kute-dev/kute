@@ -4,6 +4,7 @@ on:
     branches: ["main"]
     paths:
       - "website/**"
+      - "cmd/site/**"
       - "docs/assets/incident-walkthrough-all-namespaces.gif"
       - "docs/assets/namespace-palette-demo.gif"
       - "docs/assets/goto-palette-demo.gif"
@@ -28,13 +29,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Setup mise
+        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+      - name: Render the site
+        # The pages are generated from website/{pages,templates,site.json}:
+        # the nav, head, footer and install panel exist once each rather than
+        # copy-pasted into every page. Output lands in website/dist/.
+        run: go run ./cmd/site
       - name: Stage site with demo GIFs
-        # website/demo.html references these under assets/ — kept only in
-        # docs/assets/ (the recording pipeline's output) to avoid committing
-        # duplicate binary copies, and merged in here at deploy time instead.
+        # demo.html references these under assets/ — kept only in docs/assets/
+        # (the recording pipeline's output) to avoid committing duplicate
+        # binary copies, and merged in here at deploy time instead.
         run: |
           mkdir -p _site/assets
           cp -r website/. _site/
+          rm -rf _site/pages _site/templates _site/dist _site/site.json
+          cp website/dist/*.html _site/
           cp docs/assets/incident-walkthrough-all-namespaces.gif docs/assets/namespace-palette-demo.gif docs/assets/goto-palette-demo.gif docs/assets/demo-everyday-actions.gif docs/assets/demo-routing-table.gif _site/assets/
       - name: Cache-bust demo GIFs
         # GitHub Pages doesn't let us set Cache-Control, so a re-recorded gif

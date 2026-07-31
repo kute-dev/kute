@@ -1,0 +1,44 @@
+{{define "install"}}<section class="install"{{.Install.IDAttr}}>
+  <div class="wrap">
+    <div class="install-panel reveal">
+      <span class="eyebrow">SINGLE BINARY</span>
+      <h2>Install kute.</h2>
+      <p>Explore the full Kute experience with <code style="white-space:nowrap">kute --demo</code>—a built-in fake cluster with no setup or configuration.</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | sh</div>
+        <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | sh" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="code-or">Or install with Homebrew</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">brew install</span> kute-dev/tap/kute</div>
+        <button class="copy-btn" data-copy="brew install kute-dev/tap/kute" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="code-or">On Windows, with PowerShell</p>
+      <div class="code-block">
+        <div><span class="prompt">&gt;</span><span class="cmd">irm</span> https://kute.dev/install.ps1 | <span class="cmd">iex</span></div>
+        <button class="copy-btn" data-copy="irm https://kute.dev/install.ps1 | iex" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="code-or">Or with Scoop</p>
+      <div class="code-block">
+        <div>
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop bucket add</span> kute-dev https://github.com/kute-dev/scoop-bucket</div>
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop install</span> kute</div>
+        </div>
+        <button class="copy-btn" data-copy="scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket&#10;scoop install kute" aria-label="Copy commands">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <div class="install-ctas">
+        <a class="btn btn-ghost" href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">View on GitHub</a>
+        <a class="btn btn-ghost" href="{{.Install.SecondHref}}">{{.Install.SecondLabel}}</a>
+        <a class="btn btn-ghost" href="verify.html">Verify a release</a>
+      </div>
+    </div>
+  </div>
+</section>{{end}}

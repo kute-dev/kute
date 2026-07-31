@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<link rel="canonical" href="{{.Canonical}}">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/styles.css">
+<meta name="theme-color" content="#0b0b10" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f7fa" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="{{.OGTitle}}">
+<meta property="og:description" content="{{.OGDescription}}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{.Canonical}}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.OGTitle}}">
+<meta name="twitter:description" content="{{.TwitterDescription}}">
+</head>
+<body>
+
+{{template "nav" .}}
+
+{{.Body}}{{if .Install}}{{template "install" .}}{{end}}
+
+<footer>
+  <div class="wrap">
+    <div class="footer-row">
+      <div>
+        <a href="index.html" class="footer-brand"><span class="mark">❯</span>kute</a>
+        <p class="footer-tag">{{.FooterTag}}</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">Issues</a>
+        <a href="features.html">Features</a>
+        <a href="demo.html">Demo</a>
+        <a href="verify.html">Verify</a>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <span>Apache License 2.0</span>
+      <span>Built with Bubble Tea &amp; Lip Gloss</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/script.js"></script>
+</body>
+</html>

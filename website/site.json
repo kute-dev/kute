@@ -1,0 +1,74 @@
+{
+  "comment": [
+    "Per-page data for cmd/site. Body content lives in pages/<slug>.html;",
+    "the shared shell, nav and install panel live in templates/.",
+    "navIconsHidden and footerTag differ across pages only because the",
+    "hand-maintained copies had drifted — see the Phase 2 note in main.go."
+  ],
+  "pages": [
+    {
+      "slug": "index",
+      "title": "kute — the incident console for Kubernetes",
+      "description": "kute makes a cluster's actual state visible without digging — triage-first sorting, live failure states that never go blank, and guardrails that scale with blast radius. Try it in one command, no cluster needed.",
+      "canonical": "https://kute.dev/",
+      "ogTitle": "kute — the incident console for Kubernetes",
+      "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
+      "twitterDescription": "Your cluster, in plain sight. Modern Kubernetes TUI.",
+      "home": true,
+      "navIconsHidden": false,
+      "footerTag": "Your cluster, in plain sight.",
+      "install": {
+        "id": "install",
+        "secondHref": "features.html",
+        "secondLabel": "See what's inside"
+      }
+    },
+    {
+      "slug": "features",
+      "title": "Features — kute, the incident console for Kubernetes",
+      "description": "Every screen kute ships, explained: cluster overview as a routing layer not a dashboard, pod detail that leads with the last termination, secret decode that never touches disk, and Ingress/Gateway API routing tables resolved live.",
+      "canonical": "https://kute.dev/features.html",
+      "ogTitle": "Features — kute, the incident console for Kubernetes",
+      "ogDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
+      "twitterDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
+      "home": false,
+      "navIconsHidden": true,
+      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
+      "install": {
+        "id": "",
+        "secondHref": "index.html#surface",
+        "secondLabel": "Back to overview"
+      }
+    },
+    {
+      "slug": "demo",
+      "title": "Demo — kute, the incident console for Kubernetes",
+      "description": "Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, the namespace and goto palettes' alt-tab gestures, everyday Deployment actions, and the Ingress/Gateway API routing table resolving a broken backend live — all recorded straight from kute --demo.",
+      "canonical": "https://kute.dev/demo.html",
+      "ogTitle": "Demo — kute, the incident console for Kubernetes",
+      "ogDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
+      "twitterDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
+      "home": false,
+      "navIconsHidden": true,
+      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
+      "install": {
+        "id": "",
+        "secondHref": "features.html",
+        "secondLabel": "See what's inside"
+      }
+    },
+    {
+      "slug": "verify",
+      "title": "Verify a release — kute, the incident console for Kubernetes",
+      "description": "Every kute release archive is signed with a keyless cosign identity bound to the release workflow, ships an SBOM, and carries a GitHub build provenance attestation. Here is how to check all three by hand.",
+      "canonical": "https://kute.dev/verify.html",
+      "ogTitle": "Verify a release — kute, the incident console for Kubernetes",
+      "ogDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
+      "twitterDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
+      "home": false,
+      "navIconsHidden": true,
+      "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
+      "install": null
+    }
+  ]
+}
