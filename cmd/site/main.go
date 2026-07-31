@@ -60,6 +60,12 @@ type page struct {
 	NoIndex            bool          `json:"noIndex"`
 	Install            *installPanel `json:"install"`
 
+	// CTA closes the page with the compact call to action instead. Only the
+	// install page carries the full panel now: repeating four package
+	// managers at the foot of every page made each one longer without
+	// telling anyone anything they could not get by following one link.
+	CTA bool `json:"cta"`
+
 	// Body is the page-unique markup, read from pages/<slug>.html.
 	// The rest are site-level values copied onto every page at load.
 	Body           string `json:"-"`
@@ -74,17 +80,8 @@ type page struct {
 	SignedFrom     string `json:"-"`
 }
 
-// AnchorPrefix is empty on the landing page, whose section anchors are local,
-// and "/index.html" everywhere else, where they have to travel.
-func (p page) AnchorPrefix() string {
-	if p.Home {
-		return ""
-	}
-	return "/index.html"
-}
-
 // NavCurrent marks the nav link pointing at the page being rendered. Without
-// it nothing in the markup says which of the seven links you are already on.
+// it nothing in the markup says which of the links you are already on.
 func (p page) NavCurrent(slug string) string {
 	if p.Slug == slug {
 		return ` aria-current="page"`
@@ -116,7 +113,7 @@ const structuredData = `{
   "name": "kute",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Linux, macOS, Windows",
-  "description": "A terminal console for Kubernetes: triage-first sorting, live failure states, and guardrails that scale with blast radius.",
+  "description": "A terminal console for Kubernetes. The broken thing sorts to the top, every action shows the command it will run before it runs it, and nothing goes blank when the connection drops.",
   "url": "https://kute.dev/",
   "downloadUrl": "https://github.com/kute-dev/kute/releases",
   "license": "https://www.apache.org/licenses/LICENSE-2.0",
@@ -172,9 +169,17 @@ func run(root, outDir string) error {
 		}
 
 		// Bodies are templates too, so a page can quote a value that has to
-		// stay in step with something else (the release version). They are
-		// otherwise emitted exactly as written.
-		bodyTmpl, err := template.New(p.Slug).Parse(string(body))
+		// stay in step with something else (the release version), and can
+		// reuse a shared fragment — the copy-button icon appears a dozen
+		// times across the install and guide pages, and pasting the same SVG
+		// path that often is how the copies drift. They are otherwise emitted
+		// exactly as written. Cloned per page so one body's definitions can
+		// never leak into the next one's.
+		bodySet, err := tmpl.Clone()
+		if err != nil {
+			return err
+		}
+		bodyTmpl, err := bodySet.New(p.Slug).Parse(string(body))
 		if err != nil {
 			return fmt.Errorf("pages/%s.html: %w", p.Slug, err)
 		}
