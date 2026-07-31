@@ -127,21 +127,18 @@ func TestPartialGrantAcrossScreens(t *testing.T) {
 
 		a.Press("l")
 		a.WaitFor("KUTE-E2E-LOG-MARKER", Settle)
-		a.Esc()
-		a.WaitFor(pod, Settle)
+		a.backToPodDetail()
 
 		// Events and the timeline, both granted.
 		a.Press("e")
 		a.WaitLoaded(Settle)
 		a.WaitFor("Started", Settle)
-		a.Esc()
-		a.WaitFor(pod, Settle)
+		a.backToPodDetail()
 
 		a.Press("t")
 		a.WaitLoaded(Settle)
 		a.WaitFor("Timeline", Settle)
-		a.Esc()
-		a.WaitFor(pod, Settle)
+		a.backToPodDetail()
 		a.Esc()
 		a.WaitFor("api-", Settle)
 	})

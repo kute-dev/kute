@@ -20,7 +20,7 @@ func TestKindScreens(t *testing.T) {
 	a.WaitFor("api-", Connect)
 
 	t.Run("configmap", func(t *testing.T) {
-		a.openFrom(t, "configmaps", "app-config")
+		a.openFrom(t, "configmaps", "ConfigMaps", "app-config")
 		a.WaitLoaded(Settle)
 
 		// §27a's grid, with both shapes of value the fixture exists to
@@ -39,7 +39,7 @@ func TestKindScreens(t *testing.T) {
 	})
 
 	t.Run("secret", func(t *testing.T) {
-		a.openFrom(t, "secrets", "app-secret")
+		a.openFrom(t, "secrets", "Secrets", "app-secret")
 		a.WaitLoaded(Settle)
 
 		// §27b: keys visible, values masked, sizes real. The value must not
@@ -57,7 +57,7 @@ func TestKindScreens(t *testing.T) {
 	})
 
 	t.Run("ingress", func(t *testing.T) {
-		a.openFrom(t, "ingresses", "shop")
+		a.openFrom(t, "ingresses", "Ingresses", "shop")
 		a.WaitLoaded(Settle)
 
 		// §23a: one row per host+path across both hosts, with backends
@@ -120,10 +120,22 @@ func TestKindScreens(t *testing.T) {
 	})
 }
 
-// openFrom jumps to a kind, puts the cursor on the named row and opens it.
-func (a *App) openFrom(t *testing.T, query, row string) {
+// openFrom jumps to a kind's list, puts the cursor on the named row and
+// opens it.
+//
+// list is the destination list's own title, and passing row for it instead
+// is a race, not a shortcut: the palette's enter dispatches the kind switch
+// as a command, so the frame gotoKind fences on can still be the *previous*
+// kind's list. A row name that also appears there matches it immediately —
+// "shop" is an Ingress here and also the middle of the Secrets list's
+// sh.helm.release.v1.shop.v2 — and ↵ then fires at a list whose rows haven't
+// arrived, which browse correctly ignores, leaving the test waiting forever
+// for a screen it never asked to open. Waiting for the title first is what
+// proves the switch landed; only then does the row wait mean anything,
+// because switching kinds clears the rows.
+func (a *App) openFrom(t *testing.T, query, list, row string) {
 	t.Helper()
-	a.gotoKind(t, query, row)
+	a.gotoKind(t, query, list)
 	a.WaitFor(row, Settle)
 	a.Enter()
 }

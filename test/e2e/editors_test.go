@@ -32,7 +32,7 @@ func TestConfigMapEditInPlace(t *testing.T) {
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
-	a.openFrom(t, "configmaps", "app-config")
+	a.openFrom(t, "configmaps", "ConfigMaps", "app-config")
 	a.WaitLoaded(Settle)
 	a.WaitForAll(Settle, "cm/app-config", "log-level", "info")
 
@@ -103,7 +103,7 @@ func TestSecretUnmaskAddAndRemoveKey(t *testing.T) {
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
-	a.openFrom(t, "secrets", "app-secret")
+	a.openFrom(t, "secrets", "Secrets", "app-secret")
 	a.WaitLoaded(Settle)
 	a.WaitForAll(Settle, "secret/app-secret", "api-token", "database-url")
 

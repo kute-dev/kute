@@ -38,22 +38,19 @@ func TestEverydayFlow(t *testing.T) {
 	// off a real kubelet.
 	a.Press("l")
 	a.WaitFor("KUTE-E2E-LOG-MARKER", Settle)
-	a.Esc()
-	a.WaitFor(pod, Settle)
+	a.backToPodDetail()
 
 	// --- events (§9b) ------------------------------------------------------
 	a.Press("e")
 	a.WaitGone("Loading", Settle)
 	a.WaitFor("Started", Settle)
-	a.Esc()
-	a.WaitFor(pod, Settle)
+	a.backToPodDetail()
 
 	// --- timeline (§16b) ---------------------------------------------------
 	a.Press("t")
 	a.WaitGone("Loading", Settle)
 	a.WaitFor("TIMELINE", Settle)
-	a.Esc()
-	a.WaitFor(pod, Settle)
+	a.backToPodDetail()
 
 	// Back out to the list the pod was opened from.
 	a.Esc()
@@ -103,6 +100,20 @@ func TestRolloutRestartStaysOnScreen(t *testing.T) {
 	a.WaitGone(before, Settle)
 }
 
+// backToPodDetail leaves a screen pushed from pod detail and waits for pod
+// detail itself.
+//
+// Not a wait for the pod's name: every screen reached from pod detail — logs,
+// events, timeline — names the same pod in its own header, so that wait is
+// satisfied by the screen being left, and the next key press lands on it
+// instead. CONTAINERS is pod detail's own section title and no other screen
+// renders it.
+func (a *App) backToPodDetail() {
+	a.t.Helper()
+	a.Esc()
+	a.WaitFor("CONTAINERS", Settle)
+}
+
 // selectAPIPod filters the Pods list down to the api Deployment's pods,
 // leaving the cursor on the first, and returns that pod's name as it appears
 // on screen.
@@ -129,6 +140,12 @@ func (a *App) filterTo(t *testing.T, term string) {
 
 // gotoKind switches the browse list to another kind through the one goto
 // palette, the way a user does: g, type, enter.
+//
+// want has to be something only the destination shows — its title, not one
+// of its rows. Enter dispatches the switch as a command, so the frame this
+// fences on can still be the previous kind's list, and a want that list also
+// contains returns instantly, leaving every key after it aimed at a screen
+// that is still being replaced.
 func (a *App) gotoKind(t *testing.T, query, want string) {
 	t.Helper()
 	a.Press("g")

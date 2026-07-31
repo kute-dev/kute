@@ -37,7 +37,7 @@ Three layers, each testing something the layer below cannot.
    against a real apiserver by reading the unexported `kindInformers` map, exactly as
    `internal/kube/count_test.go:51` already does against the fake clientset.
 
-### Two rules that keep this from becoming a flaky suite
+### Rules that keep this from becoming a flaky suite
 
 - **No golden files in E2E.** A real cluster produces nondeterministic AGE, pod-name
   suffixes, IPs and node assignment. Goldens stay the unit-level tool
@@ -45,6 +45,13 @@ Three layers, each testing something the layer below cannot.
 - **No one-shot assertions.** Informer caches fill asynchronously; every check goes through
   `App.WaitFor(substr, timeout)`, which polls the latest frame against a deadline. A bare
   `strings.Contains` on the first frame is a race by construction.
+- **Never wait on a string the screen you are leaving also shows.** Navigation is
+  dispatched as a command, so the frame a key press fences on can still be the old screen —
+  and `WaitFor` then returns on that frame, aiming every key after it at a screen that is
+  being replaced. It is why `gotoKind` waits for the destination *list's title* and
+  `backToPodDetail` for `CONTAINERS`, never for a row or an object name that both screens
+  carry (`shop` is an Ingress *and* the middle of `sh.helm.release.v1.shop.v2` on the
+  Secrets list; every screen pushed from pod detail repeats the pod's name in its header).
 
 `lipgloss.SetColorProfile` is a process global, so as with `browse`'s truecolor goldens, no
 E2E test that renders may call `t.Parallel`.
