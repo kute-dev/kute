@@ -259,6 +259,39 @@ func TestGeneratedSiteLinksResolve(t *testing.T) {
 	}
 }
 
+// TestSocialCardResolves checks the one asset no link checker sees. og:image
+// and twitter:image are absolute URLs in content= attributes, so they are
+// neither an internal path the link test follows nor an <a> the outbound
+// check visits — a missing card would just render as a blank social preview.
+func TestSocialCardResolves(t *testing.T) {
+	out := t.TempDir()
+	if err := run(filepath.Join(repoRoot, "website"), out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	var s site
+	if err := jsonUnmarshalFile(t, "website/site.json", &s); err != nil {
+		t.Fatal(err)
+	}
+
+	body := string(mustRead(t, filepath.Join(out, "index.html")))
+	re := regexp.MustCompile(`(?:property|name)="(og:image|twitter:image)" content="([^"]+)"`)
+	found := re.FindAllStringSubmatch(body, -1)
+	if len(found) != 2 {
+		t.Fatalf("expected og:image and twitter:image on the landing page, got %d", len(found))
+	}
+	for _, m := range found {
+		tag, url := m[1], m[2]
+		if !strings.HasPrefix(url, s.SiteURL) {
+			t.Errorf("%s is %q, which is not absolute under %s — scrapers require an absolute URL", tag, url, s.SiteURL)
+			continue
+		}
+		rel := strings.TrimPrefix(url, s.SiteURL)
+		if _, err := os.Stat(filepath.Join(repoRoot, "website", rel)); err != nil {
+			t.Errorf("%s points at %s, which is not a file in website/", tag, rel)
+		}
+	}
+}
+
 func mustRead(t *testing.T, p string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(p)
