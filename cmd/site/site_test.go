@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -142,6 +143,39 @@ func TestTextContrastMeetsAA(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestReleaseVersionsAgree keeps the verify page's worked example in step
+// with the same commands in the docs. The page used to hard-code the version
+// in four places; they are one value now, but that value still has to match
+// what docs/verifying-releases.md and README.md tell people to run, and a
+// release bump that updates one and not the others is the failure this
+// catches. Both files are the prose version of the same commands.
+func TestReleaseVersionsAgree(t *testing.T) {
+	var s site
+	if err := jsonUnmarshalFile(t, "website/site.json", &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.ReleaseVersion == "" || s.SignedFrom == "" {
+		t.Fatal("site.json must set releaseVersion and signedFrom")
+	}
+
+	for _, f := range []string{"docs/verifying-releases.md", "README.md"} {
+		body := readFile(t, f)
+		if want := "VERSION=" + s.ReleaseVersion; !strings.Contains(body, want) {
+			t.Errorf("%s does not contain %q — site.json says releaseVersion=%s",
+				f, want, s.ReleaseVersion)
+		}
+	}
+	if body := readFile(t, "docs/verifying-releases.md"); !strings.Contains(body, s.SignedFrom) {
+		t.Errorf("docs/verifying-releases.md does not mention %s, the release site.json calls the first signed one",
+			s.SignedFrom)
+	}
+}
+
+func jsonUnmarshalFile(t *testing.T, rel string, v any) error {
+	t.Helper()
+	return json.Unmarshal([]byte(readFile(t, rel)), v)
 }
 
 var linkRe = regexp.MustCompile(`(?:href|src|poster)="([^"]+)"`)

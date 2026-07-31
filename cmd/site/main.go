@@ -62,6 +62,12 @@ type page struct {
 	FooterTag      string `json:"-"`
 	SiteURL        string `json:"-"`
 	StructuredData string `json:"-"`
+
+	// ReleaseVersion and SignedFrom are the version strings the verify page
+	// quotes. They were hard-coded in four places with nothing keeping them
+	// in step with each other or with docs/verifying-releases.md.
+	ReleaseVersion string `json:"-"`
+	SignedFrom     string `json:"-"`
 }
 
 // AnchorPrefix is empty on the landing page, whose section anchors are local,
@@ -87,7 +93,15 @@ type site struct {
 	// field: the hand-maintained copies had already drifted apart once.
 	FooterTag string `json:"footerTag"`
 	SiteURL   string `json:"siteURL"`
-	Pages     []page `json:"pages"`
+
+	// ReleaseVersion is the release the verify page's worked example uses,
+	// without a leading v. SignedFrom is the first release that carries
+	// signatures. Both must match docs/verifying-releases.md, which the
+	// tests assert.
+	ReleaseVersion string `json:"releaseVersion"`
+	SignedFrom     string `json:"signedFrom"`
+
+	Pages []page `json:"pages"`
 }
 
 // structuredData is the SoftwareApplication node, emitted on the landing page
@@ -145,12 +159,26 @@ func run(root, outDir string) error {
 		if err != nil {
 			return err
 		}
-		p.Body = string(body)
 		p.FooterTag = s.FooterTag
 		p.SiteURL = s.SiteURL
+		p.ReleaseVersion = s.ReleaseVersion
+		p.SignedFrom = s.SignedFrom
 		if p.Home {
 			p.StructuredData = structuredData
 		}
+
+		// Bodies are templates too, so a page can quote a value that has to
+		// stay in step with something else (the release version). They are
+		// otherwise emitted exactly as written.
+		bodyTmpl, err := template.New(p.Slug).Parse(string(body))
+		if err != nil {
+			return fmt.Errorf("pages/%s.html: %w", p.Slug, err)
+		}
+		var rendered bytes.Buffer
+		if err := bodyTmpl.Execute(&rendered, p); err != nil {
+			return fmt.Errorf("pages/%s.html: %w", p.Slug, err)
+		}
+		p.Body = rendered.String()
 
 		var buf bytes.Buffer
 		if err := tmpl.ExecuteTemplate(&buf, "page.html", p); err != nil {

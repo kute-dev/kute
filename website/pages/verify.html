@@ -40,13 +40,13 @@
     <div class="flagship-copy reveal">
       <div class="code-block block">
         <div class="code-lines">
-          <div><span class="prompt">$</span><span class="cmd">VERSION</span>=0.4.0</div>
+          <div><span class="prompt">$</span><span class="cmd">VERSION</span>={{.ReleaseVersion}}</div>
           <div><span class="prompt">$</span><span class="cmd">FILE</span>=kute_${VERSION}_linux_amd64.tar.gz</div>
           <div><span class="prompt">$</span><span class="cmd">BASE</span>=https://github.com/kute-dev/kute/releases/download/v${VERSION}</div>
           <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}"</div>
           <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.sigstore.json"</div>
         </div>
-        <button class="copy-btn" data-copy="VERSION=0.4.0&#10;FILE=kute_${VERSION}_linux_amd64.tar.gz&#10;BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}&#10;curl -fsSLO &quot;${BASE}/${FILE}&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.sigstore.json&quot;" aria-label="Copy commands">
+        <button class="copy-btn" data-copy="VERSION={{.ReleaseVersion}}&#10;FILE=kute_${VERSION}_linux_amd64.tar.gz&#10;BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}&#10;curl -fsSLO &quot;${BASE}/${FILE}&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.sigstore.json&quot;" aria-label="Copy commands">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
@@ -65,7 +65,7 @@
         </button>
       </div>
       <div class="trust-cmd" style="margin-left:auto; margin-right:auto; display:flex; max-width:560px;"><span class="label">success is one line</span> <code>Verified OK</code></div>
-      <p style="text-align:center; margin-top:22px;">Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. On cosign 2.x add <code>--new-bundle-format</code>; that release reads the bundle only when asked, and cosign 3 made it the default. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v0.4.0'</code>.</p>
+      <p style="text-align:center; margin-top:22px;">Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. On cosign 2.x add <code>--new-bundle-format</code>; that release reads the bundle only when asked, and cosign 3 made it the default. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v{{.ReleaseVersion}}'</code>.</p>
     </div>
   </div>
 </section>
@@ -128,7 +128,7 @@
 
     <div class="flagship-copy reveal">
       <p style="text-align:center;">Without cosign they print a note and fall back to the checksum alone. A check nobody can run is not a stronger check — but it does mean the default one-liner install on a machine without cosign is checksum-only. If you want the strong check there, install cosign first, or follow this page by hand.</p>
-      <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>v0.4.0-beta.1</code> onward is signed.</p>
+      <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>{{.SignedFrom}}</code> onward is signed.</p>
       <p style="text-align:center; margin-top:18px;">A verification failure you can't explain is a security report rather than a bug report — please use <a href="https://github.com/kute-dev/kute/security/advisories/new" target="_blank" rel="noopener">GitHub's private advisory form</a> instead of a public issue.</p>
       <div class="install-ctas">
         <a class="btn btn-ghost" href="/index.html#install">Install kute</a>
