@@ -132,10 +132,19 @@ main() {
 
 	(
 		cd "$tmp"
+		# Exact filename match on field 2. checksums.txt lists every release
+		# artifact, so a substring match for kute_X_linux_amd64.tar.gz would
+		# also pull in the .sigstore.json/.sbom.json lines and ask sha256sum
+		# to verify files that aren't here. awk compares strings rather than
+		# patterns, so the name's dots can't act as wildcards either; the
+		# leading '*' is sha256sum's binary-mode marker, which install.ps1
+		# tolerates the same way.
+		select_sum() { awk -v a="$archive" '$2 == a || $2 == "*" a' checksums.txt; }
+		[ -n "$(select_sum)" ] || fail "no checksum entry for ${archive}"
 		if command -v sha256sum >/dev/null 2>&1; then
-			grep -F "  ${archive}" checksums.txt | sha256sum -c - >/dev/null || fail "checksum verification failed"
+			select_sum | sha256sum -c - >/dev/null || fail "checksum verification failed"
 		elif command -v shasum >/dev/null 2>&1; then
-			grep -F "  ${archive}" checksums.txt | shasum -a 256 -c - >/dev/null || fail "checksum verification failed"
+			select_sum | shasum -a 256 -c - >/dev/null || fail "checksum verification failed"
 		else
 			fail "missing required command: sha256sum or shasum"
 		fi
