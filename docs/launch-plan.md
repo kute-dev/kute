@@ -53,9 +53,16 @@ to retrofit after 1.0 because users' verification habits form at install time.
 - ✅ **Both installers verify the signature themselves** when `cosign` is on `PATH`, beyond
   what this section asked for: `curl | sh` is the weakest link named above, and a snippet
   only reaches people who read it. Absent cosign, or on a release published before signing,
-  they print a note and fall through to the checksum — so a missing `.sig` is a warning
-  rather than an error. Closing that gap needs a strict opt-in
+  they print a note and fall through to the checksum — so a missing `.sigstore.json` is a
+  warning rather than an error. Closing that gap needs a strict opt-in
   (`KUTE_REQUIRE_SIGNATURE`), which is not built.
+- ✅ Signatures are **Sigstore bundles** (`<artifact>.sigstore.json`), not the split
+  `.sig`/`.pem` pair the first cut produced. cosign 3 deprecated the flags that write the
+  split form and removed the ones that verify it, so `v0.4.0-beta.1`'s release job failed at
+  the signing step and the documented verify command would not have run on a current cosign
+  anyway. `release.yml` now verifies one archive and `checksums.txt` after goreleaser, with
+  the exact command the docs give users: PR CI skips signing (no OIDC identity), so a
+  tag-only breakage of this shape has no other place to surface.
 
 `govulncheck.yml` already covers the dependency half of supply chain. `ci.yml`'s
 `goreleaser-check` job now also runs a snapshot build, because `goreleaser check` validates

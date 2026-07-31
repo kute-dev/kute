@@ -41,6 +41,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      # The signing step only runs on a tag — no PR has an OIDC identity, so
+      # ci.yml's snapshot build passes `--skip=sign` and cannot catch a
+      # cosign invocation that no longer parses. Verifying one archive here,
+      # with the exact command docs/verifying-releases.md gives users, is
+      # what turns that class of breakage into a red release job instead of
+      # a release whose signatures nobody can check.
+      - name: Verify the signatures we just published
+        run: |
+          set -euo pipefail
+          for file in dist/kute_*_linux_amd64.tar.gz dist/checksums.txt; do
+            echo "verifying ${file}"
+            cosign verify-blob \
+              --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \
+              --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+              --bundle "${file}.sigstore.json" \
+              "${file}"
+          done
       # One attestation over every file checksums.txt lists, so a user can
       # ask GitHub what built an archive (`gh attestation verify`) as well as
       # asking the signature who signed it.

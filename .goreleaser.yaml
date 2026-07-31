@@ -42,27 +42,30 @@ sboms:
 # archives are signed so verification is one command against the file the
 # user actually downloaded; checksums.txt is signed for anyone who prefers
 # to verify the manifest and hash from it.
+#
+# One `.sigstore.json` bundle per artifact rather than a separate `.sig` and
+# `.pem`: cosign 3 deprecated `--output-signature`/`--output-certificate` on
+# the signing side and *removed* `--signature`/`--certificate` from
+# verify-blob, so the split-file layout is one nobody's cosign can still
+# check. The bundle carries the signature, the Fulcio certificate and the
+# transparency-log proof in one file.
 signs:
   - id: archives
     cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: archive
     output: true
   - id: checksums
     cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: checksum

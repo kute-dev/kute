@@ -71,8 +71,7 @@
 
     <div class="flagship-copy reveal">
       <ul class="deepdive-list" style="max-width:640px; margin-left:auto; margin-right:auto;">
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sig</code> — the cosign signature over the archive.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.pem</code> — the short-lived certificate it was signed with. Its identity names the workflow and the tag that produced the release.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sigstore.json</code> — the Sigstore bundle: the cosign signature over the archive, the short-lived certificate it was signed with, and the transparency-log proof, in one file. The certificate's identity names the workflow and the tag that produced the release.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sbom.json</code> — an SPDX inventory of every Go module compiled into that binary. It has a checksum in <code>checksums.txt</code> like the archive itself.</li>
       </ul>
       <p style="text-align:center; margin-top:22px;">Signing is <strong>keyless</strong>: there is no kute public key to distribute, rotate, or lose. The signature is bound to an ephemeral certificate issued to the release workflow's own identity and recorded in the public Rekor transparency log. What you check is <em>who signed it</em> — so the identity in the command below is the part that has to match.</p>
@@ -86,7 +85,7 @@
     <div class="section-head reveal">
       <span class="eyebrow">step one</span>
       <h2>Verify the signature.</h2>
-      <p>Needs <a href="https://docs.sigstore.dev/cosign/system_config/installation/" target="_blank" rel="noopener">cosign</a>. Set the version and platform you downloaded, then fetch the archive with its two companions.</p>
+      <p>Needs <a href="https://docs.sigstore.dev/cosign/system_config/installation/" target="_blank" rel="noopener">cosign</a> 3 or newer. Set the version and platform you downloaded, then fetch the archive with its bundle.</p>
     </div>
 
     <div class="flagship-copy reveal">
@@ -96,10 +95,9 @@
           <div><span class="prompt">$</span><span class="cmd">FILE</span>=kute_${VERSION}_linux_amd64.tar.gz</div>
           <div><span class="prompt">$</span><span class="cmd">BASE</span>=https://github.com/kute-dev/kute/releases/download/v${VERSION}</div>
           <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}"</div>
-          <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.sig"</div>
-          <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.pem"</div>
+          <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.sigstore.json"</div>
         </div>
-        <button class="copy-btn" data-copy="VERSION=0.4.0&#10;FILE=kute_${VERSION}_linux_amd64.tar.gz&#10;BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}&#10;curl -fsSLO &quot;${BASE}/${FILE}&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.sig&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.pem&quot;" aria-label="Copy commands">
+        <button class="copy-btn" data-copy="VERSION=0.4.0&#10;FILE=kute_${VERSION}_linux_amd64.tar.gz&#10;BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}&#10;curl -fsSLO &quot;${BASE}/${FILE}&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.sigstore.json&quot;" aria-label="Copy commands">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
@@ -110,15 +108,15 @@
           <div><span class="prompt">$</span><span class="cmd">cosign</span> verify-blob \</div>
           <div>&nbsp;&nbsp;<span class="flag">--certificate-identity-regexp</span> '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \</div>
           <div>&nbsp;&nbsp;<span class="flag">--certificate-oidc-issuer</span> 'https://token.actions.githubusercontent.com' \</div>
-          <div>&nbsp;&nbsp;<span class="flag">--signature</span> "${FILE}.sig" <span class="flag">--certificate</span> "${FILE}.pem" \</div>
+          <div>&nbsp;&nbsp;<span class="flag">--bundle</span> "${FILE}.sigstore.json" \</div>
           <div>&nbsp;&nbsp;"${FILE}"</div>
         </div>
-        <button class="copy-btn" data-copy="cosign verify-blob \&#10;  --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \&#10;  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \&#10;  --signature &quot;${FILE}.sig&quot; --certificate &quot;${FILE}.pem&quot; \&#10;  &quot;${FILE}&quot;" aria-label="Copy command">
+        <button class="copy-btn" data-copy="cosign verify-blob \&#10;  --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \&#10;  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \&#10;  --bundle &quot;${FILE}.sigstore.json&quot; \&#10;  &quot;${FILE}&quot;" aria-label="Copy command">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
       <div class="trust-cmd" style="margin-left:auto; margin-right:auto; display:flex; max-width:560px;"><span class="label">success is one line</span> <code>Verified OK</code></div>
-      <p style="text-align:center; margin-top:22px;">Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v0.4.0'</code>.</p>
+      <p style="text-align:center; margin-top:22px;">Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. On cosign 2.x add <code>--new-bundle-format</code>; that release reads the bundle only when asked, and cosign 3 made it the default. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v0.4.0'</code>.</p>
     </div>
   </div>
 </section>
@@ -181,7 +179,7 @@
 
     <div class="flagship-copy reveal">
       <p style="text-align:center;">Without cosign they print a note and fall back to the checksum alone. A check nobody can run is not a stronger check — but it does mean the default one-liner install on a machine without cosign is checksum-only. If you want the strong check there, install cosign first, or follow this page by hand.</p>
-      <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sig</code> or <code>.pem</code>; the installers say so and continue. Everything from <code>v0.4.0-beta.1</code> onward is signed.</p>
+      <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>v0.4.0-beta.1</code> onward is signed.</p>
       <p style="text-align:center; margin-top:18px;">A verification failure you can't explain is a security report rather than a bug report — please use <a href="https://github.com/kute-dev/kute/security/advisories/new" target="_blank" rel="noopener">GitHub's private advisory form</a> instead of a public issue.</p>
       <div class="install-ctas">
         <a class="btn btn-ghost" href="index.html#install">Install kute</a>

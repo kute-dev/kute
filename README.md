@@ -90,17 +90,16 @@ VERSION=0.4.0
 FILE=kute_${VERSION}_linux_amd64.tar.gz
 BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}
 curl -fsSLO "${BASE}/${FILE}"
-curl -fsSLO "${BASE}/${FILE}.sig"
-curl -fsSLO "${BASE}/${FILE}.pem"
+curl -fsSLO "${BASE}/${FILE}.sigstore.json"
 
 cosign verify-blob \
   --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  --signature "${FILE}.sig" --certificate "${FILE}.pem" \
+  --bundle "${FILE}.sigstore.json" \
   "${FILE}"
 ```
 
-Success is `Verified OK`. [`docs/verifying-releases.md`](docs/verifying-releases.md) covers provenance (`gh attestation verify`), the SBOM, and what the installers do on a machine without cosign.
+Success is `Verified OK`. Needs cosign 3 or newer as written; on 2.x add `--new-bundle-format`. [`docs/verifying-releases.md`](docs/verifying-releases.md) covers provenance (`gh attestation verify`), the SBOM, and what the installers do on a machine without cosign.
 
 </details>
 

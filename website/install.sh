@@ -38,21 +38,34 @@ verify_signature() {
 		return 0
 	fi
 
-	if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/${archive}.sig" "${base_url}/${archive}.sig" 2>/dev/null ||
-		! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "${tmp}/${archive}.pem" "${base_url}/${archive}.pem" 2>/dev/null; then
+	bundle="${tmp}/${archive}.sigstore.json"
+	if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 -o "$bundle" "${base_url}/${archive}.sigstore.json" 2>/dev/null; then
 		printf 'note: %s publishes no signature; verified checksum only.\n' "$version"
 		return 0
 	fi
 
+	# cosign 3 reads the bundle format by default and has no
+	# --new-bundle-format flag; cosign 2 needs it and rejects a bundle
+	# without it. Rather than parse `cosign version`, try the modern form and
+	# fall back — a bundle that is genuinely bad fails both ways, so the
+	# retry can only rescue an old cosign, never hide a bad signature.
+	if verify_blob_with "$bundle" || verify_blob_with "$bundle" --new-bundle-format; then
+		printf 'Verified signature (cosign, keyless).\n'
+		return 0
+	fi
+
+	fail "signature verification failed for ${archive} — do not run it; see ${verify_docs}"
+}
+
+verify_blob_with() {
+	bundle="$1"
+	shift
 	cosign verify-blob \
 		--certificate-identity-regexp "$cert_identity" \
 		--certificate-oidc-issuer "$cert_issuer" \
-		--signature "${tmp}/${archive}.sig" \
-		--certificate "${tmp}/${archive}.pem" \
-		"${tmp}/${archive}" >/dev/null 2>&1 ||
-		fail "signature verification failed for ${archive} — do not run it; see ${verify_docs}"
-
-	printf 'Verified signature (cosign, keyless).\n'
+		--bundle "$bundle" \
+		"$@" \
+		"${tmp}/${archive}" >/dev/null 2>&1
 }
 
 main() {

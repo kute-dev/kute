@@ -43,11 +43,9 @@ function Confirm-KuteSignature {
         return
     }
 
-    $sigPath = "$ArchivePath.sig"
-    $certPath = "$ArchivePath.pem"
+    $bundlePath = "$ArchivePath.sigstore.json"
     try {
-        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Archive.sig" -OutFile $sigPath
-        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Archive.pem" -OutFile $certPath
+        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/$Archive.sigstore.json" -OutFile $bundlePath
     } catch {
         Write-Host "note: $Version publishes no signature; verified checksum only."
         return
@@ -65,15 +63,24 @@ function Confirm-KuteSignature {
     # script's ErrorActionPreference = 'Stop' throws NativeCommandError on a
     # verification that passed. Drop to 'Continue' for the call itself and
     # judge the result by $LASTEXITCODE, which is the only honest signal here.
+    #
+    # cosign 3 reads the bundle format by default and has no
+    # --new-bundle-format flag; cosign 2 needs it and rejects a bundle
+    # without it. Rather than parse `cosign version`, try the modern form and
+    # fall back — a bundle that is genuinely bad fails both ways, so the
+    # retry can only rescue an old cosign, never hide a bad signature.
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & cosign verify-blob `
-            --certificate-identity-regexp $identity `
-            --certificate-oidc-issuer $issuer `
-            --signature $sigPath `
-            --certificate $certPath `
-            $ArchivePath 2>&1 | Out-Null
+        foreach ($extra in @(@(), @('--new-bundle-format'))) {
+            & cosign verify-blob `
+                --certificate-identity-regexp $identity `
+                --certificate-oidc-issuer $issuer `
+                --bundle $bundlePath `
+                @extra `
+                $ArchivePath 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { break }
+        }
     } finally {
         $ErrorActionPreference = $prevEap
     }
