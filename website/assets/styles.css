@@ -1,15 +1,22 @@
 /* ==========================================================================
    kute.dev — home page
-   Layout/rhythm/components inspired by huly.io (see /website-main/DESIGN.md).
+   Layout/rhythm/components inspired by huly.io (see DESIGN.md).
    Palette is NOT huly's — it is kute's own semantic Theme tokens
    (Accent purple, Good/Warn/Bad/Info) so site chrome matches the real
    product screenshots reproduced in .term-* below.
+
+   One deliberate departure from that mirror: the quiet text tiers
+   (--text-dim/-faint/-ghost, plus light --good/--warn) are lighter here than
+   in the TUI. They carry real prose on this page and have to clear WCAG AA
+   against --bg; a terminal running under the user's own colour scheme is not
+   held to that. Keep any new value above 4.5:1 on both backgrounds.
    ========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* kute Theme — dark (source of truth: internal/tui theme + docs/design/README.md) */
+  /* kute Theme — dark (source of truth: internal/tui theme + docs/design/README.md,
+     except the quiet text tiers — see the AA note in the file header) */
   --bg: #0b0b10;
   --bg-chrome: #0e0e15;
   --bg-strip: #0c0c12;
@@ -21,9 +28,9 @@
   --text: #f0f0fa;
   --text-primary: #d8d8e8;
   --text-secondary: #9a9ab2;
-  --text-dim: #676780;
-  --text-faint: #55556e;
-  --text-ghost: #44445c;
+  --text-dim: #8f8fa4;
+  --text-faint: #83839f;
+  --text-ghost: #78789b;
   --accent: #a78bfa;
   --accent-hi: #c4b5fd;
   --sel-bg: #1d1633;
@@ -62,14 +69,14 @@
   --text: #14141c;
   --text-primary: #2a2a38;
   --text-secondary: #565668;
-  --text-dim: #8a8a9e;
-  --text-faint: #9a9aae;
-  --text-ghost: #b4b4c6;
+  --text-dim: #5b5b6e;
+  --text-faint: #64647d;
+  --text-ghost: #6d6d90;
   --accent: #6b46d9;
   --accent-hi: #5936b8;
   --sel-bg: #ece5fb;
-  --good: #148a4e;
-  --warn: #a87b0a;
+  --good: #13824a;
+  --warn: #936b09;
   --bad: #cc3a3a;
   --bad-soft: #d95c5c;
   --bad-text: #a02c2c;
@@ -90,14 +97,14 @@
     --text: #14141c;
     --text-primary: #2a2a38;
     --text-secondary: #565668;
-    --text-dim: #8a8a9e;
-    --text-faint: #9a9aae;
-    --text-ghost: #b4b4c6;
+    --text-dim: #5b5b6e;
+    --text-faint: #64647d;
+    --text-ghost: #6d6d90;
     --accent: #6b46d9;
     --accent-hi: #5936b8;
     --sel-bg: #ece5fb;
-    --good: #148a4e;
-    --warn: #a87b0a;
+    --good: #13824a;
+    --warn: #936b09;
     --bad: #cc3a3a;
     --bad-soft: #d95c5c;
     --bad-text: #a02c2c;
