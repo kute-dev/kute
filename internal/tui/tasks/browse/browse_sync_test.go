@@ -40,6 +40,14 @@ func firstRowsLoaded(t *testing.T, cmd tea.Cmd) rowsLoadedMsg {
 	return rl
 }
 
+// emptyRowsFor builds the empty reply load() would have produced for kind
+// against the descriptor m currently holds. The columns stamp is part of that
+// reply: applyRowsLoaded discards one projected against a different
+// descriptor shape, the way it discards one for a superseded kind.
+func emptyRowsFor(m Model, kind kube.ResourceKind) rowsLoadedMsg {
+	return rowsLoadedMsg{kind: kind, columns: len(m.desc.Columns), rows: nil}
+}
+
 // notYetSyncedLister simulates *kube.Cluster's CacheSyncChecker: ListRaw
 // reads a cache that's still filling (empty, no error — the same
 // "truthful-looking but wrong" shape the real informer cache returns before
@@ -111,7 +119,7 @@ func TestEmptyKindRendersEmptyWhileAnotherKindSyncs(t *testing.T) {
 	m := New(Config{Session: newSession(), Lister: lister})
 	m.SetSize(120, 36)
 
-	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	updated, _ := m.applyRowsLoaded(emptyRowsFor(m, kube.KindPod))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateEmpty {
@@ -131,7 +139,7 @@ func TestUnsyncedKindStaysLoadingViaKindChecker(t *testing.T) {
 	m.SetSize(120, 36)
 	m.kind = kube.KindSecret
 
-	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindSecret, rows: nil})
+	updated, cmd := m.applyRowsLoaded(emptyRowsFor(m, kube.KindSecret))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateLoading {
@@ -184,7 +192,7 @@ func TestStalledCacheRendersTheErrorNotAnEmptyCluster(t *testing.T) {
 	m.kind = kube.KindHelmRelease
 	m.desc, _ = m.session.Registry.Descriptor(kube.KindHelmRelease)
 
-	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindHelmRelease, rows: nil})
+	updated, cmd := m.applyRowsLoaded(emptyRowsFor(m, kube.KindHelmRelease))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateError {
@@ -210,7 +218,7 @@ func TestStalledUnrelatedKindStillRendersEmpty(t *testing.T) {
 	m.SetSize(120, 36)
 	m.kind = kube.KindPod
 
-	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	updated, _ := m.applyRowsLoaded(emptyRowsFor(m, kube.KindPod))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateEmpty {
@@ -231,7 +239,7 @@ func TestApplyRowsLoadedStaysLoadingWhileCacheSyncing(t *testing.T) {
 	m.SetSize(120, 36)
 
 	before := m.reloadEpoch
-	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	updated, cmd := m.applyRowsLoaded(emptyRowsFor(m, kube.KindPod))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateLoading {
@@ -330,7 +338,7 @@ func TestForbiddenKindRendersThePermissionCard(t *testing.T) {
 	m.SetSize(120, 36)
 	m.kind = kube.KindPod
 
-	updated, cmd := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	updated, cmd := m.applyRowsLoaded(emptyRowsFor(m, kube.KindPod))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStatePermissionDenied {
@@ -359,7 +367,7 @@ func TestForbiddenUnrelatedKindStillRendersEmpty(t *testing.T) {
 	m.SetSize(120, 36)
 	m.kind = kube.KindPod
 
-	updated, _ := m.applyRowsLoaded(rowsLoadedMsg{kind: kube.KindPod, rows: nil})
+	updated, _ := m.applyRowsLoaded(emptyRowsFor(m, kube.KindPod))
 	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateEmpty {

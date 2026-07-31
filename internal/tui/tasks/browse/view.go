@@ -911,6 +911,14 @@ func (m Model) tableBody(width, height int) string {
 // orthogonal to a single row's set-image edit).
 func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column, width int, st rowCellStyles, theme tui.Theme, cpuMax, memMax int64, majorityVersion string, marksOn, isMarkedRow bool) []components.Cell {
 	cells := resources.Cells(r, width, nil)
+	// resources.Row's Cells align positionally with the descriptor's Columns,
+	// and the model drops any rows that stop doing so (dropStaleShapedRows).
+	// This clamp is the render path's own guarantee that it can never index
+	// past the columns it was handed whatever the model believes: a panic
+	// inside View takes the whole program down with it.
+	if len(cells) > len(cols) {
+		cells = cells[:len(cols)]
+	}
 	for i := range cells {
 		switch {
 		case i == 0: // status glyph column

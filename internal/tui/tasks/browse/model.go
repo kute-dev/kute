@@ -288,14 +288,25 @@ type Model struct {
 
 	rows      []resources.Row
 	fetchedAt time.Time
+	// rowColumns is how many Descriptor columns m.rows were projected with —
+	// resources.Row's contract is that Cells align positionally with the
+	// descriptor's Columns, and a custom kind's descriptor can change shape
+	// under a loaded list (printer columns arrive per-kind on first read, and
+	// a context switch resets them again). Rows whose shape doesn't match the
+	// live m.desc are misaligned by definition, so every path that adopts
+	// rows records this and every path that would show a mismatched set drops
+	// it instead (dropStaleShapedRows).
+	rowColumns int
 	// rowCache holds the last successfully-loaded rows per kind+namespace
 	// seen this session (browseCacheKey), so revisiting one mid-session can
 	// show cached rows dimmed instead of the skeleton loader (docs/design
 	// README.md §15a: "revisiting a kind seen this session: cached rows
 	// dimmed instead of skeletons" — the same muted treatment 4a's stale
 	// grammar already gives an offline table). Never cleared by
-	// resetAndLoad — it outlives any single kind/namespace view on purpose.
-	rowCache map[browseCacheKey][]resources.Row
+	// resetAndLoad — it outlives any single kind/namespace view on purpose,
+	// including across a context switch, which is why each entry carries the
+	// column shape its rows were projected with.
+	rowCache map[browseCacheKey]cachedRows
 	// cachedView is true while m.state is TaskStateLoading but m.rows holds
 	// a rowCache hit rather than fresh data — Body()/tableBody read it to
 	// render the muted cached snapshot instead of the skeleton, and it's
@@ -417,12 +428,16 @@ type Model struct {
 
 // rowsLoadedMsg carries a kind's freshly-listed rows. kind guards against a
 // reply for a since-superseded kind (relevant once the jump palette can
-// switch kinds mid-flight, Phase 2). nodeCount rides along for the Pods
+// switch kinds mid-flight, Phase 2); columns — how many descriptor columns
+// the rows were projected against — guards the same way against a descriptor
+// that changed shape mid-flight (a custom kind's printer columns landing, or
+// a context switch resetting them). nodeCount rides along for the Pods
 // health strip (0 when unknown or not the Pods kind); nodeCapacity/
 // podCountByNode/clusterPodTotal ride along for the Nodes columns/health
 // strip (Node kind only, see nodes.go's loadNodeExtras).
 type rowsLoadedMsg struct {
 	kind            kube.ResourceKind
+	columns         int
 	rows            []resources.Row
 	pods            map[string]kube.Pod
 	helmReleases    map[string]kube.HelmRelease
@@ -671,7 +686,7 @@ func (m Model) load() tea.Cmd {
 		defer cancel()
 		rows, err := resources.List(ctx, lister, desc, ns)
 		if err != nil {
-			return rowsLoadedMsg{kind: kind, err: err}
+			return rowsLoadedMsg{kind: kind, columns: len(desc.Columns), err: err}
 		}
 		var pods map[string]kube.Pod
 		var helmReleases map[string]kube.HelmRelease
@@ -696,7 +711,7 @@ func (m Model) load() tea.Cmd {
 			cacheNote = chartCacheNoteFor(lister, time.Now())
 		}
 		return rowsLoadedMsg{
-			kind: kind, rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
+			kind: kind, columns: len(desc.Columns), rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
 			nodePodHealth: nodePodHealth, chartCacheNote: cacheNote,
 		}
@@ -843,11 +858,28 @@ type browseCacheKey struct {
 	namespace string
 }
 
+// cachedRows is one rowCache entry: the snapshot plus the number of
+// descriptor columns its Cells were projected against, so a snapshot taken
+// under a different shape of the same kind — a custom kind loaded with its
+// printer columns, then revisited after a context switch reset discovery back
+// to the interim NAME/AGE pair — is recognisably stale rather than a set of
+// rows whose cells land under the wrong headers.
+type cachedRows struct {
+	rows    []resources.Row
+	columns int
+}
+
 // cachedRowsFor returns rowCache's snapshot for kind/namespace, if any —
 // used by resetAndLoad to seed the 15a "cached rows dimmed" loading view.
+// A snapshot projected against a different column count than the descriptor
+// now in force is no hit at all: showing it would mean rendering cells under
+// headers they don't belong to.
 func (m Model) cachedRowsFor(kind kube.ResourceKind, namespace string) ([]resources.Row, bool) {
-	rows, ok := m.rowCache[browseCacheKey{kind, namespace}]
-	return rows, ok
+	entry, ok := m.rowCache[browseCacheKey{kind, namespace}]
+	if !ok || entry.columns != len(m.desc.Columns) {
+		return nil, false
+	}
+	return entry.rows, true
 }
 
 // cacheCurrentRows snapshots m.rows into rowCache under the current
@@ -855,11 +887,30 @@ func (m Model) cachedRowsFor(kind kube.ResourceKind, namespace string) ([]resour
 // since m.rows is mutated in place by later sorts/marks.
 func (m *Model) cacheCurrentRows() {
 	if m.rowCache == nil {
-		m.rowCache = make(map[browseCacheKey][]resources.Row)
+		m.rowCache = make(map[browseCacheKey]cachedRows)
 	}
 	cp := make([]resources.Row, len(m.rows))
 	copy(cp, m.rows)
-	m.rowCache[browseCacheKey{m.kind, m.namespace}] = cp
+	m.rowCache[browseCacheKey{m.kind, m.namespace}] = cachedRows{rows: cp, columns: m.rowColumns}
+}
+
+// dropStaleShapedRows clears any loaded rows that were projected against a
+// different descriptor shape than m.desc now has, putting the screen back
+// into its loading state. Called wherever the descriptor can change under an
+// already-loaded list; the reload that follows refills it in shape.
+func (m *Model) dropStaleShapedRows() {
+	if m.rows == nil || m.rowColumns == len(m.desc.Columns) {
+		return
+	}
+	m.rows = nil
+	m.visible = nil
+	m.expandedGroups = nil
+	m.display = nil
+	m.selected, m.offset = 0, 0
+	m.cachedView = false
+	m.state = tui.TaskStateLoading
+	m.feedback = "Loading " + m.desc.Display + "..."
+	m.loadStartedAt = time.Now()
 }
 
 // resetAndLoad puts the model back into the loading state for whatever
@@ -907,8 +958,10 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	// kicked off below still runs and replaces it once it lands
 	// (applyRowsLoaded clears cachedView).
 	m.cachedView = false
+	m.rowColumns = 0
 	if cached, ok := m.cachedRowsFor(m.kind, m.namespace); ok && len(cached) > 0 {
 		m.rows = cached
+		m.rowColumns = len(m.desc.Columns) // cachedRowsFor only hits on a shape match
 		m.cachedView = true
 		m.recomputeVisible()
 	}

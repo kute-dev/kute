@@ -11,6 +11,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // recordingLister notes every kind read, so a test can assert what a screen
@@ -185,6 +186,131 @@ func TestCRDChangePicksUpNewPrinterColumns(t *testing.T) {
 	}
 	if len(m.desc.Columns) != 3 || m.desc.Columns[1] != "Phase" {
 		t.Fatalf("descriptor columns = %v, want Name/Phase/Age", m.desc.Columns)
+	}
+}
+
+// widgetKind is the discovered-kind fixture the CRD column tests share, in
+// its two shapes: before its printer columns have been fetched, and after.
+func widgetKind(printerColumns ...kube.PrinterColumn) kube.DiscoveredKind {
+	return kube.DiscoveredKind{
+		GVR:  schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		Kind: "Widget", Plural: "widgets", Group: "example.com", Established: true,
+		PrinterColumns: printerColumns,
+	}
+}
+
+// TestColumnsShrinkingDropsRowsProjectedWithTheOldOnes is the crash this
+// pairs with: a custom kind loaded with its printer columns, then a context
+// switch (which resets discovery, columns included) putting the same kind
+// back on its interim NAME/AGE pair. The rows on screen still carry a cell
+// per old column, so rendering them under the new, narrower column set walked
+// straight off the end of it — index out of range, inside View, which takes
+// the program down with it.
+func TestColumnsShrinkingDropsRowsProjectedWithTheOldOnes(t *testing.T) {
+	sess := newSession()
+	withCols := widgetKind(
+		kube.PrinterColumn{Name: "Phase", Type: "string", JSONPath: ".status.phase"},
+		kube.PrinterColumn{Name: "Host", Type: "string", JSONPath: ".status.host"},
+	)
+	sess.Registry.Register(resources.CustomDescriptor(withCols))
+
+	m := New(Config{Session: sess, Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.kind = kube.ResourceKind("Widget")
+	m.desc, _ = sess.Registry.Descriptor(m.kind)
+
+	m.applyRowsLoaded(rowsLoadedMsg{
+		kind: m.kind, columns: len(m.desc.Columns),
+		rows: []resources.Row{{
+			Namespace: "default", Name: "w1",
+			Cells:  []string{"w1", "Ready", "widget.example.com", "3m"},
+			Status: resources.StatusOK,
+		}},
+	})
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("precondition: state = %s, want ready", m.state)
+	}
+
+	// The columns go away again, and the root shell has already rebuilt the
+	// registry by the time the message reaches this screen.
+	sess.Registry.Register(resources.CustomDescriptor(widgetKind()))
+	_, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindCustomResourceDefinition})
+
+	if cmd == nil {
+		t.Fatal("expected a reload once the kind's columns changed shape")
+	}
+	if len(m.rows) != 0 || m.state != tui.TaskStateLoading {
+		t.Fatalf("rows = %d, state = %s — rows projected against the old columns must not survive the swap", len(m.rows), m.state)
+	}
+	m.View() // the panic was here
+}
+
+// TestRowsLoadedAgainstOldColumnsIsIgnored: the same mismatch arriving from
+// the other direction — a load already in flight when the descriptor changed
+// shape. Its rows are as misaligned as the ones on screen were.
+func TestRowsLoadedAgainstOldColumnsIsIgnored(t *testing.T) {
+	sess := newSession()
+	sess.Registry.Register(resources.CustomDescriptor(widgetKind()))
+
+	m := New(Config{Session: sess, Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.kind = kube.ResourceKind("Widget")
+	m.desc, _ = sess.Registry.Descriptor(m.kind)
+
+	m.applyRowsLoaded(rowsLoadedMsg{
+		kind: m.kind, columns: len(m.desc.Columns) + 1,
+		rows: []resources.Row{{Namespace: "default", Name: "w1", Cells: []string{"w1", "Ready", "3m"}}},
+	})
+
+	if len(m.rows) != 0 {
+		t.Fatalf("rows = %d, want none — this reply was projected against a descriptor the screen no longer has", len(m.rows))
+	}
+}
+
+// TestCachedRowsAreNotReusedAcrossAColumnChange: 15a's cached-rows loading
+// view outlives a context switch (rowCache is never cleared), so it's the
+// other way a set of rows can meet a descriptor that has since changed shape.
+func TestCachedRowsAreNotReusedAcrossAColumnChange(t *testing.T) {
+	sess := newSession()
+	withCols := widgetKind(kube.PrinterColumn{Name: "Phase", Type: "string", JSONPath: ".status.phase"})
+	sess.Registry.Register(resources.CustomDescriptor(withCols))
+
+	m := New(Config{Session: sess, Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.kind = kube.ResourceKind("Widget")
+	m.namespace = "default"
+	m.desc, _ = sess.Registry.Descriptor(m.kind)
+
+	m.applyRowsLoaded(rowsLoadedMsg{
+		kind: m.kind, columns: len(m.desc.Columns),
+		rows: []resources.Row{{Namespace: "default", Name: "w1", Cells: []string{"w1", "Ready", "3m"}}},
+	})
+	if _, ok := m.cachedRowsFor(m.kind, m.namespace); !ok {
+		t.Fatal("precondition: a successful load should be cached for the 15a loading view")
+	}
+
+	m.desc = resources.CustomDescriptor(widgetKind()) // the new context's interim columns
+	if _, ok := m.cachedRowsFor(m.kind, m.namespace); ok {
+		t.Fatal("the cached snapshot was projected against different columns — reusing it puts every cell under the wrong header")
+	}
+}
+
+// TestRowCellsNeverIndexPastItsColumns pins the render path's own half of the
+// guarantee, independent of whatever the model believes: View is not a place
+// that may panic, so a row wider than the columns it's handed is clamped
+// rather than fatal.
+func TestRowCellsNeverIndexPastItsColumns(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: fakeLister{}})
+	m.SetSize(120, 36)
+	m.desc = resources.CustomDescriptor(widgetKind())
+	m.kind = m.desc.Kind
+
+	cols := browseColumns(m.desc)
+	row := resources.Row{Name: "w1", Cells: []string{"w1", "Ready", "widget.example.com", "3m"}}
+	cells := m.rowCells(row, nil, cols, 120, newRowCellStyles(m.Theme(), false, false, false), m.Theme(), 0, 0, "", false, false)
+
+	if len(cells) != len(cols) {
+		t.Fatalf("cells = %d, want %d — one per column handed in", len(cells), len(cols))
 	}
 }
 

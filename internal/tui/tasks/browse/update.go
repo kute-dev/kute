@@ -69,6 +69,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Kind == kube.KindCustomResourceDefinition && m.session != nil {
 			if desc, ok := m.session.Registry.Descriptor(m.kind); ok && len(desc.Columns) != len(m.desc.Columns) {
 				m.desc = desc
+				// The rows on screen were projected against the old column
+				// set, so they can't be rendered under the new one — they'd
+				// land under the wrong headers, and a set that's now wider
+				// than the table would index past its last column. The reload
+				// below refills them in shape.
+				m.dropStaleShapedRows()
 				m.reloadEpoch++
 				return m, m.scheduleReload(m.reloadEpoch)
 			}
@@ -262,6 +268,14 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.kind != m.kind {
 		return m, nil // stale reply for a kind we've since switched away from
 	}
+	if msg.columns != len(m.desc.Columns) {
+		// Same staleness, one dimension over: these rows were projected
+		// against a descriptor this kind no longer has (its printer columns
+		// landed, or a context switch reset them), so their cells no longer
+		// line up with the columns on screen. Whatever changed the descriptor
+		// scheduled its own reload; this reply is that reload's predecessor.
+		return m, nil
+	}
 	if msg.err != nil {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
@@ -272,6 +286,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.rows = msg.rows
+	m.rowColumns = msg.columns
 	m.applySort()
 	m.pods = msg.pods
 	m.helmReleases = msg.helmReleases
