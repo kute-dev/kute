@@ -23,6 +23,15 @@ type Config struct {
 	// X" side of every 28a/28b comparison. Empty (a plain `go run`/test
 	// build with no ldflags) falls back to tui.Version in BuildSession.
 	Version string
+	// Commit and Date are the other two ldflags-injected build vars. They
+	// are diagnostics-only: nothing in the UI shows them, but every crash
+	// report and `--version` line names the exact build.
+	Commit string
+	Date   string
+	// LogFile is --log-file's destination for the error/klog stream. Empty
+	// keeps the stream in memory only, where a crash report can still reach
+	// the tail of it (see internal/diag).
+	LogFile string
 	// Context pins the kubeconfig context to launch against (--context),
 	// overriding both the last-used context and the kubeconfig's own
 	// current-context. Empty keeps the normal restore.

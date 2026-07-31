@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,10 +15,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
+	"github.com/kute-dev/kute/internal/diag"
 	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/tasks/browse"
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
@@ -1235,9 +1238,16 @@ func RunWithConfig(cfg Config) error {
 // and has to run *this* startup sequence, goroutines and all, rather than a
 // copy of it that drifts out of step with the real one.
 func run(cfg Config, opts ...tea.ProgramOption) error {
-	silenceKlog()
+	sink, live, err := openDiagnostics(cfg)
+	if err != nil {
+		return err
+	}
+	defer sink.Close() //nolint:errcheck // a close error at exit helps nobody
+	configureKlog(sink)
+	defer installPanicHandler(sink)()
+
 	model, cluster, demoCluster := NewModel(cfg)
-	program := tea.NewProgram(model, opts...)
+	program := tea.NewProgram(newCrashCatcher(model, sink, live), opts...)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1273,26 +1283,51 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 		}
 	}
 
-	_, err := program.Run()
+	_, err = program.Run()
 
 	if sess := model.Session(); sess != nil {
 		sess.SyncLocationToPerContext()
 		_ = sess.State.Save()
 	}
-	return err
+	return reportProgramCrash(sink, err)
 }
 
-// silenceKlog routes client-go's logger (klog) away from stderr, where its
+// openDiagnostics builds the process's one diagnostics sink and the live
+// crash Snapshot that feeds it. --log-file failing to open is fatal on
+// purpose: a user who asked for a log file and silently got none is worse
+// off than one who got an error at startup.
+func openDiagnostics(cfg Config) (*diag.Sink, *liveState, error) {
+	live := newLiveState(nil, cfg.Demo)
+	sink, err := diag.Open(diag.Options{
+		Build:    diag.Build{Version: cfg.Version, Commit: cfg.Commit, Date: cfg.Date},
+		LogFile:  cfg.LogFile,
+		CrashDir: filepath.Dir(state.Path()),
+		Snapshot: live.Snapshot,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	live.sink = sink
+	sink.Logf("starting %s (demo=%t, context=%q, namespace=%q, kubeconfig=%q)",
+		diag.Build{Version: cfg.Version, Commit: cfg.Commit, Date: cfg.Date},
+		cfg.Demo, cfg.Context, cfg.Namespace, cfg.Kubeconfig)
+	return sink, live, nil
+}
+
+// configureKlog routes client-go's logger (klog) away from stderr, where its
 // output — client-side throttling warnings, reflector errors — would splatter
-// over the Bubble Tea screen. This also covers everything routed through
-// utilruntime.ErrorHandlers, which logs via klog.
-func silenceKlog() {
+// over the Bubble Tea screen, and into the diagnostics sink instead. This
+// also covers everything routed through utilruntime.ErrorHandlers, which
+// logs via klog. Without --log-file the sink writes no file, so the visible
+// behaviour is what it always was (nothing on screen) — the difference is
+// that the tail of the stream is now in memory when a crash report needs it.
+func configureKlog(sink *diag.Sink) {
 	fs := flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(fs)
 	_ = fs.Set("logtostderr", "false")
 	_ = fs.Set("alsologtostderr", "false")
 	_ = fs.Set("stderrthreshold", "FATAL")
-	klog.SetOutput(io.Discard)
+	klog.SetOutput(sink)
 }
 
 // watchForwardManager bridges mgr's change notifications into the Bubble

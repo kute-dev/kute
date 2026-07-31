@@ -91,9 +91,16 @@ Run `kute` with no arguments and it opens on the context you last used, in the n
 | `--kubeconfig <path>` | Read a specific kubeconfig file. Takes precedence over `$KUBECONFIG`, which takes precedence over `~/.kube/config`. |
 | `--theme dark\|light` | Force a theme instead of detecting it from the terminal background. |
 | `--demo` | Run against a built-in in-memory fake cluster. No kubeconfig or cluster needed. |
+| `--log-file <path>` | Write the error and client-go log stream to a file. Nothing is logged to the terminal — it's the screen. |
 | `--version` | Print version, commit and build date, then exit. |
 
 Everything else is a keystroke: `?` from any screen lists the keys for that screen plus the global ones.
+
+### Reporting a bug
+
+If kute crashes it writes a crash report — build, context, namespace, kind, screen, terminal size, the panic and the tail of the log — to `~/.local/state/kute/kute-crash-<timestamp>.log`, and prints the path. Attach that file to the [bug form](https://github.com/kute-dev/kute/issues/new?template=bug_report.yml).
+
+If it misbehaves without crashing, re-run with `--log-file /tmp/kute.log`, reproduce, and attach that instead. Both files name your contexts, clusters and namespaces — redact anything you can't share. [`docs/diagnostics.md`](docs/diagnostics.md) has the details.
 
 ### Authentication
 

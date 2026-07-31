@@ -8,6 +8,10 @@ body:
     attributes:
       value: |
         Use this form for reproducible bugs. For questions or troubleshooting help, start a Discussion instead: https://github.com/kute-dev/kute/discussions
+
+        **If kute crashed**, it wrote a crash report and printed its path. Attach that file — it already contains everything the fields below ask for. Reports are written to `$XDG_STATE_HOME/kute/` (`~/.local/state/kute/` by default) as `kute-crash-<timestamp>.log`.
+
+        **If kute misbehaved without crashing**, re-run it with `kute --log-file /tmp/kute.log`, reproduce the problem, and attach that file.
   - type: textarea
     id: what-happened
     attributes:
@@ -34,24 +38,41 @@ body:
     validations:
       required: true
   - type: textarea
+    id: diagnostics
+    attributes:
+      label: Version, platform, context, screen and terminal size
+      description: Paste the crash footer kute printed, or fill this in by hand. `kute --version` gives the first line; the rest is where you were when it went wrong.
+      render: text
+      placeholder: |
+        version:   0.3.0 (abc1234, 2026-07-28)
+        platform:  linux/amd64, darwin/arm64, windows/amd64, ...
+        terminal:  columns x rows, e.g. 120x36
+        context:   the kubeconfig context name (or "demo" for --demo)
+        namespace: the namespace you were in
+        kind:      the resource kind on screen (Pod, Deployment, ...)
+        screen:    which screen (list, pod detail, logs, YAML, ...)
+    validations:
+      required: true
+  - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: Include kute version, install method, OS, terminal, Kubernetes version, and whether this happens in demo mode.
+      description: Install method, OS, terminal emulator, Kubernetes version and distribution (AKS/EKS/GKE/kind/...), and auth mode (certificate, token, OIDC, exec plugin).
+      render: text
       placeholder: |
-        kute version:
         install method:
         OS:
         terminal:
         Kubernetes version:
-        demo mode:
+        distribution:
+        auth:
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Logs or screenshots
-      description: Paste relevant output, screenshots, or recordings if available.
+      label: Crash report or log file
+      description: Attach the `kute-crash-*.log` file, or the output of `--log-file`. Paste screenshots or recordings here too. These files carry context, cluster and namespace names — redact anything you can't share.
       render: text
     validations:
       required: false

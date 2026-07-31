@@ -78,19 +78,23 @@ two multi-node kind clusters, and `scripts/e2e-cluster.sh` warns before walking 
 
 Simple edit mode is OK for now.
 
-## 4. Diagnostics and a bug-report path
+## 4. Diagnostics and a bug-report path — **done**
 
-A TUI crash currently leaves the user with nothing to attach. There's no log destination,
+A TUI crash used to leave the user with nothing to attach. There was no log destination,
 no crash context, no issue template.
 
 This is diagnostics for a user who cannot otherwise report a bug.
 
-- `--log-file <path>` for the error/klog stream (klog is already wired through a private
-  flagset in `internal/app`).
-- Version, context, active kind, and terminal size in the crash footer.
-- A pre-filled GitHub issue template asking for exactly those.
+- ✅ `--log-file <path>` for the error/klog stream. `internal/diag` is the sink klog now
+  writes to instead of `io.Discard`; without the flag the stream still fills a bounded
+  ring, so a crash report from a plain run has the tail of it.
+- ✅ Version, context, namespace, active kind, screen and terminal size in the crash
+  footer — and in a `kute-crash-<timestamp>.log` written to the state dir.
+- ✅ The bug form (`.github/ISSUE_TEMPLATE/bug_report.yml`) asks for exactly the fields
+  the footer prints, in the same order.
 
-*Acceptance:* a deliberately-crashed build produces a file a maintainer can diagnose from.
+*Acceptance:* `KUTE_CRASH_TEST=1 kute --demo` crashes on the next key press and produces
+that file. See [`diagnostics.md`](diagnostics.md).
 
 ## 5. State the freeze
 

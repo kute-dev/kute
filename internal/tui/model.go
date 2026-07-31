@@ -298,6 +298,17 @@ func (m Model) Conn() kube.ConnState { return m.conn }
 // built with one.
 func (m Model) Session() *Session { return m.session }
 
+// Screen names the active task's concrete type ("browse.Model"). It exists
+// for diagnostics — a crash report that says which screen the user was
+// looking at — which is why it hands back a string rather than the Task
+// itself: nothing outside the shell may drive the active task.
+func (m Model) Screen() string {
+	if m.task == nil {
+		return ""
+	}
+	return reflect.TypeOf(m.task).String()
+}
+
 // Theme returns the session's active theme, or Dark() before a session is
 // wired in (openPalette and friends need a Theme to style their embedded
 // textinput.Model even in that window).
