@@ -1,3 +1,15 @@
+<!-- Provenance note (added when this moved out of website/).
+
+This is a style reference for **Huly** (huly.io), not for kute. It has no kute
+content in it. It sat inside website/ for a while, which meant the deploy
+published it at kute.dev/DESIGN.md.
+
+It is kept because website/assets/styles.css genuinely took layout, rhythm and
+some component geometry from it — the aurora beam, the pill radii, the section
+rhythm, the two-font split. The palette was never taken from it; that is
+kute's own. kute's site design is documented in website.md next to this file.
+-->
+
 # Huly — Style Reference
 > Aurora through a midnight observatory — the hero is a vertical beam of violet melting into coral, and every quiet section below it borrows that same two-color story told at lower volume.
 

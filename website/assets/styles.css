@@ -1,6 +1,7 @@
 /* ==========================================================================
    kute.dev — home page
-   Layout/rhythm/components inspired by huly.io (see DESIGN.md).
+   Layout/rhythm/components inspired by huly.io; see
+   docs/design/website.md, which documents this file's tokens and rules.
    Palette is NOT huly's — it is kute's own semantic Theme tokens
    (Accent purple, Good/Warn/Bad/Info) so site chrome matches the real
    product screenshots reproduced in .term-* below.

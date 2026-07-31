@@ -194,9 +194,6 @@ func run(root, outDir string) error {
 }
 
 // writeSiteFiles emits the whole-site files that have no page of their own.
-// DESIGN.md is disallowed explicitly: it is internal design rationale that
-// ships in the deployed directory, so it is reachable but should not be
-// indexed.
 func writeSiteFiles(s site, outDir string) error {
 	var sitemap bytes.Buffer
 	sitemap.WriteString(xml.Header)
@@ -209,7 +206,7 @@ func writeSiteFiles(s site, outDir string) error {
 	}
 	sitemap.WriteString("</urlset>\n")
 
-	robots := "User-agent: *\nAllow: /\nDisallow: /DESIGN.md\n\nSitemap: " + s.SiteURL + "sitemap.xml\n"
+	robots := "User-agent: *\nAllow: /\n\nSitemap: " + s.SiteURL + "sitemap.xml\n"
 
 	manifest := `{
   "name": "kute",
