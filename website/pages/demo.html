@@ -18,7 +18,7 @@
       <p>A clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod. Pod detail and logs show the actual cause, delete asks for explicit confirmation, and the incident timeline correlates the crash to a rollout ten minutes earlier.</p>
     </div>
     <div class="demo-shot reveal">
-      <img src="assets/incident-walkthrough-all-namespaces.gif" alt="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier" loading="lazy">
+      <img src="/assets/incident-walkthrough-all-namespaces.gif" alt="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-all-namespaces.tape</code></p>
   </div>
@@ -33,7 +33,7 @@
       <p>Typing a kind's alias letter pins it to rank 1 — still requires <code>↵</code> to jump, never fires instantly. Bare <code>g</code> + <code>↵</code> alt-tabs between kinds the same way the namespace palette alt-tabs between namespaces. And the fuzzy corpus searches resource names too: typing a specific pod's name jumps straight to it, switching kind as a side effect.</p>
     </div>
     <div class="demo-shot reveal">
-      <img src="assets/goto-palette-demo.gif" alt="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail" loading="lazy">
+      <img src="/assets/goto-palette-demo.gif" alt="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-goto-palette.tape</code></p>
   </div>
@@ -48,7 +48,7 @@
       <p>The same palette that jumps to any resource kind also toggles between your last two namespaces — bare <code>n</code> + <code>↵</code> switches back and forth with nothing typed — and recalls older ones from the RECENT row by number as the digit assignments shift with what you've visited most recently.</p>
     </div>
     <div class="demo-shot reveal">
-      <img src="assets/namespace-palette-demo.gif" alt="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit" loading="lazy">
+      <img src="/assets/namespace-palette-demo.gif" alt="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-namespace-palette.tape</code></p>
   </div>
@@ -63,7 +63,7 @@
       <p>One Deployment, one continuous flow: scale warns you it's HPA-managed before overriding a no-op, set image picks a tag straight from rollout history, resource limits nudge next to the live usage bars, and a label add/remove shows the exact <code>kubectl</code> command before it runs. Port-forward starts without suspending kute — the header's forward chip stays live while you keep browsing.</p>
     </div>
     <div class="demo-shot reveal">
-      <img src="assets/demo-everyday-actions.gif" alt="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues" loading="lazy">
+      <img src="/assets/demo-everyday-actions.gif" alt="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-everyday-actions.tape</code></p>
   </div>
@@ -78,7 +78,7 @@
       <p>An Ingress with a healthy route sits right next to one whose Service was never created — red inline, not a silent failure discovered later. An HTTPRoute's weighted canary split resolves both backends' live endpoint counts, and <code>p</code> jumps straight to the parent Gateway that accepted it — resolving Gateway API's split ownership both ways.</p>
     </div>
     <div class="demo-shot reveal">
-      <img src="assets/demo-routing-table.gif" alt="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway" loading="lazy">
+      <img src="/assets/demo-routing-table.gif" alt="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway" loading="lazy">
     </div>
     <p class="term-caption reveal">Regenerated with <code>scripts/record-demo.sh docs/assets/demo-routing-table.tape</code></p>
   </div>

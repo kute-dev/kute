@@ -44,7 +44,7 @@ jobs:
           mkdir -p _site/assets
           cp -r website/. _site/
           rm -rf _site/pages _site/templates _site/dist _site/site.json
-          cp website/dist/*.html _site/
+          cp -r website/dist/. _site/
           cp docs/assets/incident-walkthrough-all-namespaces.gif docs/assets/namespace-palette-demo.gif docs/assets/goto-palette-demo.gif docs/assets/demo-everyday-actions.gif docs/assets/demo-routing-table.gif _site/assets/
       - name: Cache-bust demo GIFs
         # GitHub Pages doesn't let us set Cache-Control, so a re-recorded gif

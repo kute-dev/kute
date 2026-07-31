@@ -1,14 +1,15 @@
 {{define "nav"}}<nav class="nav" aria-label="Main">
   <div class="wrap">
-    <a href="index.html" class="brand"><span class="mark">❯</span>kute</a>
+    <a href="/index.html" class="brand"><span class="mark">❯</span>kute</a>
     <div class="nav-links" id="nav-links">
       <a href="{{.AnchorPrefix}}#problem">Problem</a>
       <a href="{{.AnchorPrefix}}#approach">Approach</a>
       <a href="{{.AnchorPrefix}}#principles">Principles</a>
       <a href="{{.AnchorPrefix}}#surface">Surface</a>
       <a href="{{.AnchorPrefix}}#trust">Trust</a>
-      <a href="features.html">Features</a>
-      <a href="demo.html">Demo</a>
+      <a href="/features.html"{{.NavCurrent "features"}}>Features</a>
+      <a href="/demo.html"{{.NavCurrent "demo"}}>Demo</a>
+      <a href="/verify.html"{{.NavCurrent "verify"}}>Verify</a>
     </div>
     <div class="nav-cta">
       <button class="nav-star" data-theme-toggle aria-label="Toggle theme">

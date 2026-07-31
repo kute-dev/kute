@@ -5,19 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <meta name="description" content="{{.Description}}">
-<link rel="canonical" href="{{.Canonical}}">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/styles.css">
+{{if .NoIndex}}<meta name="robots" content="noindex">
+{{end}}{{if .Canonical}}<link rel="canonical" href="{{.Canonical}}">
+{{end}}<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/assets/styles.css">
 <meta name="theme-color" content="#0b0b10" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f7f7fa" media="(prefers-color-scheme: light)">
+{{if .Canonical}}<meta property="og:site_name" content="kute">
+<meta property="og:locale" content="en_US">
 <meta property="og:title" content="{{.OGTitle}}">
 <meta property="og:description" content="{{.OGDescription}}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{.Canonical}}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="{{$.SiteURL}}assets/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="kute — your cluster, in plain sight. The incident console for Kubernetes.">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{.OGTitle}}">
 <meta name="twitter:description" content="{{.TwitterDescription}}">
-</head>
+<meta name="twitter:image" content="{{$.SiteURL}}assets/og-card.png">
+{{end}}{{if .StructuredData}}<script type="application/ld+json">
+{{.StructuredData}}
+</script>
+{{end}}</head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 
@@ -31,15 +45,15 @@
   <div class="wrap">
     <div class="footer-row">
       <div>
-        <a href="index.html" class="footer-brand"><span class="mark">❯</span>kute</a>
+        <a href="/index.html" class="footer-brand"><span class="mark">❯</span>kute</a>
         <p class="footer-tag">{{.FooterTag}}</p>
       </div>
       <div class="footer-links">
         <a href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">Issues</a>
-        <a href="features.html">Features</a>
-        <a href="demo.html">Demo</a>
-        <a href="verify.html">Verify</a>
+        <a href="/features.html">Features</a>
+        <a href="/demo.html">Demo</a>
+        <a href="/verify.html">Verify</a>
       </div>
     </div>
     <div class="footer-legal">
@@ -49,6 +63,6 @@
   </div>
 </footer>
 
-<script src="assets/script.js"></script>
+<script src="/assets/script.js"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"os"
@@ -52,29 +53,57 @@ type page struct {
 	OGDescription      string        `json:"ogDescription"`
 	TwitterDescription string        `json:"twitterDescription"`
 	Home               bool          `json:"home"`
+	NoIndex            bool          `json:"noIndex"`
 	Install            *installPanel `json:"install"`
 
 	// Body is the page-unique markup, read from pages/<slug>.html.
-	// FooterTag is site-level; it is copied onto every page at load.
-	Body      string `json:"-"`
-	FooterTag string `json:"-"`
+	// The rest are site-level values copied onto every page at load.
+	Body           string `json:"-"`
+	FooterTag      string `json:"-"`
+	SiteURL        string `json:"-"`
+	StructuredData string `json:"-"`
 }
 
 // AnchorPrefix is empty on the landing page, whose section anchors are local,
-// and "index.html" everywhere else, where they have to travel.
+// and "/index.html" everywhere else, where they have to travel.
 func (p page) AnchorPrefix() string {
 	if p.Home {
 		return ""
 	}
-	return "index.html"
+	return "/index.html"
+}
+
+// NavCurrent marks the nav link pointing at the page being rendered. Without
+// it nothing in the markup says which of the seven links you are already on.
+func (p page) NavCurrent(slug string) string {
+	if p.Slug == slug {
+		return ` aria-current="page"`
+	}
+	return ""
 }
 
 type site struct {
 	// FooterTag is one string for the whole site rather than a per-page
 	// field: the hand-maintained copies had already drifted apart once.
 	FooterTag string `json:"footerTag"`
+	SiteURL   string `json:"siteURL"`
 	Pages     []page `json:"pages"`
 }
+
+// structuredData is the SoftwareApplication node, emitted on the landing page
+// only — repeating it per page describes four applications, not one.
+const structuredData = `{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "kute",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "description": "A terminal console for Kubernetes: triage-first sorting, live failure states, and guardrails that scale with blast radius.",
+  "url": "https://kute.dev/",
+  "downloadUrl": "https://github.com/kute-dev/kute/releases",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}`
 
 func main() {
 	root := flag.String("root", "website", "website source directory")
@@ -118,6 +147,10 @@ func run(root, outDir string) error {
 		}
 		p.Body = string(body)
 		p.FooterTag = s.FooterTag
+		p.SiteURL = s.SiteURL
+		if p.Home {
+			p.StructuredData = structuredData
+		}
 
 		var buf bytes.Buffer
 		if err := tmpl.ExecuteTemplate(&buf, "page.html", p); err != nil {
@@ -126,6 +159,50 @@ func run(root, outDir string) error {
 
 		dest := filepath.Join(outDir, p.Slug+".html")
 		if err := os.WriteFile(dest, buf.Bytes(), 0o644); err != nil {
+			return err
+		}
+	}
+	return writeSiteFiles(s, outDir)
+}
+
+// writeSiteFiles emits the whole-site files that have no page of their own.
+// DESIGN.md is disallowed explicitly: it is internal design rationale that
+// ships in the deployed directory, so it is reachable but should not be
+// indexed.
+func writeSiteFiles(s site, outDir string) error {
+	var sitemap bytes.Buffer
+	sitemap.WriteString(xml.Header)
+	sitemap.WriteString("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
+	for _, p := range s.Pages {
+		if p.NoIndex || p.Canonical == "" {
+			continue
+		}
+		fmt.Fprintf(&sitemap, "  <url><loc>%s</loc></url>\n", p.Canonical)
+	}
+	sitemap.WriteString("</urlset>\n")
+
+	robots := "User-agent: *\nAllow: /\nDisallow: /DESIGN.md\n\nSitemap: " + s.SiteURL + "sitemap.xml\n"
+
+	manifest := `{
+  "name": "kute",
+  "short_name": "kute",
+  "description": "The incident console for Kubernetes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b10",
+  "theme_color": "#0b0b10",
+  "icons": [
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
+`
+	for name, content := range map[string]string{
+		"sitemap.xml":      sitemap.String(),
+		"robots.txt":       robots,
+		"site.webmanifest": manifest,
+	} {
+		if err := os.WriteFile(filepath.Join(outDir, name), []byte(content), 0o644); err != nil {
 			return err
 		}
 	}
