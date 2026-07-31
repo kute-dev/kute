@@ -124,6 +124,35 @@
     });
   });
 
+  // Demo videos. The markup deliberately carries no autoplay attribute: these
+  // replaced auto-looping GIFs, which had no way to stop them, and a visitor
+  // who has asked for reduced motion should not be handed the same thing in a
+  // different container. They stay paused on their poster with controls, and
+  // play only if motion is welcome — and only while actually on screen, so
+  // five terminal recordings aren't decoding at once.
+  var demos = document.querySelectorAll('video[data-demo]');
+  if (demos.length) {
+    var wantsMotion = !(window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (wantsMotion && 'IntersectionObserver' in window) {
+      var vio = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var v = entry.target;
+          if (entry.isIntersecting) {
+            // preload="none" until we actually want it.
+            if (v.preload !== 'auto') v.preload = 'auto';
+            // Rejects if the browser blocks autoplay; the controls remain.
+            var p = v.play();
+            if (p && p.catch) p.catch(function () {});
+          } else if (!v.paused) {
+            v.pause();
+          }
+        });
+      }, { threshold: 0.25 });
+      demos.forEach(function (v) { vio.observe(v); });
+    }
+  }
+
   // Scroll reveal
   var revealEls = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window && revealEls.length) {
