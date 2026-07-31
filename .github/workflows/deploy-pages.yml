@@ -34,10 +34,10 @@ jobs:
         # copy-pasted into every page. Output lands in website/dist/.
         run: go run ./cmd/site
       - name: Stage site with demo recordings
-        # demo.html references these under assets/ — kept only in docs/assets/
-        # alongside the .tape files and .gif originals they are derived from,
-        # and merged in here at deploy time rather than duplicated under
-        # website/. Regenerate with scripts/gif-to-mp4.sh.
+        # The home and guide pages reference these under assets/ — kept only
+        # in docs/assets/ alongside the .tape files and .gif originals they
+        # are derived from, and merged in here at deploy time rather than
+        # duplicated under website/. Regenerate with scripts/gif-to-mp4.sh.
         run: |
           mkdir -p _site/assets
           cp -r website/. _site/
@@ -48,8 +48,11 @@ jobs:
         # GitHub Pages doesn't let us set Cache-Control, so a re-recorded clip
         # keeping the same filename would otherwise stay stuck in visitors'
         # browser caches. Tag each reference with the commit SHA so every
-        # deploy that touches one forces a fresh fetch.
-        run: sed -i -E "s/(\.mp4|-poster\.jpg)\"/\1?v=${GITHUB_SHA}\"/g" _site/demo.html
+        # deploy that touches one forces a fresh fetch. Every page is rewritten
+        # rather than a named one: naming the page is how this got missed when
+        # the recordings moved off demo.html, and a page with no <video> is a
+        # no-op here.
+        run: sed -i -E "s/(\.mp4|-poster\.jpg)\"/\1?v=${GITHUB_SHA}\"/g" _site/*.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

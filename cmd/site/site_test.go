@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // repoRoot is two levels up from cmd/site.
@@ -170,6 +172,31 @@ func TestReleaseVersionsAgree(t *testing.T) {
 	if body := readFile(t, "docs/verifying-releases.md"); !strings.Contains(body, s.SignedFrom) {
 		t.Errorf("docs/verifying-releases.md does not mention %s, the release site.json calls the first signed one",
 			s.SignedFrom)
+	}
+}
+
+// TestKeyboardReferenceCoversVerbs holds the guide's key table to the app's
+// own command registry. The site makes a claim about what the keys do, and a
+// verb added, renamed or rebound in internal/tui/verbs has nothing else
+// telling anyone the published reference has gone stale — the failure mode is
+// a page that stays plausible while being wrong, which is worse than a
+// missing one. Verbs the guide deliberately leaves out are listed here, so
+// omitting one is a decision someone wrote down rather than an oversight.
+func TestKeyboardReferenceCoversVerbs(t *testing.T) {
+	guide := readFile(t, "website/pages/guide.html")
+
+	// Empty on purpose — the guide documents every verb today. Anything
+	// deliberately left out belongs here with its reason.
+	omitted := map[string]string{}
+
+	for _, v := range verbs.All {
+		if _, ok := omitted[v.ID]; ok {
+			continue
+		}
+		if !strings.Contains(guide, v.Label) {
+			t.Errorf("guide.html never mentions %q (verb %s, key %q) — either document it in the keyboard reference or add it to the omitted list with a reason",
+				v.Label, v.ID, v.Key)
+		}
 	}
 }
 

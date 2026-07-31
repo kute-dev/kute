@@ -1,0 +1,163 @@
+<!-- ================= PAGE HEADER ================= -->
+<header class="page-header">
+  <div class="hero-aurora" aria-hidden="true"></div>
+  <div class="hero-sunburst" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="eyebrow">● single binary</span>
+    <h1>Install <em style="color:var(--accent-hi); font-style:normal;">kute</em>.</h1>
+    <p class="sub">One file, no runtime to install, nothing added to your cluster. Pick your platform below, then run <code style="white-space:nowrap">kute --demo</code> to look around before you point it at anything real.</p>
+  </div>
+</header>
+
+<div class="guide-layout wrap">
+  <nav class="guide-rail" aria-label="On this page">
+    <span class="guide-rail-label">On this page</span>
+    <ol>
+      <li><a href="#macos-linux">macOS and Linux</a></li>
+      <li><a href="#windows">Windows</a></li>
+      <li><a href="#manual">Download it yourself</a></li>
+      <li><a href="#requirements">What you need</a></li>
+      <li><a href="#first-run">Your first run</a></li>
+      <li><a href="#updating">Updating and uninstalling</a></li>
+      <li><a href="#problems">Common problems</a></li>
+    </ol>
+  </nav>
+
+  <div class="guide-body">
+
+    <!-- ================= MACOS / LINUX ================= -->
+    <section class="guide-section" id="macos-linux">
+      <span class="eyebrow">macOS · linux</span>
+      <h2>macOS and Linux</h2>
+      <p>The install script picks the right build for your machine, checks the download against its published checksum, and — if you have <code>cosign</code> installed — its signature too.</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | sh</div>
+        <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | sh" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="code-or">Or with Homebrew</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">brew install</span> kute-dev/tap/kute</div>
+        <button class="copy-btn" data-copy="brew install kute-dev/tap/kute" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p>The script installs to <code>/usr/local/bin</code>. Set <code>KUTE_INSTALL_DIR</code> to put the binary somewhere else — <code>~/.local/bin</code>, say, if you would rather not use <code>sudo</code> — or <code>KUTE_VERSION</code> to pin a specific release instead of taking the newest.</p>
+      <div class="code-block block">
+        <div class="code-lines">
+          <div><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | KUTE_INSTALL_DIR=$HOME/.local/bin sh</div>
+        </div>
+        <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | KUTE_INSTALL_DIR=$HOME/.local/bin sh" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= WINDOWS ================= -->
+    <section class="guide-section" id="windows">
+      <span class="eyebrow">windows</span>
+      <h2>Windows</h2>
+      <p>In PowerShell:</p>
+      <div class="code-block">
+        <div><span class="prompt">&gt;</span><span class="cmd">irm</span> https://kute.dev/install.ps1 | <span class="cmd">iex</span></div>
+        <button class="copy-btn" data-copy="irm https://kute.dev/install.ps1 | iex" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="code-or">Or with Scoop</p>
+      <div class="code-block block">
+        <div class="code-lines">
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop bucket add</span> kute-dev https://github.com/kute-dev/scoop-bucket</div>
+          <div><span class="prompt">&gt;</span><span class="cmd">scoop install</span> kute</div>
+        </div>
+        <button class="copy-btn" data-copy="scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket&#10;scoop install kute" aria-label="Copy commands">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p>kute draws with Unicode glyphs and 24-bit colour, so Windows Terminal gives you the best result. It runs in the older console host too, in a plainer palette.</p>
+    </section>
+
+    <!-- ================= MANUAL ================= -->
+    <section class="guide-section" id="manual">
+      <span class="eyebrow">by hand</span>
+      <h2>Download it yourself</h2>
+      <p>Every release ships six builds — Linux, macOS and Windows, each for x86-64 and arm64 — on the <a href="https://github.com/kute-dev/kute/releases" target="_blank" rel="noopener">releases page</a>. Unpack the archive, put <code>kute</code> somewhere on your <code>PATH</code>, and that is the whole installation.</p>
+      <p>Every archive is signed, carries a build provenance attestation, and ships a software bill of materials. <a href="/verify.html">Verifying a download</a> walks through checking all three by hand — worth doing once if you are putting this on a machine that touches production.</p>
+    </section>
+
+    <!-- ================= REQUIREMENTS ================= -->
+    <section class="guide-section" id="requirements">
+      <span class="eyebrow">before you start</span>
+      <h2>What you need</h2>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>A kubeconfig</strong> — the same one <code>kubectl</code> uses. kute reads <code>$KUBECONFIG</code>, then <code>~/.kube/config</code>, and uses in-cluster credentials when it runs inside a pod.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>Your own permissions, nothing more.</strong> kute reads with your credentials. Read access to a namespace is enough to be useful; anything you are not allowed to list shows up as a permission card explaining what was refused, not as an empty table.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>Nothing on the cluster.</strong> There is no agent, operator or CRD to install. Uninstalling is deleting a file.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>A terminal</strong> — including one over SSH. A 24-bit-colour terminal looks best; kute falls back to a 256-colour palette and ASCII glyphs where it has to.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong><code>kubectl</code>, for three things only</strong> — opening a shell in a container, editing an object in your <code>$EDITOR</code>, and a shell on a node. Everything else talks to the API directly.</li>
+      </ul>
+    </section>
+
+    <!-- ================= FIRST RUN ================= -->
+    <section class="guide-section" id="first-run">
+      <span class="eyebrow">first run</span>
+      <h2>Your first run</h2>
+      <p>Start with the demo. It is the whole app against a fake cluster held in memory — real screens, real keys, real failure states, nothing to connect to and nothing you can break:</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">kute</span> <span class="flag">--demo</span></div>
+        <button class="copy-btn" data-copy="kute --demo" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p>Then point it at a real cluster. Plain <code>kute</code> opens on your current context; <code>--context</code> and <code>-n</code> override that:</p>
+      <div class="code-block block">
+        <div class="code-lines">
+          <div><span class="prompt">$</span><span class="cmd">kute</span></div>
+          <div><span class="prompt">$</span><span class="cmd">kute</span> <span class="flag">--context</span> staging-eks <span class="flag">-n</span> payments</div>
+        </div>
+        <button class="copy-btn" data-copy="kute --context staging-eks -n payments" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p>Press <code>?</code> for the keys that work where you are, and <code>g</code> to go anywhere. The <a href="/guide.html">guide</a> covers the rest.</p>
+    </section>
+
+    <!-- ================= UPDATING ================= -->
+    <section class="guide-section" id="updating">
+      <span class="eyebrow">later</span>
+      <h2>Updating and uninstalling</h2>
+      <p>kute checks for a new release about once a day and shows a quiet chip in the header when there is one. <code>U</code> opens what changed, with the exact upgrade command for the way you installed it. It never updates itself.</p>
+      <table class="keyref">
+        <tbody>
+          <tr><td><code>brew</code></td><td><code>brew upgrade kute</code></td></tr>
+          <tr><td><code>scoop</code></td><td><code>scoop update kute</code></td></tr>
+          <tr><td>install script</td><td>run it again — it replaces the binary in place</td></tr>
+        </tbody>
+      </table>
+      <p>To uninstall: remove the binary (<code>brew uninstall kute</code>, <code>scoop uninstall kute</code>, or delete it from <code>/usr/local/bin</code>). kute keeps two small files of its own, both safe to delete — <code>~/.config/kute/config.yaml</code> if you made one, and the remembered contexts and namespaces under <code>~/.local/state/kute/</code>.</p>
+    </section>
+
+    <!-- ================= PROBLEMS ================= -->
+    <section class="guide-section" id="problems">
+      <span class="eyebrow">if it goes wrong</span>
+      <h2>Common problems</h2>
+
+      <h3><code>kute: command not found</code></h3>
+      <p>The binary landed somewhere that is not on your <code>PATH</code> — most often after setting <code>KUTE_INSTALL_DIR</code>. Check where it went, then add that directory to your <code>PATH</code> in your shell's startup file.</p>
+
+      <h3>macOS says it cannot check the developer</h3>
+      <p>That is Gatekeeper reacting to a binary you downloaded by hand rather than through Homebrew. Installing with <code>brew</code> or the install script avoids it entirely; if you have already downloaded one, clear the quarantine flag with <code>xattr -d com.apple.quarantine ./kute</code> — after <a href="/verify.html">verifying it</a>, which is a better check than Gatekeeper's anyway.</p>
+
+      <h3>The install script says cosign was not found</h3>
+      <p>Not a failure. The download is still checked against its published checksum; the signature check is the extra step that needs <code>cosign</code> present. Install cosign and re-run if you want both.</p>
+
+      <h3>Outbound requests are restricted where you work</h3>
+      <p>The once-a-day release check is the only request kute makes that is not to your cluster. Turn it off with <code>update: check: false</code> in <code>~/.config/kute/config.yaml</code>.</p>
+
+      <h3>Something else</h3>
+      <p>The guide's <a href="/guide.html#troubleshooting">troubleshooting section</a> covers connection failures, permission errors and cloud-provider credential plugins. If it is a bug, <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">an issue</a> is the right place.</p>
+    </section>
+
+  </div>
+</div>

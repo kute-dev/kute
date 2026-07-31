@@ -8,6 +8,25 @@ The site's palette mirrors the TUI's semantic `Theme` so the HTML-rebuilt
 terminal mockups look like the real product. There is one deliberate exception
 and it is called out below.
 
+## Who it is for
+
+**Every page is written for someone who wants to use kute**, not for someone
+who wants to work on it. Architecture, design rationale and contributor
+process live in the repo — this site explains what a user sees and does.
+
+In practice that rules out a whole vocabulary: kind registry, command table,
+semantic token struct, watch cache, skeleton, informer, `sh.helm.release.v1`,
+"data not code", and any sentence whose subject is a Go type. Each of those
+has a user-facing translation and the translation is what ships — "your CRDs
+appear with the same tables and keys as built-in kinds, discovered on connect"
+rather than "kinds are registry entries". Regeneration commands, `.tape`
+files and repo paths are not published either; a visitor cannot run them.
+
+The four pages map onto the journey — understand (`/`), learn (`/guide.html`),
+try (`/install.html`), trust (`/verify.html`) — and each answers its question
+once. The old `features.html` existed because the home page had become a
+feature page; merging them is what the guide's existence made possible.
+
 ## How the pages are built
 
 There are no hand-maintained HTML pages. `cmd/site` renders `website/dist/`
@@ -18,9 +37,15 @@ from:
 | `website/pages/<slug>.html` | The body of one page, everything between the nav and the footer |
 | `website/templates/page.html` | The shell: head, skip link, nav slot, `<main>`, footer, scripts |
 | `website/templates/nav.html` | The nav, including `aria-current` on the active link |
-| `website/templates/install.html` | The install panel, shared by three pages |
+| `website/templates/install.html` | The full install panel — the install page only |
+| `website/templates/cta.html` | The compact call to action every other page closes with |
 | `website/templates/icons.html` | SVG fragments used more than once |
 | `website/site.json` | Per-page metadata plus site-wide values |
+
+Page bodies are parsed against a clone of the shared template set, so a body
+can call `{{template "copyicon"}}` rather than pasting the same SVG path a
+dozen times. A page carries either `install` (the full panel) or `cta`, never
+both; `404` carries neither.
 
 `website/dist/` is generated and gitignored. Preview with:
 
@@ -112,6 +137,15 @@ third-party round trip behind it. Only weights actually used are requested.
 - **One version string.** The verify page quotes `releaseVersion` from
   `site.json`; `TestReleaseVersionsAgree` checks it against
   `docs/verifying-releases.md` and `README.md`.
+- **The keyboard reference is checked against the app.** Every verb in
+  `internal/tui/verbs` must appear in `guide.html`, asserted by
+  `TestKeyboardReferenceCoversVerbs`. A rebound or renamed key otherwise
+  leaves the published reference plausible and wrong, which is worse than
+  absent. Deliberate omissions go in that test's `omitted` map with a reason.
+- **Recordings are cache-busted at deploy.** GitHub Pages will not let us set
+  `Cache-Control`, so `deploy-pages.yml` appends the commit SHA to every
+  `.mp4`/`-poster.jpg` reference — across all pages, not a named one, which is
+  how the step got missed when the recordings moved off `demo.html`.
 
 ## Provenance
 

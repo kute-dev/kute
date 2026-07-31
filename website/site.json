@@ -3,85 +3,69 @@
     "Per-page data for cmd/site. Body content lives in pages/<slug>.html;",
     "the shared shell, nav and install panel live in templates/.",
     "footerTag is site-level: it is one string for the whole site, so the",
-    "copies cannot drift apart again."
+    "copies cannot drift apart again.",
+    "The full install panel belongs to the install page alone; every other",
+    "page closes with the compact cta instead."
   ],
   "siteURL": "https://kute.dev/",
   "releaseVersion": "0.4.0",
   "signedFrom": "v0.4.0-beta.1",
-  "footerTag": "Your cluster, in plain sight. Every pixel visible, navigation only when you ask.",
+  "footerTag": "Your cluster, in plain sight. Navigation only when you ask.",
   "pages": [
     {
       "slug": "index",
       "title": "kute — the incident console for Kubernetes",
-      "description": "kute makes a cluster's actual state visible without digging — triage-first sorting, live failure states that never go blank, and guardrails that scale with blast radius. Try it in one command, no cluster needed.",
+      "description": "kute makes a cluster's actual state visible without digging — the broken thing sorts to the top, every action shows the command it will run first, and nothing goes blank when the connection drops. Try it in one command, no cluster needed.",
       "canonical": "https://kute.dev/",
       "ogTitle": "kute — the incident console for Kubernetes",
       "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
       "twitterDescription": "Your cluster, in plain sight. Modern Kubernetes TUI.",
       "home": true,
+      "cta": true
+    },
+    {
+      "slug": "guide",
+      "title": "Guide — using kute, the incident console for Kubernetes",
+      "description": "How to drive kute: getting started, jumping between resources with the palettes, diagnosing a failing pod, following logs, changing a workload safely, production safeguards, configuration, and the full keyboard reference.",
+      "canonical": "https://kute.dev/guide.html",
+      "ogTitle": "Guide — using kute, the incident console for Kubernetes",
+      "ogDescription": "From your first screen to a production delete — how to drive kute, with recordings you can follow along with.",
+      "twitterDescription": "From your first screen to a production delete — how to drive kute.",
+      "home": false,
+      "cta": true
+    },
+    {
+      "slug": "install",
+      "title": "Install kute — the incident console for Kubernetes",
+      "description": "Install kute on macOS, Linux or Windows: one binary, nothing added to your cluster. Package managers, what you need before you start, your first run, updating and uninstalling, and fixes for the usual install problems.",
+      "canonical": "https://kute.dev/install.html",
+      "ogTitle": "Install kute — the incident console for Kubernetes",
+      "ogDescription": "One binary, no cluster-side install. macOS, Linux and Windows, on x86-64 and arm64.",
+      "twitterDescription": "One binary, no cluster-side install. macOS, Linux and Windows.",
+      "home": false,
       "install": {
         "id": "install",
-        "secondHref": "/features.html",
-        "secondLabel": "See what's inside",
+        "secondHref": "/guide.html",
+        "secondLabel": "Read the guide",
         "thirdHref": "/verify.html",
-        "thirdLabel": "Verify a release"
-      }
-    },
-    {
-      "slug": "features",
-      "title": "Features — kute, the incident console for Kubernetes",
-      "description": "Every screen kute ships, explained: cluster overview as a routing layer not a dashboard, pod detail that leads with the last termination, secret decode that never touches disk, and Ingress/Gateway API routing tables resolved live.",
-      "canonical": "https://kute.dev/features.html",
-      "ogTitle": "Features — kute, the incident console for Kubernetes",
-      "ogDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
-      "twitterDescription": "Every screen kute ships, explained — one skeleton, forty screens.",
-      "home": false,
-      "install": {
-        "id": "",
-        "secondHref": "/index.html#surface",
-        "secondLabel": "Back to overview",
-        "thirdHref": "/verify.html",
-        "thirdLabel": "Verify a release"
-      }
-    },
-    {
-      "slug": "demo",
-      "title": "Demo — kute, the incident console for Kubernetes",
-      "description": "Watch kute in motion: an incident walkthrough from a clean namespace to a correlated rollout, the namespace and goto palettes' alt-tab gestures, everyday Deployment actions, and the Ingress/Gateway API routing table resolving a broken backend live — all recorded straight from kute --demo.",
-      "canonical": "https://kute.dev/demo.html",
-      "ogTitle": "Demo — kute, the incident console for Kubernetes",
-      "ogDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
-      "twitterDescription": "Watch kute in motion — recorded straight from kute --demo, no cluster needed.",
-      "home": false,
-      "install": {
-        "id": "",
-        "secondHref": "/features.html",
-        "secondLabel": "See what's inside",
-        "thirdHref": "/verify.html",
-        "thirdLabel": "Verify a release"
+        "thirdLabel": "Verify a download"
       }
     },
     {
       "slug": "verify",
-      "title": "Verify a release — kute, the incident console for Kubernetes",
+      "title": "Verify a download — kute, the incident console for Kubernetes",
       "description": "Every kute release archive is signed with a keyless cosign identity bound to the release workflow, ships an SBOM, and carries a GitHub build provenance attestation. Here is how to check all three by hand.",
       "canonical": "https://kute.dev/verify.html",
-      "ogTitle": "Verify a release — kute, the incident console for Kubernetes",
+      "ogTitle": "Verify a download — kute, the incident console for Kubernetes",
       "ogDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "twitterDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "home": false,
-      "install": {
-        "id": "",
-        "secondHref": "/features.html",
-        "secondLabel": "See what's inside",
-        "thirdHref": "https://github.com/kute-dev/kute/releases",
-        "thirdLabel": "All releases"
-      }
+      "cta": true
     },
     {
       "slug": "404",
       "title": "Page not found — kute, the incident console for Kubernetes",
-      "description": "That page isn't on kute.dev. Links to the overview, features, demo and release-verification pages.",
+      "description": "That page isn't on kute.dev. Links to the overview, guide, install and download-verification pages.",
       "canonical": "",
       "ogTitle": "",
       "ogDescription": "",

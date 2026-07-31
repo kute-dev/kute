@@ -682,45 +682,6 @@ p { margin: 0; }
 .deepdive-list li { list-style: none; position: relative; padding-left: 27px; font-size: 14.5px; color: var(--text-secondary); }
 .deepdive-list li svg { position: absolute; left: 0; top: 2px; width: 17px; height: 17px; color: var(--good); }
 
-/* ---------- six principles bento ---------- */
-.features { padding: var(--section-gap) 0; }
-.bento {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-.bento-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card);
-  padding: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  position: relative;
-  overflow: hidden;
-  transition: border-color .2s ease, transform .2s ease;
-}
-.bento-card:hover { border-color: rgba(167,139,250,.4); transform: translateY(-2px); }
-.bento-card .glow {
-  position: absolute; top: -40px; right: -40px; width: 140px; height: 140px;
-  background: radial-gradient(circle, rgba(167,139,250,.18), transparent 70%);
-  pointer-events: none;
-}
-.bento-icon {
-  width: 38px; height: 38px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 10px;
-  background: rgba(167,139,250,.10);
-  color: var(--accent-hi);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
-}
-.bento-icon svg { width: 19px; height: 19px; }
-.bento-card h3 { font-size: 16.5px; }
-.bento-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.55; }
-
 /* ---------- the surface (four-category map) ---------- */
 .surface { padding: var(--section-gap) 0; }
 .surface-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 56px 72px; font-family: var(--font-mono); }
@@ -778,26 +739,6 @@ p { margin: 0; }
 }
 .trust-cmd .label { color: var(--text-faint); }
 .trust-cmd code { color: var(--accent-hi); }
-
-/* ---------- non-goals (quiet, deliberately low-weight) ---------- */
-.nongoals { padding: calc(var(--section-gap) - 24px) 0; }
-.nongoals-list { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; }
-.ng-item { display: flex; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--border-subtle); align-items: baseline; }
-.ng-item:first-child { border-top: 1px solid var(--border-subtle); }
-.ng-item .ng-label { flex-shrink: 0; width: 190px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-faint); }
-.ng-item p { color: var(--text-secondary); font-size: 14.5px; line-height: 1.6; }
-
-/* ---------- pull quote ---------- */
-.pullquote { padding: 72px 0; text-align: center; }
-.pullquote blockquote {
-  max-width: 740px; margin: 0 auto;
-  font-family: var(--font-display);
-  font-size: clamp(20px, 2.6vw, 28px);
-  line-height: 1.45;
-  color: var(--text);
-}
-.pullquote .accent { color: var(--accent-hi); }
-.pullquote cite { display: block; margin-top: 18px; font-style: normal; font-size: 13px; color: var(--text-faint); font-family: var(--font-mono); }
 
 /* ---------- install / cta ---------- */
 .install { padding: var(--section-gap) 0 calc(var(--section-gap) - 40px); }
@@ -882,6 +823,25 @@ p { margin: 0; }
 
 .install-ctas { margin-top: 26px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
 
+/* The compact call to action every page except install closes with. Same
+   panel language, one command instead of four — the other three are one
+   click away and repeating them made every page longer for nothing. */
+.cta { padding: calc(var(--section-gap) - 24px) 0 var(--section-gap); }
+.cta-panel {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 32px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+}
+.cta-panel h2 { font-size: clamp(24px, 2.6vw, 30px); }
+.cta-panel > p { margin: 12px auto 0; max-width: 460px; color: var(--text-secondary); font-size: 15px; }
+.cta-panel code { font-family: var(--font-mono); font-size: .92em; background: var(--bg); border-radius: 3px; padding: 3px 6px; }
+.cta-panel .code-block { margin-top: 22px; }
+.cta-panel .install-ctas { margin-top: 20px; }
+
 /* ---------- features page ---------- */
 .page-header { padding: 168px 0 64px; position: relative; overflow: hidden; }
 .page-header .wrap { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -931,6 +891,91 @@ p { margin: 0; }
 .feature-more .surf-row { grid-template-columns: minmax(160px, 260px) 1fr; font-family: var(--font-mono); }
 .feature-more .surf-desc { text-align: left; }
 
+/* ---------- guide page ----------
+   A documentation page, not a pitch: prose measure, a contents rail that
+   tracks where you are, and the same terminal mockups the rest of the site
+   uses as illustrations rather than decoration. */
+.guide-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+  padding-bottom: var(--section-gap);
+}
+
+.guide-rail { position: sticky; top: 96px; }
+.guide-rail-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+}
+.guide-rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.guide-rail a {
+  display: block;
+  padding: 6px 12px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--border-subtle);
+}
+.guide-rail a:hover { color: var(--text); border-left-color: var(--text-faint); }
+/* Set by script as sections scroll past, so the rail answers "where am I" on
+   a page long enough that the question comes up. */
+.guide-rail a[aria-current="true"] { color: var(--accent-hi); border-left-color: var(--accent); }
+
+.guide-section { padding: 40px 0 24px; border-top: 1px solid var(--border-subtle); }
+.guide-section:first-child { border-top: none; padding-top: 8px; }
+/* Anchor links land below the fixed nav rather than under it. */
+.guide-section { scroll-margin-top: 88px; }
+.guide-section h2 { font-size: clamp(25px, 2.6vw, 32px); margin-bottom: 18px; }
+.guide-section h3 { font-size: 18px; margin: 36px 0 12px; }
+.guide-section p { max-width: 72ch; color: var(--text-secondary); font-size: 15.5px; line-height: 1.7; margin-bottom: 14px; }
+.guide-section p strong { color: var(--text-primary); }
+.guide-section code {
+  font-family: var(--font-mono);
+  font-size: .9em;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.guide-section a:not(.btn):not(.copy-btn) { color: var(--accent-hi); text-decoration: underline; text-underline-offset: 3px; }
+.guide-section .deepdive-list { max-width: 72ch; margin: 0 0 18px; }
+/* The install panel centres its command blocks and sizes them for a one-liner.
+   In a documentation column they are body content: left-aligned, one width. */
+.guide-section .code-block, .guide-section .code-block.block { margin: 22px 0; max-width: 100%; }
+.guide-section .code-or { margin: 18px 0 0; text-align: left; }
+.guide-section .term, .guide-section .demo-shot, .guide-section .flagship-dual { margin: 26px 0 0; }
+.guide-section .term-caption { text-align: left; margin-bottom: 26px; }
+.guide-section .flagship-dual .term-caption { text-align: center; }
+.guide-section .trust-cmd { margin: 0 0 22px; }
+.guide-section .friction-list { margin: 22px 0; }
+.guide-note { font-size: 13.5px !important; color: var(--text-faint) !important; }
+
+/* Two columns of key → what it does. Not a data table with headers: the left
+   column is the key and the right is the sentence, so headers would only
+   restate the layout. */
+.keyref { width: 100%; max-width: 760px; border-collapse: collapse; margin: 0 0 20px; font-size: 14.5px; }
+.keyref td { padding: 9px 14px 9px 0; border-top: 1px solid var(--border-subtle); vertical-align: baseline; color: var(--text-secondary); }
+.keyref tr:first-child td { border-top: none; }
+.keyref td:first-child { width: 180px; white-space: nowrap; }
+.keyref .dim { color: var(--text-ghost); font-size: 12.5px; }
+kbd {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--accent-hi);
+  background: var(--sel-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
 /* ---------- footer ---------- */
 footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
 .footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
@@ -948,13 +993,19 @@ footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
+  /* The rail stops being a sidebar and becomes a contents list above the
+     text — sticky in a single column would eat the top of every screen. */
+  .guide-layout { grid-template-columns: 1fr; gap: 32px; }
+  .guide-rail { position: static; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+  .guide-rail ol { flex-direction: row; flex-wrap: wrap; gap: 6px 4px; }
+  .guide-rail a { border-left: none; border-bottom: 2px solid var(--border-subtle); padding: 5px 10px; }
+  .guide-rail a:hover { border-left-color: transparent; border-bottom-color: var(--text-faint); }
+  .guide-rail a[aria-current="true"] { border-left-color: transparent; border-bottom-color: var(--accent); }
+  .keyref td:first-child { width: 140px; }
   .flagship-dual { grid-template-columns: 1fr; }
   .deepdive-row, .deepdive-row.reverse { grid-template-columns: 1fr; gap: 36px; }
   .deepdive-row.reverse .deepdive-copy { order: 0; }
-  .bento { grid-template-columns: repeat(2, 1fr); }
   .pain-grid, .pain-grid.three { grid-template-columns: 1fr; }
-  .ng-item { flex-direction: column; gap: 6px; }
-  .ng-item .ng-label { width: auto; }
 }
 
 /* terminal mockups: scroll horizontally rather than compressing columns illegibly */
@@ -987,7 +1038,6 @@ footer { border-top: 1px solid var(--border-subtle); padding: 48px 0 40px; }
   .nav-links a { padding: 8px 0; width: 100%; }
   .nav-toggle { display: block; background: none; border: none; color: var(--text); cursor: pointer; padding: 6px; }
   .nav-star { display: none; }
-  .bento { grid-template-columns: 1fr; }
   .surface-grid { grid-template-columns: 1fr; }
   .hero { padding: 140px 0 70px; }
   .install-panel { padding: 36px 24px; }

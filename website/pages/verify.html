@@ -4,7 +4,7 @@
   <div class="hero-sunburst" aria-hidden="true"></div>
   <div class="wrap">
     <span class="eyebrow">● signed releases</span>
-    <h1>Prove the download<br>is really ours.</h1>
+    <h1>Verify a download<br>is really ours.</h1>
     <p class="sub">A checksum proves the archive you got matches the manifest that came down the same wire. Only a signature proves the release is ours — which matters for a tool that reads your kubeconfig and can delete production workloads on a keypress.</p>
   </div>
 </header>
@@ -112,7 +112,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
-      <p style="text-align:center; margin-top:22px;">kute's own dependency scanning runs <code>govulncheck</code> weekly, which reports <em>reachable</em> vulnerabilities rather than merely present ones. The SBOM is for scanners that want the inventory.</p>
+      <p style="text-align:center; margin-top:22px;">Point whichever scanner your organisation already uses at it — the SBOM is a plain SPDX inventory, not a format of ours.</p>
     </div>
   </div>
 </section>
@@ -130,7 +130,6 @@
       <p style="text-align:center;">Without cosign they print a note and fall back to the checksum alone. A check nobody can run is not a stronger check — but it does mean the default one-liner install on a machine without cosign is checksum-only. If you want the strong check there, install cosign first, or follow this page by hand.</p>
       <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>{{.SignedFrom}}</code> onward is signed.</p>
       <p style="text-align:center; margin-top:18px;">A verification failure you can't explain is a security report rather than a bug report — please use <a href="https://github.com/kute-dev/kute/security/advisories/new" target="_blank" rel="noopener">GitHub's private advisory form</a> instead of a public issue.</p>
-      <p style="text-align:center; margin-top:18px;">The same page lives <a href="https://github.com/kute-dev/kute/blob/main/docs/verifying-releases.md" target="_blank" rel="noopener">in the repo</a>, next to the release workflow it describes.</p>
     </div>
   </div>
 </section>

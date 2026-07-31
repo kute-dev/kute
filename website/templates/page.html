@@ -54,7 +54,7 @@ try { var t = localStorage.getItem('kute-theme'); if (t) document.documentElemen
 {{template "nav" .}}
 
 <main id="main">
-{{.Body}}{{if .Install}}{{template "install" .}}{{end}}
+{{.Body}}{{if .Install}}{{template "install" .}}{{end}}{{if .CTA}}{{template "cta" .}}{{end}}
 </main>
 
 <footer>
@@ -65,16 +65,15 @@ try { var t = localStorage.getItem('kute-theme'); if (t) document.documentElemen
         <p class="footer-tag">{{.FooterTag}}</p>
       </div>
       <div class="footer-links">
+        <a href="/guide.html">Guide</a>
+        <a href="/install.html">Install</a>
+        <a href="/verify.html">Verify a download</a>
         <a href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">Issues</a>
-        <a href="/features.html">Features</a>
-        <a href="/demo.html">Demo</a>
-        <a href="/verify.html">Verify</a>
       </div>
     </div>
     <div class="footer-legal">
       <span>Apache License 2.0</span>
-      <span>Built with Bubble Tea &amp; Lip Gloss</span>
     </div>
   </div>
 </footer>

@@ -1,0 +1,615 @@
+<!-- ================= PAGE HEADER ================= -->
+<header class="page-header">
+  <div class="hero-aurora" aria-hidden="true"></div>
+  <div class="hero-sunburst" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="eyebrow">● using kute</span>
+    <h1>Everything you need<br>to drive <em style="color:var(--accent-hi); font-style:normal;">kute</em>.</h1>
+    <p class="sub">From your first screen to a production delete: how to find things, read them, change them safely, and get unstuck. Every recording below is captured straight from <code style="white-space:nowrap">kute --demo</code>, so you can follow along without a cluster.</p>
+  </div>
+</header>
+
+<div class="guide-layout wrap">
+  <nav class="guide-rail" aria-label="On this page">
+    <span class="guide-rail-label">On this page</span>
+    <ol>
+      <li><a href="#getting-started">Getting started</a></li>
+      <li><a href="#navigation">Finding your way around</a></li>
+      <li><a href="#browsing">Browsing resources</a></li>
+      <li><a href="#investigating">Diagnosing pods and nodes</a></li>
+      <li><a href="#logs-events">Logs, events and timelines</a></li>
+      <li><a href="#actions">Changing things</a></li>
+      <li><a href="#routing">Ingress and Gateway routing</a></li>
+      <li><a href="#production">Production safeguards</a></li>
+      <li><a href="#configuration">Configuration</a></li>
+      <li><a href="#keyboard">Keyboard reference</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <div class="guide-body">
+
+    <!-- ================= GETTING STARTED ================= -->
+    <section class="guide-section" id="getting-started">
+      <span class="eyebrow">step one</span>
+      <h2>Getting started</h2>
+      <p>kute is a single binary. Install it, then run it — there is no configuration file to write first and no setup wizard to sit through.</p>
+
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | sh</div>
+        <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | sh" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p class="guide-note">Homebrew, Scoop and PowerShell one-liners, plus what to do when something goes wrong, are on the <a href="/install.html">install page</a>.</p>
+
+      <h3>Try it without a cluster</h3>
+      <p><code>kute --demo</code> runs the whole app against a built-in fake cluster that lives in memory: real screens, real keys, real failure states, nothing to connect to and nothing to break. It is the fastest way to learn the keys, and it is what every recording on this page was made with.</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">kute</span> <span class="flag">--demo</span></div>
+        <button class="copy-btn" data-copy="kute --demo" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+
+      <h3>Connecting to your own cluster</h3>
+      <p>Plain <code>kute</code> uses the same kubeconfig <code>kubectl</code> does — <code>$KUBECONFIG</code> if it is set, otherwise <code>~/.kube/config</code>, and in-cluster credentials when it is running inside a pod. It opens on your current context, or on whichever context and namespace you were last in. You can also say so explicitly:</p>
+      <div class="code-block">
+        <div><span class="prompt">$</span><span class="cmd">kute</span> <span class="flag">--context</span> prod-eks <span class="flag">-n</span> payments</div>
+        <button class="copy-btn" data-copy="kute --context prod-eks -n payments" aria-label="Copy command">
+          {{template "copyicon"}}
+        </button>
+      </div>
+      <p>kute reads with your own credentials and never asks for more than the API server already gives you. Anything you cannot list shows up as a permission card, not an empty table — see <a href="#troubleshooting">Troubleshooting</a>.</p>
+
+      <h3>Your first screen</h3>
+      <p>You land on the Pods of your current namespace. Three things are worth knowing before anything else:</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>The top line is a breadcrumb: <strong>context › namespace › kind</strong>, plus the connection state and how fresh the data is.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>The bottom line is the keybar. It only shows keys that do something on the row you are on right now, so it is worth glancing at when you change kind.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>?</code> opens the full key list for wherever you are, <code>esc</code> always steps back exactly one level, and <code>q</code> quits.</li>
+      </ul>
+    </section>
+
+    <!-- ================= NAVIGATION ================= -->
+    <section class="guide-section" id="navigation">
+      <span class="eyebrow">getting around</span>
+      <h2>Finding your way around</h2>
+      <p>kute has no menus and no tree. The screen is data; navigation is one key away when you want it. Three keys open the same palette pointed at three different things:</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong style="color:var(--text-primary)">g</strong> — jump anywhere. One fuzzy search across kinds, resource names, namespaces and contexts.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong style="color:var(--text-primary)">n</strong> — switch namespace, with each namespace's live health next to it.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong style="color:var(--text-primary)">c</strong> — switch context. Reachability is probed before you pick, and each context remembers where you were.</li>
+      </ul>
+      <p>All three open pre-selected on the last <em>other</em> place you were, so <code>n ↵</code> flips between two namespaces the way alt-tab flips between two windows — nothing typed. The eight kinds you use daily are ranked on top with their first letter highlighted: typing that letter pins the kind to the top of the list, and <code>↵</code> jumps. It never fires on the letter alone, so you can keep typing to search for something else.</p>
+
+      <div class="term reveal" role="img" aria-label="kute's goto palette on an empty query, showing the eight daily kinds ranked with their first letter highlighted as the alias">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-stage <span class="sep">›</span> Pods</span>
+          <span class="term-status"><span class="live">● connected</span></span>
+        </div>
+        <div class="term-palette-wrap">
+          <div class="term-palette">
+            <div class="term-palette-input"><span class="prompt">›</span><span class="placeholder">type to jump, or browse</span><span class="cursor">▎</span><span style="margin-left:auto;color:var(--text-faint);font-size:11px;">jump anywhere</span></div>
+            <div class="term-palette-row sel"><span><span class="alias">P</span><span class="label">ods</span></span><span class="type">36</span></div>
+            <div class="term-palette-row"><span><span class="alias">D</span><span class="label">eployments</span></span><span class="type">9</span></div>
+            <div class="term-palette-row"><span><span class="alias">S</span><span class="label">ervices</span></span><span class="type">14</span></div>
+            <div class="term-palette-row"><span><span class="alias">I</span><span class="label">ngresses</span></span><span class="type">6</span></div>
+            <div class="term-palette-row"><span><span class="alias">N</span><span class="label">odes</span></span><span class="type">5</span></div>
+            <div class="term-palette-row"><span><span class="alias">C</span><span class="label">onfigMaps</span></span><span class="type">22</span></div>
+            <div class="term-palette-row"><span><span class="alias">E</span><span class="label">vents</span></span><span class="type">–</span></div>
+            <div class="term-palette-row more"><span>+ 13 more kinds · type to narrow</span></div>
+            <div class="term-palette-foot">alias — colored first letter · typing it pins that kind to rank 1 · ↵ jumps</div>
+          </div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="pill" style="background:var(--sel-bg);color:var(--accent-hi);">GOTO</span> &nbsp; <span class="key">type</span> to narrow · <span class="key">↑↓</span> move · <span class="key">↵</span> jump</span>
+        </div>
+      </div>
+      <p class="term-caption">The goto palette. <code>:</code> opens it too, if that is the muscle memory you already have.</p>
+
+      <div class="demo-shot reveal">
+        <video src="/assets/goto-palette-demo.mp4" poster="/assets/goto-palette-demo-poster.jpg"
+               width="1220" height="770" muted loop playsinline
+               controls preload="none" data-demo
+               aria-label="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail"></video>
+      </div>
+      <p class="term-caption">Watch for the third move: typing a pod's name jumps straight to that pod, changing kind on the way.</p>
+
+      <h3>Switching namespaces</h3>
+      <p>The namespace palette keeps a RECENT row of the places you have been, each with a digit you can press. The digits shift as your recent list changes, so the namespace you are bouncing off is always <code>n ↵</code>.</p>
+
+      <div class="demo-shot reveal">
+        <video src="/assets/namespace-palette-demo.mp4" poster="/assets/namespace-palette-demo-poster.jpg"
+               width="1220" height="770" muted loop playsinline
+               controls preload="none" data-demo
+               aria-label="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit"></video>
+      </div>
+      <p class="term-caption">Two namespaces, no typing — then older ones recalled by digit.</p>
+    </section>
+
+    <!-- ================= BROWSING ================= -->
+    <section class="guide-section" id="browsing">
+      <span class="eyebrow">browse</span>
+      <h2>Browsing resources</h2>
+      <p>Every kind is the same table, so the keys you learn on Pods work on Deployments, Nodes, Secrets and on custom resources you have never opened before. <code>j</code>/<code>k</code> and the arrow keys move; <code>↵</code> opens whatever the row is; <code>esc</code> comes back.</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>/</code> filters the list as you type. It filters what is on screen — the data behind it keeps updating.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>space</code> marks the row under the cursor and moves down; <code>*</code> marks everything the current filter matches. Filter first, then mark, then act — that is how you do anything in bulk.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Unhealthy rows sort to the top on their own. You should not have to hunt for the broken one.</li>
+      </ul>
+
+      <h3>The whole cluster at once</h3>
+      <p><code>a</code> switches the list to every namespace. Namespaces with problems open expanded and sort first; healthy ones collapse to a single line so they take one row instead of forty. <code>tab</code> expands or collapses the group you are in, and <code>N</code> drops you into the selected row's namespace for good.</p>
+
+      <h3>Custom resources</h3>
+      <p>Your CRDs appear in the same list of kinds as everything else, discovered when kute connects — there is nothing to register and no layout file to write. Their columns come from the printer columns the CRD itself declares, which is what <code>kubectl get</code> shows you, and a Ready-style condition becomes the status dot. A kind that declares neither still lists, it just has nothing to colour.</p>
+
+      <h3>The cluster overview</h3>
+      <p>Press <code>g</code> and type <code>ov</code> for a cluster-wide summary: capacity, nodes, everything currently in trouble, and what changed recently. It is a place to jump <em>from</em> — every row opens the real screen for that object — rather than a dashboard to sit on.</p>
+
+      <div class="term reveal" role="img" aria-label="kute's cluster overview screen: capacity bars, a nodes summary, a cluster-wide trouble list, and recent rollout changes, every row routable to its own screen">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> prod-eks <span class="sep">›</span> <span class="kind">Overview</span> <span class="hint">cluster-scoped</span></span>
+          <span class="term-status"><span class="live">● connected · 12ms</span></span>
+        </div>
+        <div class="term-strip">
+          <span><span class="g-bad">✕ 1 crashloop</span> &nbsp; <span class="g-warn">▲ 1 node pressure</span> &nbsp; <span class="g-warn">▲ 2 warnings</span></span>
+          <span>v1.30 · 5 nodes · 125 pods · 6 namespaces</span>
+        </div>
+        <div class="term-body">
+          <div class="term-section-label">capacity</div>
+          <div class="term-kv-row"><span class="k">cpu</span><span class="mini-bar"><span class="mini-bar-fill" style="width:46%"></span></span><span class="v">46% of 40 cores</span></div>
+          <div class="term-kv-row"><span class="k">mem</span><span class="mini-bar"><span class="mini-bar-fill warn" style="width:71%"></span></span><span class="v">71% of 160Gi</span></div>
+          <div class="term-kv-row"><span class="k">pods</span><span class="mini-bar"><span class="mini-bar-fill" style="width:38%"></span></span><span class="v">125 / 330</span></div>
+
+          <div class="term-section-label">nodes · ↵ node detail</div>
+          <div class="term-row term-grid-4"><span class="dot warn">▲</span><span class="name">node-2</span><span class="g-warn">MemPressure</span><span class="dim right">mem 91%</span></div>
+          <div class="term-row term-grid-4"><span class="dot ghost">◈</span><span class="name">node-4</span><span class="dim">cordoned</span><span class="dim right">0 pods</span></div>
+          <div class="term-row term-grid-4"><span class="dot good">●</span><span class="name dim">+ 3 more</span><span class="dim">ready</span><span class="right"></span></div>
+
+          <div class="term-section-label">trouble · ↵ goes to the object</div>
+          <div class="term-row term-grid-4"><span class="dot bad">✕</span><span class="name">pod/nebula-qa-9k2ss</span><span class="g-bad">CrashLoopBackOff · ↺6</span><span class="dim right">nebula-qa</span></div>
+          <div class="term-row term-grid-4"><span class="dot warn">▲</span><span class="name">deploy/nebula-migrate</span><span class="g-warn">degraded 2/4</span><span class="dim right">nebula-qa</span></div>
+          <div class="term-row term-grid-4"><span class="dot warn">▲</span><span class="name">certificate/api-tls</span><span class="g-warn">issuing · secret missing</span><span class="dim right">nebula-prod</span></div>
+
+          <div class="term-section-label">recent changes · 30m</div>
+          <div class="term-row term-grid-4"><span class="dot accent">⇅</span><span class="name">deploy/nebula-qa</span><span class="dim">rev 43 · image :3.4.1</span><span class="right dim">14m</span></div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="key">↵</span> open · <span class="key">↹</span> next panel · <span class="key">t</span> timeline · <span class="key">e</span> events</span>
+          <span><span class="key">esc</span> back</span>
+        </div>
+      </div>
+      <p class="term-caption">Cluster overview — every row is a door, not a chart.</p>
+    </section>
+
+    <!-- ================= INVESTIGATING ================= -->
+    <section class="guide-section" id="investigating">
+      <span class="eyebrow">diagnose</span>
+      <h2>Diagnosing pods and nodes</h2>
+      <p>Press <code>↵</code> on a pod and the screen opens with the reason it is unhappy, not with its labels. A crashlooping container leads with its last termination — exit code, reason, how long ago — above everything else, so the first line you read is the one you came for.</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Containers, their images, and live CPU/memory against their limits sit below it.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Numbered RELATED links — Deployment, ReplicaSet, Service, ConfigMap — go straight to the object. There is no sidebar to tab through.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>The pod's own events are on the same screen, so "why is it Pending" is usually answered without going anywhere.</li>
+      </ul>
+
+      <div class="term reveal" role="img" aria-label="kute's pod detail screen: a crashlooping pod's last termination reason promoted above the metadata, its containers, and a log excerpt showing the OOM crash and the restart boundary">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-qa <span class="sep">›</span> Pods <span class="sep">›</span> <span class="kind">nebula-qa-9k2ss</span></span>
+          <span class="term-status"><span class="live">● watching · live</span></span>
+        </div>
+        <div class="term-strip">
+          <span><span class="g-bad">✕ CrashLoopBackOff</span> &nbsp; <span class="dim">↺ 6 restarts</span></span>
+          <span class="dim">node-3 · Burstable · deploy/nebula-qa</span>
+        </div>
+        <div class="term-error">
+          <span><span class="tri">▲</span> Last termination — exit 137 · OOMKilled · 4m ago</span>
+          <span class="meta">container exceeded memory limit 256Mi</span>
+        </div>
+        <div class="term-body">
+          <div class="term-section-label">containers</div>
+          <div class="term-row term-grid-4"><span class="dot bad">✕</span><span class="name">worker</span><span class="dim">nebula/worker:1.42.0</span><span class="g-warn right">backoff · ↺6</span></div>
+          <div class="term-row term-grid-4"><span class="dot good">●</span><span class="name">metrics-sidecar</span><span class="dim">nebula/sidecar:0.9.1</span><span class="g-good right">running</span></div>
+
+          <div class="term-section-label">logs · worker</div>
+          <div class="term-log-line"><span class="ts">10:23:19</span><span class="lvl wrn">WRN</span><span>memory high rss=243Mi limit=256Mi</span></div>
+          <div class="term-log-line"><span class="ts">10:23:19</span><span class="lvl err">ERR</span><span>worker crashed signal=SIGKILL oom=true</span></div>
+          <div class="term-log-boundary">─── container restarted · restart 6 · 10:24:02 ───</div>
+          <div class="term-log-line"><span class="ts">10:24:03</span><span class="lvl inf">INF</span><span>worker started concurrency=4</span></div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="key">l</span> follow logs · <span class="key">x</span> exec · <span class="key">y</span> yaml</span>
+          <span><span class="key">ctrl-d</span> delete</span>
+        </div>
+      </div>
+      <p class="term-caption">Pod detail — the termination reason is the headline, not a field you scroll to.</p>
+
+      <h3>Nodes</h3>
+      <p><code>↵</code> on a node gives you its conditions, how much of it is allocated against what it has, and its taints — with the node's own pods sorted by memory underneath. When a node is under pressure, the pod causing it is usually the first row.</p>
+
+      <h3>A worked example</h3>
+      <p>This is the whole loop end to end: a namespace that looks fine, all-namespaces revealing the pod that isn't, detail and logs giving the cause, and the timeline tying it to a rollout ten minutes earlier.</p>
+      <div class="demo-shot reveal">
+        <video src="/assets/incident-walkthrough-all-namespaces.mp4" poster="/assets/incident-walkthrough-all-namespaces-poster.jpg"
+               width="1220" height="770" muted loop playsinline
+               controls preload="none" data-demo
+               aria-label="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier"></video>
+      </div>
+    </section>
+
+    <!-- ================= LOGS & EVENTS ================= -->
+    <section class="guide-section" id="logs-events">
+      <span class="eyebrow">read</span>
+      <h2>Logs, events and timelines</h2>
+
+      <h3>Logs</h3>
+      <p><code>l</code> opens logs from anywhere a pod is selected, following by default. The toolbar picks the container, how far back to start, whether to wrap long lines and whether to show timestamps. <code>/</code> filters the live stream without stopping it, and severity is coloured so an ERR block is visible while scrolling past.</p>
+      <p>Restarts are drawn as a line across the stream, so the crash and the process coming back up read top to bottom in one place — no stitching together <code>kubectl logs --previous</code> by hand.</p>
+
+      <h3>Events</h3>
+      <p><code>e</code> opens events: for the whole namespace from a list, or for one object from its detail screen. Repeats collapse into a single row with a count rather than scrolling past you forty times, warnings sort first, and <code>↵</code> on an event goes to the object it is about.</p>
+
+      <h3>Timeline</h3>
+      <p><code>t</code> merges events, container restarts and rollout revisions onto one clock, newest first — namespace-wide from a list, or for a single object from its detail screen. Rollouts act as the anchors: every row tells you how long before or after the nearest change it happened, which is usually the question you are actually asking.</p>
+    </section>
+
+    <!-- ================= ACTIONS ================= -->
+    <section class="guide-section" id="actions">
+      <span class="eyebrow">act</span>
+      <h2>Changing things</h2>
+      <p>Before anything runs, kute prints the exact <code>kubectl</code> command it is about to execute on a <strong>will run</strong> line. You can read it, copy it, and learn from it — and if it isn't what you meant, you have not done anything yet.</p>
+      <div class="trust-cmd"><span class="label">will run</span> <code>kubectl scale deploy/nebula-qa --replicas=6</code></div>
+
+      <h3>Workloads</h3>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>+</code> / <code>−</code> scale a Deployment or StatefulSet from an inline prompt pre-filled with one more or one fewer than you have. If an HPA owns the replica count, kute says so instead of letting you set a number that will be overwritten.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>i</code> sets the image, offering the tags from that workload's own rollout history first — usually you are going back to one of them.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>R</code> edits requests and limits with the live usage bar next to the box you are typing in.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>ctrl-r</code> restarts a Deployment's rollout; on the revision rail, <code>R</code> rolls one back.</li>
+      </ul>
+
+      <h3>Config and secrets</h3>
+      <p><code>↵</code> on a ConfigMap or a Secret opens its data as a key/value table. Short values are edited in place with <code>↵</code>; a long one opens in a buffer you can edit properly and apply with <code>ctrl-o</code>. <code>a</code> adds a key, <code>ctrl-d</code> removes one, and on a ConfigMap <code>ctrl-r</code> applies your change <em>and</em> restarts every workload that consumes it, which is the step that is easy to forget.</p>
+      <p>Secret values are masked everywhere by default: in the table, in the will-run line, and in the result message. <code>ctrl-x</code> toggles the mask on the value you are typing. Nothing decoded is written to disk or to a log, and leaving the screen re-masks everything.</p>
+
+      <div class="term reveal" role="img" aria-label="kute's YAML view with secret decode: values masked by default, the cursor key revealed in place with a colored gutter bar, decoded in memory only">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-stage <span class="sep">›</span> secret/nebula-db-credentials <span class="sep">›</span> <span class="kind">YAML</span></span>
+          <span class="term-status"><span class="live">● live</span></span>
+        </div>
+        <div class="term-strip">
+          <span>Secret · Opaque · 4 keys · <span class="g-info">1 revealed</span></span>
+          <span class="dim">decoded in memory only — never logged, never on disk</span>
+        </div>
+        <div class="term-body">
+          <div class="term-yaml-line"><span class="ln">15</span><span>data:</span></div>
+          <div class="term-yaml-line"><span class="ln">16</span><span class="masked">host: •••••••• · base64 · 28 B</span></div>
+          <div class="term-yaml-line"><span class="ln">17</span><span class="masked">port: •••••••• · base64 · 4 B</span></div>
+          <div class="term-yaml-line revealed"><span class="ln">18</span><span>username: nebula_app <span class="tag">revealed · x to mask</span></span></div>
+          <div class="term-yaml-line"><span class="ln">19</span><span class="masked">password: •••••••• · base64 · 41 B</span></div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="key">x</span> reveal/mask key · <span class="key">X</span> reveal all · <span class="key">y</span> copy value</span>
+          <span><span class="key">esc</span> back — re-masks all</span>
+        </div>
+      </div>
+      <p class="term-caption">A Secret in the YAML view: masked by default, one key revealed in place. Any Secret behaves this way, including ones an operator created for you.</p>
+
+      <h3>Labels, YAML and the shell</h3>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>m</code> edits labels and annotations on any object, showing you which Services select on the label you are about to change before you change it. Keys a controller owns stay read-only.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>y</code> shows the object's YAML, syntax-highlighted, with the noise folded away. <code>E</code> opens it in your <code>$EDITOR</code> — kute steps aside and gives the terminal to <code>kubectl edit</code>, then puts you back exactly where you were.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>x</code> execs into a pod the same way — a real shell, handed the terminal, with the container picker only appearing when there is more than one to choose.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>f</code> starts a port-forward without suspending anything: a chip appears in the header and stays live while you keep browsing. <code>s</code> on a node opens a root shell on the node itself.</li>
+      </ul>
+
+      <h3>Helm releases</h3>
+      <p>Helm releases are just another kind in the list — you can browse them, read their values with <code>v</code>, and open the revision history with <code>h</code>, all without the <code>helm</code> binary installed. Rolling back with <code>R</code> is the one thing that shells out to real <code>helm</code>.</p>
+
+      <div class="demo-shot reveal">
+        <video src="/assets/demo-everyday-actions.mp4" poster="/assets/demo-everyday-actions-poster.jpg"
+               width="1220" height="770" muted loop playsinline
+               controls preload="none" data-demo
+               aria-label="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues"></video>
+      </div>
+      <p class="term-caption">One Deployment, one flow: scale, set image, resources, a label add and remove, and a port-forward — each showing its command first.</p>
+    </section>
+
+    <!-- ================= ROUTING ================= -->
+    <section class="guide-section" id="routing">
+      <span class="eyebrow">routing</span>
+      <h2>Ingress and Gateway routing</h2>
+      <p>An Ingress or an HTTPRoute only means something joined to other objects — a Service, a TLS Secret, a parent Gateway. Press <code>↵</code> on one and kute resolves those joins for you: one row per host and path, the backend it actually lands on, and how many endpoints are ready behind it right now.</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>A route whose backend Service does not exist is red on the row, spelled out — not something you find out from a 503 later.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Canary weights get their own column, so a 90/10 split is a number you read rather than one you compute.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>TLS columns show the real expiry date from the referenced Secret, not just that a Secret was named.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>p</code> jumps from a route to the Gateway that accepted it — useful when the platform team owns one and you own the other. <code>y</code> copies the URL, <code>Y</code> the YAML, and <code>tab</code> moves to the TLS strip where <code>↵</code> opens the Secret.</li>
+      </ul>
+
+      <div class="flagship-dual reveal">
+        <div>
+          <div class="term" role="img" aria-label="kute's Ingress routing table: host and path routes resolved live to backend services and their ready endpoint counts, a broken backend shown in red inline">
+            <div class="term-header">
+              <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-stage <span class="sep">›</span> ingress/nebula-public <span class="sep">›</span> <span class="kind">Routes</span></span>
+              <span class="term-status"><span class="live">● connected</span></span>
+            </div>
+            <div class="term-strip">
+              <span>nginx · 2 hosts · 4 routes</span>
+              <span><span class="g-good">● 3 healthy</span> &nbsp; <span class="g-bad">✕ 1 broken</span></span>
+            </div>
+            <div class="term-body">
+              <div class="term-row head term-grid-5"><span></span><span>HOST + PATH</span><span>TLS</span><span>BACKEND</span><span>ENDPOINTS</span></div>
+              <div class="term-row term-grid-5"><span class="dot good">●</span><span class="name">app.nebula.dev /</span><span class="dim">61d</span><span class="dim">svc/nebula-gateway:80</span><span class="right g-good">3/3 ready</span></div>
+              <div class="term-row term-grid-5"><span class="dot good">●</span><span class="name">app.nebula.dev /api</span><span class="dim">61d</span><span class="dim">svc/nebula-bp-api:80</span><span class="right g-good">3/3 ready</span></div>
+              <div class="term-row term-grid-5"><span class="dot bad">✕</span><span class="name">app.nebula.dev /reports</span><span class="dim">—</span><span class="dim">svc/nebula-reports:80</span><span class="right g-bad">not found</span></div>
+              <div class="term-row term-grid-5"><span class="dot warn">▲</span><span class="name">admin.nebula.dev /</span><span class="dim">22d</span><span class="dim">svc/nebula-admin:443</span><span class="right g-warn">0/1 ready</span></div>
+            </div>
+            <div class="term-keybar">
+              <span><span class="key">↵</span> backend svc · <span class="key">y</span> copy url</span>
+              <span><span class="key">e</span> events</span>
+            </div>
+          </div>
+          <p class="term-caption">Ingress — one row per host+path → backend, resolved live</p>
+        </div>
+        <div>
+          <div class="term" role="img" aria-label="kute's HTTPRoute screen: weighted canary backends and the parent Gateway's accepted status, resolving Gateway API's two-object join both ways">
+            <div class="term-header">
+              <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-stage <span class="sep">›</span> httproute/nebula-api <span class="sep">›</span> <span class="kind">Routes</span></span>
+              <span class="term-status"><span class="live">● connected</span></span>
+            </div>
+            <div class="term-strip">
+              <span>api.nebula.dev · 3 rules</span>
+              <span class="g-good">✓ gw/public accepted</span>
+            </div>
+            <div class="term-body">
+              <div class="term-row head term-grid-5"><span></span><span>MATCH</span><span>WEIGHT</span><span>BACKEND</span><span>ENDPOINTS</span></div>
+              <div class="term-row term-grid-5"><span class="dot good">●</span><span class="name">/v2 prefix</span><span class="g-good">80%</span><span class="dim">svc/nebula-api-v2:80</span><span class="right g-good">3/3 ready</span></div>
+              <div class="term-row term-grid-5"><span class="dot good">●</span><span class="name">└ same match</span><span class="g-warn">20%</span><span class="dim">svc/nebula-api-canary</span><span class="right g-good">1/1 ready</span></div>
+              <div class="term-row term-grid-5"><span class="dot bad">✕</span><span class="name">/internal prefix</span><span class="dim">—</span><span class="dim">svc/nebula-internal</span><span class="right g-bad">not found</span></div>
+            </div>
+            <div class="term-keybar">
+              <span><span class="key">↵</span> backend · <span class="key">p</span> parent gateway</span>
+              <span><span class="key">y</span> copy url</span>
+            </div>
+          </div>
+          <p class="term-caption">HTTPRoute — rules, weights, and the parent Gateway join</p>
+        </div>
+      </div>
+
+      <div class="demo-shot reveal">
+        <video src="/assets/demo-routing-table.mp4" poster="/assets/demo-routing-table-poster.jpg"
+               width="1220" height="770" muted loop playsinline
+               controls preload="none" data-demo
+               aria-label="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway"></video>
+      </div>
+    </section>
+
+    <!-- ================= PRODUCTION ================= -->
+    <section class="guide-section" id="production">
+      <span class="eyebrow">safely</span>
+      <h2>Production safeguards</h2>
+      <p>How much kute asks of you scales with how hard the thing is to undo, and it asks for more in production.</p>
+      <div class="friction-list">
+        <div class="friction-item"><span class="tier rev">reversible</span> cordon runs straight away — you can uncordon with the same key</div>
+        <div class="friction-item"><span class="tier del">delete, restart, rollback</span> a <code>y/N</code> in the keybar, under the command that is about to run — no modal in the way</div>
+        <div class="friction-item"><span class="tier prod">prod, drain, force delete</span> type the object's name to confirm; drain and force delete always ask this, everywhere</div>
+      </div>
+      <p>In a production context, the ordinary <code>y/N</code> confirmations become type-the-name confirmations too. A red border is used for exactly one thing in kute — a confirmation that will destroy something — so if you see red, stop and read.</p>
+
+      <div class="term reveal" role="img" aria-label="kute's PROD type-the-name delete confirmation modal, the only red-bordered surface in the app">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> prod-eks <span class="sep">›</span> <span class="ns">payments</span> <span class="sep">›</span> <span class="kind">Pods</span></span>
+          <span class="term-status"><span class="live">● connected · 9ms</span></span>
+        </div>
+        <div class="term-modal-wrap">
+          <div class="term-modal">
+            <div class="term-modal-head">
+              <span class="title">✕ delete pod</span>
+              <span class="tag">PROD CONTEXT</span>
+            </div>
+            <div class="term-modal-body">
+              <div>Owner: <span class="owner">Deployment/nebula-qa — will be recreated</span></div>
+              <div>Grace period: <span style="color:var(--text)">30s</span> &nbsp; <span style="color:var(--text-faint)">force delete: <span class="key" style="color:var(--accent-hi)">ctrl-k</span> (grace 0)</span></div>
+              <div class="type-row">type the pod name to confirm: nebula-qa-9k2<span class="cursor">▎</span></div>
+              <div class="progress">14/16</div>
+            </div>
+          </div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="pill confirm">CONFIRM</span> &nbsp; <span class="key">↵</span> delete (when name matches) · <span class="key">esc</span> cancel</span>
+        </div>
+      </div>
+
+      <h3>Marking a context as production</h3>
+      <p>kute never guesses from a name — a context called <code>prod-eks</code> gets no special treatment unless you say so. Open the context palette with <code>c</code>, put the cursor on a context and press <code>ctrl-p</code> to mark or unmark it. That writes the <code>prodContexts</code> list in your <a href="#configuration">config file</a>, which every kute session on that machine then reads.</p>
+
+      <h3>When the cluster goes away</h3>
+      <p>Losing the connection mid-incident does not blank the screen. What kute last saw stays browsable, dimmed, with an age stamp and a countdown to the next retry — stale data you can read beats an empty screen you cannot. Actions that would write are hidden until the connection is back.</p>
+    </section>
+
+    <!-- ================= CONFIGURATION ================= -->
+    <section class="guide-section" id="configuration">
+      <span class="eyebrow">settings</span>
+      <h2>Configuration</h2>
+      <p>kute runs with no config file at all. When you want one it lives at <code>~/.config/kute/config.yaml</code>, and these are all of its keys:</p>
+
+      <div class="code-block block">
+        <div class="code-lines">
+          <div><span class="cmd">prodContexts:</span>            <span class="dim"># type-the-name confirms in these contexts</span></div>
+          <div>  - prod-eks</div>
+          <div>  - prod-gke</div>
+          <div><span class="cmd">theme:</span> light                <span class="dim"># dark | light — default follows your terminal</span></div>
+          <div><span class="cmd">nodeShellImage:</span> ghcr.io/you/debug:1  <span class="dim"># when Docker Hub is unreachable</span></div>
+          <div><span class="cmd">update:</span></div>
+          <div>  check: false             <span class="dim"># stop the once-a-day release check</span></div>
+        </div>
+      </div>
+      <p class="guide-note">A missing or unreadable config file is never an error — kute starts anyway, with nothing marked production.</p>
+
+      <h3>Command-line flags</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><code>--context</code></td><td>Context to launch against. Defaults to the one you used last, then to the kubeconfig's current context.</td></tr>
+          <tr><td><code>-n</code>, <code>--namespace</code></td><td>Namespace to launch in. Defaults to the one you used last, then to the context's own.</td></tr>
+          <tr><td><code>--kubeconfig</code></td><td>Path to a kubeconfig. Defaults to <code>$KUBECONFIG</code>, then <code>~/.kube/config</code>.</td></tr>
+          <tr><td><code>--demo</code></td><td>Run against the built-in fake cluster instead of a real one.</td></tr>
+          <tr><td><code>--theme</code></td><td><code>dark</code> or <code>light</code>, overriding both auto-detection and the config file.</td></tr>
+          <tr><td><code>--log-file</code></td><td>Write the error and client log stream to a file — attach it to a bug report.</td></tr>
+          <tr><td><code>--keycast</code></td><td>Show the keys you press in the corner. For recording a screencast.</td></tr>
+          <tr><td><code>--version</code></td><td>Print version information and exit.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Updates</h3>
+      <p>kute checks for a new release about once a day and, if there is one, shows a quiet chip in the header. <code>U</code> opens what changed along with the exact upgrade command for the way you installed it. kute never updates itself, and <code>update: check: false</code> turns the check off entirely if outbound requests are a problem where you work.</p>
+    </section>
+
+    <!-- ================= KEYBOARD REFERENCE ================= -->
+    <section class="guide-section" id="keyboard">
+      <span class="eyebrow">reference</span>
+      <h2>Keyboard reference</h2>
+      <p><code>?</code> shows this for wherever you happen to be, filtered to what applies. <code>j</code>/<code>k</code> work anywhere the arrow keys do, and <code>esc</code> always steps back exactly one level.</p>
+
+      <h3>Anywhere</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>g</kbd> <span class="dim">or</span> <kbd>:</kbd></td><td>goto — jump to a kind, object, namespace or context</td></tr>
+          <tr><td><kbd>n</kbd></td><td>namespace — switch namespace</td></tr>
+          <tr><td><kbd>c</kbd></td><td>context — switch cluster</td></tr>
+          <tr><td><kbd>a</kbd></td><td>all namespaces</td></tr>
+          <tr><td><kbd>/</kbd></td><td>filter the current list</td></tr>
+          <tr><td><kbd>e</kbd></td><td>events</td></tr>
+          <tr><td><kbd>t</kbd></td><td>timeline</td></tr>
+          <tr><td><kbd>y</kbd></td><td>yaml</td></tr>
+          <tr><td><kbd>E</kbd></td><td>edit in <code>$EDITOR</code></td></tr>
+          <tr><td><kbd>m</kbd></td><td>labels/annotations</td></tr>
+          <tr><td><kbd>space</kbd></td><td>mark the row and move down</td></tr>
+          <tr><td><kbd>*</kbd></td><td>mark all rows the filter matches</td></tr>
+          <tr><td><kbd>U</kbd></td><td>what's new in the latest release</td></tr>
+          <tr><td><kbd>?</kbd></td><td>help for this screen</td></tr>
+          <tr><td><kbd>esc</kbd></td><td>back one level</td></tr>
+          <tr><td><kbd>q</kbd></td><td>quit</td></tr>
+        </tbody>
+      </table>
+
+      <h3>In a list</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>j</kbd> <kbd>k</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>move the cursor</td></tr>
+          <tr><td><kbd>↵</kbd></td><td>open the selected row</td></tr>
+          <tr><td><kbd>tab</kbd></td><td>expand/collapse the namespace group</td></tr>
+          <tr><td><kbd>N</kbd></td><td>jump into namespace of the selected row</td></tr>
+          <tr><td><kbd>ctrl-d</kbd></td><td>delete — the marked set, or the row you are on</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Pods</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>l</kbd></td><td>logs — follow, filter, jump across restarts</td></tr>
+          <tr><td><kbd>x</kbd></td><td>exec — a shell in the container</td></tr>
+          <tr><td><kbd>f</kbd></td><td>forward — start a port-forward</td></tr>
+          <tr><td><kbd>ctrl-k</kbd></td><td>force delete (grace period 0)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Deployments, StatefulSets, DaemonSets</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>+</kbd> <kbd>−</kbd></td><td>scale <span class="dim">(Deployments and StatefulSets)</span></td></tr>
+          <tr><td><kbd>i</kbd></td><td>set image</td></tr>
+          <tr><td><kbd>R</kbd></td><td>resources — requests and limits</td></tr>
+          <tr><td><kbd>ctrl-r</kbd></td><td>restart — roll the Deployment</td></tr>
+          <tr><td><kbd>R</kbd> <span class="dim">on the revision rail</span></td><td>rollback to an earlier revision</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Nodes</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>C</kbd></td><td>cordon / uncordon</td></tr>
+          <tr><td><kbd>D</kbd></td><td>drain</td></tr>
+          <tr><td><kbd>s</kbd></td><td>node shell — a root shell on the node</td></tr>
+        </tbody>
+      </table>
+
+      <h3>ConfigMap and Secret data</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>a</kbd></td><td>add key</td></tr>
+          <tr><td><kbd>↵</kbd></td><td>edit the value under the cursor</td></tr>
+          <tr><td><kbd>e</kbd></td><td>open a long value in a buffer editor</td></tr>
+          <tr><td><kbd>ctrl-o</kbd></td><td>apply the buffer</td></tr>
+          <tr><td><kbd>ctrl-d</kbd></td><td>remove key</td></tr>
+          <tr><td><kbd>ctrl-x</kbd></td><td>show or re-mask the value you are typing</td></tr>
+          <tr><td><kbd>ctrl-r</kbd></td><td>apply + restart consumers <span class="dim">(ConfigMaps)</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Helm releases</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>v</kbd></td><td>values</td></tr>
+          <tr><td><kbd>h</kbd></td><td>history — the revision rail</td></tr>
+          <tr><td><kbd>R</kbd></td><td>rollback</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Routing tables</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>↵</kbd></td><td>open the backend Service</td></tr>
+          <tr><td><kbd>p</kbd></td><td>parent gateway</td></tr>
+          <tr><td><kbd>y</kbd></td><td>copy url</td></tr>
+          <tr><td><kbd>Y</kbd></td><td>copy yaml</td></tr>
+          <tr><td><kbd>tab</kbd></td><td>tls secret — move to the strip below the table</td></tr>
+          <tr><td><kbd>↵</kbd> <span class="dim">on the strip</span></td><td>open secret</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Port-forwards</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>x</kbd></td><td>stop this forward</td></tr>
+          <tr><td><kbd>r</kbd></td><td>restart this forward</td></tr>
+          <tr><td><kbd>X</kbd></td><td>stop all forwards</td></tr>
+          <tr><td><kbd>y</kbd></td><td>copy url</td></tr>
+        </tbody>
+      </table>
+
+      <h3>When something is wrong</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>r</kbd></td><td>retry — reconnect, or re-probe contexts</td></tr>
+          <tr><td><kbd>w</kbd></td><td>who-can — who is allowed to do this</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= TROUBLESHOOTING ================= -->
+    <section class="guide-section" id="troubleshooting">
+      <span class="eyebrow">when it goes wrong</span>
+      <h2>Troubleshooting</h2>
+
+      <h3>kute starts but cannot reach the cluster</h3>
+      <p>You get a screen naming the context it tried and the error the API server or your network actually returned — not a spinner. <code>r</code> retries, <code>c</code> switches to a context that works. If there is no kubeconfig at all, the same screen tells you where kute looked.</p>
+
+      <h3>"Forbidden" instead of a list</h3>
+      <p>kute shows the server's own message on a card rather than an empty table, because "you may not list these" and "there are none" are very different answers. From that card, <code>w</code> opens who-can with your denial already filled in, so you can see which role would have allowed it and who has it. Browsing everything else carries on working — a permission error never blocks the app.</p>
+
+      <h3>GKE, EKS or AKS credentials fail</h3>
+      <p>Clusters that authenticate through a plugin (<code>gke-gcloud-auth-plugin</code>, <code>aws</code>, <code>kubelogin</code>) fail with the plugin's own error text shown to you. kute never lets those plugins take over your terminal for an interactive prompt, so if one needs you to log in, do it in a shell first — <code>gcloud auth login</code>, <code>aws sso login</code> — then press <code>r</code>.</p>
+
+      <h3>A big cluster feels slow to open</h3>
+      <p>kute only fetches what the screen you are on needs, and starts watching a kind the first time you look at it. Opening an unfamiliar kind on a very large cluster takes a moment the first time and is instant afterwards. Namespaces, pods and nodes are always ready at launch.</p>
+
+      <h3>Something crashed, or looks wrong</h3>
+      <p>Run kute with <code>--log-file kute.log</code> and reproduce it; the file has the error and client-go stream in it. If kute panics it writes a crash report and tells you where — attaching both to an issue is the fastest route to a fix.</p>
+      <p class="guide-note">Bugs and feature requests: <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">github.com/kute-dev/kute/issues</a>.</p>
+    </section>
+
+  </div>
+</div>

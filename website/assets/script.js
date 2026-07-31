@@ -153,6 +153,41 @@
     }
   }
 
+  // Guide contents rail: mark the section currently being read. The guide is
+  // long enough that "where am I" is a real question, and the rail is the only
+  // thing on the page that can answer it. Purely additive — every link still
+  // works as an anchor without this.
+  var railLinks = document.querySelectorAll('.guide-rail a[href^="#"]');
+  if (railLinks.length && 'IntersectionObserver' in window) {
+    var byId = {};
+    var sections = [];
+    railLinks.forEach(function (a) {
+      var el = document.getElementById(a.getAttribute('href').slice(1));
+      if (el) { byId[el.id] = a; sections.push(el); }
+    });
+    var visible = {};
+    var mark = function () {
+      // Topmost visible section wins. Two are on screen at once for most of a
+      // scroll, and picking the last one to intersect would flip the highlight
+      // backwards when scrolling up.
+      var current = null;
+      sections.forEach(function (el) {
+        if (visible[el.id] && !current) current = el.id;
+      });
+      railLinks.forEach(function (a) { a.removeAttribute('aria-current'); });
+      if (current && byId[current]) byId[current].setAttribute('aria-current', 'true');
+    };
+    var sio = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { visible[entry.target.id] = entry.isIntersecting; });
+      mark();
+    }, { rootMargin: '-88px 0px -60% 0px' });
+    sections.forEach(function (el) { sio.observe(el); });
+    // The first callback fires while the browser is still scrolling to a
+    // #hash, so a deep link lands with the previous section highlighted until
+    // you scroll. Re-check once everything has settled.
+    window.addEventListener('load', mark);
+  }
+
   // Scroll reveal
   var revealEls = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window && revealEls.length) {
