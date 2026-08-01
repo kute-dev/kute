@@ -40,7 +40,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
 | # | task | status | depends on |
 |---|---|---|---|
-| G1 | Verify `status.artifact` git metadata | `[ ]` | — |
+| G1 | Verify `status.artifact` git metadata | `[x]` **resolved: no commit metadata** | — |
 | G2 | Verify Flux declared printer columns | `[ ]` | — |
 | G3 | Verify suspension attribution is recoverable | `[ ]` | — |
 | T1 | `demoDiscoveredKind` API-group fix | `[x]` | — |
@@ -61,14 +61,38 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ## Gates — resolve before the tasks that depend on them
 
-### G1 — Verify what `status.artifact` actually carries `[ ]`
-**Blocks T11, T12.** The design asserts the commit subject and author come "from the GitRepository artifact metadata already on the cluster — no git remote access, no tokens". Unverified (no Flux cluster reachable from this checkout), and to my knowledge source-controller publishes only `revision`, `digest`, `size`, `lastUpdateTime`, plus a `metadata` map that carries OCI annotations for OCIRepository — **not** a git commit message or author.
+### G1 — What `status.artifact` carries `[x]` RESOLVED 2026-08-01
+**Answer: no commit metadata exists on the cluster.** Measured against a real Flux
+GitRepository:
 
-```sh
-kubectl get gitrepository -A -o jsonpath='{.items[0].status.artifact}' | jq
+```json
+{
+  "digest": "sha256:df7055d9…",
+  "lastUpdateTime": "2026-07-31T13:31:17Z",
+  "path": "gitrepository/flux-system/flux-system/efd398be….tar.gz",
+  "revision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef",
+  "size": 847813,
+  "url": "http://source-controller.flux-system.svc…/…tar.gz"
+}
 ```
 
-**Fallback, to be designed in either way:** show the SHA alone, and express drift as a boolean (`applied ≠ source`) rather than a commit count. The `−9 commits ahead` figure needs git log access no matter what `status.artifact` holds, and the design's own "no git remote access, no tokens" line forbids obtaining it — so **plan the boolean drift signal as the shipping behaviour** and treat the count as unbuildable unless G1 says otherwise.
+There is no commit subject, no author, and no `metadata` map at all. The design's
+"fetched from the GitRepository artifact metadata already on the cluster" is not
+achievable — source-controller publishes the tarball's coordinates, not the
+commit's content.
+
+**Binding consequences:**
+- §31a's `source revision` line shows `master@efd398b` and the artifact's
+  `lastUpdateTime` age. **No `"fix: raise worker memory limit (#412)" · dana`.**
+- §32a renders `Revision applied · kustomization/x · master@efd398b`. The commit
+  subject — which §32a's own note calls "the whole point" — is not available
+  without git access, which the same design forbids. The causal chain
+  (revision → rollout → OOM → backoff) still reads top-down; only the subject
+  line is missing, and `v` still copies the SHA to paste into `git show`.
+- **Drift is a boolean, not a count.** `−9 commits ahead` needs `git log`.
+  Compare the Kustomization's `status.lastAppliedRevision` against its source's
+  `status.artifact.revision`: equal → in sync; different → `source ahead`
+  (with both short SHAs). Never a number.
 
 ### G2 — Confirm Flux's declared printer columns `[ ]`
 **Blocks T7.** Per §14a's "kute never guesses a column that isn't there".
