@@ -82,7 +82,7 @@ func (m Model) openSelectedFluxSource() (tea.Cmd, bool) {
 	}, true
 }
 
-// fluxSourceRef re-expands a projected SOURCE cell ("git/aim-config") into
+// fluxSourceRef re-expands a projected SOURCE cell ("git/nebula-config") into
 // the kind and name it abbreviates. Returns false for a source kind's own
 // row, whose cell is "–" because it *is* the source.
 func fluxSourceRef(row resources.Row) (kube.ResourceKind, string, bool) {

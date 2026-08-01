@@ -23,8 +23,8 @@ import (
 // Every Flux CRD declares exactly Ready, Status and Age (plus URL on the
 // source kinds) — measured across all 11 CRDs on a real cluster. READY and
 // AGE are kept; the declared Status column is *not* a cell, because its
-// value is prose ("health check failed after 2m0s: Deployment/aim-stage/
-// aim-worker status: 'InProgress'") that a table cell can only ellipsize
+// value is prose ("health check failed after 2m0s: Deployment/nebula-stage/
+// nebula-worker status: 'InProgress'") that a table cell can only ellipsize
 // into uselessness — it renders verbatim as the row's sub-line instead.
 // REVISION and SOURCE are derived (Flux declares neither) and answer the
 // two questions the declared set cannot: what is deployed, and from where.
@@ -311,7 +311,7 @@ func fluxSource(u *unstructured.Unstructured) string {
 }
 
 // shortSourceKind abbreviates a sourceRef kind to the design's compact form
-// ("git/aim-config", not "GitRepository/aim-config").
+// ("git/nebula-config", not "GitRepository/nebula-config").
 func shortSourceKind(kind string) string {
 	switch kind {
 	case "GitRepository":

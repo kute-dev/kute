@@ -42,7 +42,7 @@ func TestTimelineFromFluxEventsReadsTheRevisionAnnotation(t *testing.T) {
 	now := time.Now()
 	events := []Event{
 		{
-			Object: "Kustomization/aim-workers", Namespace: "flux-system",
+			Object: "Kustomization/nebula-workers", Namespace: "flux-system",
 			Reason: "ReconciliationSucceeded", LastSeen: now,
 			Message: "Reconciliation finished in 1.4s, next run in 10m0s",
 			Annotations: map[string]string{
@@ -79,7 +79,7 @@ func TestTimelineFromFluxEventsReadsTheRevisionAnnotation(t *testing.T) {
 func TestTimelineFromFluxEventsDegradesToTheBareSHA(t *testing.T) {
 	t.Parallel()
 	events := []Event{{
-		Object: "Kustomization/aim-workers", Namespace: "flux-system", LastSeen: time.Now(),
+		Object: "Kustomization/nebula-workers", Namespace: "flux-system", LastSeen: time.Now(),
 		Annotations: map[string]string{
 			"kustomize.toolkit.fluxcd.io/revision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef",
 		},

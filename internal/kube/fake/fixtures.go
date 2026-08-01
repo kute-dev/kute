@@ -1380,22 +1380,22 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 
 	c.Seed(kube.ResourceKind("GitRepository"),
 		demoFluxSource("GitRepository", kube.FluxGroupSource+"/v1", gitRepo, ns,
-			"https://github.com/example/aim-config", headRev, age(148*24*time.Hour), age(3*time.Minute)),
+			"https://github.com/example/nebula-config", headRev, age(148*24*time.Hour), age(3*time.Minute)),
 	)
 
 	c.Seed(kube.ResourceKind("Kustomization"),
 		// ✕ failed — the design's own example, health check verbatim.
-		demoKustomization("aim-workers", ns, gitRepo, "./clusters/stage/workers", headRev, false,
+		demoKustomization("nebula-workers", ns, gitRepo, "./clusters/stage/workers", headRev, false,
 			age(148*24*time.Hour), age(4*time.Minute), fluxCond("Ready", false, "HealthCheckFailed",
-				"health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'", age(4*time.Minute))),
+				"health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'", age(4*time.Minute))),
 		// ‖ suspended, carrying a *stale* Ready=True — the fixture that
 		// proves suspension outranks a frozen condition.
-		demoKustomization("aim-infra", ns, gitRepo, "./clusters/stage/infra", oldRev, true,
+		demoKustomization("nebula-infra", ns, gitRepo, "./clusters/stage/infra", oldRev, true,
 			age(148*24*time.Hour), age(6*24*time.Hour), fluxCond("Ready", true, "ReconciliationSucceeded",
 				"Applied revision: "+oldRev, age(6*24*time.Hour))),
 		// ◌ reconciling — Ready=False *and* Reconciling=True, which the
 		// generic CRD read renders as a red failure.
-		demoKustomization("aim-apps", ns, gitRepo, "./clusters/stage/apps", headRev, false,
+		demoKustomization("nebula-apps", ns, gitRepo, "./clusters/stage/apps", headRev, false,
 			age(148*24*time.Hour), age(20*time.Second),
 			fluxCond("Ready", false, "Progressing", "building manifests", age(20*time.Second)),
 			fluxCond("Reconciling", true, "ProgressingWithRetry", "building manifests", age(20*time.Second))),
@@ -1413,7 +1413,7 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 			age(90*24*time.Hour), age(31*time.Minute), fluxCond("Ready", true, "InstallSucceeded",
 				"Helm install succeeded for release podinfo/podinfo.v1 with chart podinfo@6.5.4", age(31*time.Minute))),
 		// ✕ stalled — terminal, distinct from a retrying failure.
-		demoFluxHelmRelease("aim-redis", ns, "redis", "19.6.1", "HelmRepository", "bitnami",
+		demoFluxHelmRelease("nebula-redis", ns, "redis", "19.6.1", "HelmRepository", "bitnami",
 			age(60*24*time.Hour), age(12*time.Minute),
 			fluxCond("Ready", false, "InstallFailed", "Helm install failed: timed out waiting for the condition", age(12*time.Minute)),
 			fluxCond("Stalled", true, "RetriesExhausted", "Failed to install after 3 attempts", age(12*time.Minute))),
@@ -1425,9 +1425,9 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoFluxRevisionEvent("flux-system-rev-1", ns, "Kustomization", "flux-system",
 			"kustomize.toolkit.fluxcd.io/revision", headRev,
 			"Reconciliation finished in 1.4s, next run in 10m0s", age(time.Minute)),
-		demoFluxRevisionEvent("aim-workers-rev-1", ns, "Kustomization", "aim-workers",
+		demoFluxRevisionEvent("nebula-workers-rev-1", ns, "Kustomization", "nebula-workers",
 			"kustomize.toolkit.fluxcd.io/revision", headRev,
-			"HelmRelease/aim-stage/aim-worker configured", age(4*time.Minute)),
+			"HelmRelease/nebula-stage/nebula-worker configured", age(4*time.Minute)),
 		demoEvent("git-artifact-1", ns, "GitRepository", gitRepo, "Normal", "GitOperationSucceeded",
 			"stored artifact for commit 'fix: raise worker memory limit (#412)'", 1, age(3*time.Minute)),
 	)

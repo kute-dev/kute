@@ -66,8 +66,8 @@ func fluxModel(t *testing.T, objs ...runtime.Object) Model {
 // TestFluxSubLineRendersTheConditionMessageVerbatim is §30a's core claim:
 // the failure reason is on the row, not one screen away.
 func TestFluxSubLineRendersTheConditionMessageVerbatim(t *testing.T) {
-	msg := "health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'"
-	m := fluxModel(t, kustomization("aim-workers", false, "False", msg))
+	msg := "health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'"
+	m := fluxModel(t, kustomization("nebula-workers", false, "False", msg))
 
 	view := plain(m.Render())
 	if !strings.Contains(view, "health check failed after 2m0s") {
@@ -75,7 +75,7 @@ func TestFluxSubLineRendersTheConditionMessageVerbatim(t *testing.T) {
 	}
 	// Verbatim: the object name from inside the message survives too, which
 	// is what makes the message a diagnosis rather than a category.
-	if !strings.Contains(view, "aim-worker") {
+	if !strings.Contains(view, "nebula-worker") {
 		t.Errorf("the message must render verbatim, not paraphrased:\n%s", view)
 	}
 }
@@ -85,8 +85,8 @@ func TestFluxSubLineRendersTheConditionMessageVerbatim(t *testing.T) {
 // a sub-line has no object behind it.
 func TestFluxSubLineIsNotSelectable(t *testing.T) {
 	m := fluxModel(t,
-		kustomization("aim-apps", false, "False", "reconciliation failed"),
-		kustomization("aim-infra", false, "False", "another failure"),
+		kustomization("nebula-apps", false, "False", "reconciliation failed"),
+		kustomization("nebula-infra", false, "False", "another failure"),
 	)
 
 	// Both rows failed, so both carry sub-lines: display is row, sub, row, sub.
@@ -113,14 +113,14 @@ func TestFluxSubLineIsNotSelectable(t *testing.T) {
 // fold at all.
 func TestFluxHealthyRowsFoldAwayBehindTheUnhealthy(t *testing.T) {
 	m := fluxModel(t,
-		kustomization("aim-apps", false, "True", "Applied revision: master@sha1:efd398b"),
-		kustomization("aim-workers", false, "False", "health check failed"),
+		kustomization("nebula-apps", false, "True", "Applied revision: master@sha1:efd398b"),
+		kustomization("nebula-workers", false, "False", "health check failed"),
 		kustomization("flux-system", false, "True", "Applied revision: master@sha1:efd398b"),
 		kustomization("observability", false, "True", "Applied revision: master@sha1:efd398b"),
 	)
 
 	view := plain(m.Render())
-	if !strings.Contains(view, "aim-workers") {
+	if !strings.Contains(view, "nebula-workers") {
 		t.Errorf("the failing row must stay visible:\n%s", view)
 	}
 	if !strings.Contains(view, "+ 3 ready") {
@@ -144,8 +144,8 @@ func TestFluxHealthyRowsFoldAwayBehindTheUnhealthy(t *testing.T) {
 // status derivation is the point of the feature.
 func TestFluxAllSuspendedListKeepsItsStatusSemantics(t *testing.T) {
 	m := fluxModel(t,
-		kustomization("aim-infra", true, "True", "Applied revision: master@sha1:efd398b"),
-		kustomization("aim-apps", true, "True", "Applied revision: master@sha1:efd398b"),
+		kustomization("nebula-infra", true, "True", "Applied revision: master@sha1:efd398b"),
+		kustomization("nebula-apps", true, "True", "Applied revision: master@sha1:efd398b"),
 	)
 
 	view := plain(m.Render())
@@ -164,20 +164,20 @@ func TestFluxAllSuspendedListKeepsItsStatusSemantics(t *testing.T) {
 // that is silently drifting from git.
 func TestFluxSuspendedRowStaysVisibleAndSortsAboveHealthy(t *testing.T) {
 	m := fluxModel(t,
-		kustomization("aim-apps", false, "True", "ok"),
-		kustomization("aim-infra", true, "True", "Applied revision: master@sha1:efd398b"),
+		kustomization("nebula-apps", false, "True", "ok"),
+		kustomization("nebula-infra", true, "True", "Applied revision: master@sha1:efd398b"),
 		kustomization("flux-system", false, "True", "ok"),
 		kustomization("observability", false, "True", "ok"),
 	)
 
 	view := plain(m.Render())
-	if !strings.Contains(view, "aim-infra") {
+	if !strings.Contains(view, "nebula-infra") {
 		t.Errorf("the suspended row must survive the healthy-tail fold:\n%s", view)
 	}
 	if !strings.Contains(view, "+ 3 ready") {
 		t.Errorf("expected the three healthy rows to fold, leaving the suspended one:\n%s", view)
 	}
-	if got := m.rows[0].Name; got != "aim-infra" {
+	if got := m.rows[0].Name; got != "nebula-infra" {
 		t.Errorf("suspended row should sort first among otherwise-healthy rows, got %q", got)
 	}
 	// It must not be double-reported: the READY cell already says the word.
@@ -207,16 +207,16 @@ func fluxModelWithMutator(t *testing.T, mut *fakeMutator, objs ...runtime.Object
 // two directions, chosen by the row's own state rather than by a mode.
 func TestFluxSuspendVerbFlipsDirectionWithTheRow(t *testing.T) {
 	mut := &fakeMutator{}
-	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+	m := fluxModelWithMutator(t, mut, kustomization("nebula-apps", false, "True", "ok"))
 	m = step(t, m, tea.KeyPressMsg{Text: "s"})
-	if len(mut.fluxSuspends) != 1 || mut.fluxSuspends[0] != "flux-system/aim-apps=true" {
+	if len(mut.fluxSuspends) != 1 || mut.fluxSuspends[0] != "flux-system/nebula-apps=true" {
 		t.Fatalf("expected a suspend call, got %v", mut.fluxSuspends)
 	}
 
 	mut2 := &fakeMutator{}
-	m2 := fluxModelWithMutator(t, mut2, kustomization("aim-infra", true, "True", "ok"))
+	m2 := fluxModelWithMutator(t, mut2, kustomization("nebula-infra", true, "True", "ok"))
 	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
-	if len(mut2.fluxSuspends) != 1 || mut2.fluxSuspends[0] != "flux-system/aim-infra=false" {
+	if len(mut2.fluxSuspends) != 1 || mut2.fluxSuspends[0] != "flux-system/nebula-infra=false" {
 		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.fluxSuspends)
 	}
 	// The keybar has to say which direction it will go, or the single key is
@@ -234,9 +234,9 @@ func TestFluxSuspendVerbFlipsDirectionWithTheRow(t *testing.T) {
 // since a ready Flux list is not in one.
 func TestFluxReconcileVerbAnnotates(t *testing.T) {
 	mut := &fakeMutator{}
-	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+	m := fluxModelWithMutator(t, mut, kustomization("nebula-apps", false, "True", "ok"))
 	m = step(t, m, tea.KeyPressMsg{Text: "r"})
-	if len(mut.fluxReconciles) != 1 || mut.fluxReconciles[0] != "flux-system/aim-apps" {
+	if len(mut.fluxReconciles) != 1 || mut.fluxReconciles[0] != "flux-system/nebula-apps" {
 		t.Fatalf("expected a reconcile call, got %v", mut.fluxReconciles)
 	}
 	// The will-run line names the kubectl kute actually issues, never the
@@ -262,7 +262,7 @@ func TestFluxReconcileVerbAnnotates(t *testing.T) {
 // TestFluxSourceVerbJumpsToTheSource covers 'o'.
 func TestFluxSourceVerbJumpsToTheSource(t *testing.T) {
 	mut := &fakeMutator{}
-	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+	m := fluxModelWithMutator(t, mut, kustomization("nebula-apps", false, "True", "ok"))
 
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "o"})
 	if cmd == nil {
@@ -280,7 +280,7 @@ func TestFluxSourceVerbJumpsToTheSource(t *testing.T) {
 // TestFluxVerbsAreInertWithoutAMutator guards the read-only case: no write
 // seam wired means the keys do nothing rather than panic.
 func TestFluxVerbsAreInertWithoutAMutator(t *testing.T) {
-	m := fluxModel(t, kustomization("aim-apps", false, "True", "ok"))
+	m := fluxModel(t, kustomization("nebula-apps", false, "True", "ok"))
 	for _, key := range []string{"s", "r"} {
 		m = step(t, m, tea.KeyPressMsg{Text: key})
 	}

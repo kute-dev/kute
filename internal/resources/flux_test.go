@@ -244,8 +244,8 @@ func TestProjectFluxResourceStatus(t *testing.T) {
 // absent on a healthy row where it would only repeat the REVISION cell.
 func TestFluxSubLineCarriesTheConditionMessageVerbatim(t *testing.T) {
 	t.Parallel()
-	msg := "health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'"
-	failing := projectFluxResource(fluxObj("Kustomization", "aim-workers", false, nil, conds(cond("Ready", "False", msg))))
+	msg := "health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'"
+	failing := projectFluxResource(fluxObj("Kustomization", "nebula-workers", false, nil, conds(cond("Ready", "False", msg))))
 	if failing.SubLine != msg {
 		t.Errorf("SubLine = %q, want the message verbatim %q", failing.SubLine, msg)
 	}

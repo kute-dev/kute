@@ -49,15 +49,15 @@
           <span></span><span>NAME</span><span>READY</span><span>REVISION</span><span>SOURCE</span><span>RECONCILED</span><span style="text-align: right;">AGE</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
-          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-workers</span><span style="color: #ef6a6a;">False</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">4m ago</span><span style="color: #676780; text-align: right;">148d</span>
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">nebula-workers</span><span style="color: #ef6a6a;">False</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/nebula-config</span><span style="color: #676780;">4m ago</span><span style="color: #676780; text-align: right;">148d</span>
         </div>
-        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
+        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;">aim-infra</span><span style="color: #d9a94a;">suspended</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">6d ago</span><span style="color: #676780; text-align: right;">148d</span>
+          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;">nebula-infra</span><span style="color: #d9a94a;">suspended</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/nebula-config</span><span style="color: #676780;">6d ago</span><span style="color: #676780; text-align: right;">148d</span>
         </div>
         <div style="padding: 0 14px 4px 46px; color: #8a7a4a; font-size: 11.5px;">suspended 6d by dana · source is 9 commits ahead</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-apps</span><span style="color: #9a9ab2;">True</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">2m ago</span><span style="color: #676780; text-align: right;">148d</span>
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">nebula-apps</span><span style="color: #9a9ab2;">True</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/nebula-config</span><span style="color: #676780;">2m ago</span><span style="color: #676780; text-align: right;">148d</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
           <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">flux-system</span><span style="color: #9a9ab2;">True</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/flux-system</span><span style="color: #676780;">1m ago</span><span style="color: #676780; text-align: right;">148d</span>
@@ -77,8 +77,8 @@
       </div>
 
       <div style="width: 960px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
-        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">R PRESSED ON aim-workers — THE WILL-RUN LINE, NO FLUX BINARY REQUIRED</div>
-        <div style="padding: 4px 14px 8px; font-size: 12px;"><span style="color: #55556e;">will run</span>  <span style="color: #9a9ab2;">kubectl annotate kustomization/aim-workers -n flux-system reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite</span></div>
+        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">R PRESSED ON nebula-workers — THE WILL-RUN LINE, NO FLUX BINARY REQUIRED</div>
+        <div style="padding: 4px 14px 8px; font-size: 12px;"><span style="color: #55556e;">will run</span>  <span style="color: #9a9ab2;">kubectl annotate kustomization/nebula-workers -n flux-system reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite</span></div>
       </div>
 
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
@@ -112,23 +112,23 @@
           <span></span><span>SOURCE / RECONCILER</span><span>KIND</span><span>REVISION</span><span>RECONCILED</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa; font-weight: 700;">aim-config</span><span style="color: #676780;">GitRepo</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1 · 3m ago</span><span style="color: #676780;">1m ago</span>
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa; font-weight: 700;">nebula-config</span><span style="color: #676780;">GitRepo</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1 · 3m ago</span><span style="color: #676780;">1m ago</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
-          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;"><span style="color: #44445c;">└─</span> aim-workers</span><span style="color: #676780;">Kustomize</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">4m ago</span>
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;"><span style="color: #44445c;">└─</span> nebula-workers</span><span style="color: #676780;">Kustomize</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">4m ago</span>
         </div>
-        <div style="padding: 0 14px 4px 66px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
+        <div style="padding: 0 14px 4px 66px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-apps</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">2m ago</span>
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> nebula-apps</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">2m ago</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-infra</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04 · −9</span><span style="color: #676780;">6d ago</span>
+          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> nebula-infra</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04 · −9</span><span style="color: #676780;">6d ago</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
           <span style="color: #34d17b;">●</span><span style="color: #f0f0fa; font-weight: 700;">bitnami-charts</span><span style="color: #676780;">HelmRepo</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">index · 14m ago</span><span style="color: #676780;">14m ago</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-redis</span><span style="color: #676780;">HelmRelease</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">redis 19.6.1</span><span style="color: #676780;">31m ago</span>
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> nebula-redis</span><span style="color: #676780;">HelmRelease</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">redis 19.6.1</span><span style="color: #676780;">31m ago</span>
         </div>
         <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 2 sources · 5 reconcilers ready</div>
 
@@ -144,7 +144,7 @@
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li><span style="color: #e9e2ff;">The join is the value</span> — Flux's failure mode is chain-shaped (source fetches, reconciler applies, workload rolls out), and no kubectl view shows the chain. Same both-ways-join argument as Gateway API (<a href="#23b">23b</a>).</li>
-          <li><span style="color: #e9e2ff;">Drift is a delta, not a timestamp</span> — `−9` on aim-infra means the source is 9 commits ahead of what's applied; you read staleness without comparing SHAs by eye.</li>
+          <li><span style="color: #e9e2ff;">Drift is a delta, not a timestamp</span> — `−9` on nebula-infra means the source is 9 commits ahead of what's applied; you read staleness without comparing SHAs by eye.</li>
           <li>Risk: this is a bespoke screen, which cuts against "kinds are data, not code" (principle 5). Honest framing: 30a is the registry baseline that ships either way; 30b is a computed join view on top — same class of exception as the incident timeline (<a href="#16a">16a</a>).</li>
           <li>`r` on a source row reconciles the source; on a reconciler row it reconciles with-source — one key, scope follows the cursor, will-run line shows the difference.</li>
         </ul>
@@ -169,7 +169,7 @@
           <span style="color: #44445c;">›</span>
           <span style="color: #676780;">Kustomizations</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #f0f0fa; font-weight: 700;">aim-workers</span>
+          <span style="color: #f0f0fa; font-weight: 700;">nebula-workers</span>
           <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
         </div>
 
@@ -177,23 +177,23 @@
           <div style="display: flex; align-items: baseline; gap: 10px; font-size: 11px; letter-spacing: 0.06em;">
             <span style="color: #ef6a6a; font-weight: 700;">RECONCILE FAILED · 4m ago · retry in 3m 12s</span>
           </div>
-          <div style="color: #d98a8a; margin-top: 2px;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
-          <div style="color: #676780; font-size: 11.5px; margin-top: 2px;">↵ opens Deployment/aim-worker · its pod is CrashLoopBackOff — exit 137, OOMKilled, 4m ago</div>
+          <div style="color: #d98a8a; margin-top: 2px;">health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'</div>
+          <div style="color: #676780; font-size: 11.5px; margin-top: 2px;">↵ opens Deployment/nebula-worker · its pod is CrashLoopBackOff — exit 137, OOMKilled, 4m ago</div>
         </div>
 
         <div style="display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 3px 14px; padding: 10px 14px 6px; font-size: 12px;">
-          <span style="color: #55556e;">source</span><span style="color: #9a9ab2;">git/aim-config · ./clusters/stage/workers · interval 5m</span>
+          <span style="color: #55556e;">source</span><span style="color: #9a9ab2;">git/nebula-config · ./clusters/stage/workers · interval 5m</span>
           <span style="color: #55556e;">source revision</span><span style="color: #9a9ab2;">main@8f3c2a1 · "fix: raise worker memory limit (#412)" · dana · 7m ago</span>
           <span style="color: #55556e;">applied revision</span><span style="color: #9a9ab2;">main@8f3c2a1 <span style="color: #34d17b;">· in sync</span> — applied, failing health checks</span>
-          <span style="color: #55556e;">depends on</span><span style="color: #9a9ab2;">aim-infra <span style="color: #d9a94a;">· suspended 6d</span></span>
+          <span style="color: #55556e;">depends on</span><span style="color: #9a9ab2;">nebula-infra <span style="color: #d9a94a;">· suspended 6d</span></span>
         </div>
 
         <div style="padding: 2px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">INVENTORY · 14 OBJECTS · 1 NOT READY</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 130px 64px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa; margin-top: 2px;">
-          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #676780;">Deployment</span><span style="color: #ef6a6a;">3/4</span>
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">nebula-worker</span><span style="color: #676780;">Deployment</span><span style="color: #ef6a6a;">3/4</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 130px 64px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-worker-config</span><span style="color: #676780;">ConfigMap</span><span style="color: #676780;">—</span>
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">nebula-worker-config</span><span style="color: #676780;">ConfigMap</span><span style="color: #676780;">—</span>
         </div>
         <div style="display: flex; padding: 2px 14px 8px 46px; color: #44445c; font-size: 11px;">+ 12 ready</div>
 
@@ -212,7 +212,7 @@
           <li><span style="color: #e9e2ff;">Failure card first, chain second, inventory third</span> — the exact pod-detail promotion rule (<a href="#5a">5a</a>): kute has already followed the health check to the Deployment to the pod, and prints the real reason (exit 137) inside the Flux failure card. Zero digs.</li>
           <li><span style="color: #e9e2ff;">The commit message is the change description</span> — source revision shows subject line + author, fetched from the GitRepository artifact metadata already on the cluster. No git remote access, no tokens.</li>
           <li><span style="color: #e9e2ff;">"in sync — applied, failing health checks"</span> distinguishes the two failure families: drift (not applied) vs unhealthy (applied, workload sick). One line kills the most common Flux misdiagnosis.</li>
-          <li>Suspended dependency surfaces here too — aim-infra amber in `depends on`, because a suspended dependency is the second most common "why won't it reconcile".</li>
+          <li>Suspended dependency surfaces here too — nebula-infra amber in `depends on`, because a suspended dependency is the second most common "why won't it reconcile".</li>
         </ul>
       </sc-if>
     </div>
@@ -231,7 +231,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">nebula-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Timeline · 30m</span>
           <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
@@ -239,23 +239,23 @@
 
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 6px 14px 4px; font-size: 12px;">
           <span style="color: #676780;">14:07</span><span style="color: #ef6a6a;">▲</span>
-          <span><span style="color: #f0f0fa;">BackOff</span> <span style="color: #676780;">pod/aim-worker-7f9c4-x2vq8 · restarting failed container</span> <span style="color: #44445c;">×12</span></span>
+          <span><span style="color: #f0f0fa;">BackOff</span> <span style="color: #676780;">pod/nebula-worker-7f9c4-x2vq8 · restarting failed container</span> <span style="color: #44445c;">×12</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
           <span style="color: #676780;">14:03</span><span style="color: #ef6a6a;">▲</span>
-          <span><span style="color: #f0f0fa;">OOMKilled</span> <span style="color: #676780;">pod/aim-worker-7f9c4-x2vq8 · exit 137</span> <span style="color: #44445c;">×3</span></span>
+          <span><span style="color: #f0f0fa;">OOMKilled</span> <span style="color: #676780;">pod/nebula-worker-7f9c4-x2vq8 · exit 137</span> <span style="color: #44445c;">×3</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
           <span style="color: #676780;">14:02</span><span style="color: #9a9ab2;">●</span>
-          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/aim-worker · 4 replicas updating · image aim-worker:3.4.1 → 3.5.0</span></span>
+          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/nebula-worker · 4 replicas updating · image nebula-worker:3.4.1 → 3.5.0</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
           <span style="color: #676780;">14:02</span><span style="color: #a78bfa;">◆</span>
-          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/aim-workers · main@8f3c2a1 · "fix: raise worker memory limit (#412)" · dana</span></span>
+          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/nebula-workers · main@8f3c2a1 · "fix: raise worker memory limit (#412)" · dana</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
           <span style="color: #676780;">13:44</span><span style="color: #9a9ab2;">●</span>
-          <span><span style="color: #f0f0fa;">Reconciled</span> <span style="color: #676780;">kustomization/aim-apps · main@4c9e7b2 · no changes</span></span>
+          <span><span style="color: #f0f0fa;">Reconciled</span> <span style="color: #676780;">kustomization/nebula-apps · main@4c9e7b2 · no changes</span></span>
         </div>
         <div style="display: flex; padding: 2px 14px 8px 84px; color: #44445c; font-size: 11px;">earlier — quiet · 22 routine reconciles deduped</div>
 

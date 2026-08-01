@@ -877,14 +877,14 @@ func TestFluxCommandStringsNameTheCommandThatRuns(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 1, 14, 7, 2, 0, time.UTC)
 
-	got := FluxSuspendCommandString(ResourceKind("Kustomization"), "flux-system", "aim-workers", true)
-	want := `kubectl patch kustomization/aim-workers --type merge -p '{"spec":{"suspend":true}}' -n flux-system`
+	got := FluxSuspendCommandString(ResourceKind("Kustomization"), "flux-system", "nebula-workers", true)
+	want := `kubectl patch kustomization/nebula-workers --type merge -p '{"spec":{"suspend":true}}' -n flux-system`
 	if got != want {
 		t.Errorf("suspend:\n got %s\nwant %s", got, want)
 	}
 
-	got = FluxReconcileCommandString(ResourceKind("Kustomization"), "flux-system", "aim-workers", at)
-	want = `kubectl annotate kustomization/aim-workers reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite -n flux-system`
+	got = FluxReconcileCommandString(ResourceKind("Kustomization"), "flux-system", "nebula-workers", at)
+	want = `kubectl annotate kustomization/nebula-workers reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite -n flux-system`
 	if got != want {
 		t.Errorf("reconcile:\n got %s\nwant %s", got, want)
 	}

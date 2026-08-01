@@ -163,7 +163,7 @@ in the glyph and the READY cell, as §30a draws it.
 **The verbatim condition message is itself a declared column.** §30a's
 sub-line is not a kute invention: it renders the CRD's own `Status` column,
 moved out of a cell because it is prose (`health check failed after 2m0s:
-Deployment/aim-stage/aim-worker status: 'InProgress'` is 80+ characters and
+Deployment/nebula-stage/nebula-worker status: 'InProgress'` is 80+ characters and
 would be ellipsized to uselessness in a table cell). That is the
 justification to record in the design section.
 
@@ -317,7 +317,7 @@ glyph · NAME · READY · REVISION · SOURCE · RECONCILED · AGE
 ```
 - **READY** — `True` / `False` / `suspended`. The word; the glyph column carries the colour.
 - **REVISION** — `status.lastAppliedRevision` → `status.artifact.revision` → HelmRelease's `status.history[0].chartVersion`; shortened `main@sha1:8f3c2a1b…` → `main@8f3c2a1`.
-- **SOURCE** — `spec.sourceRef.kind/name` shortened to `git/aim-config`, or `spec.chart.spec.sourceRef` for HelmRelease. `–` on the source kinds themselves (their own `URL` printer column survives and shows).
+- **SOURCE** — `spec.sourceRef.kind/name` shortened to `git/nebula-config`, or `spec.chart.spec.sourceRef` for HelmRelease. `–` on the source kinds themselves (their own `URL` printer column survives and shows).
 - **RECONCILED** — age of the Ready condition's `lastTransitionTime` (`4m ago`).
 - Declared printer columns are **not** appended — this is a curated kind now, not a 14a generic.
 
@@ -365,7 +365,7 @@ RequestFluxReconcile(ctx, kind ResourceKind, namespace, name string) error
 - `SetFluxSuspend` → `patchDynamic` (T3) with `{"spec":{"suspend":%t}}`.
 - `RequestFluxReconcile` → **reuse `PatchMeta`** with `FluxReconcileAnnotation` = `time.Now().UTC().Format(time.RFC3339)`. It's an ordinary metadata write and `PatchMeta` already owns typed-vs-dynamic dispatch.
 - `FluxSuspendCommandString` / `FluxReconcileCommandString`, both through `kind.ResourceArg()`, matching the design's line exactly:
-  `kubectl annotate kustomization/aim-workers -n flux-system reconcile.fluxcd.io/requestedAt="…" --overwrite`
+  `kubectl annotate kustomization/nebula-workers -n flux-system reconcile.fluxcd.io/requestedAt="…" --overwrite`
 - `fake.Cluster` impls after its `PatchMeta` (`fake/fake.go:405`): mutate the unstructured in place + `c.notify(kind)`. `var _ kube.Mutator = (*Cluster)(nil)` (`fake_test.go:412`) is the gate.
 
 **Same commit:** the two methods break **eight** test doubles — `actions/controller_test.go:27`, `helmhistory:33`, `secretdata:34`, `poddetail:127`, `objectdetail:205`, `nodedetail:461`, `configmapdata:35`, `browse/browse_nodes_test.go:42`.
@@ -403,7 +403,7 @@ New task package **`internal/tui/tasks/fluxdetail`**, standard split (`model.go`
 
 **Three bands, in the design's order:**
 
-1. **Failure card** — 4a's red-tint banner idiom (as poddetail's termination banner already is; the destructive-red *border* reservation applies to confirms, not this). `RECONCILE FAILED · 4m ago · retry in 3m 12s`, the condition message **verbatim**, then the resolved drill-through: `↵ opens Deployment/aim-worker · its pod is CrashLoopBackOff — exit 137, OOMKilled`.
+1. **Failure card** — 4a's red-tint banner idiom (as poddetail's termination banner already is; the destructive-red *border* reservation applies to confirms, not this). `RECONCILE FAILED · 4m ago · retry in 3m 12s`, the condition message **verbatim**, then the resolved drill-through: `↵ opens Deployment/nebula-worker · its pod is CrashLoopBackOff — exit 137, OOMKilled`.
    - The countdown is a **clock read**, which the render-purity invariant forbids in `View`. Compute `retryAt` in the model from `spec.interval`/`spec.retryInterval` + the condition's `lastTransitionTime`, and tick it as podlogs already ticks.
    - The drill-through is a multi-hop join: Kustomization → not-ready inventory entry → its pods → container termination reason. Reuse `resources.UnsettledWorkloads` (`resources/rollout.go:33-51`) for the "one read serves the whole list" shape, never a read per object.
 2. **Chain grid** — `source` (`spec.sourceRef` + `spec.path` + `spec.interval`), `source revision`, `applied revision` with the **`in sync — applied, failing health checks`** distinction (the line that kills the most common Flux misdiagnosis), `depends on` (`spec.dependsOn`, amber when a dependency is suspended).
