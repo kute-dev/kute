@@ -127,8 +127,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case verbs.FluxSource.Key:
-		if cmd, ok := m.openSelectedSource(); ok {
-			return m, cmd
+		if row, ok := m.selectedRow(); ok {
+			m.selectSourceOf(row)
 		}
 		return m, nil
 	case verbs.FluxReconcile.Key:
@@ -211,19 +211,29 @@ func (m *Model) beginSuspend(row treeRow) tea.Cmd {
 	})
 }
 
-// openSelectedDetail is §30b's "↵ inventory": §31a for a reconciler. A
-// source has no inventory to open — it publishes an artifact, not a set of
-// applied objects — so ↵ on one jumps to the object itself in its own list
-// rather than opening a detail screen built around a question it can't
-// answer.
+// openSelectedDetail is §30b's ↵: §31a's inventory for a reconciler, §14d's
+// generic detail for a source (which publishes an artifact, not a set of
+// applied objects, so the inventory screen has no question to answer about
+// one).
+//
+// **Both push a task; neither navigates away.** A tea.Sequence(BackMsg,
+// GotoResourceMsg) — the move tasks/events and tasks/timeline make on ↵ —
+// pops this screen off the stack before jumping, so `esc` from wherever it
+// lands returns to whatever pushed *the tree*, and the tree itself is gone.
+// That is right for a feed you were reading *about* an object and wrong
+// here: the tree is a place you work from, and every ↵ out of it must be one
+// `esc` back in.
 func (m Model) openSelectedDetail() (tea.Model, tea.Cmd, bool) {
 	row, ok := m.selectedRow()
 	if !ok || row.missing {
 		return nil, nil, false
 	}
 	if row.isSource {
-		// nil task: the caller stays on this screen and dispatches the jump.
-		return nil, gotoObjectCmd(row.kind, row.namespace, row.name), true
+		if m.openObjectDetail == nil {
+			return nil, nil, false
+		}
+		task, cmd := m.openObjectDetail(row.kind, row.namespace, row.name, nil, 0, m.width, m.height)
+		return task, cmd, task != nil
 	}
 	if m.openFluxDetail == nil {
 		return nil, nil, false
@@ -232,26 +242,28 @@ func (m Model) openSelectedDetail() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
-// openSelectedSource is 'o' — the same jump §30a offers, still useful here
-// because the source may be folded away or many rows up.
-func (m Model) openSelectedSource() (tea.Cmd, bool) {
-	row, ok := m.selectedRow()
-	if !ok || row.isSource || row.sourceName == "" || row.sourceKind == "" {
-		return nil, false
+// selectSourceOf is 'o' — "go to the source this reconciles from". On this
+// screen that source is on screen already, as the row's own parent, so 'o'
+// moves the cursor to it rather than navigating anywhere. §30a's version of
+// the same verb has to leave the list (the source is a different kind, and
+// so a different list); here leaving would be the strictly worse answer,
+// and would take the tree off the stack with it.
+func (m *Model) selectSourceOf(row treeRow) bool {
+	if row.isSource || row.sourceName == "" {
+		return false
 	}
-	return gotoObjectCmd(row.sourceKind, row.sourceNamespace, row.sourceName), true
-}
-
-// gotoObjectCmd pops back to whatever pushed this screen and jumps to an
-// object's own list — the tea.Sequence(BackMsg, GotoResourceMsg) pair
-// tasks/events and tasks/timeline already established for the same move.
-func gotoObjectCmd(kind kube.ResourceKind, namespace, name string) tea.Cmd {
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg {
-			return tui.GotoResourceMsg{Kind: kind, Namespace: namespace, Name: name}
-		},
-	)
+	for i, l := range m.lines {
+		if l.kind != lineRow {
+			continue
+		}
+		head := m.rows[l.row]
+		if head.isSource && head.name == row.sourceName && head.namespace == row.sourceNamespace {
+			m.selected = i
+			m.clampOffset()
+			return true
+		}
+	}
+	return false
 }
 
 // recomputeVisible flattens the groups into rendered lines, folding the

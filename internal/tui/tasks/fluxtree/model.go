@@ -40,13 +40,21 @@ import (
 // declared here per the repo's package-local-seam convention.
 type OpenFluxDetailFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenObjectDetailFunc pushes tasks/objectdetail (§14d) for a *source* row.
+// A source publishes an artifact, not a set of applied objects, so §31a's
+// inventory-shaped screen has no question to answer about one — 14d's
+// generic CRD detail does, and it is what browse's own ↵ would open for the
+// same object. Same shape as browse's OpenObjectDetailFunc.
+type OpenObjectDetailFunc func(kind kube.ResourceKind, namespace, name string, siblings []string, index, width, height int) (tea.Model, tea.Cmd)
+
 // Config are fluxtree's dependencies, per repo convention.
 type Config struct {
-	Session        *tui.Session
-	Lister         resources.RawLister
-	Mutator        kube.Mutator
-	OpenFluxDetail OpenFluxDetailFunc
-	LoadTimeout    time.Duration
+	Session          *tui.Session
+	Lister           resources.RawLister
+	Mutator          kube.Mutator
+	OpenFluxDetail   OpenFluxDetailFunc
+	OpenObjectDetail OpenObjectDetailFunc
+	LoadTimeout      time.Duration
 }
 
 // treeRow is one object in the chain — a source or a reconciler. Everything
@@ -125,12 +133,13 @@ type line struct {
 type Model struct {
 	width, height int
 
-	session        *tui.Session
-	lister         resources.RawLister
-	mutator        kube.Mutator
-	actionsCtl     actions.Controller
-	openFluxDetail OpenFluxDetailFunc
-	timeout        time.Duration
+	session          *tui.Session
+	lister           resources.RawLister
+	mutator          kube.Mutator
+	actionsCtl       actions.Controller
+	openFluxDetail   OpenFluxDetailFunc
+	openObjectDetail OpenObjectDetailFunc
+	timeout          time.Duration
 
 	groups []group
 	// rows is every selectable object, in display order; lines is what
@@ -185,19 +194,20 @@ func New(cfg Config) Model {
 		feedback = "no cluster connection"
 	}
 	return Model{
-		width:          tui.DefaultWidth,
-		height:         tui.DefaultHeight,
-		session:        cfg.Session,
-		lister:         cfg.Lister,
-		mutator:        cfg.Mutator,
-		actionsCtl:     actions.New(cfg.Mutator),
-		openFluxDetail: cfg.OpenFluxDetail,
-		timeout:        cfg.LoadTimeout,
-		state:          state,
-		feedback:       feedback,
-		now:            time.Now(),
-		loadStartedAt:  time.Now(),
-		spinner:        components.NewSpinner(),
+		width:            tui.DefaultWidth,
+		height:           tui.DefaultHeight,
+		session:          cfg.Session,
+		lister:           cfg.Lister,
+		mutator:          cfg.Mutator,
+		actionsCtl:       actions.New(cfg.Mutator),
+		openFluxDetail:   cfg.OpenFluxDetail,
+		openObjectDetail: cfg.OpenObjectDetail,
+		timeout:          cfg.LoadTimeout,
+		state:            state,
+		feedback:         feedback,
+		now:              time.Now(),
+		loadStartedAt:    time.Now(),
+		spinner:          components.NewSpinner(),
 	}
 }
 

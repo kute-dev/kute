@@ -543,7 +543,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			OpenForward:        openForward,
 			OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
 			OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
-			OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML)),
+			OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
 			OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
 			OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
 			OpenHelmHistory:    openHelmHistoryFunc(sess, demoCluster),
@@ -612,7 +612,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenForward:        openForward,
 		OpenObjectDetail:   openObjectDetailFunc(sess, cluster, openYAML),
 		OpenFluxDetail:     openFluxDetailFunc(sess, cluster, openYAML),
-		OpenFluxTree:       openFluxTreeFunc(sess, cluster, openFluxDetailFunc(sess, cluster, openYAML)),
+		OpenFluxTree:       openFluxTreeFunc(sess, cluster, openFluxDetailFunc(sess, cluster, openYAML), openObjectDetailFunc(sess, cluster, openYAML)),
 		OpenRouteTable:     openRouteTableFunc(sess, cluster, openYAML),
 		OpenWhoCan:         openWhoCanFunc(sess, cluster),
 		OpenHelmHistory:    openHelmHistoryFunc(sess, cluster),
@@ -882,13 +882,14 @@ func openFluxDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenYAM
 // reconciler tree. Cluster-wide and row-less like 19a's own opener, and
 // reusing openFluxDetail so ↵ on a reconciler lands on exactly the §31a
 // screen browse's own ↵ opens.
-func openFluxTreeFunc(sess *tui.Session, active seams, openFluxDetail browse.OpenFluxDetailFunc) browse.OpenFluxTreeFunc {
+func openFluxTreeFunc(sess *tui.Session, active seams, openFluxDetail browse.OpenFluxDetailFunc, openObjectDetail browse.OpenObjectDetailFunc) browse.OpenFluxTreeFunc {
 	return func(width, height int) (tea.Model, tea.Cmd) {
 		ft := fluxtree.New(fluxtree.Config{
-			Session:        sess,
-			Lister:         active,
-			Mutator:        active,
-			OpenFluxDetail: fluxtree.OpenFluxDetailFunc(openFluxDetail),
+			Session:          sess,
+			Lister:           active,
+			Mutator:          active,
+			OpenFluxDetail:   fluxtree.OpenFluxDetailFunc(openFluxDetail),
+			OpenObjectDetail: fluxtree.OpenObjectDetailFunc(openObjectDetail),
 		})
 		ft.SetSize(width, height)
 		return &ft, ft.Init()

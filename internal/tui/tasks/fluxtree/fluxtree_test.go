@@ -323,3 +323,176 @@ func TestSourceRevisionReadsIndexForAChartRepo(t *testing.T) {
 		}
 	}
 }
+
+// TestEnterPushesSoEscapeComesBack is the navigation contract for this
+// screen: whatever ↵ opens, one esc returns to the tree.
+//
+// tui.Model pushes the current task onto its back-stack precisely when a
+// task's Update returns a *different* task instance, and a tui.BackMsg pops
+// one level. So "↵ returns a new task, and never a BackMsg" is exactly the
+// property that makes esc come back — and the failure it guards is subtle:
+// the tea.Sequence(BackMsg, GotoResourceMsg) jump that tasks/events and
+// tasks/timeline make on ↵ pops this screen *before* navigating, which
+// leaves esc returning to whatever pushed the tree, with the tree gone.
+func TestEnterPushesSoEscapeComesBack(t *testing.T) {
+	opened := map[string]bool{}
+	newTree := func(t *testing.T) *Model {
+		t.Helper()
+		c := fake.NewDemo()
+		reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+		sess := &tui.Session{
+			Theme: tui.Dark(), Registry: reg, Groups: groups,
+			Location: tui.Location{Context: "microk8s-cluster", Namespace: "flux-system"},
+		}
+		m := New(Config{
+			Session: sess, Lister: c, Mutator: c,
+			OpenFluxDetail: func(_ kube.ResourceKind, _, name string, _, _ int) (tea.Model, tea.Cmd) {
+				opened["flux-detail/"+name] = true
+				return &pushedTask{}, nil
+			},
+			OpenObjectDetail: func(_ kube.ResourceKind, _, name string, _ []string, _, _, _ int) (tea.Model, tea.Cmd) {
+				opened["object-detail/"+name] = true
+				return &pushedTask{}, nil
+			},
+		})
+		m.SetSize(120, 36)
+		upd, _ := m.Update(m.load()())
+		return upd.(*Model)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		wantKind string
+		source   bool
+	}{
+		{"reconciler opens its inventory", "flux-detail/", false},
+		{"source opens its object detail", "object-detail/", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clear(opened)
+			m := newTree(t)
+			idx := -1
+			for i, l := range m.lines {
+				if l.kind == lineRow && m.rows[l.row].isSource == tc.source {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				t.Fatalf("no %s row in the tree", tc.name)
+			}
+			m.selected = idx
+			row, _ := m.selectedRow()
+
+			next, cmd := m.Update(tea.KeyPressMsg{Text: "enter"})
+			if next == tea.Model(m) {
+				t.Fatalf("↵ on %s returned the same task — nothing was pushed, so esc has nothing to come back to", row.name)
+			}
+			if !opened[tc.wantKind+row.name] {
+				t.Errorf("↵ opened %v, want %s%s", opened, tc.wantKind, row.name)
+			}
+			// A BackMsg anywhere in the returned command would pop the tree
+			// off the stack on the way out.
+			if cmd != nil {
+				if _, isBack := cmd().(tui.BackMsg); isBack {
+					t.Error("↵ emitted a BackMsg — the tree is popped and esc can't return to it")
+				}
+			}
+		})
+	}
+}
+
+// TestSourceVerbStaysOnTheScreen: on a list, 'o' has to leave (the source is
+// a different kind, so a different list). On the tree the source is the
+// row's own parent, already on screen — so 'o' moves the cursor to it and
+// navigates nowhere, which is both more useful and impossible to get lost
+// from.
+func TestSourceVerbStaysOnTheScreen(t *testing.T) {
+	m := demoModel(t)
+	idx := -1
+	for i, l := range m.lines {
+		if l.kind == lineRow && !m.rows[l.row].isSource && m.rows[l.row].sourceName != "" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatal("no reconciler row with a resolved source")
+	}
+	m.selected = idx
+	row, _ := m.selectedRow()
+
+	next, cmd := m.Update(tea.KeyPressMsg{Text: "o"})
+	if next != tea.Model(m) {
+		t.Error("'o' must not push or replace the screen")
+	}
+	if cmd != nil {
+		t.Errorf("'o' must not navigate, got a command returning %T", cmd())
+	}
+	landed, ok := m.selectedRow()
+	if !ok || !landed.isSource || landed.name != row.sourceName {
+		t.Errorf("'o' left the cursor on %+v, want the source %q", landed, row.sourceName)
+	}
+}
+
+// TestEscapeReturnsToTheTreeThroughTheRootShell drives the actual thing the
+// user does: open the tree, press ↵ on a row, press esc. The two halves of
+// the contract live in different places — this screen has to *push* (return
+// a new task) and the root shell has to pop on tui.BackMsg — so only a test
+// that runs both proves the round trip.
+func TestEscapeReturnsToTheTreeThroughTheRootShell(t *testing.T) {
+	c := fake.NewDemo()
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{
+		Theme: tui.Dark(), Registry: reg, Groups: groups,
+		Location: tui.Location{Context: "microk8s-cluster", Namespace: "flux-system"},
+	}
+	tree := New(Config{
+		Session: sess, Lister: c, Mutator: c,
+		OpenFluxDetail: func(kube.ResourceKind, string, string, int, int) (tea.Model, tea.Cmd) {
+			return &pushedTask{}, nil
+		},
+		OpenObjectDetail: func(kube.ResourceKind, string, string, []string, int, int, int) (tea.Model, tea.Cmd) {
+			return &pushedTask{}, nil
+		},
+	})
+	tree.SetSize(120, 36)
+	loaded, _ := tree.Update(tree.load()())
+
+	root := tui.NewWithSession(loaded.(*Model), sess)
+	updated, _ := root.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	if view := plain(updated.(tui.Model).View().Content); !strings.Contains(view, "SOURCE / RECONCILER") {
+		t.Fatalf("expected to start on the tree:\n%s", view)
+	}
+
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "enter"})
+	if view := plain(updated.(tui.Model).View().Content); strings.Contains(view, "SOURCE / RECONCILER") {
+		t.Fatalf("↵ did not open anything:\n%s", view)
+	}
+
+	// esc from the pushed screen — the real screens all answer it with a
+	// BackMsg, which is what pushedTask models here.
+	next, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Text: "esc"})
+	if cmd != nil {
+		next, _ = next.(tui.Model).Update(cmd())
+	}
+	view := plain(next.(tui.Model).View().Content)
+	if !strings.Contains(view, "SOURCE / RECONCILER") {
+		t.Fatalf("esc did not return to the Flux tree:\n%s", view)
+	}
+}
+
+// pushedTask is a minimal tui.Task stand-in for the openers above — it
+// answers esc with a tui.BackMsg, which is what every real pushed screen in
+// the app does.
+type pushedTask struct{}
+
+func (pushedTask) Init() tea.Cmd { return nil }
+func (p *pushedTask) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyPressMsg); ok && key.String() == "esc" {
+		return p, func() tea.Msg { return tui.BackMsg{} }
+	}
+	return p, nil
+}
+func (pushedTask) View() tea.View      { return tea.NewView("pushed screen") }
+func (p *pushedTask) SetSize(int, int) {}
