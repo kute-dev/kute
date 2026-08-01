@@ -18,6 +18,12 @@ type Event struct {
 	Count     int32
 	FirstSeen time.Time
 	LastSeen  time.Time
+	// Annotations is the Event object's own metadata.annotations. Flux's
+	// controllers put the reconciled revision there
+	// (kustomize.toolkit.fluxcd.io/revision), which is the exact,
+	// unparsed source for §32a's revision rows — the message is prose,
+	// the annotation is data.
+	Annotations map[string]string
 }
 
 // EventGroup is one deduped row for the events screen (9b): every
@@ -139,14 +145,15 @@ func eventFromObject(ev *corev1.Event) Event {
 		count = 1
 	}
 	return Event{
-		Type:      ev.Type,
-		Reason:    ev.Reason,
-		Message:   ev.Message,
-		Object:    ev.InvolvedObject.Kind + "/" + ev.InvolvedObject.Name,
-		Namespace: ev.Namespace,
-		Count:     count,
-		FirstSeen: first,
-		LastSeen:  last,
+		Type:        ev.Type,
+		Reason:      ev.Reason,
+		Message:     ev.Message,
+		Object:      ev.InvolvedObject.Kind + "/" + ev.InvolvedObject.Name,
+		Namespace:   ev.Namespace,
+		Count:       count,
+		FirstSeen:   first,
+		LastSeen:    last,
+		Annotations: ev.Annotations,
 	}
 }
 

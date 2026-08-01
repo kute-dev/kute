@@ -68,6 +68,12 @@ func (m Model) namespaceKeybar() tui.Keybar {
 	if m.normalPresent {
 		groups = append(groups, []tui.KeyHint{{Key: "tab", Label: "expand/collapse normal"}})
 	}
+	if m.revisionSelected() {
+		// §32a: only offered on a revision row — there is nothing to copy
+		// from an ordinary event, and a key that does nothing is worse
+		// than an absent one.
+		groups = append(groups, []tui.KeyHint{{Key: "v", Label: "copy revision"}})
+	}
 	return tui.Keybar{
 		Pill:       tui.ModeBrowse,
 		PillText:   "TIMELINE",

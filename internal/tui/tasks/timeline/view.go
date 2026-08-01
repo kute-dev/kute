@@ -656,6 +656,10 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 	switch e.Kind {
 	case kube.TimelineRollout:
 		return tui.GlyphRollout, lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
+	case kube.TimelineRevision:
+		// §32a: the only purple marker in the feed besides the rollout
+		// anchor it usually precedes.
+		return tui.GlyphRevision, lipgloss.NewStyle().Foreground(theme.AccentHi).Bold(true)
 	case kube.TimelineRestart:
 		return tui.GlyphRestarts, lipgloss.NewStyle().Foreground(theme.Warn)
 	default:
@@ -948,6 +952,17 @@ func compactImageTransition(prev, next string) string {
 // (their own Reason is "Restarted"/"Rollout", not embedded in Message the
 // way an Event's already reads).
 func entrySummary(e kube.TimelineEntry) string {
+	if e.Kind == kube.TimelineRevision {
+		// "Revision applied · kustomization/aim-workers · master@efd398b"
+		// plus the commit subject when the cluster actually had one — the
+		// subject lives only in a source-controller event that expires, so
+		// its absence is normal and never faked (§31a/§32a).
+		parts := []string{"Revision applied", strings.ToLower(e.Object), e.GitRevision}
+		if e.CommitSubject != "" {
+			parts = append(parts, `"`+e.CommitSubject+`"`)
+		}
+		return strings.Join(parts, " · ")
+	}
 	if e.Reason == "" {
 		return e.Message
 	}

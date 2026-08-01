@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 )
@@ -35,13 +37,20 @@ func (m Model) load() tea.Cmd {
 			return loadedMsg{err: err}
 		}
 
-		eventEntries := kube.TimelineFromEvents(kube.DedupeEvents(rawEvents))
+		// §32a: Flux reconcile events become their own revision rows, so
+		// they must not also appear as ordinary event rows — the revision
+		// row says everything the reconcile event did, better.
+		fluxEvents, plainEvents := splitFluxRevisionEvents(rawEvents)
+		revisionEntries := kube.TimelineFromFluxEvents(fluxEvents,
+			kube.FluxCommitSubjects(rawEvents, sourceRevisionOf(ctx, lister, namespace)))
+
+		eventEntries := kube.TimelineFromEvents(kube.DedupeEvents(plainEvents))
 		restartEntries := restartsForScope(ctx, lister, namespace, objectKind, objectName)
 		rolloutEntries, rail, railDeployment := rolloutsForScope(ctx, lister, namespace, objectKind, objectName)
 		attachChangeCause(ctx, lister, namespace, rolloutEntries)
 		attachChangeCause(ctx, lister, namespace, rail)
 
-		merged := kube.MergeTimeline(eventEntries, restartEntries, rolloutEntries)
+		merged := kube.MergeTimeline(eventEntries, restartEntries, rolloutEntries, revisionEntries)
 		return loadedMsg{entries: merged, rail: rail, railDeployment: railDeployment}
 	}
 }
@@ -386,4 +395,53 @@ func ownerRef(refs []metav1.OwnerReference) string {
 		return ""
 	}
 	return refs[0].Kind + "/" + refs[0].Name
+}
+
+// splitFluxRevisionEvents partitions events into those carrying a Flux
+// revision annotation (which become §32a revision rows) and the rest.
+func splitFluxRevisionEvents(events []kube.Event) (flux, plain []kube.Event) {
+	for _, e := range events {
+		if kube.FluxEventRevision(e) != "" {
+			flux = append(flux, e)
+			continue
+		}
+		plain = append(plain, e)
+	}
+	return flux, plain
+}
+
+// sourceRevisionOf resolves a source object ("GitRepository/flux-system")
+// to the revision its artifact currently reports, so a "stored artifact for
+// commit" event — whose message names the subject but not the SHA — can be
+// paired with one.
+//
+// Reads only kinds already in the cache; an un-started informer yields no
+// pairing rather than starting one from the update loop.
+func sourceRevisionOf(ctx context.Context, lister resources.RawLister, namespace string) func(string) string {
+	cache := map[string]string{}
+	return func(object string) string {
+		kind, name := splitObject(object)
+		if kind == "" || name == "" {
+			return ""
+		}
+		if rev, ok := cache[object]; ok {
+			return rev
+		}
+		objs, err := lister.ListRaw(ctx, kind, namespace)
+		if err != nil {
+			cache[object] = ""
+			return ""
+		}
+		for _, o := range objs {
+			u, ok := o.(*unstructured.Unstructured)
+			if !ok || u.GetName() != name {
+				continue
+			}
+			rev, _, _ := unstructured.NestedString(u.Object, "status", "artifact", "revision")
+			cache[object] = rev
+			return rev
+		}
+		cache[object] = ""
+		return ""
+	}
 }

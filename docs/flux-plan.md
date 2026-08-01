@@ -54,7 +54,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T9 | Write seam: suspend / resume / reconcile | `[x]` | T3 |
 | T10 | §30a verbs wired into browse | `[x]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
-| T12 | §32a timeline learns git | `[ ]` | T2, G1 |
+| T12 | §32a timeline learns git | `[x]` | T2, G1 |
 | T13 | E2E coverage | `[ ]` | T10, T11, T12 |
 
 ---
@@ -389,7 +389,7 @@ New task package **`internal/tui/tasks/fluxdetail`**, standard split (`model.go`
 
 ## §32a — Timeline learns git
 
-### T12 — `feat(tui): name the commit behind a change in the incident timeline` `[ ]`
+### T12 — `feat(tui): name the commit behind a change in the incident timeline` `[x]`
 
 Extends `internal/tui/tasks/timeline` — **no new screen**, one new entry source.
 

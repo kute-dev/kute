@@ -24,6 +24,11 @@ const (
 	// GlyphMarked is 20a's bulk-operations mark glyph (`▪`), rendered in the
 	// table's leading mark column and the health strip's "▪ N marked" segment.
 	GlyphMarked = "▪"
+
+	// GlyphRevision is §32a's git-revision marker in the incident timeline
+	// (`◆`) — the only accent-purple marker in that feed, because on a
+	// GitOps cluster a commit is the answer to "what changed?".
+	GlyphRevision = "◆"
 	// GlyphSelectorJoin is 26a's inline "a Service selector matches this
 	// label" warning glyph (`⚠`), rendered ahead of the joined label row's
 	// "selector · svc/x" note.

@@ -204,6 +204,13 @@ func (m Model) selectedRow() (kube.TimelineEntry, bool) {
 	return m.rows[m.selected], true
 }
 
+// revisionSelected reports whether the feed cursor is on a §32a git
+// revision row carrying something 'v' could copy.
+func (m Model) revisionSelected() bool {
+	row, ok := m.selectedRow()
+	return ok && row.Kind == kube.TimelineRevision && row.GitRevision != ""
+}
+
 // selectedRevision is 16b's rail cursor target for 'R' rollback.
 func (m Model) selectedRevision() (kube.TimelineEntry, bool) {
 	if m.railSelected < 0 || m.railSelected >= len(m.rail) {

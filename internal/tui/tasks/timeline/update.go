@@ -269,6 +269,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.filterInput.Prompt = ""
 			m.filterInput.Focus()
 		}
+	case "v":
+		// §32a: copy the revision — the thing you paste into `git show` or
+		// an incident channel. Only meaningful on a revision row.
+		if e, ok := m.selectedRow(); ok && e.Kind == kube.TimelineRevision && e.GitRevision != "" {
+			return m, tea.SetClipboard(e.GitRevision)
+		}
 	case "R":
 		if m.railFocused && m.mutator != nil {
 			if rev, ok := m.selectedRevision(); ok {
