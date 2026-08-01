@@ -15,6 +15,12 @@ func TestFluxCommitSubjectParsesSourceControllerMessage(t *testing.T) {
 	tests := []struct{ msg, want string }{
 		{"stored artifact for commit 'fix: raise worker memory limit (#412)'", "fix: raise worker memory limit (#412)"},
 		{"stored artifact for commit 'chore: bump'", "chore: bump"},
+		{"stored artifact for commit 'openwebui bumped to 16.0.0'", "openwebui bumped to 16.0.0"},
+		// Observed on a real cluster: source-controller substitutes the
+		// revision when it has no subject. Echoing it back would print the
+		// SHA twice on one row, the second time dressed as a commit message.
+		{"stored artifact for commit 'master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef'", ""},
+		{"stored artifact for commit 'sha256:d83a8a3354d98907a55beba524407a0b'", ""},
 		// The steady-state message carries no subject and must yield none
 		// rather than a plausible-looking fragment.
 		{"no changes since last reconciliation: observed revision 'master@sha1:efd398be'", ""},

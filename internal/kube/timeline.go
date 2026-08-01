@@ -185,12 +185,53 @@ var storedArtifactCommit = regexp.MustCompile(`stored artifact for commit '(.+)'
 
 // FluxCommitSubject extracts the commit subject from a source-controller
 // event message, or "" when the message isn't that one.
+//
+// source-controller does not always have a subject to put there. Observed
+// on a real cluster, the same message renders all of these:
+//
+//	stored artifact for commit 'openwebui bumped to 16.0.0'
+//	stored artifact for commit 'master@sha1:efd398bed98a38348c7702355ecd…'
+//
+// The second is the revision standing in for a subject it didn't have.
+// Echoing that back would print the SHA twice on one row, once as REVISION
+// and once as a quoted "subject" — a fabricated fact in the slot reserved
+// for the one thing the cluster genuinely knows. A revision-shaped capture
+// is therefore no subject at all.
 func FluxCommitSubject(message string) string {
 	m := storedArtifactCommit.FindStringSubmatch(message)
 	if len(m) != 2 {
 		return ""
 	}
-	return strings.TrimSpace(m[1])
+	subject := strings.TrimSpace(m[1])
+	if looksLikeFluxRevision(subject) {
+		return ""
+	}
+	return subject
+}
+
+// looksLikeFluxRevision reports whether s is a Flux revision string
+// ("<ref>@<algo>:<hex>" or a bare "<algo>:<hex>") rather than prose.
+func looksLikeFluxRevision(s string) bool {
+	digest := s
+	if at := strings.LastIndex(s, "@"); at >= 0 {
+		digest = s[at+1:]
+	}
+	algo, hex, found := strings.Cut(digest, ":")
+	if !found || len(hex) < 7 {
+		return false
+	}
+	switch algo {
+	case "sha1", "sha256", "sha512":
+	default:
+		return false
+	}
+	for _, r := range hex {
+		isHexDigit := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
+		if !isHexDigit {
+			return false
+		}
+	}
+	return true
 }
 
 // TimelineFromFluxEvents projects Flux reconcile events carrying a revision

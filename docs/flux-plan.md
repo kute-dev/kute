@@ -108,6 +108,28 @@ So §32a reads the SHA from the annotation and only the *subject* from prose.
 3. **Degrade** — no event and no cache entry ⇒ render `master@efd398b`
    alone. **Never fetch the git remote; no tokens.**
 
+**Measured on the reference cluster 2026-08-01, after a real commit landed:**
+- The revision annotation works exactly as designed — 8 revision rows from
+  9 events across 3 distinct commits, no message parsing involved.
+- **The `stored artifact` events had already expired.** Only one
+  GitRepository event survived (`no changes since last reconciliation`),
+  while source-controller's *log* still showed three `stored artifact`
+  lines. This is the strongest possible argument for step 2: without
+  caching at the moment of observation the subject is simply gone, and the
+  window is well under an hour.
+- **source-controller substitutes the revision when it has no subject** —
+  the same message renders both `stored artifact for commit 'openwebui
+  bumped to 16.0.0'` and `stored artifact for commit
+  'master@sha1:efd398be…'`. A naive parse prints the SHA twice on one row,
+  the second time dressed as a commit message. `FluxCommitSubject` rejects
+  a revision-shaped capture.
+
+**Still outstanding for §32a:** step 2's persisted `(repo, sha) → subject`
+cache. Until it lands, subjects appear only for a commit observed inside the
+event TTL, and every older row degrades to the bare SHA — correct, and
+visibly less than the design draws. Needs a state-schema version bump plus
+migration, per the persisted-state invariant.
+
 **Drift stays a boolean.** `−9 commits ahead` needs `git log` and remains
 unbuildable: compare the Kustomization's `status.lastAppliedRevision` with
 its source's `status.artifact.revision` — equal is in sync, different is
