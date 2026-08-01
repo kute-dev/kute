@@ -64,6 +64,12 @@ type Session struct {
 	// cluster. Filled by fetchGotoCountsCmd off the Update loop; see
 	// gotoCount for why the palette must never count synchronously.
 	counts countCache
+	// fluxSubjects retains §32a's revision→commit-subject pairs for the life
+	// of the session, so a "◆ revision applied" row keeps naming its commit
+	// after the source-controller event that carried the subject has aged
+	// out. Filled by tasks/timeline's load off the Update loop; see
+	// fluxsubjects.go for why this one is in memory and never persisted.
+	fluxSubjects fluxSubjectCache
 	// Metrics is the same seam as browse.Config.Metrics, wired to the same
 	// concrete cluster value — used by the namespace palette (namespace.go)
 	// for its CPU-share column. Nil when no cluster is reachable, or when a

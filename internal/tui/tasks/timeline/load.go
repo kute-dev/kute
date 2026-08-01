@@ -23,6 +23,7 @@ import (
 func (m Model) load() tea.Cmd {
 	src := m.events
 	lister := m.lister
+	session := m.session
 	namespace := m.namespace
 	objectKind := m.objectKind
 	objectName := m.objectName
@@ -41,8 +42,13 @@ func (m Model) load() tea.Cmd {
 		// they must not also appear as ordinary event rows — the revision
 		// row says everything the reconcile event did, better.
 		fluxEvents, plainEvents := splitFluxRevisionEvents(rawEvents)
-		revisionEntries := kube.TimelineFromFluxEvents(fluxEvents,
+		// The subject outlives the event that carried it: this load's own
+		// "stored artifact for commit" sightings are merged into the
+		// session cache and the whole cache is what the rows read, so a
+		// revision keeps its subject once seen (docs/flux-plan.md T14).
+		subjects := session.RetainFluxCommitSubjects(
 			kube.FluxCommitSubjects(rawEvents, sourceRevisionOf(ctx, lister, namespace)))
+		revisionEntries := kube.TimelineFromFluxEvents(fluxEvents, subjects)
 
 		eventEntries := kube.TimelineFromEvents(kube.DedupeEvents(plainEvents))
 		restartEntries := restartsForScope(ctx, lister, namespace, objectKind, objectName)

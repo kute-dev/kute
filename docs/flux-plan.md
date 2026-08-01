@@ -38,23 +38,20 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
-**As of 2026-08-01: T1–T13 and all 3 gates closed**, verified end to end
-against a real cluster. Flux kinds are correctly keyed, grouped, projected,
-rendered and mutable; the timeline carries revision rows; e2e covers the
-list, the Helm-release name collision, suspend and reconcile.
+**As of 2026-08-01: T1–T14 and all 3 gates closed — this effort is
+complete**, verified end to end against a real cluster. Flux kinds are
+correctly keyed, grouped, projected, rendered and mutable; the timeline
+carries revision rows and retains their commit subjects for the session;
+e2e covers the list, the Helm-release name collision, suspend and reconcile.
 
-**Outstanding: T14 only** — §32a's commit-subject cache, scoped down to a
-session-scoped map (the persisted version was retired; see T14 for the
-measurement). Until it lands, a subject shows for about an hour after a
-commit and then drops off a row that stays on screen.
+Only §30b (the source→reconciler tree) remains, deferred by decision.
 
 **One thing the e2e run surfaced:** with both HelmRelease kinds served,
 `g "helm"` became a coin flip between §18a's "Helm Releases" and Flux's
 "Helmreleases" — one keystroke apart in the fuzzy palette. A substituted
 kind now takes a "Flux " display prefix, and only a substituted one does:
 Kustomizations and the source kinds collide with nothing and keep their own
-plural. One §32a increment is also outstanding — the persisted commit-subject
-cache, see G1.
+plural.
 
 | # | task | status | depends on |
 |---|---|---|---|
@@ -74,7 +71,7 @@ cache, see G1.
 | T11 | §31a Kustomization detail screen | `[x]` | T10, G1 |
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
 | T13 | E2E coverage | `[x]` | T10, T11, T12 |
-| T14 | §32a commit-subject cache (session-scoped) | `[ ]` **next** | T12 |
+| T14 | §32a commit-subject cache (session-scoped) | `[x]` | T12 |
 
 ---
 
@@ -141,8 +138,7 @@ So §32a reads the SHA from the annotation and only the *subject* from prose.
   the second time dressed as a commit message. `FluxCommitSubject` rejects
   a revision-shaped capture.
 
-**Still outstanding for §32a:** the subject cache — now scoped down to an
-in-memory one, see **T14**.
+The subject cache landed as an in-memory, session-scoped one — see **T14**.
 
 **Drift stays a boolean.** `−9 commits ahead` needs `git log` and remains
 unbuildable: compare the Kustomization's `status.lastAppliedRevision` with
@@ -488,7 +484,7 @@ Follow `gotoKind`'s discipline — wait on the destination list's *title*, never
 
 ---
 
-## T14 — `feat(tui): keep a Flux commit subject once the timeline has seen it` `[ ]`
+## T14 — `feat(tui): keep a Flux commit subject once the timeline has seen it` `[x]`
 
 **Session-scoped, in memory. Deliberately NOT persisted** — the plan
 originally called for per-context persisted state with a schema version bump
@@ -527,14 +523,23 @@ invariant) for the smallest marginal gain, since after a restart the
 A session-scoped map keeps the case that actually matters: kute open while a
 deploy lands keeps that commit's subject for as long as it runs.
 
-### Shape
+### Shape — as landed
 
-- A `map[string]string` (revision → subject) on the timeline model or, if
-  another screen ever needs it, on `*tui.Session`. Populated on every load
-  from whatever `stored artifact` events are currently present, then merged
-  rather than replaced — the whole point is that it outlives the events.
-- `kube.FluxCommitSubjects` already builds the per-load map; T14 is the
-  merge-and-retain step plus its lookup, roughly 20 lines.
+- A `map[string]string` (revision → subject) on `*tui.Session`
+  (`internal/tui/fluxsubjects.go`), not on the timeline model: the model is
+  rebuilt on every `t` press, so a model-scoped map would only survive until
+  the first `esc` — which is not session-scoped in any useful sense.
+  Populated on every load from whatever `stored artifact` events are
+  currently present, then merged rather than replaced.
+- Mutex-guarded, for `countCache`'s exact reason: `timeline.load` merges into
+  it from a `tea.Cmd` goroutine while the Update loop may read.
+- `kube.FluxCommitSubjects` already built the per-load map; T14 is the
+  merge-and-retain step (`Session.RetainFluxCommitSubjects`, which returns
+  the merged snapshot the rows read) plus its wiring — about 20 lines.
+- **Not cleared on a context switch**, unlike the counts cache next to it: a
+  count is a statement about one cluster, but a commit subject is a fact
+  about a git commit keyed by the revision that names it, and a
+  content-addressed SHA can't collide with a different message.
 - Degradation is unchanged: no entry ⇒ bare SHA. **Never fetch the git
   remote; no tokens.**
 - `FluxCommitSubject` already rejects a revision-shaped capture (see G1), so
@@ -542,10 +547,14 @@ deploy lands keeps that commit's subject for as long as it runs.
 
 ### Test
 
-Drive two loads: the first with a `stored artifact` event present, the
-second with it removed but the reconcile events still carrying the revision.
-The subject must survive the second load. That is the exact sequence the
-cluster produces on its own, and it fails without the merge.
+`TestFluxCommitSubjectSurvivesTheEventThatCarriedIt`
+(`tasks/timeline/timeline_test.go`) drives two loads: the first with a
+`stored artifact` event present, the second with it removed but the
+reconcile event still carrying the revision. The subject survives the second
+load. That is the exact sequence the cluster produces on its own, and it
+fails without the merge (verified). A third, fresh-session load of the same
+second-load events asserts the bare revision, so the test can't pass on a
+per-load map that merely never forgot.
 
 ## Manual verification
 

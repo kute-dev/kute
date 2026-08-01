@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/config"
@@ -1173,4 +1174,93 @@ func TestDeploymentScopedTimelineIncludesPodEvents(t *testing.T) {
 	if strings.Contains(view, "unrelated pod's own event") {
 		t.Fatalf("expected an unrelated pod's event to stay excluded:\n%s", view)
 	}
+}
+
+// TestFluxCommitSubjectSurvivesTheEventThatCarriedIt pins §32a's
+// session-scoped subject cache (docs/flux-plan.md T14). The two facts a
+// revision row is built from have different lifetimes on the cluster: the
+// Kustomization re-emits its reconcile event — carrying the revision
+// annotation — every interval, so the row itself is effectively permanent,
+// while source-controller's "stored artifact for commit" event fires once
+// per commit and ages out at the ~1h Event TTL. Without retention the
+// subject shows for about an hour and then vanishes from a row that stays on
+// screen. This drives the exact sequence the cluster produces on its own:
+// one load with the subject's event present, a second with only the
+// reconcile event left.
+func TestFluxCommitSubjectSurvivesTheEventThatCarriedIt(t *testing.T) {
+	const (
+		revision = "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef"
+		subject  = "openwebui bumped to 16.0.0"
+	)
+	repo := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "source.toolkit.fluxcd.io/v1",
+		"kind":       "GitRepository",
+		"metadata":   map[string]any{"name": "flux-system", "namespace": "default"},
+		"status":     map[string]any{"artifact": map[string]any{"revision": revision}},
+	}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("GitRepository"): {repo},
+	}}
+	reconcile := kube.Event{
+		Type: "Normal", Reason: "ReconciliationSucceeded", Object: "Kustomization/nva-workers",
+		Namespace: "default", Message: "Reconciliation finished in 1.40s, next run in 10m0s",
+		Count: 1, LastSeen: time.Now(),
+		Annotations: map[string]string{"kustomize.toolkit.fluxcd.io/revision": revision},
+	}
+	stored := kube.Event{
+		Type: "Normal", Reason: "GitOperationSucceeded", Object: "GitRepository/flux-system",
+		Namespace: "default", Message: "stored artifact for commit '" + subject + "'",
+		Count: 1, LastSeen: time.Now(),
+	}
+
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{events: []kube.Event{reconcile, stored}},
+		Lister: lister, Namespace: "default",
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if got, ok := revisionRow(m); !ok || got.CommitSubject != subject {
+		t.Fatalf("first load: revision row = %+v (found %v), want CommitSubject %q", got, ok, subject)
+	}
+
+	// The subject's own event ages out; the reconcile event keeps coming.
+	m.events = fakeEvents{events: []kube.Event{reconcile}}
+	m = step(t, m, m.load()())
+
+	got, ok := revisionRow(m)
+	if !ok {
+		t.Fatal("second load: expected the revision row to still be there")
+	}
+	if got.CommitSubject != subject {
+		t.Fatalf("second load: CommitSubject = %q, want %q retained from the expired event", got.CommitSubject, subject)
+	}
+	// Matched on the quoted opening fragment, not the whole subject: the
+	// WHAT column wraps, so the full string spans two physical lines.
+	if view := plain(m.Render()); !strings.Contains(view, `"openwebui`) {
+		t.Fatalf("expected the retained commit subject in view:\n%s", view)
+	}
+
+	// Control: a session that never saw the "stored artifact" event has
+	// nothing to retain, so the same load renders the bare revision. Without
+	// it this test would pass on a per-load map that simply never forgot.
+	fresh := New(Config{
+		Session: newSession(), Events: fakeEvents{events: []kube.Event{reconcile}},
+		Lister: lister, Namespace: "default",
+	})
+	fresh.SetSize(120, 36)
+	fresh = step(t, fresh, fresh.Init()())
+	if got, ok := revisionRow(fresh); !ok || got.CommitSubject != "" {
+		t.Fatalf("fresh session: revision row = %+v (found %v), want no commit subject", got, ok)
+	}
+}
+
+// revisionRow returns the feed's first §32a revision entry.
+func revisionRow(m Model) (kube.TimelineEntry, bool) {
+	for _, e := range m.rows {
+		if e.Kind == kube.TimelineRevision {
+			return e, true
+		}
+	}
+	return kube.TimelineEntry{}, false
 }
