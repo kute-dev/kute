@@ -149,6 +149,13 @@ type Descriptor struct {
 	// running", "2 pending"). Defaults to DefaultHealthLabel's generic
 	// wording; Pods overrides it with the docs/design/README.md 2a copy.
 	HealthLabel func(StatusClass) string
+	// HealthGlyph picks the health-strip glyph for a StatusClass. Defaults
+	// to DefaultHealthGlyph; a kind overrides it where its own design
+	// section names a different glyph for a class — Nodes render Neutral as
+	// ◈ (11a's cordoned), Helm renders Warn as ◌ (18a's pending-upgrade).
+	// Lives on the descriptor rather than as a kind-name check in browse so
+	// a new kind's strip is declared with the rest of its data.
+	HealthGlyph func(StatusClass) string
 	// Custom marks a kind discovered from a CRD at connect time (14a) — the
 	// one generic flag browse/goto key off to route a row to the 14d
 	// generic detail screen and the 14c API-group type label, instead of
@@ -173,6 +180,23 @@ type Descriptor struct {
 // *kube/fake.Cluster.
 type InstanceCounter interface {
 	CountInstances(kind kube.ResourceKind) int
+}
+
+// DefaultHealthGlyph is the generic per-class glyph used by every kind that
+// doesn't set Descriptor.HealthGlyph. Rune literals rather than the
+// tui.Glyph* constants because resources must not import tui — the same
+// reason projections.go and crd.go spell their glyphs out.
+func DefaultHealthGlyph(class StatusClass) string {
+	switch class {
+	case StatusOK:
+		return "\u25cf" // ●
+	case StatusWarn:
+		return "\u25b2" // ▲
+	case StatusFail:
+		return "\u2715" // ✕
+	default:
+		return "\u25cb" // ○
+	}
 }
 
 // DefaultHealthLabel is the generic per-class wording used by every kind

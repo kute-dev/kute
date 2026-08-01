@@ -299,17 +299,10 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		}
 		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, seg.class))
 		label := m.desc.HealthLabel(seg.class)
-		glyph := defaultGlyphFor(seg.class)
-		if m.kind == kube.KindNode && seg.class == resources.StatusNeutral {
-			// 11a: cordoned nodes render ◈, not the generic ○ "completed"
-			// glyph every other kind's Neutral class falls back to.
-			glyph = tui.GlyphCordoned
-		}
-		if m.kind == kube.KindHelmRelease && seg.class == resources.StatusWarn {
-			// 18a's own strip example renders pending-upgrade as ◌, not the
-			// generic ▲ pending glyph every other kind's Warn class uses.
-			glyph = tui.GlyphProbing
-		}
+		// Per-kind glyph overrides (11a's cordoned ◈, 18a's pending ◌) are
+		// declared on the descriptor, not switched on here — see
+		// resources.Descriptor.HealthGlyph.
+		glyph := m.desc.HealthGlyph(seg.class)
 		parts = append(parts, glyphStyle.Render(glyph)+" "+
 			numStyle.Render(strconv.Itoa(seg.n))+" "+labelStyle.Render(label))
 	}

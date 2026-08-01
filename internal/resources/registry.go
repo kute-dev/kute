@@ -42,6 +42,9 @@ func (r Registry) Register(d Descriptor) {
 	if d.HealthLabel == nil {
 		d.HealthLabel = DefaultHealthLabel
 	}
+	if d.HealthGlyph == nil {
+		d.HealthGlyph = DefaultHealthGlyph
+	}
 	r.byKind[d.Kind] = d
 }
 
@@ -61,11 +64,11 @@ func DefaultRegistry() Registry {
 		{Kind: kube.KindConfigMap, Group: GroupConfig, Display: "ConfigMaps", Icon: "⚙", Columns: []string{"Name", "Data", "Age"}, Describe: "non-secret configuration data", Project: projectConfigMap},
 		{Kind: kube.KindSecret, Group: GroupConfig, Display: "Secrets", Icon: "⚙", Columns: []string{"Name", "Type", "Data", "Age"}, Describe: "sensitive configuration data", Project: projectSecret},
 		{Kind: kube.KindPersistentVolumeClaim, Group: GroupStorage, Display: "PersistentVolumeClaims", Icon: "▤", Columns: []string{"Name", "Status", "Capacity", "Age"}, Describe: "requested persistent storage", Project: projectPVC},
-		{Kind: kube.KindNode, Group: GroupCluster, Display: "Nodes", Icon: "⬡", Columns: []string{"Name", "Status", "Health", "Pods", "CPU", "MEM", "Version", "Age"}, Describe: "cluster worker machines", ClusterScoped: true, Project: projectNode, HealthLabel: nodeHealthLabel},
+		{Kind: kube.KindNode, Group: GroupCluster, Display: "Nodes", Icon: "⬡", Columns: []string{"Name", "Status", "Health", "Pods", "CPU", "MEM", "Version", "Age"}, Describe: "cluster worker machines", ClusterScoped: true, Project: projectNode, HealthLabel: nodeHealthLabel, HealthGlyph: nodeHealthGlyph},
 		{Kind: kube.KindNamespace, Group: GroupCluster, Display: "Namespaces", Icon: "⬡", Columns: []string{"Name", "Status", "Age"}, Describe: "cluster resource partitions", ClusterScoped: true, Project: projectNamespace},
 		{Kind: kube.KindEvent, Group: GroupObservability, Display: "Events", Icon: "∿", Columns: []string{"Type", "Reason", "Object", "Age"}, Describe: "cluster activity and warnings", Project: projectEvent},
 		{Kind: kube.KindForward, Group: GroupCluster, Display: "Forwards", Icon: "⇄", Columns: []string{"Local", "Target", "Namespace", "Uptime", "Traffic"}, FlexColumn: "Target", Describe: "active kubectl port-forward sessions", ClusterScoped: true, Project: projectForward, HealthLabel: forwardHealthLabel},
-		{Kind: kube.KindHelmRelease, Group: GroupCluster, Display: "Helm Releases", Icon: "⎈", Columns: []string{"Release", "Chart", "Latest", "App Ver", "Rev", "Status", "Updated"}, FlexColumn: "Release", Describe: "deployed Helm chart releases", Project: projectHelmRelease, Health: helmReleaseHealth, HealthLabel: helmReleaseHealthLabel},
+		{Kind: kube.KindHelmRelease, Group: GroupCluster, Display: "Helm Releases", Icon: "⎈", Columns: []string{"Release", "Chart", "Latest", "App Ver", "Rev", "Status", "Updated"}, FlexColumn: "Release", Describe: "deployed Helm chart releases", Project: projectHelmRelease, Health: helmReleaseHealth, HealthLabel: helmReleaseHealthLabel, HealthGlyph: helmReleaseHealthGlyph},
 	}
 	// CustomResourceDefinition (14b) is always present, like Forward — a
 	// built-in, not a discovered kind — registered here with a nil counter
@@ -82,6 +85,9 @@ func DefaultRegistry() Registry {
 		}
 		if d.HealthLabel == nil {
 			d.HealthLabel = DefaultHealthLabel
+		}
+		if d.HealthGlyph == nil {
+			d.HealthGlyph = DefaultHealthGlyph
 		}
 		byKind[d.Kind] = d
 	}
@@ -144,6 +150,24 @@ func helmReleaseHealth(rows []Row) HealthCounts {
 		}
 	}
 	return h
+}
+
+// helmReleaseHealthGlyph is 18a's own strip example: pending-upgrade
+// renders ◌, not the generic ▲ every other kind's Warn class uses.
+func helmReleaseHealthGlyph(class StatusClass) string {
+	if class == StatusWarn {
+		return "\u25cc" // ◌
+	}
+	return DefaultHealthGlyph(class)
+}
+
+// nodeHealthGlyph is 11a's: a cordoned node renders ◈, not the generic ○
+// every other kind's Neutral class falls back to.
+func nodeHealthGlyph(class StatusClass) string {
+	if class == StatusNeutral {
+		return "\u25c8" // ◈
+	}
+	return DefaultHealthGlyph(class)
 }
 
 // helmReleaseHealthLabel is 18a's health-strip wording: "3 deployed · 1

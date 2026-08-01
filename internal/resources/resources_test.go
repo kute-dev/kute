@@ -523,3 +523,36 @@ func TestListProjectsAllObjects(t *testing.T) {
 		t.Fatalf("Count = %d, %v; want 2", n, err)
 	}
 }
+
+// TestHealthGlyphOverridesRideOnTheDescriptor pins the per-kind strip
+// glyphs that used to be kind-name switches in browse's view: 11a's
+// cordoned ◈ for a Node's Neutral class, 18a's pending-upgrade ◌ for a Helm
+// release's Warn class. Every other kind falls back to the generic set.
+func TestHealthGlyphOverridesRideOnTheDescriptor(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	tests := []struct {
+		kind  kube.ResourceKind
+		class StatusClass
+		want  string
+	}{
+		{kube.KindNode, StatusNeutral, "◈"},
+		{kube.KindNode, StatusOK, "●"},
+		{kube.KindHelmRelease, StatusWarn, "◌"},
+		{kube.KindHelmRelease, StatusFail, "✕"},
+		{kube.KindPod, StatusNeutral, "○"},
+		{kube.KindPod, StatusWarn, "▲"},
+	}
+	for _, tc := range tests {
+		d, ok := reg.Descriptor(tc.kind)
+		if !ok {
+			t.Fatalf("no descriptor for %s", tc.kind)
+		}
+		if d.HealthGlyph == nil {
+			t.Fatalf("%s: HealthGlyph was not defaulted by the registry", tc.kind)
+		}
+		if got := d.HealthGlyph(tc.class); got != tc.want {
+			t.Errorf("%s/%v glyph = %q, want %q", tc.kind, tc.class, got, tc.want)
+		}
+	}
+}
