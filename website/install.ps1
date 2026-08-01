@@ -69,26 +69,42 @@ function Confirm-KuteSignature {
     # without it. Rather than parse `cosign version`, try the modern form and
     # fall back — a bundle that is genuinely bad fails both ways, so the
     # retry can only rescue an old cosign, never hide a bad signature.
+    #
+    # A non-zero $LASTEXITCODE is not always a verdict. cosign bootstraps
+    # Sigstore's TUF trust root before it looks at a byte of the bundle, and
+    # when that bootstrap fails (the tuf-repo-cdn.sigstore.dev 403/404
+    # outage, DNS, a proxy) it exits without judging the signature — the
+    # cosign-not-found case with cosign present. Only a failure whose output
+    # is not a trust-bootstrap failure means "do not run it".
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+    $unverifiable = $false
     try {
         foreach ($extra in @(@(), @('--new-bundle-format'))) {
-            & cosign verify-blob `
+            $output = (& cosign verify-blob `
                 --certificate-identity-regexp $identity `
                 --certificate-oidc-issuer $issuer `
                 --bundle $bundlePath `
                 @extra `
-                $ArchivePath 2>&1 | Out-Null
+                $ArchivePath 2>&1 | Out-String)
             if ($LASTEXITCODE -eq 0) { break }
+            if ($output -match 'setting trusted material|getting trusted root|failed to create TUF client|tuf refresh failed') {
+                $unverifiable = $true
+            }
         }
     } finally {
         $ErrorActionPreference = $prevEap
     }
-    if ($LASTEXITCODE -ne 0) {
-        throw "kute install: signature verification failed for $Archive — do not run it; see $VerifyDocs"
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'Verified signature (cosign, keyless).'
+        return
     }
-
-    Write-Host 'Verified signature (cosign, keyless).'
+    if ($unverifiable) {
+        Write-Host 'note: cosign could not verify — Sigstore trust bootstrap failed; verified checksum only.'
+        Write-Host "      $VerifyDocs explains how to check the signature."
+        return
+    }
+    throw "kute install: signature verification failed for $Archive — do not run it; see $VerifyDocs"
 }
 
 function Install-Kute {

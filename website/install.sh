@@ -49,23 +49,60 @@ verify_signature() {
 	# without it. Rather than parse `cosign version`, try the modern form and
 	# fall back — a bundle that is genuinely bad fails both ways, so the
 	# retry can only rescue an old cosign, never hide a bad signature.
-	if verify_blob_with "$bundle" || verify_blob_with "$bundle" --new-bundle-format; then
+	# verify_blob_with reports 0 verified, 1 rejected (a verdict cosign
+	# actually reached) and 2 unverifiable (cosign never got to judge the
+	# bundle); only the rejected status means "do not run it". The else
+	# clauses capture the failure status: `if` with a false condition and no
+	# else exits 0, so it cannot be read after the statement.
+	if verify_blob_with "$bundle"; then
 		printf 'Verified signature (cosign, keyless).\n'
+		return 0
+	else
+		st1=$?
+	fi
+	if verify_blob_with "$bundle" --new-bundle-format; then
+		printf 'Verified signature (cosign, keyless).\n'
+		return 0
+	else
+		st2=$?
+	fi
+	if [ "$st1" -eq 2 ] || [ "$st2" -eq 2 ]; then
+		printf 'note: cosign could not verify — Sigstore trust bootstrap failed; verified checksum only.\n'
+		printf '      %s explains how to check the signature.\n' "$verify_docs"
 		return 0
 	fi
 
 	fail "signature verification failed for ${archive} — do not run it; see ${verify_docs}"
 }
 
+# Exit status is the signal: 0 verified, 1 rejected (cosign judged the
+# bundle and said no), 2 unverifiable (cosign never judged it).
 verify_blob_with() {
 	bundle="$1"
 	shift
-	cosign verify-blob \
+	# stdout is discarded — "Verified OK" is the only thing cosign puts there
+	# and it means nothing to a machine. stderr is kept because the error
+	# text is what separates an infrastructure failure from a verdict.
+	if err="$(cosign verify-blob \
 		--certificate-identity-regexp "$cert_identity" \
 		--certificate-oidc-issuer "$cert_issuer" \
 		--bundle "$bundle" \
 		"$@" \
-		"${tmp}/${archive}" >/dev/null 2>&1
+		"${tmp}/${archive}" 2>&1 >/dev/null)"; then
+		return 0
+	fi
+	# cosign bootstraps Sigstore's TUF trust root before it looks at a byte
+	# of the bundle. A failed bootstrap — the tuf-repo-cdn.sigstore.dev
+	# 403/404 outage, a DNS failure, a blocked proxy — exits non-zero
+	# without ever judging the signature. That is the cosign-not-found case
+	# with cosign present, and deserves the same fallback, not "do not run
+	# it". A bundle cosign genuinely rejected fails after bootstrap with a
+	# different message and hard-fails below.
+	case "$err" in
+		*"setting trusted material"*|*"getting trusted root"*|*"failed to create TUF client"*|*"tuf refresh failed"*)
+			return 2 ;;
+	esac
+	return 1
 }
 
 main() {
