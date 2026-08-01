@@ -30,6 +30,14 @@
 //     durable statement of the same fact (the RDY column, the termination
 //     record) instead. The same applies to opening a row: wait for the row,
 //     not for the breadcrumb, or ↵ lands on a list that has not filled yet.
+//   - A key press whose *meaning* depends on the previous write fences on the
+//     screen, never on the API. Confirming a write through a client proves the
+//     server has it, not that kute does — browse reloads from its informer
+//     cache on a 250ms debounce, so a toggle keyed off the projected row (§30a's
+//     suspend/resume) reads the pre-write direction for tens of milliseconds
+//     after the object has changed. Re-sending the write kute already sent is
+//     silent: no field changes, no watch event follows, and the test waits out
+//     its whole budget for the opposite verb. See waitForRowState.
 //
 // No test here may call t.Parallel: Launch isolates HOME and the XDG
 // directories with t.Setenv, which is process-global.

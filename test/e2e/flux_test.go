@@ -96,6 +96,7 @@ func TestFluxScreens(t *testing.T) {
 		// The durable statement of the fact, read from the API rather than
 		// from a frame: a suspend nothing reconciles away stays true.
 		a.Press("s")
+		a.waitForRowState(t, "kute-apps", "suspended")
 		waitForKustomization(t, "kute-apps", "became suspended", suspendIs(true))
 
 		a.Press("s")
@@ -167,6 +168,34 @@ func (a *App) selectListRow(t *testing.T, want string) {
 		a.Down()
 	}
 	t.Fatalf("never reached row %q:\n%s", want, a.Frame())
+}
+
+// waitForRowState waits until the row named want carries state in its own
+// line — the fence a write has to clear before the *next* key press, when
+// that press's meaning depends on what the write did.
+//
+// §30a's 's' is one verb in two directions and reads which one off the
+// projected row, so a second press against a row kute has not caught up on
+// re-sends the suspend it just did. Nothing reports that as a failure: the
+// patch changes no field, the server answers 200 without bumping
+// resourceVersion, no watch event follows, and the resume the test is
+// waiting for never happens. Fencing on the API alone cannot close the
+// window — browse reloads from its own informer cache on a 250ms debounce
+// (reloadDebounce), so the object is suspended on the server for some time
+// before the row on screen says so.
+func (a *App) waitForRowState(t *testing.T, want, state string) {
+	t.Helper()
+	frame, ok := a.poll(func(f string) bool {
+		for _, line := range strings.Split(f, "\n") {
+			if strings.Contains(line, want) && strings.Contains(line, state) {
+				return true
+			}
+		}
+		return false
+	}, Settle)
+	if !ok {
+		t.Fatalf("row %q never read %q:\n%s", want, state, frame)
+	}
 }
 
 // fluxDynamic builds a dynamic client against the e2e kubeconfig — the way
