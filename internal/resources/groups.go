@@ -16,6 +16,13 @@ const (
 	// BuildDiscoveredRegistry only when discovery found at least one, never
 	// part of DefaultGroups' static list.
 	GroupCustomResources GroupID = "Custom Resources"
+	// GroupFlux buckets discovered Flux kinds (docs/design README.md §30a).
+	// Like GroupCustomResources it is appended by BuildDiscoveredRegistry
+	// only when discovery found one, never part of DefaultGroups' static
+	// list — and the two are mutually exclusive: a kind is in exactly one
+	// group. Sorts before Custom Resources, which stays last as the
+	// catch-all long tail.
+	GroupFlux GroupID = "Flux"
 )
 
 // Group is a labelled bucket of resource kinds shown in the explorer.

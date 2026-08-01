@@ -25,7 +25,45 @@ type substituted struct {
 // substitutedKinds is the whole substitution table. Deliberately tiny: a
 // substitution costs the invariant that a ResourceKind is its API Kind, so
 // it is only worth paying where two kinds genuinely collide.
-var substitutedKinds = map[ResourceKind]substituted{}
+var substitutedKinds = map[ResourceKind]substituted{
+	KindFluxHelmRelease: {
+		apiKind:  "HelmRelease",
+		group:    FluxGroupHelm,
+		resource: "helmreleases." + FluxGroupHelm,
+	},
+}
+
+// Flux API groups (docs/design README.md §30a). Enumerated rather than
+// matched on a ".toolkit.fluxcd.io" suffix: "kute never guesses", and a
+// future Flux group with different status semantics must not silently
+// inherit §30a's descriptor.
+const (
+	FluxGroupSource       = "source.toolkit.fluxcd.io"
+	FluxGroupKustomize    = "kustomize.toolkit.fluxcd.io"
+	FluxGroupHelm         = "helm.toolkit.fluxcd.io"
+	FluxGroupNotification = "notification.toolkit.fluxcd.io"
+	FluxGroupImage        = "image.toolkit.fluxcd.io"
+)
+
+// FluxReconcileAnnotation is the annotation every Flux controller watches
+// for an out-of-band "reconcile now" request — §30a's 'r' stamps it with a
+// fresh RFC3339 timestamp, the same thing `flux reconcile` does and the
+// same annotate-to-trigger mechanism RolloutRestart already uses.
+const FluxReconcileAnnotation = "reconcile.fluxcd.io/requestedAt"
+
+// IsFluxGroup reports whether group is one of Flux's own API groups, and so
+// whether a kind discovered in it gets §30a's curated descriptor.
+//
+// Recognition is by group, never by bare Kind name: Flux's HelmRelease
+// shares its Kind with §18a's Helm-3 release kind, and matching on the name
+// is precisely the bug §30a exists to prevent.
+func IsFluxGroup(group string) bool {
+	switch group {
+	case FluxGroupSource, FluxGroupKustomize, FluxGroupHelm, FluxGroupNotification, FluxGroupImage:
+		return true
+	}
+	return false
+}
 
 // APIKind is the Kubernetes Kind behind k. Identical to string(k) for every
 // kind but a substituted one.
@@ -87,6 +125,24 @@ const (
 	// (docs/design README.md §18a, kube/helm.go). One row per release
 	// (namespace+name), aggregated to its highest revision.
 	KindHelmRelease ResourceKind = "HelmRelease"
+
+	// KindFluxHelmRelease is the discovered helm.toolkit.fluxcd.io
+	// HelmRelease (docs/design README.md §30a) under a registry key that is
+	// deliberately NOT its API Kind.
+	//
+	// resources.Registry is keyed on ResourceKind alone — not on (group,
+	// kind) — and §18a's synthetic KindHelmRelease (Helm-3 release Secrets)
+	// got there first, so registering Flux's under its bare Kind silently
+	// replaced it: the Helm list rendered NAME+AGE only, and Flux's own
+	// HelmReleases never appeared at all. Substituting the key rather than
+	// re-keying the whole registry keeps the change to one table; the cost
+	// is that this key is no longer the API Kind, which ResourceKind's
+	// APIKind/ResourceArg exist to pay. See substitutedKinds.
+	//
+	// It is the only Flux kind that needs a const. Every other one is
+	// addressed by its own Kind and reached through Descriptor.Flux — browse
+	// never names an individual Flux kind.
+	KindFluxHelmRelease ResourceKind = "FluxHelmRelease"
 
 	// Gateway API kinds (gateway.networking.k8s.io) are never DefaultRegistry
 	// entries — like every CRD they only exist in the registry once

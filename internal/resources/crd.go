@@ -369,21 +369,32 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 		deployDesc.Project = projectDeployment(reader)
 		registry.Register(deployDesc)
 	}
+	var fluxKinds, customKinds []kube.ResourceKind
 	for _, dk := range discovered {
-		if dk.Kind == string(kube.KindHTTPRoute) {
+		switch {
+		case kube.IsFluxGroup(dk.Group):
+			// By API group, never by bare Kind name — Flux's HelmRelease
+			// shares its Kind with 18a's, and a name check is the bug §30a
+			// exists to prevent (see kube.IsFluxGroup).
+			registry.Register(fluxDescriptor(dk))
+			fluxKinds = append(fluxKinds, dk.RegistryKind())
+		case dk.Kind == string(kube.KindHTTPRoute):
 			registry.Register(httpRouteDescriptor(dk))
-			continue
+			customKinds = append(customKinds, dk.RegistryKind())
+		default:
+			registry.Register(CustomDescriptor(dk))
+			customKinds = append(customKinds, dk.RegistryKind())
 		}
-		registry.Register(CustomDescriptor(dk))
 	}
 
 	groups := DefaultGroups()
-	if len(discovered) > 0 {
-		kinds := make([]kube.ResourceKind, 0, len(discovered))
-		for _, dk := range discovered {
-			kinds = append(kinds, dk.RegistryKind())
-		}
-		groups = append(groups, Group{ID: GroupCustomResources, Icon: "◆", Kinds: kinds})
+	if len(fluxKinds) > 0 {
+		groups = append(groups, Group{ID: GroupFlux, Icon: "⇅", Kinds: fluxKinds})
+	}
+	// Gated on customKinds rather than on discovered, so a cluster running
+	// Flux and nothing else doesn't get an empty Custom Resources group.
+	if len(customKinds) > 0 {
+		groups = append(groups, Group{ID: GroupCustomResources, Icon: "◆", Kinds: customKinds})
 	}
 	return registry, groups
 }

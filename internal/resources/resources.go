@@ -173,6 +173,12 @@ type Descriptor struct {
 	// APIGroup for the dim "cert-manager.io/v1" tag (docs/design README.md
 	// §14a).
 	APIVersion string
+	// Flux marks a discovered kind in one of Flux's API groups (§30a): it
+	// carries spec.suspend and honours reconcile.fluxcd.io/requestedAt, so
+	// §30a's suspend/resume and reconcile verbs apply. The one flag browse
+	// keys off — never a kind-name check, since the Flux kind set is
+	// discovered at connect rather than compiled in.
+	Flux bool
 }
 
 // InstanceCounter reads a live instance count for a discovered kind — the

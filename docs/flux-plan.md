@@ -43,10 +43,10 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | G1 | Verify `status.artifact` git metadata | `[ ]` | — |
 | G2 | Verify Flux declared printer columns | `[ ]` | — |
 | G3 | Verify suspension attribution is recoverable | `[ ]` | — |
-| T1 | `demoDiscoveredKind` API-group fix | `[ ]` | — |
-| T2 | Registry-kind ↔ API-kind substitution seam | `[ ]` | — |
-| T3 | Delete + patch a custom resource (dynamic fallback) | `[ ]` | — |
-| T4 | Health-strip glyph into the descriptor | `[ ]` | — |
+| T1 | `demoDiscoveredKind` API-group fix | `[x]` | — |
+| T2 | Registry-kind ↔ API-kind substitution seam | `[x]` | — |
+| T3 | Delete + patch a custom resource (dynamic fallback) | `[x]` | — |
+| T4 | Health-strip glyph into the descriptor | `[x]` | — |
 | T5 | Design-doc sections §30a/§31a/§32a | `[ ]` | G1, G2, G3 |
 | T6 | Kind keying, `GroupFlux`, collision fix | `[ ]` | T1, T2 |
 | T7 | §30a descriptor, projection, status | `[ ]` | T4, T6, G2 |
@@ -85,13 +85,13 @@ kubectl get crd kustomizations.kustomize.toolkit.fluxcd.io \
 
 ## Prerequisites — each ships alone
 
-### T1 — `fix(kube/fake): give demoDiscoveredKind the API group its caller declares` `[ ]`
+### T1 — `fix(kube/fake): give demoDiscoveredKind the API group its caller declares` `[x]`
 
 `internal/kube/fake/fixtures.go:539-553` hardcodes `Group: "cert-manager.io"` / `Version: "v1"` yet is called for `monitoring.coreos.com` and `argoproj.io`. Visible in 14a's breadcrumb chip, 14c's goto type label, and `Describe`. Gateway API dodged it with an inline literal (`:1066-1085`).
 
 Add `group, version` params, update the nine call sites, collapse the Gateway API literals onto it. **Required first** — otherwise `IsFluxGroup(dk.Group)` never fires in `--demo`.
 
-### T2 — `refactor(kube): resolve a registry kind's API kind and kubectl arg through one table` `[ ]`
+### T2 — `refactor(kube): resolve a registry kind's API kind and kubectl arg through one table` `[x]`
 
 The substitution seam, landed **with an empty table** so it's a provable no-op. In `internal/kube/kinds.go`:
 
@@ -117,7 +117,7 @@ Route every call site (all verified):
 **Acceptance:** table empty ⇒ whole suite green, every golden byte-identical.
 **Tests:** `TestResourceForResolvesSubstitutedKind` (`count_test.go`), `TestEnsureDynamicKindForRegistersSubstitutedKindAgainstRealGVR` (`lazy_test.go`, `dynamicfake` helper exists at `:27-33`), `TestObjectEventsMatchesTheAPIKindNotTheRegistryKind`, `TestEditArgsUsesTheKubectlResourceArg` — all must fail before T6 populates the table.
 
-### T3 — `fix(kube): delete a custom resource from its own list` `[ ]`
+### T3 — `fix(kube): delete a custom resource from its own list` `[x]`
 
 `deleteResource` (`mutate.go:154-155`) ends `default: return fmt.Errorf("delete is not supported for kind %s")` — **`ctrl-d` fails on every discovered CRD row today while the keybar advertises it.** 30a's keybar makes this in-scope. Give it the dynamic fallback `PatchMeta` already has.
 
@@ -130,7 +130,7 @@ func (c *Cluster) patchDynamic(ctx, kind, namespace, name string, patch []byte) 
 Point `PatchMeta`, `deleteResource` and T9's suspend at them. Fixes a second latent bug: 26a's editor on a CRD whose list was never opened.
 **Test:** `TestDeleteResourceFallsBackToTheDynamicClient` — fails today.
 
-### T4 — `refactor(resources): move the health-strip glyph override into the kind descriptor` `[ ]`
+### T4 — `refactor(resources): move the health-strip glyph override into the kind descriptor` `[x]`
 
 Add `Descriptor.HealthGlyph func(StatusClass) string` + `DefaultHealthGlyph`, defaulted in `Register`/`DefaultRegistry` alongside `Health`/`HealthLabel` (`registry.go:38-46, :80-86`). Move `nodeHealthGlyph` (Neutral→`◈`) and `helmReleaseHealthGlyph` (Warn→`◌`) onto their descriptors; delete the two `if m.kind == …` blocks at `browse/view.go:301-310`.
 
