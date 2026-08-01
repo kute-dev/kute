@@ -328,3 +328,47 @@ func TestShortRevisionCoversEveryShapeFluxUses(t *testing.T) {
 		}
 	}
 }
+
+// TestSuspendedIsAmberWithoutLosingItsOwnCount pins the split between what a
+// suspended row *is* and what colour it renders. The class stays Neutral so
+// the strip keeps counting and naming suspended objects apart from
+// reconciling ones; the tone is Warn so the row doesn't read as parked and
+// benign, which is what Neutral's blue says everywhere else in the app
+// (Completed pods, cordoned nodes). §31a's SUSPENDED card was already amber
+// — this is what stops the two screens disagreeing about one object.
+func TestSuspendedIsAmberWithoutLosingItsOwnCount(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	reg.Register(fluxDescriptor(fluxKustomizationDiscoveredKind()))
+	d, ok := reg.Descriptor(kube.ResourceKind("Kustomization"))
+	if !ok {
+		t.Fatal("no Kustomization descriptor")
+	}
+	if d.HealthTone == nil {
+		t.Fatal("HealthTone was not defaulted by the registry")
+	}
+	if got := d.HealthTone(StatusNeutral); got != StatusWarn {
+		t.Errorf("HealthTone(Neutral) = %v, want Warn — a suspended reconciler is a risk state", got)
+	}
+	// The count and the word it carries must survive the recolouring.
+	if got := d.HealthLabel(StatusNeutral); got != "suspended" {
+		t.Errorf("HealthLabel(Neutral) = %q, want %q", got, "suspended")
+	}
+	if got := d.HealthLabel(StatusWarn); got != "reconciling" {
+		t.Errorf("HealthLabel(Warn) = %q, want %q — the two classes must stay distinct", got, "reconciling")
+	}
+	if got := d.HealthGlyph(StatusNeutral); got != "‖" {
+		t.Errorf("HealthGlyph(Neutral) = %q, want %q", got, "‖")
+	}
+	// Every other class is its own colour, here as everywhere.
+	for _, class := range []StatusClass{StatusOK, StatusWarn, StatusFail} {
+		if got := d.HealthTone(class); got != class {
+			t.Errorf("HealthTone(%v) = %v, want identity", class, got)
+		}
+	}
+	// And no other kind is touched.
+	pod, _ := reg.Descriptor(kube.KindPod)
+	if got := pod.HealthTone(StatusNeutral); got != StatusNeutral {
+		t.Errorf("Pods HealthTone(Neutral) = %v, want identity", got)
+	}
+}

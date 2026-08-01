@@ -175,6 +175,20 @@ type Descriptor struct {
 	// Lives on the descriptor rather than as a kind-name check in browse so
 	// a new kind's strip is declared with the rest of its data.
 	HealthGlyph func(StatusClass) string
+	// HealthTone remaps a StatusClass to the class whose *colour* renders it,
+	// in the strip and on the row glyph alike. Defaults to identity, which is
+	// what every kind but one wants: the class carries both the meaning and
+	// the hue.
+	//
+	// Flux is the exception, and it needs the two split. A suspended
+	// reconciler must stay StatusNeutral so the strip can count and name it
+	// separately from the reconciling ones (its label mapping has four
+	// distinct words for four classes), but Neutral's blue is the hue of a
+	// Completed pod and a cordoned node — parked, benign, nothing to see. A
+	// Kustomization someone paused is not parked: it is silently drifting
+	// from git for as long as it stays that way, which is a risk state and
+	// reads amber (docs/design README.md §30a).
+	HealthTone func(StatusClass) StatusClass
 	// Custom marks a kind discovered from a CRD at connect time (14a) — the
 	// one generic flag browse/goto key off to route a row to the 14d
 	// generic detail screen and the 14c API-group type label, instead of
@@ -230,6 +244,10 @@ func DefaultHealthGlyph(class StatusClass) string {
 		return "\u25cb" // ○
 	}
 }
+
+// DefaultHealthTone is the identity remap used by every kind that doesn't
+// set Descriptor.HealthTone: a class is rendered in its own colour.
+func DefaultHealthTone(class StatusClass) StatusClass { return class }
 
 // DefaultHealthLabel is the generic per-class wording used by every kind
 // that doesn't set Descriptor.HealthLabel.

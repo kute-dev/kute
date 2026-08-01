@@ -45,6 +45,9 @@ func (r Registry) Register(d Descriptor) {
 	if d.HealthGlyph == nil {
 		d.HealthGlyph = DefaultHealthGlyph
 	}
+	if d.HealthTone == nil {
+		d.HealthTone = DefaultHealthTone
+	}
 	r.byKind[d.Kind] = d
 }
 
@@ -78,20 +81,15 @@ func DefaultRegistry() Registry {
 	// once a cluster is reachable.
 	descriptors = append(descriptors, CRDDescriptor(nil))
 
-	byKind := make(map[kube.ResourceKind]Descriptor, len(descriptors))
+	// Through Register, not a second defaulting block of its own: the two
+	// used to be copies, so a newly added Health* default reached discovered
+	// kinds and silently skipped every built-in one (HealthTone was added
+	// that way and nil-panicked on Pods).
+	reg := Registry{byKind: make(map[kube.ResourceKind]Descriptor, len(descriptors))}
 	for _, d := range descriptors {
-		if d.Health == nil {
-			d.Health = StatusHealth
-		}
-		if d.HealthLabel == nil {
-			d.HealthLabel = DefaultHealthLabel
-		}
-		if d.HealthGlyph == nil {
-			d.HealthGlyph = DefaultHealthGlyph
-		}
-		byKind[d.Kind] = d
+		reg.Register(d)
 	}
-	return Registry{byKind: byKind}
+	return reg
 }
 
 // podHealthLabel is the docs/design/README.md 2a health-strip wording:

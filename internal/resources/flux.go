@@ -51,6 +51,7 @@ func fluxDescriptor(dk kube.DiscoveredKind) Descriptor {
 		Project:         projectFluxResource,
 		HealthLabel:     fluxHealthLabel,
 		HealthGlyph:     fluxHealthGlyph,
+		HealthTone:      fluxHealthTone,
 	}
 }
 
@@ -97,6 +98,26 @@ func fluxHealthGlyph(class StatusClass) string {
 	default:
 		return DefaultHealthGlyph(class)
 	}
+}
+
+// fluxHealthTone renders §30a's suspended state amber rather than the
+// Neutral blue its class would otherwise give it.
+//
+// The class has to stay Neutral: it is what lets the strip count and label
+// suspended objects separately from reconciling ones, and what keeps
+// fluxStatus's precedence expressible at all. But the hue is a separate
+// claim, and Neutral's blue is the hue of a Completed pod and a cordoned
+// node — states that are finished or deliberately parked, with nothing to
+// act on. A suspended Kustomization is neither: it is drifting from git for
+// as long as it stays paused, which is the one thing an operator scanning
+// the list needs to notice. §31a's own SUSPENDED card has always been
+// amber; this is what stops the list and the detail screen disagreeing
+// about the same object.
+func fluxHealthTone(class StatusClass) StatusClass {
+	if class == StatusNeutral {
+		return StatusWarn
+	}
+	return class
 }
 
 // projectFluxResource is §30a's status derivation, in strict precedence.

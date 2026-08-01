@@ -300,7 +300,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		if seg.n == 0 {
 			continue
 		}
-		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, seg.class))
+		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, m.healthTone(seg.class)))
 		label := m.desc.HealthLabel(seg.class)
 		// Per-kind glyph overrides (11a's cordoned ◈, 18a's pending ◌) are
 		// declared on the descriptor, not switched on here — see
@@ -487,6 +487,18 @@ func defaultGlyphFor(class resources.StatusClass) string {
 	default:
 		return tui.GlyphCompleted
 	}
+}
+
+// healthTone applies the kind descriptor's own class→colour remap
+// (resources.Descriptor.HealthTone) — identity for every kind but Flux,
+// whose suspended rows stay Neutral for counting and label purposes while
+// rendering amber. Nil-guarded because a Model can hold a zero Descriptor
+// before its kind resolves.
+func (m Model) healthTone(class resources.StatusClass) resources.StatusClass {
+	if m.desc.HealthTone == nil {
+		return class
+	}
+	return m.desc.HealthTone(class)
 }
 
 func glyphColor(theme tui.Theme, class resources.StatusClass) color.Color {
@@ -938,7 +950,7 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			if cells[i].Text == "" {
 				cells[i].Text = defaultGlyphFor(glyphClass)
 			}
-			cells[i].Style = st.status[glyphClass]
+			cells[i].Style = st.status[m.healthTone(glyphClass)]
 			if m.desc.Custom && !m.desc.StatusSemantics && r.Status == resources.StatusNeutral {
 				// docs/design README.md §14a: a CRD instance with no
 				// Ready/Available condition at all — "never fake
