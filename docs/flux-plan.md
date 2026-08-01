@@ -69,6 +69,7 @@ cache, see G1.
 | T11 | §31a Kustomization detail screen | `[x]` | T10, G1 |
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
 | T13 | E2E coverage | `[x]` | T10, T11, T12 |
+| T14 | §32a commit-subject cache (session-scoped) | `[ ]` **next** | T12 |
 
 ---
 
@@ -113,11 +114,9 @@ So §32a reads the SHA from the annotation and only the *subject* from prose.
 **Design (§32a):**
 1. **Primary** — parse the subject out of source-controller GitRepository
    events already in the watch cache. No new watch: 9b/16a already read Events.
-2. **Cache** — persist `(repo, sha) → subject` into per-context state the
-   moment it is seen. **Events expire (~1h)**, so without this the subject
-   vanishes from timeline rows older than the TTL, which is exactly when a
-   timeline is most useful. Schema change ⇒ version bump + migration, per the
-   persisted-state invariant.
+2. **Cache** — hold `(repo, sha) → subject` for the session, the moment it is
+   seen. **Superseded 2026-08-01: session-scoped, not persisted** — see T14
+   for the measurement that changed this.
 3. **Degrade** — no event and no cache entry ⇒ render `master@efd398b`
    alone. **Never fetch the git remote; no tokens.**
 
@@ -137,11 +136,8 @@ So §32a reads the SHA from the annotation and only the *subject* from prose.
   the second time dressed as a commit message. `FluxCommitSubject` rejects
   a revision-shaped capture.
 
-**Still outstanding for §32a:** step 2's persisted `(repo, sha) → subject`
-cache. Until it lands, subjects appear only for a commit observed inside the
-event TTL, and every older row degrades to the bare SHA — correct, and
-visibly less than the design draws. Needs a state-schema version bump plus
-migration, per the persisted-state invariant.
+**Still outstanding for §32a:** the subject cache — now scoped down to an
+in-memory one, see **T14**.
 
 **Drift stays a boolean.** `−9 commits ahead` needs `git log` and remains
 unbuildable: compare the Kustomization's `status.lastAppliedRevision` with
@@ -486,6 +482,65 @@ Assert:
 Follow `gotoKind`'s discipline — wait on the destination list's *title*, never a row name both screens carry. No `t.Parallel`.
 
 ---
+
+## T14 — `feat(tui): keep a Flux commit subject once the timeline has seen it` `[ ]`
+
+**Session-scoped, in memory. Deliberately NOT persisted** — the plan
+originally called for per-context persisted state with a schema version bump
+and migration; the measurement below retired that.
+
+### Why it is needed at all
+
+The subject and the row it belongs to have **different lifetimes**, measured
+on the reference cluster:
+
+| object | events present | what they carry |
+|---|---|---|
+| GitRepository | 1, from 09:11 | `no changes since last reconciliation` — **no subject** |
+| Kustomization | 6, spanning 08:24 → 09:14 | the revision annotation, re-emitted every ~10m |
+
+A Kustomization re-emits a reconcile event every interval, so a `◆` row for
+the currently-applied revision is effectively **permanent**. But
+`stored artifact for commit '…'` fires **once per commit** and ages out at
+the ~1h Event TTL.
+
+So without any cache the failure isn't "no subject" — it is worse: the
+subject shows for about an hour and then **disappears from a row that stays
+on screen**, which silently loses information over time. That is exactly the
+state observed: 8 revision rows across 3 commits, 0 subjects.
+
+### Why it must not be persisted
+
+Informers LIST on startup, so kute picks up events emitted before it
+launched — but only inside the TTL. Open kute cold two days after a commit
+and no cache can invent the subject; the cache only *retains* what was
+already seen, it adds no capability. Surviving a restart is therefore the
+expensive half (versioned state + migration, per the persisted-state
+invariant) for the smallest marginal gain, since after a restart the
+"must be inside the TTL" constraint applies again regardless.
+
+A session-scoped map keeps the case that actually matters: kute open while a
+deploy lands keeps that commit's subject for as long as it runs.
+
+### Shape
+
+- A `map[string]string` (revision → subject) on the timeline model or, if
+  another screen ever needs it, on `*tui.Session`. Populated on every load
+  from whatever `stored artifact` events are currently present, then merged
+  rather than replaced — the whole point is that it outlives the events.
+- `kube.FluxCommitSubjects` already builds the per-load map; T14 is the
+  merge-and-retain step plus its lookup, roughly 20 lines.
+- Degradation is unchanged: no entry ⇒ bare SHA. **Never fetch the git
+  remote; no tokens.**
+- `FluxCommitSubject` already rejects a revision-shaped capture (see G1), so
+  a cached entry can never be a SHA masquerading as a message.
+
+### Test
+
+Drive two loads: the first with a `stored artifact` event present, the
+second with it removed but the reconcile events still carrying the revision.
+The subject must survive the second load. That is the exact sequence the
+cluster produces on its own, and it fails without the merge.
 
 ## Manual verification
 
