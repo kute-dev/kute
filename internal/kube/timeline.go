@@ -289,6 +289,22 @@ func FluxEventRevision(e Event) string {
 	return ""
 }
 
+// FluxTracksSourceRevision reports whether a reconciler of this API kind
+// records what it applied in its *source's* revision vocabulary — the
+// precondition for comparing the two and calling the difference drift
+// (§30b's "source ahead", §31a's chain grid).
+//
+// A Kustomization does: its lastAppliedRevision is the git revision its
+// GitRepository published, so an inequality means the source moved on. A
+// HelmRelease does not, whichever source kind backs it: it records a *chart
+// version* ("19.6.1") while its HelmRepository's artifact revision is the
+// digest of the repo index. Those two are never equal and never will be, so
+// comparing them reports permanent drift on every healthy Helm chain — a
+// confident, always-wrong claim, which is worse than saying nothing.
+func FluxTracksSourceRevision(apiKind string) bool {
+	return apiKind != "HelmRelease"
+}
+
 // ShortFluxRevision collapses "master@sha1:efd398be…" to "master@efd398b",
 // and a bare "sha256:d83a…" digest to its first 7 hex characters. A plain
 // version string is returned unchanged.

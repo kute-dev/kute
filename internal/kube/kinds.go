@@ -201,6 +201,15 @@ const (
 	// tasks/overview directly, the same kind-name special-case KindWhoCan
 	// already takes.
 	KindOverview ResourceKind = "Overview"
+
+	// KindFluxTree is a synthetic kind, like KindOverview: not a Kubernetes
+	// API type and never registered in resources.Registry. §30b is a
+	// *computed join* over the Flux kinds that are already registered, so it
+	// has nothing of its own to list. It exists so the goto corpus can
+	// surface a `g "flux"` result — only on a cluster that actually serves
+	// Flux CRDs, per §30a's zero-chrome-otherwise rule — and browse's
+	// switchKind can recognize it as a carve-out that pushes tasks/fluxtree.
+	KindFluxTree ResourceKind = "FluxTree"
 )
 
 // ResourceChangedMsg is emitted (as a tea.Msg) when a watched informer observes

@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › Flux                                   ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  ● 3 ready   ◌ 1 reconciling   ✕ 2 failed   ‖ 1 suspended                      
+────────────────────────────────────────────────────────────────────────────────
+     SOURCE / RECONCILER      KIND         REVISION                 RECONCILED  
+────────────────────────────────────────────────────────────────────────────────
+▎ ●  bitnami                  HelmRepo     index · 14m ago          14m ago     
+  ✕  └─ nebula-redis          HelmRelease  redis 19.6.1             12m ago     
+      Helm install failed: timed out waiting for the condition                  
+  ●  flux-system              GitRepo      main@8f3c2a1 · 3m ago    3m ago      
+  ✕  └─ nebula-workers        Kustomize    main@8f3c2a1             4m ago      
+      health check failed after 2m0s: Deployment/nebula-stage/nebula-worker s…  
+  ‖  └─ nebula-infra          Kustomize    main@2b91f04 · source …  6d ago      
+  ◌  └─ nebula-apps           Kustomize    main@8f3c2a1             1m ago      
+      building manifests                                                        
+  ●  └─ flux-system           Kustomize    main@8f3c2a1             1m ago      
+  ●  └─ observability         Kustomize    main@8f3c2a1             2m ago      
+    + 1 source · 1 reconciler ready · ↹ expand                                  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   FLUX  esc back │ ↵ open │ r reconcile  s suspend │ ↹ expand/collapse ready   

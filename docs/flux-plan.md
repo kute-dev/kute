@@ -14,7 +14,7 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 ## Decisions
 
-- **§30a + §31a + §32a in this effort. §30b (the source→reconciler tree) is deferred** — recorded in the design README as a follow-up with its rationale intact. It's a bespoke screen that cuts against "kinds are data, not code" and needs a join nothing else in the app builds; it's the one piece that can wait without leaving anything half-built.
+- **§30a + §31a + §32a in this effort. §30b (the source→reconciler tree) was deferred** — and then built, 2026-08-01, once the registry projection it turned out to need was already in place (see T15).
 - **Flux's HelmRelease gets its own `ResourceKind` key**; no registry-wide `(group, kind)` refactor.
 - **Flux kinds get their own `GroupFlux`**, appended only when Flux CRDs are discovered.
 - **`r` stays as the design draws it**, against a recorded objection — see T9.
@@ -38,13 +38,13 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
-**As of 2026-08-01: T1–T14 and all 3 gates closed — this effort is
+**As of 2026-08-01: T1–T15 and all 3 gates closed — this effort is
 complete**, verified end to end against a real cluster. Flux kinds are
 correctly keyed, grouped, projected, rendered and mutable; the timeline
 carries revision rows and retains their commit subjects for the session;
-e2e covers the list, the Helm-release name collision, suspend and reconcile.
-
-Only §30b (the source→reconciler tree) remains, deferred by decision.
+§30b's source→reconciler tree is built (T15, after being deferred through
+T14); e2e covers the list, the Helm-release name collision, suspend and
+reconcile.
 
 **One thing the e2e run surfaced:** with both HelmRelease kinds served,
 `g "helm"` became a coin flip between §18a's "Helm Releases" and Flux's
@@ -72,6 +72,7 @@ plural.
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
 | T13 | E2E coverage | `[x]` | T10, T11, T12 |
 | T14 | §32a commit-subject cache (session-scoped) | `[x]` | T12 |
+| T15 | §30b source → reconciler tree | `[x]` | T7, T11 |
 
 ---
 
@@ -275,7 +276,7 @@ Add `Descriptor.HealthGlyph func(StatusClass) string` + `DefaultHealthGlyph`, de
 - **Suspended is amber, not gray** — a paused Kustomization silently drifting from git is a risk state, not a parked one. The one place Flux departs from the cordoned-node treatment it otherwise resembles.
 - **Why `r` survives the bare-letter objection** (see T9) — written here too, since `verbs.go` will point at it.
 - **The scope fence**: no install, no bootstrap, no commit-to-git — the same boundary §18a draws with "detecting that an upgrade exists is not performing one". Pausing and requesting a reconciliation are operations on cluster state kute can already see; `flux bootstrap` writes to a Git repository.
-- **§30b is deferred, not rejected** — record the tree's rationale (the chain-shaped failure mode, the both-ways-join argument from §23b) and why it waits.
+- **§30b is deferred, not rejected** — record the tree's rationale (the chain-shaped failure mode, the both-ways-join argument from §23b) and why it waits. *(Superseded by T15: the section now documents the screen as built.)*
 
 Also amend CLAUDE.md's "CRD support is data, not code" invariant with the exception and its bound.
 
@@ -436,9 +437,44 @@ Extends `internal/tui/tasks/timeline` — **no new screen**, one new entry sourc
 
 ---
 
-## §30b — deferred
+## T15 — `feat(tui): show which Flux source drives which reconciler` `[x]`
 
-The source→reconciler tree. Not built in this effort; recorded in §30a's design section as a follow-up so its rationale isn't lost: Flux's failure mode is chain-shaped (source fetches → reconciler applies → workload rolls out) and no kubectl view shows the chain — the same both-ways-join argument §23b makes for Gateway API. It waits because it's a bespoke screen that cuts against "kinds are data, not code" and needs a join nothing else in the app builds, and because its headline `−9 commits ahead` drift delta is blocked on G1.
+Built 2026-08-01, after being deferred through T1–T14.
+
+**What changed the calculus.** The deferral rested on two objections. The
+first — a bespoke screen cutting against "kinds are data, not code" — turned
+out not to apply once §30a landed: `tasks/fluxtree` computes *nothing* about
+status. Every row's glyph, class, revision cell and condition sub-line is the
+kind descriptor's own `Project` output, the same `resources.Row` §30a's table
+renders, so the screen is an arrangement of registry data rather than a
+second implementation of Flux. The second — the `−9` drift delta being
+unbuildable — was already settled by G1 for §31a: drift is the boolean
+`source ahead`, and §30b renders it exactly as §31a's chain grid does.
+
+**Shape:** `internal/tui/tasks/fluxtree`, standard file split, reached by
+`g "flux"` (synthetic `kube.KindFluxTree`, browse carve-out, `OpenFluxTree`
+seam) — and offered *only* when discovery found a Flux kind, per §30a's
+zero-chrome rule. Cluster-wide read of the Flux source and reconciler kinds
+only (never a registry walk), joined on each reconciler's `sourceRef` /
+`spec.chart.spec.sourceRef`.
+
+**The bug the join surfaced, in both §30b and §31a.** Drift was computed by
+comparing a reconciler's applied revision with its source's artifact
+revision. That holds for a Kustomization, whose `lastAppliedRevision` *is*
+the git revision its GitRepository published. It is meaningless for a
+HelmRelease: it records a chart version (`19.6.1`) while its HelmRepository
+publishes the digest of the repo index. The two are never equal, so every
+healthy Helm chain would have claimed `source ahead` permanently.
+`kube.FluxTracksSourceRevision` now gates the comparison, and §31a's
+`driftNote` reads through it too — §31a had the same latent bug, invisible
+only because the demo had no HelmRepository for its releases to point at
+until this task added one.
+
+**Also landed here:** `tui.GlyphSuspended` (T7 specified it, T7 never added
+it), and the demo's two HelmRepositories, without which the Helm half of the
+tree renders as orphan chains.
+
+**Not built:** the mockup's `−9` commit delta (unbuildable, see G1).
 
 ---
 

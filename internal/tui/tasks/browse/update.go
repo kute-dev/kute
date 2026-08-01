@@ -112,6 +112,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			task, cmd := m.openOverview(m.width, m.height)
 			return task, cmd
 		}
+		if msg.Kind == kube.KindFluxTree {
+			// §30b is a computed join over the Flux kinds, with no list of
+			// its own — the same kind-name carve-out KindOverview takes
+			// above. The goto corpus only offers it on a Flux cluster, so
+			// reaching here at all already means the kinds exist.
+			if m.openFluxTree == nil {
+				return m, nil
+			}
+			task, cmd := m.openFluxTree(m.width, m.height)
+			return task, cmd
+		}
 		if msg.Kind == kube.KindEvent {
 			// Unlike KindWhoCan/KindOverview, Events does have a
 			// resources.Descriptor and could list as a stock browse table —

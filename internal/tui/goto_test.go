@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -633,4 +634,48 @@ func TestGotoFuzzySearchSkipsUnstartedKinds(t *testing.T) {
 			t.Fatalf("fuzzy search read the %s cache, whose informer has not started", kind)
 		}
 	}
+}
+
+// TestGotoOffersTheFluxTreeOnlyOnAFluxCluster is §30a/§30b's "zero chrome on
+// a non-Flux cluster" applied to the one place §30b is reachable from. The
+// entry has to appear the moment Flux CRDs are discovered and never before —
+// a palette result that opens a screen with nothing to show is worse than no
+// result at all.
+func TestGotoOffersTheFluxTreeOnlyOnAFluxCluster(t *testing.T) {
+	t.Parallel()
+	// Matched on the item's own detail text, not the label: the palette
+	// echoes the typed query, so "flux" is on screen either way.
+	const fluxTreeDetail = "tree · sources"
+
+	plain := gotoTestSession(gotoFakeLister{})
+	if strings.Contains(gotoFuzzyLabels(t, plain, "flux"), fluxTreeDetail) {
+		t.Error("a cluster with no Flux CRDs must not offer the Flux tree")
+	}
+
+	fluxy := gotoTestSession(gotoFakeLister{})
+	reg, groups := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{{
+		Kind: "Kustomization", Plural: "kustomizations", Group: kube.FluxGroupKustomize,
+		GVR:         schema.GroupVersionResource{Group: kube.FluxGroupKustomize, Version: "v1", Resource: "kustomizations"},
+		Versions:    []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
+		Established: true,
+		CRDName:     "kustomizations." + kube.FluxGroupKustomize,
+	}}, nil)
+	fluxy.Registry, fluxy.Groups = reg, groups
+	if !strings.Contains(gotoFuzzyLabels(t, fluxy, "flux"), fluxTreeDetail) {
+		t.Error("a Flux cluster must offer the Flux tree in the goto palette")
+	}
+}
+
+// gotoFuzzyLabels drives the real palette and returns its rendered results
+// for query — the corpus is unexported, so this asserts through the same
+// surface a user sees.
+func gotoFuzzyLabels(t *testing.T, sess *tui.Session, query string) string {
+	t.Helper()
+	model := tui.NewWithSession(&screenTask{name: "browse"}, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	for _, r := range query {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: string(r)})
+	}
+	return ansi.Strip(updated.(tui.Model).View().Content)
 }

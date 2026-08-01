@@ -111,6 +111,42 @@ func TestFluxScreens(t *testing.T) {
 			t.Errorf("reconcile annotation %q is not RFC3339 — Flux ignores a malformed stamp: %v", stamp, err)
 		}
 	})
+
+	// §30b: the same objects, arranged by what drives them. The join is
+	// computed from each Kustomization's own spec.sourceRef against the
+	// GitRepository the fixtures declare, so this asserts the chain a real
+	// API server produces rather than one a fake was told about.
+	t.Run("flux tree nests reconcilers under their source", func(t *testing.T) {
+		a.Press("g")
+		a.Type("flux")
+		a.Enter()
+		// The tree's own column header — never a row name, which the
+		// Kustomizations list also carries (harness rule: never wait on a
+		// string the screen you are leaving also shows).
+		a.WaitFor("SOURCE / RECONCILER", Settle)
+
+		a.WaitForAll(Settle, "kute-config", "GitRepo", "└─")
+
+		// Every Kustomization in the fixtures reconciles from kute-config,
+		// so each must appear *under* it rather than as its own chain.
+		frame := a.Frame()
+		sourceLine := -1
+		for i, line := range strings.Split(frame, "\n") {
+			if strings.Contains(line, "kute-config") && strings.Contains(line, "GitRepo") {
+				sourceLine = i
+			}
+			if sourceLine >= 0 && strings.Contains(line, "kute-workers") {
+				if !strings.Contains(line, "└─") {
+					t.Errorf("kute-workers is not nested under its source:\n%s", frame)
+				}
+				if i < sourceLine {
+					t.Errorf("a reconciler rendered above the source it hangs off:\n%s", frame)
+				}
+				return
+			}
+		}
+		t.Errorf("never found the kute-config chain:\n%s", frame)
+	})
 }
 
 // selectListRow moves the cursor down until want is the selected row in a

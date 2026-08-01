@@ -323,6 +323,9 @@ func gotoFuzzyItems(sess *Session, query string) []palette.Item {
 	corpus = append(corpus, gotoNamespaceItems(sess)...)
 	corpus = append(corpus, gotoWhoCanItem())
 	corpus = append(corpus, gotoOverviewItem())
+	if item, ok := gotoFluxTreeItem(sess); ok {
+		corpus = append(corpus, item)
+	}
 	corpus = append(corpus, gotoUpdateItem())
 
 	var pinned []palette.Item
@@ -388,6 +391,40 @@ func gotoOverviewItem() palette.Item {
 		Detail: "cluster · routing",
 		Data:   gotoTarget{action: gotoSwitchKind, kind: kube.KindOverview},
 	}
+}
+
+// gotoFluxTreeItem is §30b's synthetic "flux" goto result — the source →
+// reconciler tree. Like gotoWhoCanItem/gotoOverviewItem it has nothing of
+// its own to list (§30b is a computed join over kinds already in the
+// registry), so it joins the fuzzy corpus directly rather than through
+// gotoKindItems' Registry walk.
+//
+// Unlike those two it is *conditional*: a cluster with no Flux CRDs gets no
+// entry at all, per §30a's "zero chrome on a non-Flux cluster". The test is
+// the descriptors' own Flux flag — the same API-group recognition every
+// other Flux surface uses, never a kind-name match.
+func gotoFluxTreeItem(sess *Session) (palette.Item, bool) {
+	if !hasFluxKinds(sess) {
+		return palette.Item{}, false
+	}
+	return palette.Item{
+		Label:  "flux",
+		Detail: "tree · sources → reconcilers",
+		Data:   gotoTarget{action: gotoSwitchKind, kind: kube.KindFluxTree},
+	}, true
+}
+
+// hasFluxKinds reports whether this cluster serves any Flux kind at all.
+func hasFluxKinds(sess *Session) bool {
+	if sess == nil {
+		return false
+	}
+	for _, kind := range sess.Registry.Kinds() {
+		if desc, ok := sess.Registry.Descriptor(kind); ok && desc.Flux {
+			return true
+		}
+	}
+	return false
 }
 
 // gotoUpdateItem is 28b's synthetic ":update" goto result — like

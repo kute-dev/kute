@@ -164,7 +164,10 @@ func (m Model) retryIn() string {
 // A boolean, never a commit count: counting commits needs git log, and kute
 // reads no git remote (docs/flux-plan.md G1).
 func (m Model) driftNote() string {
-	if m.chn.SourceRevision == "" || m.chn.AppliedRevision == "" {
+	if m.chn.SourceRevision == "" || m.chn.AppliedRevision == "" || !m.chn.DriftComparable {
+		// Not comparable is not "in sync": a HelmRelease records a chart
+		// version where its source records an index digest, so the only
+		// honest answer is no answer (kube.FluxTracksSourceRevision).
 		return ""
 	}
 	if m.chn.SourceRevision == m.chn.AppliedRevision {
@@ -203,7 +206,11 @@ func (m Model) chainGrid(width int) string {
 	if m.chn.AppliedRevision != "" {
 		applied := val.Render(m.chn.AppliedRevision)
 		switch {
-		case m.chn.SourceRevision == "":
+		// Not comparable earns no verdict at all — neither "in sync" nor
+		// "source ahead". A HelmRelease's applied revision is a chart
+		// version, its source's is an index digest
+		// (kube.FluxTracksSourceRevision).
+		case m.chn.SourceRevision == "" || !m.chn.DriftComparable:
 		case m.chn.AppliedRevision == m.chn.SourceRevision:
 			// §31a's line that kills the most common Flux misdiagnosis:
 			// applied-but-unhealthy is not the same failure as not-applied.

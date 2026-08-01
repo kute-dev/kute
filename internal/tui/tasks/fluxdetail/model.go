@@ -54,13 +54,18 @@ type inventoryItem struct {
 
 // chain is §31a's middle band: what this object is wired to.
 type chain struct {
-	SourceKind       kube.ResourceKind
-	SourceName       string
-	SourceDisplay    string // "git/nebula-config"
-	Path             string
-	Interval         string
-	SourceRevision   string // the source's own artifact revision, shortened
-	AppliedRevision  string // what this reconciler last applied, shortened
+	SourceKind      kube.ResourceKind
+	SourceName      string
+	SourceDisplay   string // "git/nebula-config"
+	Path            string
+	Interval        string
+	SourceRevision  string // the source's own artifact revision, shortened
+	AppliedRevision string // what this reconciler last applied, shortened
+	// DriftComparable reports whether the two revisions above describe the
+	// same thing, and so whether their difference means anything. False for
+	// a HelmRelease, whose applied revision is a chart version while its
+	// source publishes an index digest — see kube.FluxTracksSourceRevision.
+	DriftComparable  bool
 	DependsOn        []dependency
 	InventoryMissing string // why there is no inventory, when there isn't
 }

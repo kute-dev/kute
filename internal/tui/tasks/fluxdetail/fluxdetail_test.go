@@ -208,3 +208,41 @@ func TestInventoryStatusIsAGlyphNotJustAColour(t *testing.T) {
 		t.Errorf("expected the failing workload to render %s in the inventory:\n%s", tui.GlyphFailed, view)
 	}
 }
+
+// TestHelmReleaseNeverClaimsDrift guards the chain grid's own version of
+// the comparison §30b's tree makes. A HelmRelease records a chart version
+// ("6.5.4") while the HelmRepository behind it publishes the digest of the
+// repo index — never equal, so a naive comparison reports "source ahead"
+// on every healthy Helm release, forever. Latent until the demo grew a
+// HelmRepository for its releases to point at.
+func TestHelmReleaseNeverClaimsDrift(t *testing.T) {
+	c := fake.NewDemo()
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups,
+		Location: tui.Location{Context: "microk8s-cluster", Namespace: "flux-system"}}
+	m := New(Config{Session: sess, Lister: c, Mutator: c,
+		Kind: kube.KindFluxHelmRelease, Namespace: "flux-system", Name: "podinfo"})
+	m.SetSize(120, 30)
+	upd, _ := m.Update(m.load()())
+	got := upd.(*Model)
+
+	// The precondition: the source resolved, so a comparison was possible.
+	if got.chn.SourceRevision == "" {
+		t.Fatal("the demo must give this release a HelmRepository with an artifact")
+	}
+	if got.chn.DriftComparable {
+		t.Error("a HelmRelease's applied revision is not in its source's vocabulary")
+	}
+	if note := got.driftNote(); note != "" {
+		t.Errorf("driftNote = %q, want silence — not comparable is not a verdict", note)
+	}
+	if view := plain(got.Render()); strings.Contains(view, "source ahead") {
+		t.Errorf("a healthy Helm release must not be reported as drifted:\n%s", view)
+	}
+
+	// And a Kustomization that genuinely is behind still reports it.
+	drifted := plain(demoModel(t, "nebula-infra").Render())
+	if !strings.Contains(drifted, "source ahead") {
+		t.Errorf("a Kustomization behind its GitRepository must still report drift:\n%s", drifted)
+	}
+}

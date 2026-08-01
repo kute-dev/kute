@@ -1,0 +1,413 @@
+package fluxtree
+
+import (
+	"context"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
+)
+
+// load reads every Flux kind the cluster serves and joins the reconcilers to
+// their sources.
+//
+// The read is cluster-wide (namespace "") because the chain is: a
+// Kustomization in one namespace routinely reconciles from a GitRepository
+// in flux-system, and a namespace-scoped read would show the reconciler as
+// an orphan. It is also *narrow* — only kinds the registry marks Flux, which
+// is a handful of discovered CRDs, never a walk of the registry. Starting
+// those informers is this screen's whole purpose; starting everything else's
+// would be the failure CLAUDE.md's lazy-informer rule exists to prevent.
+func (m Model) load() tea.Cmd {
+	lister := m.lister
+	registry := m.registry()
+	timeout := m.timeout
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		sourceKinds, reconcilerKinds := fluxKinds(registry)
+		read := append(append([]kube.ResourceKind{}, sourceKinds...), reconcilerKinds...)
+
+		sources := map[string]*group{}
+		var order []string
+		for _, kind := range sourceKinds {
+			desc, ok := registry.Descriptor(kind)
+			if !ok {
+				continue
+			}
+			objs, err := lister.ListRaw(ctx, kind, "")
+			if err != nil {
+				return loadedMsg{err: err, kinds: read}
+			}
+			for _, obj := range objs {
+				row := sourceRowOf(desc, kind, obj)
+				key := joinKey(kind, row.namespace, row.name)
+				sources[key] = &group{head: row}
+				order = append(order, key)
+			}
+		}
+
+		// A reconciler whose sourceRef resolves to nothing still has to
+		// appear — that is a real broken chain, and the failure this screen
+		// is for. It gets a synthetic head naming the reference itself.
+		for _, kind := range reconcilerKinds {
+			desc, ok := registry.Descriptor(kind)
+			if !ok {
+				continue
+			}
+			objs, err := lister.ListRaw(ctx, kind, "")
+			if err != nil {
+				return loadedMsg{err: err, kinds: read}
+			}
+			for _, obj := range objs {
+				row := reconcilerRowOf(desc, kind, obj)
+				key := joinKey(row.sourceKind, row.sourceNamespace, row.sourceName)
+				g, ok := sources[key]
+				if !ok {
+					g = &group{head: missingSourceRow(row)}
+					sources[key] = g
+					order = append(order, key)
+				}
+				// Drift is a boolean, never a count: "N commits ahead" needs
+				// git log, which kute never has (docs/flux-plan.md G1). And
+				// it is only computed where the two revisions are the same
+				// kind of thing — see kube.FluxTracksSourceRevision.
+				if kube.FluxTracksSourceRevision(kind.APIKind()) &&
+					g.head.revisionKey != "" && row.revisionKey != "" && g.head.revisionKey != row.revisionKey {
+					row.revision += " · source ahead"
+				}
+				g.children = append(g.children, row)
+			}
+		}
+
+		groups := make([]group, 0, len(order))
+		for _, key := range order {
+			g := sources[key]
+			sortRows(g.children)
+			groups = append(groups, *g)
+		}
+		sortGroups(groups)
+		return loadedMsg{groups: groups, kinds: read}
+	}
+}
+
+// registry is the kind catalog to read Flux descriptors from.
+func (m Model) registry() resources.Registry {
+	if m.session == nil {
+		return resources.DefaultRegistry()
+	}
+	return m.session.Registry
+}
+
+// fluxKinds splits the registry's Flux descriptors into the two halves of
+// the chain, by API group — never by kind name, per §30a's recognition rule.
+// Notification-controller kinds (Alert, Provider, Receiver) are in neither:
+// they are not part of the fetch→apply chain this screen draws.
+func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.ResourceKind) {
+	for _, kind := range registry.Kinds() {
+		desc, ok := registry.Descriptor(kind)
+		if !ok || !desc.Flux {
+			continue
+		}
+		switch desc.APIGroup {
+		case kube.FluxGroupSource:
+			// HelmChart is an artifact of a HelmRelease, not a source an
+			// operator points anything at — it would double every Helm
+			// chain. The HelmRepository behind it is the real source.
+			if desc.Kind.APIKind() == "HelmChart" {
+				continue
+			}
+			sources = append(sources, kind)
+		case kube.FluxGroupKustomize, kube.FluxGroupHelm:
+			reconcilers = append(reconcilers, kind)
+		}
+	}
+	sort.Slice(sources, func(i, j int) bool { return sources[i] < sources[j] })
+	sort.Slice(reconcilers, func(i, j int) bool { return reconcilers[i] < reconcilers[j] })
+	return sources, reconcilers
+}
+
+// sourceRowOf projects one source object. Everything but the revision cell
+// is the descriptor's own §30a projection, unchanged.
+func sourceRowOf(desc resources.Descriptor, kind kube.ResourceKind, obj runtime.Object) treeRow {
+	row := baseRow(desc, kind, obj)
+	row.isSource = true
+	u, _ := obj.(*unstructured.Unstructured)
+	row.revisionKey = artifactRevision(u)
+	row.revision = sourceRevisionCell(desc.Kind.APIKind(), row.revisionKey, artifactUpdated(u))
+	return row
+}
+
+// reconcilerRowOf projects one Kustomization/HelmRelease and resolves the
+// sourceRef that decides which group it belongs to.
+func reconcilerRowOf(desc resources.Descriptor, kind kube.ResourceKind, obj runtime.Object) treeRow {
+	row := baseRow(desc, kind, obj)
+	u, _ := obj.(*unstructured.Unstructured)
+	row.revisionKey = appliedRevision(u)
+	if chart := chartName(u); chart != "" && row.revision != "–" {
+		// A HelmRelease's REVISION cell is a chart version on its own
+		// ("19.6.1"), which says nothing about *what* was installed.
+		row.revision = chart + " " + row.revision
+	}
+	row.sourceKind, row.sourceName, row.sourceNamespace = sourceRefOf(u, row.namespace)
+	return row
+}
+
+// baseRow copies the descriptor's own projected row — the same
+// resources.Row §30a's table renders — into this screen's shape. Nothing
+// about status, glyph or the condition message is re-derived here; that is
+// what keeps the two screens from ever disagreeing about an object.
+func baseRow(desc resources.Descriptor, kind kube.ResourceKind, obj runtime.Object) treeRow {
+	r := desc.Project(obj)
+	row := treeRow{
+		kind:       kind,
+		kindLabel:  kindLabel(desc.Kind.APIKind()),
+		namespace:  r.Namespace,
+		name:       r.Name,
+		glyph:      r.Glyph,
+		class:      r.Status,
+		subLine:    r.SubLine,
+		suspended:  r.Suspended,
+		revision:   "–",
+		reconciled: "–",
+	}
+	if r.GlyphClass != "" {
+		row.class = r.GlyphClass
+	}
+	// §30a's curated column order: name, ready, revision, source, reconciled, age.
+	if len(r.Cells) >= 5 {
+		row.revision, row.reconciled = r.Cells[2], r.Cells[4]
+	}
+	return row
+}
+
+// missingSourceRow is the synthetic head for a sourceRef that resolved to
+// nothing. It names the reference rather than inventing an object, and says
+// plainly what was looked for and not found.
+func missingSourceRow(child treeRow) treeRow {
+	name := child.sourceName
+	if name == "" {
+		name = "no source"
+	}
+	return treeRow{
+		kindLabel:  kindLabel(string(child.sourceKind)),
+		namespace:  child.sourceNamespace,
+		name:       name,
+		glyph:      "▲",
+		class:      resources.StatusWarn,
+		revision:   "–",
+		reconciled: "–",
+		subLine:    missingSubLine(child),
+		isSource:   true,
+		missing:    true,
+	}
+}
+
+func missingSubLine(child treeRow) string {
+	if child.sourceName == "" {
+		return "no sourceRef — nothing tells this reconciler what to apply"
+	}
+	return "source not found: " + strings.ToLower(string(child.sourceKind)) + "/" + child.sourceName +
+		" in " + child.sourceNamespace
+}
+
+// sourceRevisionCell is §30b's REVISION cell for a source: what it fetched,
+// and when.
+//
+// A HelmRepository's artifact revision is the digest of the repo index — 71
+// characters of hex that identify nothing a human compares — so it reads
+// "index", the mockup's own word for it. Every other source carries a git
+// revision worth naming.
+func sourceRevisionCell(apiKind, revision string, updated time.Time) string {
+	text := revision
+	switch {
+	case apiKind == "HelmRepository":
+		text = "index"
+	case text == "":
+		text = "–"
+	default:
+		text = kube.ShortFluxRevision(text)
+	}
+	if !updated.IsZero() {
+		text += " · " + shortAge(time.Since(updated)) + " ago"
+	}
+	return text
+}
+
+// sourceRefOf reads the reference that makes this object part of a chain: a
+// Kustomization's own spec.sourceRef, or a HelmRelease's
+// spec.chart.spec.sourceRef (its chart names the repository it comes from).
+// A ref with no namespace of its own defaults to the object's, which is
+// Flux's own rule.
+func sourceRefOf(u *unstructured.Unstructured, defaultNS string) (kube.ResourceKind, string, string) {
+	if u == nil {
+		return "", "", defaultNS
+	}
+	for _, path := range [][]string{
+		{"spec", "sourceRef"},
+		{"spec", "chart", "spec", "sourceRef"},
+	} {
+		ref, ok, _ := unstructured.NestedMap(u.Object, path...)
+		if !ok {
+			continue
+		}
+		kind, _, _ := unstructured.NestedString(ref, "kind")
+		name, _, _ := unstructured.NestedString(ref, "name")
+		if name == "" {
+			continue
+		}
+		ns, _, _ := unstructured.NestedString(ref, "namespace")
+		if ns == "" {
+			ns = defaultNS
+		}
+		return kube.ResourceKind(kind), name, ns
+	}
+	return "", "", defaultNS
+}
+
+func artifactRevision(u *unstructured.Unstructured) string {
+	if u == nil {
+		return ""
+	}
+	rev, _, _ := unstructured.NestedString(u.Object, "status", "artifact", "revision")
+	return rev
+}
+
+func artifactUpdated(u *unstructured.Unstructured) time.Time {
+	if u == nil {
+		return time.Time{}
+	}
+	ts, _, _ := unstructured.NestedString(u.Object, "status", "artifact", "lastUpdateTime")
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// appliedRevision is what a reconciler has actually applied — the left half
+// of the drift comparison. HelmRelease reports it as lastAttemptedRevision;
+// its lastAppliedRevision is null.
+func appliedRevision(u *unstructured.Unstructured) string {
+	if u == nil {
+		return ""
+	}
+	for _, path := range [][]string{
+		{"status", "lastAppliedRevision"},
+		{"status", "lastAttemptedRevision"},
+	} {
+		if v, _, _ := unstructured.NestedString(u.Object, path...); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func chartName(u *unstructured.Unstructured) string {
+	if u == nil {
+		return ""
+	}
+	name, _, _ := unstructured.NestedString(u.Object, "spec", "chart", "spec", "chart")
+	return name
+}
+
+// kindLabel is the KIND cell — the short name the mockup uses, not the API
+// kind, which would push the column twice as wide for no added meaning.
+func kindLabel(apiKind string) string {
+	switch apiKind {
+	case "GitRepository":
+		return "GitRepo"
+	case "HelmRepository":
+		return "HelmRepo"
+	case "OCIRepository":
+		return "OCIRepo"
+	case "Kustomization":
+		return "Kustomize"
+	case "":
+		return "–"
+	default:
+		return apiKind
+	}
+}
+
+func joinKey(kind kube.ResourceKind, namespace, name string) string {
+	return string(kind) + "/" + namespace + "/" + name
+}
+
+// sortRows orders a group's reconcilers unhealthy-first, then by name — the
+// same triage order §30a's list uses.
+func sortRows(rows []treeRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		ri, rj := statusRank(rows[i].class), statusRank(rows[j].class)
+		if ri != rj {
+			return ri < rj
+		}
+		if rows[i].namespace != rows[j].namespace {
+			return rows[i].namespace < rows[j].namespace
+		}
+		return rows[i].name < rows[j].name
+	})
+}
+
+// sortGroups puts the chains that need attention first: a group with
+// anything unhealthy in it outranks a clean one, and among equals the worst
+// row decides.
+func sortGroups(groups []group) {
+	sort.SliceStable(groups, func(i, j int) bool {
+		ri, rj := groupRank(groups[i]), groupRank(groups[j])
+		if ri != rj {
+			return ri < rj
+		}
+		if groups[i].head.namespace != groups[j].head.namespace {
+			return groups[i].head.namespace < groups[j].head.namespace
+		}
+		return groups[i].head.name < groups[j].head.name
+	})
+}
+
+func groupRank(g group) int {
+	worst := statusRank(g.head.class)
+	for _, c := range g.children {
+		worst = min(worst, statusRank(c.class))
+	}
+	return worst
+}
+
+// statusRank orders the classes worst-first. Suspended (Neutral) sits
+// between failing and warning rather than last: a paused reconciler is
+// drifting, not finished, so it must not sink below the healthy rows.
+func statusRank(c resources.StatusClass) int {
+	switch c {
+	case resources.StatusFail:
+		return 0
+	case resources.StatusNeutral:
+		return 1
+	case resources.StatusWarn:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// shortAge renders a duration the way every other compact age cell does.
+func shortAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "0m"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h"
+	default:
+		return strconv.Itoa(int(d.Hours()/24)) + "d"
+	}
+}

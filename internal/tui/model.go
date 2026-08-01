@@ -102,6 +102,18 @@ type TaskScope struct {
 	// or any removal.
 	ConfigMapRestartConsumers bool
 	ConfigMapConsumers        []kube.ConfigMapConsumerRef
+	// FluxSourceKind/FluxSourceName/FluxSourceNamespace turn a
+	// "flux-reconcile" into §30b's *with-source* reconcile: the source is
+	// annotated first, then the reconciler. Empty on §30a's plain reconcile
+	// and on a reconcile of a source row, which is already the source.
+	//
+	// Two writes behind one verb, exactly as ConfigMapRestartConsumers above
+	// chains a rollout-restart onto a ConfigMap patch — the alternative, a
+	// second verb, would put two spellings of "reconcile" in the registry
+	// for what a user experiences as one key.
+	FluxSourceKind      string
+	FluxSourceName      string
+	FluxSourceNamespace string
 }
 
 // TaskAction describes an operation available from a task screen.

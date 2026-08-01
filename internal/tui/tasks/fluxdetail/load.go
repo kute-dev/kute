@@ -78,6 +78,7 @@ func buildChain(ctx context.Context, lister resources.RawLister, u *unstructured
 		Path:            nested(u, "spec", "path"),
 		Interval:        nested(u, "spec", "interval"),
 		AppliedRevision: appliedRevision(u),
+		DriftComparable: kube.FluxTracksSourceRevision(u.GetKind()),
 	}
 
 	for _, base := range [][]string{

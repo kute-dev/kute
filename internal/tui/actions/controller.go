@@ -301,8 +301,17 @@ func (c *Controller) execute() tea.Cmd {
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
 				action.Scope.ResourceName, action.Scope.Verb == "flux-suspend")
 		case "flux-reconcile":
-			err = mutator.RequestFluxReconcile(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
+			// §30b's with-source reconcile stamps the source first: asking a
+			// reconciler to sync against an artifact that is still stale
+			// just re-applies what it already has.
+			if action.Scope.FluxSourceName != "" {
+				err = mutator.RequestFluxReconcile(context.Background(),
+					kube.ResourceKind(action.Scope.FluxSourceKind), action.Scope.FluxSourceNamespace, action.Scope.FluxSourceName)
+			}
+			if err == nil {
+				err = mutator.RequestFluxReconcile(context.Background(),
+					kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
+			}
 		case "rollout-restart":
 			err = mutator.RolloutRestart(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)

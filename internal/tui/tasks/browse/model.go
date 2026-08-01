@@ -170,6 +170,11 @@ type OpenConfigMapDataFunc func(namespace, name string, width, height int) (tea.
 // list).
 type OpenOverviewFunc func(width, height int) (tea.Model, tea.Cmd)
 
+// OpenFluxTreeFunc pushes tasks/fluxtree (§30b) — the `g "flux"` goto entry
+// point, same no-argument shape as OpenOverviewFunc since the tree is
+// cluster-wide and carries no row scope of its own.
+type OpenFluxTreeFunc func(width, height int) (tea.Model, tea.Cmd)
+
 // Config are the dependencies browse needs, per repo convention
 // (package-local Config struct, interface-typed fields, New fills zero
 // values).
@@ -197,6 +202,7 @@ type Config struct {
 	OpenSecretData     OpenSecretDataFunc
 	OpenConfigMapData  OpenConfigMapDataFunc
 	OpenOverview       OpenOverviewFunc
+	OpenFluxTree       OpenFluxTreeFunc
 	// Forwards is the app-wide port-forward registry (13c's stop/restart/
 	// stop-all verbs act on it directly, unlike OpenForward's picker push) —
 	// nil disables those verbs the same way a nil Mutator disables delete.
@@ -236,6 +242,7 @@ type Model struct {
 	openSecretData     OpenSecretDataFunc
 	openConfigMapData  OpenConfigMapDataFunc
 	openOverview       OpenOverviewFunc
+	openFluxTree       OpenFluxTreeFunc
 	forwards           *kube.ForwardManager
 	retrier            ConnRetrier
 	timeout            time.Duration
@@ -580,6 +587,7 @@ func New(cfg Config) Model {
 		openSecretData:     cfg.OpenSecretData,
 		openConfigMapData:  cfg.OpenConfigMapData,
 		openOverview:       cfg.OpenOverview,
+		openFluxTree:       cfg.OpenFluxTree,
 		forwards:           cfg.Forwards,
 		retrier:            cfg.Retrier,
 		timeout:            cfg.LoadTimeout,

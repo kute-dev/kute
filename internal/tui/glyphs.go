@@ -33,4 +33,11 @@ const (
 	// label" warning glyph (`⚠`), rendered ahead of the joined label row's
 	// "selector · svc/x" note.
 	GlyphSelectorJoin = "⚠"
+
+	// GlyphSuspended is §30a/§30b's paused-reconciliation marker (`‖`) — the
+	// one status glyph Flux adds. resources/flux.go can't reference it (that
+	// package must not import tui, see resources.go's own note), so the
+	// projection carries the same rune as a literal and this constant serves
+	// the tui-side surfaces: §30b's strip, and any future one.
+	GlyphSuspended = "‖"
 )

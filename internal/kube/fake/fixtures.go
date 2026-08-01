@@ -1363,6 +1363,8 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 			"HelmRelease", "helmreleases", "Namespaced", "v2", true, readyCols, crdAge),
 		demoCRD("gitrepositories."+kube.FluxGroupSource, kube.FluxGroupSource,
 			"GitRepository", "gitrepositories", "Namespaced", "v1", true, sourceCols, crdAge),
+		demoCRD("helmrepositories."+kube.FluxGroupSource, kube.FluxGroupSource,
+			"HelmRepository", "helmrepositories", "Namespaced", "v1", true, sourceCols, crdAge),
 	)
 	c.SeedDiscovered(demoDiscoveredKind("Kustomization", "kustomizations",
 		kube.FluxGroupKustomize, "v1", "kustomizations."+kube.FluxGroupKustomize, false, readyCols))
@@ -1370,6 +1372,8 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		kube.FluxGroupHelm, "v2", "helmreleases."+kube.FluxGroupHelm, false, readyCols))
 	c.SeedDiscovered(demoDiscoveredKind("GitRepository", "gitrepositories",
 		kube.FluxGroupSource, "v1", "gitrepositories."+kube.FluxGroupSource, false, sourceCols))
+	c.SeedDiscovered(demoDiscoveredKind("HelmRepository", "helmrepositories",
+		kube.FluxGroupSource, "v1", "helmrepositories."+kube.FluxGroupSource, false, sourceCols))
 
 	const (
 		ns      = "flux-system"
@@ -1381,6 +1385,22 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.Seed(kube.ResourceKind("GitRepository"),
 		demoFluxSource("GitRepository", kube.FluxGroupSource+"/v1", gitRepo, ns,
 			"https://github.com/example/nebula-config", headRev, age(148*24*time.Hour), age(3*time.Minute)),
+	)
+
+	// The two chart repositories the HelmReleases below actually name. §30b
+	// nests each reconciler under the source it reconciles *from*, so
+	// without these the Helm half of the tree would render as two orphaned
+	// chains — and a HelmRepository's artifact revision is a bare index
+	// digest, the case §30b's REVISION cell renders as the word "index".
+	c.Seed(kube.ResourceKind("HelmRepository"),
+		demoFluxSource("HelmRepository", kube.FluxGroupSource+"/v1", "bitnami", ns,
+			"https://charts.bitnami.com/bitnami",
+			"sha256:d83a8a3354d98907a55beba524407a0b94d319623d0370a65fcd390e68db9852",
+			age(148*24*time.Hour), age(14*time.Minute)),
+		demoFluxSource("HelmRepository", kube.FluxGroupSource+"/v1", "podinfo", ns,
+			"https://stefanprodan.github.io/podinfo",
+			"sha256:9d1e5f0a2c3b4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70819203040506",
+			age(120*24*time.Hour), age(52*time.Minute)),
 	)
 
 	c.Seed(kube.ResourceKind("Kustomization"),
@@ -1402,10 +1422,16 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 				"Applied revision: "+oldRev, age(6*24*time.Hour))),
 		// ◌ reconciling — Ready=False *and* Reconciling=True, which the
 		// generic CRD read renders as a red failure.
+		//
+		// Deliberately minute-scale, not seconds: Flux writes
+		// lastTransitionTime as RFC3339, which truncates to the second, so a
+		// sub-minute age renders "20s"/"21s" depending on where in the
+		// current second a render lands — a coin flip for any golden that
+		// includes this row.
 		demoKustomization("nebula-apps", ns, gitRepo, "./clusters/stage/apps", headRev, false,
-			age(148*24*time.Hour), age(20*time.Second),
-			fluxCond("Ready", false, "Progressing", "building manifests", age(20*time.Second)),
-			fluxCond("Reconciling", true, "ProgressingWithRetry", "building manifests", age(20*time.Second))),
+			age(148*24*time.Hour), age(90*time.Second),
+			fluxCond("Ready", false, "Progressing", "building manifests", age(90*time.Second)),
+			fluxCond("Reconciling", true, "ProgressingWithRetry", "building manifests", age(90*time.Second))),
 		// ● ready
 		demoKustomization("flux-system", ns, gitRepo, "./flux", headRev, false,
 			age(148*24*time.Hour), age(time.Minute), fluxCond("Ready", true, "ReconciliationSucceeded",
