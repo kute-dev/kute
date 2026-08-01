@@ -448,6 +448,27 @@ One instance per status branch, all visible in one screenshot: ready, reconcilin
 
 ---
 
+## Fixtures — landed 2026-08-01
+
+`demoFluxFixtures` (`internal/kube/fake/fixtures.go`) seeds the three CRDs a
+real cluster serves, with the printer columns measured on one, plus one
+instance per branch of §30a's precedence: failed, reconciling, suspended
+(carrying a **stale `Ready=True`**, the fixture that proves suspension
+outranks a frozen condition), and ready. Flux's HelmReleases are seeded
+under `kube.KindFluxHelmRelease` — the one place the fake diverges from the
+real cluster, which resolves by API group — so `--demo` shows both
+HelmRelease lists coexisting, which is the whole point of T6.
+
+§32a events are seeded too: reconcile events carrying the revision
+annotation, plus a source-controller `stored artifact for commit` message,
+so the timeline's `◆` rows and their commit subjects are demoable.
+
+**One bug this surfaced:** `fake.Cluster`'s two event readers built
+`kube.Event` by hand and dropped `Annotations`, so every §32a revision row
+silently vanished under the fake while the real cluster worked. Fixed in
+both readers, with `TestDemoFluxEventsCarryTheRevisionAnnotation` guarding
+it.
+
 ## T13 — `test(e2e): cover the Flux list, the Helm-release name collision, suspend and reconcile` `[ ]`
 
 Fixtures `52-flux-crds.yaml` + `53-flux-objects.yaml` with hand-written `spec.suspend`/`status.conditions`/`status.inventory`. **No Flux controller** — nothing reconciles, which is exactly what makes assertions durable under the "never assert on transient state" rule. Extend `scripts/e2e-cluster.sh` `apply_fixtures` (`:66-76`) skip list + a `wait --for=condition=Established`.

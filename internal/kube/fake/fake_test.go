@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -441,3 +442,97 @@ func TestDemoDiscoveredKindsCarryTheirOwnAPIGroup(t *testing.T) {
 // kube.Mutator, the only formally exported multi-method consumer contract
 // it stands in for today.
 var _ kube.Mutator = (*Cluster)(nil)
+
+// TestDemoSeedsFluxKinds guards --demo's §30a fixtures. The demo cluster is
+// the only way to exercise the Flux screens without a live Flux install, so
+// a fixture that silently stops being seeded takes the screens with it.
+func TestDemoSeedsFluxKinds(t *testing.T) {
+	t.Parallel()
+	c := NewDemo()
+	ctx := context.Background()
+
+	for kind, wantMin := range map[kube.ResourceKind]int{
+		"Kustomization":          5,
+		kube.KindFluxHelmRelease: 2,
+		"GitRepository":          1,
+	} {
+		objs, err := c.ListRaw(ctx, kind, "flux-system")
+		if err != nil {
+			t.Fatalf("ListRaw(%s): %v", kind, err)
+		}
+		if len(objs) < wantMin {
+			t.Errorf("%s: seeded %d objects, want at least %d", kind, len(objs), wantMin)
+		}
+	}
+
+	// Flux's HelmReleases must be seeded under the substituted registry
+	// kind. Seeding the bare "HelmRelease" would route them into §18a's
+	// Helm-3 list — the exact collision §30a exists to prevent.
+	if objs, _ := c.ListRaw(ctx, kube.ResourceKind("HelmRelease"), "flux-system"); len(objs) != 0 {
+		t.Errorf("Flux HelmReleases must not be seeded under the bare API Kind, found %d", len(objs))
+	}
+
+	// Every branch of §30a's status precedence needs a fixture, or the demo
+	// can't show what the feature is for.
+	var suspended, stalled, reconciling bool
+	objs, _ := c.ListRaw(ctx, kube.ResourceKind("Kustomization"), "flux-system")
+	for _, o := range objs {
+		u := o.(*unstructured.Unstructured)
+		if v, _, _ := unstructured.NestedBool(u.Object, "spec", "suspend"); v {
+			suspended = true
+		}
+		conds, _, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
+		for _, cd := range conds {
+			cm := cd.(map[string]any)
+			typ, _, _ := unstructured.NestedString(cm, "type")
+			st, _, _ := unstructured.NestedString(cm, "status")
+			if typ == "Reconciling" && st == "True" {
+				reconciling = true
+			}
+		}
+	}
+	hrs, _ := c.ListRaw(ctx, kube.KindFluxHelmRelease, "flux-system")
+	for _, o := range hrs {
+		conds, _, _ := unstructured.NestedSlice(o.(*unstructured.Unstructured).Object, "status", "conditions")
+		for _, cd := range conds {
+			cm := cd.(map[string]any)
+			typ, _, _ := unstructured.NestedString(cm, "type")
+			st, _, _ := unstructured.NestedString(cm, "status")
+			if typ == "Stalled" && st == "True" {
+				stalled = true
+			}
+		}
+	}
+	if !suspended || !stalled || !reconciling {
+		t.Errorf("demo must cover every status branch: suspended=%v stalled=%v reconciling=%v",
+			suspended, stalled, reconciling)
+	}
+}
+
+// TestDemoFluxEventsCarryTheRevisionAnnotation pins the fake's event
+// readers: §32a reads the revision from metadata.annotations, so a reader
+// that drops them makes every revision row disappear under the fake while
+// the real cluster still works.
+func TestDemoFluxEventsCarryTheRevisionAnnotation(t *testing.T) {
+	t.Parallel()
+	c := NewDemo()
+	events, err := c.NamespaceEvents(context.Background(), "flux-system")
+	if err != nil {
+		t.Fatalf("NamespaceEvents: %v", err)
+	}
+	var withRevision, withSubject int
+	for _, e := range events {
+		if kube.FluxEventRevision(e) != "" {
+			withRevision++
+		}
+		if kube.FluxCommitSubject(e.Message) != "" {
+			withSubject++
+		}
+	}
+	if withRevision < 2 {
+		t.Errorf("expected at least 2 events carrying a Flux revision annotation, got %d", withRevision)
+	}
+	if withSubject < 1 {
+		t.Errorf("expected a source-controller event carrying a commit subject, got %d", withSubject)
+	}
+}

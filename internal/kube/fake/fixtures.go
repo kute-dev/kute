@@ -157,6 +157,7 @@ func NewDemo() *Cluster {
 	demoPrometheusFixtures(c, age)
 	demoArgoCDFixtures(c, age)
 	demoGatewayAPIFixtures(c, age)
+	demoFluxFixtures(c, age)
 	demoHelmReleaseFixtures(c, age)
 
 	// "ghost" exercises 23a's ▲ "0 ready" backend state: a Service whose
@@ -1328,4 +1329,209 @@ func DemoChartIndex() *helmrepo.Cache {
 		"redis":                 "18.1.5",
 		"kube-prometheus-stack": "58.2.1",
 	})
+}
+
+// demoFluxFixtures seeds §30a's Flux kinds: the three CRDs a real cluster
+// serves for kustomize/source/helm, plus one instance per branch of §30a's
+// status precedence so the list, its strip and its sub-lines are all
+// exercised in --demo.
+//
+// Printer columns match what real Flux CRDs declare, measured across all 11
+// on a live cluster: Ready, Status and Age everywhere, plus URL on the
+// source kinds. §30a's own list ignores them (it is a curated kind), but
+// 14b's CRDs list renders them, so getting them wrong would show there.
+//
+// The HelmRelease instances are seeded under kube.KindFluxHelmRelease, not
+// "HelmRelease" — fake.Cluster keys its object map by registry kind while
+// the real cluster resolves by API group, and this is the one place that
+// difference is visible. Seeding the bare Kind would put Flux's releases
+// into §18a's Helm-3 list, which is the exact bug §30a exists to prevent.
+func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
+	crdAge := age(60 * 24 * time.Hour)
+	readyCols := []kube.PrinterColumn{
+		{Name: "Ready", Type: "string", JSONPath: `.status.conditions[?(@.type=="Ready")].status`},
+		{Name: "Status", Type: "string", JSONPath: `.status.conditions[?(@.type=="Ready")].message`},
+	}
+	sourceCols := append([]kube.PrinterColumn{
+		{Name: "URL", Type: "string", JSONPath: ".spec.url"},
+	}, readyCols...)
+
+	c.Seed(kube.KindCustomResourceDefinition,
+		demoCRD("kustomizations."+kube.FluxGroupKustomize, kube.FluxGroupKustomize,
+			"Kustomization", "kustomizations", "Namespaced", "v1", true, readyCols, crdAge),
+		demoCRD("helmreleases."+kube.FluxGroupHelm, kube.FluxGroupHelm,
+			"HelmRelease", "helmreleases", "Namespaced", "v2", true, readyCols, crdAge),
+		demoCRD("gitrepositories."+kube.FluxGroupSource, kube.FluxGroupSource,
+			"GitRepository", "gitrepositories", "Namespaced", "v1", true, sourceCols, crdAge),
+	)
+	c.SeedDiscovered(demoDiscoveredKind("Kustomization", "kustomizations",
+		kube.FluxGroupKustomize, "v1", "kustomizations."+kube.FluxGroupKustomize, false, readyCols))
+	c.SeedDiscovered(demoDiscoveredKind("HelmRelease", "helmreleases",
+		kube.FluxGroupHelm, "v2", "helmreleases."+kube.FluxGroupHelm, false, readyCols))
+	c.SeedDiscovered(demoDiscoveredKind("GitRepository", "gitrepositories",
+		kube.FluxGroupSource, "v1", "gitrepositories."+kube.FluxGroupSource, false, sourceCols))
+
+	const (
+		ns      = "flux-system"
+		gitRepo = "flux-system"
+		headRev = "main@sha1:8f3c2a1b4d5e6f708192a3b4c5d6e7f809102030"
+		oldRev  = "main@sha1:2b91f04c5d6e7f8091a2b3c4d5e6f70819203040"
+	)
+
+	c.Seed(kube.ResourceKind("GitRepository"),
+		demoFluxSource("GitRepository", kube.FluxGroupSource+"/v1", gitRepo, ns,
+			"https://github.com/example/aim-config", headRev, age(148*24*time.Hour), age(3*time.Minute)),
+	)
+
+	c.Seed(kube.ResourceKind("Kustomization"),
+		// ✕ failed — the design's own example, health check verbatim.
+		demoKustomization("aim-workers", ns, gitRepo, "./clusters/stage/workers", headRev, false,
+			age(148*24*time.Hour), age(4*time.Minute), fluxCond("Ready", false, "HealthCheckFailed",
+				"health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'", age(4*time.Minute))),
+		// ‖ suspended, carrying a *stale* Ready=True — the fixture that
+		// proves suspension outranks a frozen condition.
+		demoKustomization("aim-infra", ns, gitRepo, "./clusters/stage/infra", oldRev, true,
+			age(148*24*time.Hour), age(6*24*time.Hour), fluxCond("Ready", true, "ReconciliationSucceeded",
+				"Applied revision: "+oldRev, age(6*24*time.Hour))),
+		// ◌ reconciling — Ready=False *and* Reconciling=True, which the
+		// generic CRD read renders as a red failure.
+		demoKustomization("aim-apps", ns, gitRepo, "./clusters/stage/apps", headRev, false,
+			age(148*24*time.Hour), age(20*time.Second),
+			fluxCond("Ready", false, "Progressing", "building manifests", age(20*time.Second)),
+			fluxCond("Reconciling", true, "ProgressingWithRetry", "building manifests", age(20*time.Second))),
+		// ● ready
+		demoKustomization("flux-system", ns, gitRepo, "./flux", headRev, false,
+			age(148*24*time.Hour), age(time.Minute), fluxCond("Ready", true, "ReconciliationSucceeded",
+				"Applied revision: "+headRev, age(time.Minute))),
+		demoKustomization("observability", ns, gitRepo, "./clusters/stage/observability", headRev, false,
+			age(120*24*time.Hour), age(2*time.Minute), fluxCond("Ready", true, "ReconciliationSucceeded",
+				"Applied revision: "+headRev, age(2*time.Minute))),
+	)
+
+	c.Seed(kube.KindFluxHelmRelease,
+		demoFluxHelmRelease("podinfo", ns, "podinfo", "6.5.4", "HelmRepository", "podinfo",
+			age(90*24*time.Hour), age(31*time.Minute), fluxCond("Ready", true, "InstallSucceeded",
+				"Helm install succeeded for release podinfo/podinfo.v1 with chart podinfo@6.5.4", age(31*time.Minute))),
+		// ✕ stalled — terminal, distinct from a retrying failure.
+		demoFluxHelmRelease("aim-redis", ns, "redis", "19.6.1", "HelmRepository", "bitnami",
+			age(60*24*time.Hour), age(12*time.Minute),
+			fluxCond("Ready", false, "InstallFailed", "Helm install failed: timed out waiting for the condition", age(12*time.Minute)),
+			fluxCond("Stalled", true, "RetriesExhausted", "Failed to install after 3 attempts", age(12*time.Minute))),
+	)
+
+	// §32a: reconcile events carrying the revision annotation, plus the
+	// source-controller message the commit subject is parsed out of.
+	c.Seed(kube.KindEvent,
+		demoFluxRevisionEvent("flux-system-rev-1", ns, "Kustomization", "flux-system",
+			"kustomize.toolkit.fluxcd.io/revision", headRev,
+			"Reconciliation finished in 1.4s, next run in 10m0s", age(time.Minute)),
+		demoFluxRevisionEvent("aim-workers-rev-1", ns, "Kustomization", "aim-workers",
+			"kustomize.toolkit.fluxcd.io/revision", headRev,
+			"HelmRelease/aim-stage/aim-worker configured", age(4*time.Minute)),
+		demoEvent("git-artifact-1", ns, "GitRepository", gitRepo, "Normal", "GitOperationSucceeded",
+			"stored artifact for commit 'fix: raise worker memory limit (#412)'", 1, age(3*time.Minute)),
+	)
+}
+
+// fluxCond builds one Flux status condition. lastTransitionTime is set
+// because §30a's RECONCILED column reads it — a condition without one
+// renders "–", which is right on a real object that has none and wrong as a
+// fixture default.
+func fluxCond(typ string, ok bool, reason, message string, transition metav1.Time) map[string]any {
+	status := "True"
+	if !ok {
+		status = "False"
+	}
+	return map[string]any{
+		"type": typ, "status": status, "reason": reason, "message": message,
+		"lastTransitionTime": transition.UTC().Format(time.RFC3339),
+	}
+}
+
+// fluxStatus assembles a status block from conditions plus extra fields.
+func fluxStatus(conds []map[string]any, extra map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range extra {
+		out[k] = v
+	}
+	list := make([]any, len(conds))
+	for i, c := range conds {
+		list[i] = c
+	}
+	out["conditions"] = list
+	return out
+}
+
+func demoFluxObject(apiVersion, kind, name, ns string, created metav1.Time, spec, status map[string]any) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": apiVersion,
+		"kind":       kind,
+		"metadata": map[string]any{
+			"name": name, "namespace": ns,
+			"creationTimestamp": created.UTC().Format(time.RFC3339),
+		},
+		"spec":   spec,
+		"status": status,
+	}}
+}
+
+// demoKustomization builds one kustomize.toolkit.fluxcd.io/v1 Kustomization.
+// spec.suspend is only set when true, matching the real shape where an
+// unsuspended object omits the field rather than setting it false.
+func demoKustomization(name, ns, source, path, applied string, suspend bool, created, _ metav1.Time, conds ...map[string]any) *unstructured.Unstructured {
+	spec := map[string]any{
+		"interval":  "5m",
+		"path":      path,
+		"prune":     true,
+		"sourceRef": map[string]any{"kind": "GitRepository", "name": source},
+	}
+	if suspend {
+		spec["suspend"] = true
+	}
+	return demoFluxObject(kube.FluxGroupKustomize+"/v1", "Kustomization", name, ns, created,
+		spec, fluxStatus(conds, map[string]any{"lastAppliedRevision": applied, "lastAttemptedRevision": applied}))
+}
+
+// demoFluxHelmRelease builds one helm.toolkit.fluxcd.io/v2 HelmRelease.
+// lastAppliedRevision is deliberately absent — a real HelmRelease leaves it
+// null and reports its version through status.history, which is exactly the
+// fallback §30a's REVISION column has to take.
+func demoFluxHelmRelease(name, ns, chart, version, sourceKind, sourceName string, created, _ metav1.Time, conds ...map[string]any) *unstructured.Unstructured {
+	spec := map[string]any{
+		"interval": "15m",
+		"chart": map[string]any{"spec": map[string]any{
+			"chart": chart, "version": version,
+			"sourceRef": map[string]any{"kind": sourceKind, "name": sourceName, "namespace": "flux-system"},
+		}},
+	}
+	status := fluxStatus(conds, map[string]any{
+		"lastAttemptedRevision": version,
+		"history": []any{map[string]any{
+			"chartName": chart, "chartVersion": version, "version": int64(1),
+		}},
+	})
+	return demoFluxObject(kube.FluxGroupHelm+"/v2", "HelmRelease", name, ns, created, spec, status)
+}
+
+// demoFluxSource builds one source.toolkit.fluxcd.io GitRepository, whose
+// revision lives in status.artifact rather than a lastAppliedRevision.
+func demoFluxSource(kind, apiVersion, name, ns, url, revision string, created, fetched metav1.Time) *unstructured.Unstructured {
+	return demoFluxObject(apiVersion, kind, name, ns, created,
+		map[string]any{"interval": "1m", "url": url, "ref": map[string]any{"branch": "main"}},
+		fluxStatus(
+			[]map[string]any{fluxCond("Ready", true, "Succeeded", "stored artifact for revision '"+revision+"'", fetched)},
+			map[string]any{"artifact": map[string]any{
+				"revision":       revision,
+				"lastUpdateTime": fetched.UTC().Format(time.RFC3339),
+			}},
+		))
+}
+
+// demoFluxRevisionEvent builds a reconcile Event carrying §32a's revision
+// annotation — the exact shape a real Flux controller emits, where the
+// revision is data on the event rather than prose inside its message.
+func demoFluxRevisionEvent(name, ns, kind, objName, annKey, revision, message string, last metav1.Time) *corev1.Event {
+	ev := demoEvent(name, ns, kind, objName, "Normal", "ReconciliationSucceeded", message, 1, last)
+	ev.Annotations = map[string]string{annKey: revision}
+	return ev
 }

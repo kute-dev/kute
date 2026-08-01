@@ -736,6 +736,10 @@ func (c *Cluster) ObjectEvents(ctx context.Context, namespace string, kind kube.
 			Count:     max32(ev.Count, 1),
 			FirstSeen: ev.FirstTimestamp.Time,
 			LastSeen:  ev.LastTimestamp.Time,
+			// Carried through because §32a's revision rows live in the
+			// event's annotations, not its message — dropping them here
+			// makes those rows silently vanish under the fake.
+			Annotations: ev.Annotations,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
@@ -762,6 +766,10 @@ func (c *Cluster) NamespaceEvents(ctx context.Context, namespace string) ([]kube
 			Count:     max32(ev.Count, 1),
 			FirstSeen: ev.FirstTimestamp.Time,
 			LastSeen:  ev.LastTimestamp.Time,
+			// Carried through because §32a's revision rows live in the
+			// event's annotations, not its message — dropping them here
+			// makes those rows silently vanish under the fake.
+			Annotations: ev.Annotations,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
