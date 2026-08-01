@@ -15,6 +15,11 @@ import (
 // ResourceArg and RegistryKind; these tests exercise the *mechanism*
 // independently of whichever kinds happen to need it, so they register
 // their own rather than depending on the real table's contents.
+//
+// It writes a package global, so **a caller must not be t.Parallel** — the
+// same process-global rule the repo already applies to t.Setenv and the
+// lipgloss colour profile. A parallel caller races every other parallel test
+// that resolves a kind, which is most of them (-race caught exactly that).
 func withSubstitution(t *testing.T, key ResourceKind, s substituted) {
 	t.Helper()
 	prev, had := substitutedKinds[key]

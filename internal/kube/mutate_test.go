@@ -890,8 +890,9 @@ func TestFluxCommandStringsNameTheCommandThatRuns(t *testing.T) {
 	}
 
 	// A substituted kind must render its fully-qualified resource, or the
-	// pasted command resolves to 18a's Helm-3 kind or to nothing.
-	withSubstitution(t, KindFluxHelmRelease, substitutedKinds[KindFluxHelmRelease])
+	// pasted command resolves to 18a's Helm-3 kind or to nothing. Reads the
+	// real table's own entry — this test is parallel, so it must not go
+	// through withSubstitution, which writes the package global.
 	got = FluxSuspendCommandString(KindFluxHelmRelease, "flux-system", "podinfo", true)
 	if !strings.Contains(got, "helmreleases.helm.toolkit.fluxcd.io/podinfo") {
 		t.Errorf("expected the fully-qualified resource arg, got %s", got)
