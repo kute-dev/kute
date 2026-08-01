@@ -48,8 +48,8 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T3 | Delete + patch a custom resource (dynamic fallback) | `[x]` | — |
 | T4 | Health-strip glyph into the descriptor | `[x]` | — |
 | T5 | Design-doc sections §30a/§31a/§32a | `[ ]` | G1, G2, G3 |
-| T6 | Kind keying, `GroupFlux`, collision fix | `[ ]` | T1, T2 |
-| T7 | §30a descriptor, projection, status | `[ ]` | T4, T6, G2 |
+| T6 | Kind keying, `GroupFlux`, collision fix | `[x]` | T1, T2 |
+| T7 | §30a descriptor, projection, status | `[~]` | T4, T6, G2 |
 | T8 | §30a row rendering — sub-lines, fold, strip | `[ ]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[ ]` | T3 |
 | T10 | §30a verbs wired into browse | `[ ]` | T8, T9 |
@@ -153,7 +153,7 @@ Also amend CLAUDE.md's "CRD support is data, not code" invariant with the except
 
 ## §30a — Kustomizations list
 
-### T6 — `fix(tui): stop Flux's HelmRelease CRD taking over the Helm releases list` `[ ]`
+### T6 — `fix(tui): stop Flux's HelmRelease CRD taking over the Helm releases list` `[x]`
 
 **`internal/kube/kinds.go`** — one const (following the Gateway API consts' doc-comment shape at `:42-52`), the five Flux group consts + `IsFluxGroup`, `FluxReconcileAnnotation`, and the substitution table entry:
 
