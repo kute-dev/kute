@@ -406,6 +406,37 @@ func findPod(objs []runtime.Object, name string) (*corev1.Pod, bool) {
 	return nil, false
 }
 
+// TestDemoDiscoveredKindsCarryTheirOwnAPIGroup guards the fix for a fixture
+// bug that reached the screen: demoDiscoveredKind hardcoded cert-manager.io
+// as every demo kind's Group, so in --demo a ServiceMonitor's 14a breadcrumb
+// tag, its 14c goto type label and its descriptor's "custom resource · …"
+// Describe all claimed it was a cert-manager type. Each demo kind must
+// report the group its own CRD declares.
+func TestDemoDiscoveredKindsCarryTheirOwnAPIGroup(t *testing.T) {
+	t.Parallel()
+	want := map[string]string{
+		"Certificate":    "cert-manager.io",
+		"ServiceMonitor": "monitoring.coreos.com",
+		"Prometheus":     "monitoring.coreos.com",
+		"Application":    "argoproj.io",
+		"HTTPRoute":      "gateway.networking.k8s.io",
+	}
+	got := map[string]string{}
+	for _, dk := range NewDemo().DiscoveredKinds() {
+		got[dk.Kind] = dk.Group
+		// The GVR the dynamic client would use has to agree with it, or a
+		// read of this kind goes to the wrong endpoint entirely.
+		if dk.GVR.Group != dk.Group {
+			t.Errorf("%s: GVR group %q disagrees with Group %q", dk.Kind, dk.GVR.Group, dk.Group)
+		}
+	}
+	for kind, group := range want {
+		if got[kind] != group {
+			t.Errorf("%s: got group %q, want %q", kind, got[kind], group)
+		}
+	}
+}
+
 // Compile-time interface satisfaction: the fake must actually implement
 // kube.Mutator, the only formally exported multi-method consumer contract
 // it stands in for today.

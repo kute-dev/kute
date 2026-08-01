@@ -343,9 +343,9 @@ func demoCertManagerFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoCRD("clusterissuers.cert-manager.io", "cert-manager.io", "ClusterIssuer", "clusterissuers", "Cluster", "v1", true, issuerCols, crdAge),
 	)
 
-	c.SeedDiscovered(demoDiscoveredKind("Certificate", "certificates", "certificates.cert-manager.io", false, certCols))
-	c.SeedDiscovered(demoDiscoveredKind("CertificateRequest", "certificaterequests", "certificaterequests.cert-manager.io", false, certReqCols))
-	c.SeedDiscovered(demoDiscoveredKind("ClusterIssuer", "clusterissuers", "clusterissuers.cert-manager.io", true, issuerCols))
+	c.SeedDiscovered(demoDiscoveredKind("Certificate", "certificates", "cert-manager.io", "v1", "certificates.cert-manager.io", false, certCols))
+	c.SeedDiscovered(demoDiscoveredKind("CertificateRequest", "certificaterequests", "cert-manager.io", "v1", "certificaterequests.cert-manager.io", false, certReqCols))
+	c.SeedDiscovered(demoDiscoveredKind("ClusterIssuer", "clusterissuers", "cert-manager.io", "v1", "clusterissuers.cert-manager.io", true, issuerCols))
 
 	c.Seed(kube.ResourceKind("Certificate"),
 		demoCertificate("api-tls", "default", true, "api-tls-secret", "letsencrypt-prod", age(5*24*time.Hour)),
@@ -387,10 +387,10 @@ func demoPrometheusFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoCRD("servicemonitors.monitoring.coreos.com", group, "ServiceMonitor", "servicemonitors", "Namespaced", "v1", true, nil, crdAge),
 		demoCRD("prometheusrules.monitoring.coreos.com", group, "PrometheusRule", "prometheusrules", "Namespaced", "v1", true, nil, crdAge),
 	)
-	c.SeedDiscovered(demoDiscoveredKind("Prometheus", "prometheuses", "prometheuses.monitoring.coreos.com", false, nil))
-	c.SeedDiscovered(demoDiscoveredKind("Alertmanager", "alertmanagers", "alertmanagers.monitoring.coreos.com", false, nil))
-	c.SeedDiscovered(demoDiscoveredKind("ServiceMonitor", "servicemonitors", "servicemonitors.monitoring.coreos.com", false, nil))
-	c.SeedDiscovered(demoDiscoveredKind("PrometheusRule", "prometheusrules", "prometheusrules.monitoring.coreos.com", false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("Prometheus", "prometheuses", group, "v1", "prometheuses.monitoring.coreos.com", false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("Alertmanager", "alertmanagers", group, "v1", "alertmanagers.monitoring.coreos.com", false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("ServiceMonitor", "servicemonitors", group, "v1", "servicemonitors.monitoring.coreos.com", false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("PrometheusRule", "prometheusrules", group, "v1", "prometheusrules.monitoring.coreos.com", false, nil))
 
 	c.Seed(kube.ResourceKind("Prometheus"),
 		demoCR("monitoring.coreos.com/v1", "Prometheus", "k8s", "monitoring", age(80*24*time.Hour), nil, readyCondition(true, "")),
@@ -445,8 +445,8 @@ func demoArgoCDFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoCRD("applications.argoproj.io", group, "Application", "applications", "Namespaced", "v1alpha1", true, appCols, crdAge),
 		demoCRD("appprojects.argoproj.io", group, "AppProject", "appprojects", "Namespaced", "v1alpha1", true, nil, crdAge),
 	)
-	c.SeedDiscovered(demoDiscoveredKind("Application", "applications", "applications.argoproj.io", false, appCols))
-	c.SeedDiscovered(demoDiscoveredKind("AppProject", "appprojects", "appprojects.argoproj.io", false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("Application", "applications", group, "v1alpha1", "applications.argoproj.io", false, appCols))
+	c.SeedDiscovered(demoDiscoveredKind("AppProject", "appprojects", group, "v1alpha1", "appprojects.argoproj.io", false, nil))
 
 	c.Seed(kube.ResourceKind("Application"),
 		demoArgoApplication("api", "argocd", "default", age(20*24*time.Hour), "Synced", "Healthy"),
@@ -536,13 +536,19 @@ func readyCondition(ready bool, message string) map[string]any {
 // call — kept as a small parallel constructor rather than re-deriving it
 // from the unstructured object (fake fixtures build both representations by
 // hand, same as every other demo* helper in this file).
-func demoDiscoveredKind(kind, plural, crdName string, clusterScoped bool, cols []kube.PrinterColumn) kube.DiscoveredKind {
+//
+// group/version are parameters rather than the cert-manager constants this
+// started with: every consumer of a DiscoveredKind's Group renders it
+// (14a's breadcrumb API tag, 14c's goto type label, the descriptor's own
+// "custom resource · <group>" Describe), so hardcoding one group made the
+// Prometheus and Argo fixtures claim to be cert-manager kinds on screen.
+func demoDiscoveredKind(kind, plural, group, version, crdName string, clusterScoped bool, cols []kube.PrinterColumn) kube.DiscoveredKind {
 	return kube.DiscoveredKind{
-		GVR:            schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: plural},
+		GVR:            schema.GroupVersionResource{Group: group, Version: version, Resource: plural},
 		Kind:           kind,
 		Plural:         plural,
-		Group:          "cert-manager.io",
-		Versions:       []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
+		Group:          group,
+		Versions:       []kube.CRDVersion{{Name: version, Served: true, Storage: true}},
 		ClusterScoped:  clusterScoped,
 		PrinterColumns: cols,
 		Established:    true,
@@ -1063,24 +1069,8 @@ func demoGatewayAPIFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoCRD("gateways."+group, group, "Gateway", "gateways", "Namespaced", "v1", true, nil, gwAge),
 		demoCRD("httproutes."+group, group, "HTTPRoute", "httproutes", "Namespaced", "v1", true, nil, gwAge),
 	)
-	c.SeedDiscovered(kube.DiscoveredKind{
-		GVR:         schema.GroupVersionResource{Group: group, Version: "v1", Resource: "gateways"},
-		Kind:        "Gateway",
-		Plural:      "gateways",
-		Group:       group,
-		Versions:    []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
-		Established: true,
-		CRDName:     "gateways." + group,
-	})
-	c.SeedDiscovered(kube.DiscoveredKind{
-		GVR:         schema.GroupVersionResource{Group: group, Version: "v1", Resource: "httproutes"},
-		Kind:        "HTTPRoute",
-		Plural:      "httproutes",
-		Group:       group,
-		Versions:    []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
-		Established: true,
-		CRDName:     "httproutes." + group,
-	})
+	c.SeedDiscovered(demoDiscoveredKind("Gateway", "gateways", group, "v1", "gateways."+group, false, nil))
+	c.SeedDiscovered(demoDiscoveredKind("HTTPRoute", "httproutes", group, "v1", "httproutes."+group, false, nil))
 
 	// web-canary has no matching pods (Ready=0) so its split leg renders ▲,
 	// distinct from web's ● (the same Service demoProductionFixtures' pods
