@@ -146,10 +146,37 @@ func (a *App) filterTo(t *testing.T, term string) {
 // fences on can still be the previous kind's list, and a want that list also
 // contains returns instantly, leaving every key after it aimed at a screen
 // that is still being replaced.
+//
+// The wait *before* Enter is what makes a discovered kind reachable: the
+// palette only knows the kinds discovery has found so far, and a query for
+// one it hasn't (early in a connect) doesn't fail — it matches the kind's own
+// CRD row and lands on CustomResourceDefinitions instead. Nothing recovers
+// from that; the test just waits out its budget on a screen it never asked
+// for. Committing only once the destination is on the ranked list turns that
+// race into a wait.
+//
+// That fence is want itself here because a kind's palette row carries the
+// same display name its list is titled with. Where the two differ, drive
+// gotoPalette directly.
 func (a *App) gotoKind(t *testing.T, query, want string) {
+	t.Helper()
+	a.gotoPalette(t, query, want, want)
+}
+
+// gotoPalette drives the one jump palette: type query, wait for row to be on
+// the ranked list, commit, then wait for want.
+//
+// row and want are separate because the synthetic goto targets — the ones
+// with no kind-registry entry behind them — label their row for the query
+// rather than for the screen it opens, so their row's detail line is the
+// honest fence. §30b's flux tree needs one as much as any discovered kind
+// does: it is offered only on a cluster whose Flux CRDs discovery has
+// actually found, so early in a connect it is simply not there.
+func (a *App) gotoPalette(t *testing.T, query, row, want string) {
 	t.Helper()
 	a.Press("g")
 	a.Type(query)
+	a.WaitFor(row, Settle)
 	a.Enter()
 	a.WaitFor(want, Settle)
 }

@@ -66,7 +66,7 @@ func TestNoMetricsServerRendersUnknown(t *testing.T) {
 	})
 
 	t.Run("overview capacity", func(t *testing.T) {
-		a.gotoKind(t, "overview", "Cluster Overview")
+		a.gotoPalette(t, "overview", "cluster · routing", "Cluster Overview")
 		a.WaitLoaded(Settle)
 		// 19a says so outright rather than drawing an empty bar, which is
 		// the clearest form of "no answer" on this screen.

@@ -118,13 +118,10 @@ func TestFluxScreens(t *testing.T) {
 	// GitRepository the fixtures declare, so this asserts the chain a real
 	// API server produces rather than one a fake was told about.
 	t.Run("flux tree nests reconcilers under their source", func(t *testing.T) {
-		a.Press("g")
-		a.Type("flux")
-		a.Enter()
 		// The tree's own column header — never a row name, which the
 		// Kustomizations list also carries (harness rule: never wait on a
 		// string the screen you are leaving also shows).
-		a.WaitFor("SOURCE / RECONCILER", Settle)
+		a.gotoPalette(t, "flux", "tree · sources → reconcilers", "SOURCE / RECONCILER")
 
 		a.WaitForAll(Settle, "kute-config", "GitRepo", "└─")
 
