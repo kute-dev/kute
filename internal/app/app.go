@@ -26,6 +26,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
+	"github.com/kute-dev/kute/internal/tui/tasks/fluxdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/forwardpicker"
 	"github.com/kute-dev/kute/internal/tui/tasks/helmhistory"
 	"github.com/kute-dev/kute/internal/tui/tasks/nodedetail"
@@ -540,6 +541,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 			OpenExec:           browse.OpenExecFunc(openExec),
 			OpenForward:        openForward,
 			OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
+			OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
 			OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
 			OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
 			OpenHelmHistory:    openHelmHistoryFunc(sess, demoCluster),
@@ -607,6 +609,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenExec:           browse.OpenExecFunc(openExec),
 		OpenForward:        openForward,
 		OpenObjectDetail:   openObjectDetailFunc(sess, cluster, openYAML),
+		OpenFluxDetail:     openFluxDetailFunc(sess, cluster, openYAML),
 		OpenRouteTable:     openRouteTableFunc(sess, cluster, openYAML),
 		OpenWhoCan:         openWhoCanFunc(sess, cluster),
 		OpenHelmHistory:    openHelmHistoryFunc(sess, cluster),
@@ -851,6 +854,24 @@ func openObjectDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenY
 		})
 		od.SetSize(width, height)
 		return &od, od.Init()
+	}
+}
+
+// openFluxDetailFunc pushes tasks/fluxdetail (§31a) for a Flux reconciler
+// row — active alone satisfies every seam it declares.
+func openFluxDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) browse.OpenFluxDetailFunc {
+	return func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+		fd := fluxdetail.New(fluxdetail.Config{
+			Session:   sess,
+			Lister:    active,
+			Mutator:   active,
+			OpenYAML:  fluxdetail.OpenYAMLFunc(openYAML),
+			Kind:      kind,
+			Namespace: namespace,
+			Name:      name,
+		})
+		fd.SetSize(width, height)
+		return &fd, fd.Init()
 	}
 }
 

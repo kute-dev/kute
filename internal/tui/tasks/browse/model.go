@@ -143,6 +143,11 @@ type OpenRouteTableFunc func(kind kube.ResourceKind, namespace, name string, wid
 // with the failed verb+resource pre-filled").
 type OpenWhoCanFunc func(verb, resource, namespace string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenFluxDetailFunc pushes tasks/fluxdetail (§31a) for a Flux reconciler
+// row. Separate from OpenObjectDetailFunc because §31a is a different
+// screen, not a variant of 14d — see the fluxdetail package doc.
+type OpenFluxDetailFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenHelmHistoryFunc pushes tasks/helmhistory (18a's `h`) for a release's
 // full revision rail.
 type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -186,6 +191,7 @@ type Config struct {
 	OpenObjectDetail   OpenObjectDetailFunc
 	OpenRouteTable     OpenRouteTableFunc
 	OpenWhoCan         OpenWhoCanFunc
+	OpenFluxDetail     OpenFluxDetailFunc
 	OpenHelmHistory    OpenHelmHistoryFunc
 	OpenHelmValues     OpenHelmValuesFunc
 	OpenSecretData     OpenSecretDataFunc
@@ -224,6 +230,7 @@ type Model struct {
 	openObjectDetail   OpenObjectDetailFunc
 	openRouteTable     OpenRouteTableFunc
 	openWhoCan         OpenWhoCanFunc
+	openFluxDetail     OpenFluxDetailFunc
 	openHelmHistory    OpenHelmHistoryFunc
 	openHelmValues     OpenHelmValuesFunc
 	openSecretData     OpenSecretDataFunc
@@ -567,6 +574,7 @@ func New(cfg Config) Model {
 		openObjectDetail:   cfg.OpenObjectDetail,
 		openRouteTable:     cfg.OpenRouteTable,
 		openWhoCan:         cfg.OpenWhoCan,
+		openFluxDetail:     cfg.OpenFluxDetail,
 		openHelmHistory:    cfg.OpenHelmHistory,
 		openHelmValues:     cfg.OpenHelmValues,
 		openSecretData:     cfg.OpenSecretData,

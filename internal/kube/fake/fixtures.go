@@ -1384,8 +1384,15 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	)
 
 	c.Seed(kube.ResourceKind("Kustomization"),
-		// ✕ failed — the design's own example, health check verbatim.
-		demoKustomization("nebula-workers", ns, gitRepo, "./clusters/stage/workers", headRev, false,
+		// ✕ failed — the design's own example, health check verbatim. Its
+		// inventory names the workload the health check is waiting on, so
+		// §31a's drill-through has something real to resolve.
+		demoKustomizationWithInventory("nebula-workers", ns, gitRepo, "./clusters/stage/workers", headRev, false,
+			[]string{
+				ns + "_nebula-worker_apps_Deployment",
+				ns + "_nebula-worker-config__ConfigMap",
+				ns + "_nebula-worker__Service",
+			},
 			age(148*24*time.Hour), age(4*time.Minute), fluxCond("Ready", false, "HealthCheckFailed",
 				"health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'", age(4*time.Minute))),
 		// ‖ suspended, carrying a *stale* Ready=True — the fixture that
@@ -1419,6 +1426,26 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 			fluxCond("Stalled", true, "RetriesExhausted", "Failed to install after 3 attempts", age(12*time.Minute))),
 	)
 
+	// The workload nebula-workers manages: 3 of 4 replicas ready, which is
+	// what its health check is failing on and what §31a's failure card
+	// resolves the reconcile failure to.
+	workerReplicas := int32(4)
+	c.Seed(kube.KindDeployment, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nebula-worker", Namespace: ns, CreationTimestamp: age(148 * 24 * time.Hour)},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &workerReplicas,
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "worker", Image: "nebula-worker:3.5.0"}},
+			}},
+		},
+		Status: appsv1.DeploymentStatus{Replicas: 4, ReadyReplicas: 3, UpdatedReplicas: 4},
+	})
+	c.Seed(kube.KindConfigMap, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "nebula-worker-config", Namespace: ns, CreationTimestamp: age(148 * 24 * time.Hour)},
+		Data:       map[string]string{"LOG_LEVEL": "info"},
+	})
+	c.Seed(kube.KindService, demoService("nebula-worker", ns, map[string]string{"app": "nebula-worker"}, age(148*24*time.Hour)))
+
 	// §32a: reconcile events carrying the revision annotation, plus the
 	// source-controller message the commit subject is parsed out of.
 	c.Seed(kube.KindEvent,
@@ -1431,6 +1458,21 @@ func demoFluxFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoEvent("git-artifact-1", ns, "GitRepository", gitRepo, "Normal", "GitOperationSucceeded",
 			"stored artifact for commit 'fix: raise worker memory limit (#412)'", 1, age(3*time.Minute)),
 	)
+}
+
+// demoKustomizationWithInventory is demoKustomization plus a
+// status.inventory — the entry-id shape Flux really writes,
+// "<namespace>_<name>_<group>_<Kind>", with an empty group for core kinds.
+func demoKustomizationWithInventory(name, ns, source, path, applied string, suspend bool, inventory []string, created, reconciled metav1.Time, conds ...map[string]any) *unstructured.Unstructured {
+	u := demoKustomization(name, ns, source, path, applied, suspend, created, reconciled, conds...)
+	entries := make([]any, len(inventory))
+	for i, id := range inventory {
+		entries[i] = map[string]any{"id": id, "v": "v1"}
+	}
+	status, _, _ := unstructured.NestedMap(u.Object, "status")
+	status["inventory"] = map[string]any{"entries": entries}
+	u.Object["status"] = status
+	return u
 }
 
 // fluxCond builds one Flux status condition. lastTransitionTime is set

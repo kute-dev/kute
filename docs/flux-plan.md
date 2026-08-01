@@ -38,12 +38,9 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
-**As of 2026-08-01: 11 of 13 tasks and all 3 gates closed.** Flux kinds are
+**As of 2026-08-01: 12 of 13 tasks and all 3 gates closed.** Flux kinds are
 correctly keyed, grouped, projected, rendered and mutable, and the timeline
-carries revision rows. Outstanding: **T11** (the §31a detail screen — `↵` on
-a Flux row currently falls through to the generic 14d detail, which works
-but shows none of 31a's failure card, chain grid or inventory) and **T13**
-(e2e). One §32a increment is also outstanding — the persisted commit-subject
+carries revision rows. Outstanding: **T13** (e2e). One §32a increment is also outstanding — the persisted commit-subject
 cache, see G1.
 
 | # | task | status | depends on |
@@ -61,7 +58,7 @@ cache, see G1.
 | T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[x]` | T3 |
 | T10 | §30a verbs wired into browse | `[x]` | T8, T9 |
-| T11 | §31a Kustomization detail screen | `[ ]` **not started** | T10, G1 |
+| T11 | §31a Kustomization detail screen | `[x]` | T10, G1 |
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
 | T13 | E2E coverage | `[ ]` **not started** | T10, T11, T12 |
 
@@ -397,7 +394,7 @@ New `internal/tui/tasks/browse/flux.go` per the `routes.go`/`nodes.go`/`helm.go`
 
 ## §31a — Kustomization detail
 
-### T11 — `feat(tui): explain a failed Flux reconcile and what it manages` `[ ]`
+### T11 — `feat(tui): explain a failed Flux reconcile and what it manages` `[x]`
 
 New task package **`internal/tui/tasks/fluxdetail`**, standard split (`model.go`/`update.go`/`view.go`/`keys.go`/`load.go`). Pushed from 30a's `↵`; pill `KUSTOMIZE`. Closest structural model is `tasks/poddetail` (failure banner → meta grid → sub-table) plus `tasks/objectdetail` for the conditions read.
 

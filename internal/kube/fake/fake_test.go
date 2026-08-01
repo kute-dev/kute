@@ -318,8 +318,8 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)
 	}
 	deploys, _ := c.ListRaw(ctx, kube.KindDeployment, "")
-	if len(deploys) != 15 {
-		t.Fatalf("expected 15 deployment fixtures, got %d", len(deploys))
+	if len(deploys) != 16 {
+		t.Fatalf("expected 16 deployment fixtures, got %d", len(deploys))
 	}
 	nodes, _ := c.ListRaw(ctx, kube.KindNode, "")
 	if len(nodes) != 4 {

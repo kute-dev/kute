@@ -29,6 +29,22 @@ func (m Model) fluxVerbsApply() bool {
 	return m.desc.Flux && m.mutator != nil && m.state == tui.TaskStateReady
 }
 
+// openSelectedFluxDetail pushes §31a for the cursor row. Gated on the
+// descriptor's own Flux flag, so it precedes crddetail.go's generic 14d
+// branch (a Flux descriptor is Custom too) without either needing a
+// kind-name check.
+func (m Model) openSelectedFluxDetail() (tea.Model, tea.Cmd, bool) {
+	if !m.desc.Flux || m.openFluxDetail == nil {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	task, cmd := m.openFluxDetail(m.kind, row.Namespace, row.Name, m.width, m.height)
+	return task, cmd, task != nil
+}
+
 // beginFluxSuspend toggles spec.suspend on row — one verb, two directions,
 // exactly beginCordon's shape. TierNone, so it executes immediately; the
 // will-run line is set first so the command is on screen the moment the key

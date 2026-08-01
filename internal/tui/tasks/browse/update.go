@@ -669,6 +669,11 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 			return m, cmd, true
 		}
 	}
+	// §31a before 14d: a Flux descriptor is Custom too, so the generic
+	// branch would otherwise claim it first.
+	if task, cmd, ok := m.openSelectedFluxDetail(); ok {
+		return task, cmd, true
+	}
 	if task, cmd, ok := m.openSelectedObjectDetail(); ok {
 		return task, cmd, true
 	}

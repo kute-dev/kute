@@ -1,0 +1,142 @@
+package fluxdetail
+
+import (
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
+)
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.SetSize(msg.Width, msg.Height)
+	case kube.ResourceChangedMsg:
+		// Reload on this object's own kind, and on the kinds its inventory
+		// pulls in — otherwise the READY column goes stale while the screen
+		// keeps claiming it is live.
+		if m.reloadsOn(msg.Kind) {
+			return m, m.load()
+		}
+	case kube.ConnState:
+		m.conn = msg
+	case tickMsg:
+		// The retry countdown's clock lives here, not in View — render
+		// functions stay pure.
+		m.now = time.Time(msg)
+		return m, tickCmd()
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	case loadedMsg:
+		return m, m.applyLoaded(msg)
+	case actions.ResultMsg:
+		if msg.Err == nil {
+			return m, m.load()
+		}
+		m.feedback = msg.Err.Error()
+	case tea.KeyPressMsg:
+		return m.updateKey(msg)
+	}
+	return m, nil
+}
+
+// reloadsOn reports whether a change to kind could change this screen.
+func (m Model) reloadsOn(kind kube.ResourceKind) bool {
+	if kind == m.kind || kind == m.chn.SourceKind {
+		return true
+	}
+	for _, it := range m.inventory {
+		if it.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
+	if msg.err != nil {
+		m.state, m.feedback = tui.TaskStateError, msg.err.Error()
+		return nil
+	}
+	if msg.gone {
+		m.state = tui.TaskStateError
+		m.feedback = m.name + " no longer exists · esc to go back"
+		return nil
+	}
+	m.fail, m.chn, m.inventory = msg.fail, msg.chn, msg.inventory
+	m.suspended, m.statusText = msg.suspended, msg.statusText
+	m.state = tui.TaskStateReady
+	// Drop the "loading…" note, or it sits in the keybar's right slot for
+	// the rest of the session pretending a load is still in flight.
+	if strings.HasPrefix(m.feedback, "loading ") {
+		m.feedback = ""
+	}
+	if n := len(m.visibleInventory()); m.selected >= n {
+		m.selected = max(0, n-1)
+	}
+	return nil
+}
+
+func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "backspace":
+		return m, func() tea.Msg { return tui.BackMsg{} }
+	case "up", "k":
+		m.moveSelection(-1)
+	case "down", "j":
+		m.moveSelection(1)
+	case "tab":
+		m.invExpanded = !m.invExpanded
+		if n := len(m.visibleInventory()); m.selected >= n {
+			m.selected = max(0, n-1)
+		}
+	case "enter":
+		// ↵ lands on the object the cursor is on, which after the sort is
+		// the failing one by default — §31a's "zero digs".
+		if it, ok := m.selectedItem(); ok {
+			return m, func() tea.Msg {
+				return tui.GotoResourceMsg{Kind: it.Kind, Namespace: it.Namespace, Name: it.Name}
+			}
+		}
+	case "y":
+		if m.openYAML != nil {
+			task, cmd := m.openYAML(m.kind, m.namespace, m.name, m.width, m.height)
+			if task != nil {
+				return task, cmd
+			}
+		}
+	case "r":
+		if m.mutator != nil && !m.offline() {
+			return m, m.beginReconcile()
+		}
+	case "s":
+		if m.mutator != nil && !m.offline() {
+			return m, m.beginSuspend()
+		}
+	case "o":
+		if m.chn.SourceKind != "" && m.chn.SourceName != "" {
+			src := m.chn
+			ns := m.namespace
+			return m, func() tea.Msg {
+				return tui.GotoResourceMsg{Kind: src.SourceKind, Namespace: ns, Name: src.SourceName}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) moveSelection(delta int) {
+	n := len(m.visibleInventory())
+	if n == 0 {
+		m.selected = 0
+		return
+	}
+	m.selected = min(max(0, m.selected+delta), n-1)
+}
