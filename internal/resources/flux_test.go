@@ -305,3 +305,26 @@ func TestFluxRevisionAndSource(t *testing.T) {
 		})
 	}
 }
+
+// TestShortRevisionCoversEveryShapeFluxUses. All three were observed on one
+// real cluster; the bare-digest case is the one that matters most, since a
+// HelmRepository's artifact revision is 71 characters left whole — wider
+// than the entire table.
+func TestShortRevisionCoversEveryShapeFluxUses(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, want string }{
+		{"master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef", "master@efd398b"},
+		{"sha256:d83a8a3354d98907a55beba524407a0b94d319623d0370a65fcd390e68db9852", "d83a8a3"},
+		{"v1.21.0", "v1.21.0"},
+		{"1.11.0", "1.11.0"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := shortRevision(tc.in); got != tc.want {
+			t.Errorf("shortRevision(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+		if got := shortRevision(tc.in); len(got) > 24 {
+			t.Errorf("shortRevision(%q) = %q, too wide for a column at %d chars", tc.in, got, len(got))
+		}
+	}
+}

@@ -49,8 +49,8 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T4 | Health-strip glyph into the descriptor | `[x]` | — |
 | T5 | Design-doc sections §30a/§31a/§32a | `[ ]` | G1, G2, G3 |
 | T6 | Kind keying, `GroupFlux`, collision fix | `[x]` | T1, T2 |
-| T7 | §30a descriptor, projection, status | `[~]` | T4, T6, G2 |
-| T8 | §30a row rendering — sub-lines, fold, strip | `[ ]` | T7, G3 |
+| T7 | §30a descriptor, projection, status | `[x]` | T4, T6, G2 |
+| T8 | §30a row rendering — sub-lines, fold, strip | `[~]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[ ]` | T3 |
 | T10 | §30a verbs wired into browse | `[ ]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
@@ -259,7 +259,7 @@ Flux group appended before Custom Resources (the catch-all stays last); Custom n
 
 **Tests (fail today):** `TestFluxHelmReleaseDoesNotReplaceHelmReleasesList` (Display becomes `"Helmreleases"`, `Custom` true), `TestFluxKindsAppearInExactlyOneGroup`.
 
-### T7 — `feat(tui): show Flux reconcile state with real columns and status` `[ ]`
+### T7 — `feat(tui): show Flux reconcile state with real columns and status` `[x]`
 
 New **`internal/resources/flux.go`**, mirroring `crd.go`'s `httpRouteDescriptor`/`projectHTTPRoute`/`httpRouteAttachedCell` triple. Reuses `evalPrinterColumn` (`crd.go:126`), `metaOf`, `shortAge`.
 

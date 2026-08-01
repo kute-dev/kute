@@ -246,24 +246,38 @@ func fluxRevision(u *unstructured.Unstructured) string {
 	return "–"
 }
 
-// shortRevision collapses Flux's "<ref>@<algo>:<hex>" revision into
-// "<ref>@<7 hex>", the form that fits a column and that a human compares.
-// A revision without that shape (a chart version like "v1.21.0") is left
-// exactly as it is.
+// shortRevision collapses a Flux revision to the form that fits a column
+// and that a human actually compares. Flux uses three shapes for it, all
+// three seen on one real cluster:
+//
+//	main@sha1:efd398bed98a…  (git)   → main@efd398b
+//	sha256:d83a8a3354d98907… (helm index, no ref) → d83a8a3
+//	v1.21.0                  (chart version) → unchanged
+//
+// The second shape is why this can't just split on "@": a HelmRepository's
+// artifact revision is a bare 64-character digest, which left whole is
+// wider than the entire table.
 func shortRevision(rev string) string {
-	at := strings.LastIndex(rev, "@")
-	if at < 0 {
+	ref := ""
+	digest := rev
+	if at := strings.LastIndex(rev, "@"); at >= 0 {
+		ref, digest = rev[:at], rev[at+1:]
+	}
+	colon := strings.Index(digest, ":")
+	if colon < 0 {
+		// No algorithm prefix: a plain version like "v1.21.0", which is
+		// already the readable form and must not be truncated.
 		return rev
 	}
-	ref, digest := rev[:at], rev[at+1:]
-	if colon := strings.Index(digest, ":"); colon >= 0 {
-		digest = digest[colon+1:]
-	}
+	digest = digest[colon+1:]
 	if len(digest) > 7 {
 		digest = digest[:7]
 	}
-	if digest == "" {
+	switch {
+	case digest == "":
 		return ref
+	case ref == "":
+		return digest
 	}
 	return ref + "@" + digest
 }
