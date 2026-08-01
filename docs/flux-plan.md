@@ -38,10 +38,15 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
-**As of 2026-08-01: all 13 tasks and all 3 gates closed.** Flux kinds are
-correctly keyed, grouped, projected, rendered and mutable, and the timeline
-carries revision rows. Outstanding: only §32a's persisted commit-subject cache (see G1) — until it
-lands, a subject shows only for a commit observed inside the Event TTL.
+**As of 2026-08-01: T1–T13 and all 3 gates closed**, verified end to end
+against a real cluster. Flux kinds are correctly keyed, grouped, projected,
+rendered and mutable; the timeline carries revision rows; e2e covers the
+list, the Helm-release name collision, suspend and reconcile.
+
+**Outstanding: T14 only** — §32a's commit-subject cache, scoped down to a
+session-scoped map (the persisted version was retired; see T14 for the
+measurement). Until it lands, a subject shows for about an hour after a
+commit and then drops off a row that stays on screen.
 
 **One thing the e2e run surfaced:** with both HelmRelease kinds served,
 `g "helm"` became a coin flip between §18a's "Helm Releases" and Flux's
