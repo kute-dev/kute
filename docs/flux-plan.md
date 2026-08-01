@@ -41,8 +41,8 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | # | task | status | depends on |
 |---|---|---|---|
 | G1 | Verify `status.artifact` git metadata | `[x]` **resolved: no commit metadata** | — |
-| G2 | Verify Flux declared printer columns | `[ ]` | — |
-| G3 | Verify suspension attribution is recoverable | `[ ]` | — |
+| G2 | Verify Flux declared printer columns | `[x]` **resolved** | — |
+| G3 | Verify suspension attribution is recoverable | `[x]` **resolved: not recoverable** | — |
 | T1 | `demoDiscoveredKind` API-group fix | `[x]` | — |
 | T2 | Registry-kind ↔ API-kind substitution seam | `[x]` | — |
 | T3 | Delete + patch a custom resource (dynamic fallback) | `[x]` | — |
@@ -94,16 +94,71 @@ commit's content.
   `status.artifact.revision`: equal → in sync; different → `source ahead`
   (with both short SHAs). Never a number.
 
-### G2 — Confirm Flux's declared printer columns `[ ]`
-**Blocks T7.** Per §14a's "kute never guesses a column that isn't there".
-```sh
-kubectl get crd kustomizations.kustomize.toolkit.fluxcd.io \
-  -o jsonpath='{.spec.versions[?(@.storage)].additionalPrinterColumns}'
-```
-30a is curated so it doesn't inherit them, but a declared SUSPENDED column should feed the READY cell rather than being recomputed.
+### G2 — Flux's declared printer columns `[x]` RESOLVED 2026-08-01
 
-### G3 — Confirm suspension attribution `[ ]`
-**Blocks T8.** Is `suspended 6d by dana` recoverable from the object — `managedFields` for the `spec.suspend` write, or a Flux-set annotation? If neither, drop the `by <user>` clause and keep the duration. Do not invent it.
+Measured on a real Flux cluster (11 CRDs across all five groups). **Every**
+Flux kind declares exactly these three, and nothing else:
+
+| column | jsonPath |
+|---|---|
+| `Ready` | `.status.conditions[?(@.type=="Ready")].status` |
+| `Status` | `.status.conditions[?(@.type=="Ready")].message` |
+| `Age` | `.metadata.creationTimestamp` |
+
+Sources (`GitRepository`, `OCIRepository`, …) add `URL` = `.spec.url`.
+`HelmChart` adds `Chart`, `Version`, `Source Kind`, `Source Name`.
+
+**There is no SUSPENDED column anywhere** — confirming suspension has to ride
+in the glyph and the READY cell, as §30a draws it.
+
+**The verbatim condition message is itself a declared column.** §30a's
+sub-line is not a kute invention: it renders the CRD's own `Status` column,
+moved out of a cell because it is prose (`health check failed after 2m0s:
+Deployment/aim-stage/aim-worker status: 'InProgress'` is 80+ characters and
+would be ellipsized to uselessness in a table cell). That is the
+justification to record in the design section.
+
+REVISION and SOURCE **are** kute-derived, from real fields (below). §14a's
+"never guesses a column that isn't there" governs the *generic* descriptor;
+§30a is curated, like §18a's Helm columns and §23b's ATTACHED — the design
+section carries the reason.
+
+### G3 — Suspension attribution `[x]` RESOLVED 2026-08-01: not recoverable
+
+**Drop `by dana` and drop the duration.** Neither is obtainable:
+
+- **Who** would come from `metadata.managedFields`, which `stripManagedFields`
+  (`internal/kube/transform.go`) removes from every object *before it enters
+  the informer cache* — deliberately, since it is a third to a half of the
+  stored bytes. Recovering it means a live per-object GET, which is exactly
+  what a browse path must not do.
+- **How long** has no source field at all. Flux records nothing about when
+  `spec.suspend` was set. The Ready condition's `lastTransitionTime` is
+  frozen from *before* suspension, so reading it would report when the object
+  last became ready — a plausible-looking number that is simply the wrong
+  fact.
+
+So a suspended row's sub-line carries the drift signal only: `suspended` and,
+when the applied revision differs from the source's, `· source ahead`.
+
+### Field shapes the projection reads (measured)
+
+- `spec.suspend` is **absent, not `false`**, on an unsuspended object — read it
+  with a defaulting accessor.
+- Kustomization: `status.lastAppliedRevision` (`master@sha1:efd398be…`),
+  `spec.sourceRef{kind,name}`, `spec.path`, `spec.interval`, `spec.dependsOn`.
+- GitRepository: `status.artifact.revision`; it *is* the source, so SOURCE
+  reads `–` and its declared URL column carries the identity.
+- HelmRelease: `lastAppliedRevision` is **null**; the version lives in
+  `status.history[0].chartVersion` (`v1.21.0`) with `lastAttemptedRevision`
+  as the fallback. Source is `spec.chart.spec.sourceRef{kind,name}`.
+- Conditions in the healthy steady state are just `Ready` (plus `Released` on
+  HelmRelease, `ArtifactInStorage` on sources). `Reconciling`/`Stalled` are
+  transient and absent on a settled cluster — which is why the precedence
+  table must not require them to be present.
+- `status.inventory.entries[].id` is `<namespace>_<name>_<group>_<Kind>` with
+  the version in a sibling `v` field; a cluster-scoped entry has an empty
+  first segment (leading underscore). Confirms T11's parse.
 
 ---
 
