@@ -25,6 +25,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	sigsyaml "sigs.k8s.io/yaml"
 
@@ -434,6 +435,46 @@ func (c *Cluster) PatchMeta(_ context.Context, kind kube.ResourceKind, namespace
 		return nil
 	}
 	return fmt.Errorf("%s %q not found", kind, name)
+}
+
+// SetFluxSuspend flips spec.suspend on a seeded Flux object in place —
+// §30a's 's' against the fake cluster.
+func (c *Cluster) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	u, err := c.findUnstructuredLocked(kind, namespace, name)
+	if err != nil {
+		return err
+	}
+	if err := unstructured.SetNestedField(u.Object, suspend, "spec", "suspend"); err != nil {
+		return err
+	}
+	c.notify(kind)
+	return nil
+}
+
+// RequestFluxReconcile stamps the reconcile annotation on a seeded Flux
+// object — §30a's 'r'. Goes through PatchMeta for the same reason the real
+// cluster does: the request is an ordinary metadata write.
+func (c *Cluster) RequestFluxReconcile(ctx context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return c.PatchMeta(ctx, kind, namespace, name, true,
+		kube.FluxReconcileAnnotation, time.Now().UTC().Format(time.RFC3339), false)
+}
+
+// findUnstructuredLocked resolves one seeded custom resource by kind/name.
+// Callers hold c.mu.
+func (c *Cluster) findUnstructuredLocked(kind kube.ResourceKind, namespace, name string) (*unstructured.Unstructured, error) {
+	for _, obj := range c.objects[kind] {
+		u, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			continue
+		}
+		if u.GetName() != name || (namespace != "" && u.GetNamespace() != namespace) {
+			continue
+		}
+		return u, nil
+	}
+	return nil, fmt.Errorf("%s %q not found", kind, name)
 }
 
 // PatchSecretData sets or removes a single key in a Secret's .Data map in

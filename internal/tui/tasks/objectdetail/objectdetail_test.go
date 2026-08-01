@@ -243,6 +243,16 @@ func (f *fakeMutator) PatchConfigMapData(context.Context, string, string, string
 	return nil
 }
 
+// Flux verbs (§30a). Recorded but inert: no test in this package drives
+// them, and the Mutator contract requires them.
+func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
 // TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
 // (docs/design README.md §52, §301): objectdetail must show the OFFLINE
 // pill and drop delete from the keybar while disconnected, not just browse.

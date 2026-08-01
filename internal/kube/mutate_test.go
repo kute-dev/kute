@@ -2,7 +2,10 @@ package kube
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -11,8 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func newTestCluster(objs ...runtime.Object) (*Cluster, *fake.Clientset) {
@@ -794,5 +799,101 @@ func TestIsMirrorPod(t *testing.T) {
 	normal := corev1.Pod{}
 	if isMirrorPod(normal) {
 		t.Fatalf("pod without the mirror annotation should not be detected as a mirror pod")
+	}
+}
+
+// TestSetFluxSuspendPatchesSpecSuspend asserts the recorded dynamic-client
+// action, not just the absence of an error: the patch has to reach the
+// right GVR with the right body, on a kind whose informer never started.
+func TestSetFluxSuspendPatchesSpecSuspend(t *testing.T) {
+	t.Parallel()
+	for _, suspend := range []bool{true, false} {
+		c, dyn := newDynTestCluster(newWidget("podinfo", "flux-system"))
+		if err := c.SetFluxSuspend(context.Background(), ResourceKind("Widget"), "flux-system", "podinfo", suspend); err != nil {
+			t.Fatalf("SetFluxSuspend(%v): %v", suspend, err)
+		}
+		var patched bool
+		for _, a := range dyn.Actions() {
+			p, ok := a.(k8stesting.PatchAction)
+			if !ok {
+				continue
+			}
+			patched = true
+			if got := a.GetResource(); got != widgetGVR {
+				t.Errorf("patched %v, want %v", got, widgetGVR)
+			}
+			if got, want := string(p.GetPatch()), fmt.Sprintf(`{"spec":{"suspend":%t}}`, suspend); got != want {
+				t.Errorf("patch body = %s, want %s", got, want)
+			}
+			if p.GetPatchType() != types.MergePatchType {
+				t.Errorf("patch type = %v, want a merge patch", p.GetPatchType())
+			}
+		}
+		if !patched {
+			t.Fatal("no patch reached the dynamic client")
+		}
+		got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(context.Background(), "podinfo", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if v, _, _ := unstructured.NestedBool(got.Object, "spec", "suspend"); v != suspend {
+			t.Errorf("spec.suspend = %v, want %v", v, suspend)
+		}
+	}
+}
+
+// TestRequestFluxReconcileStampsAFreshTimestamp pins that the annotation
+// lands and parses as RFC3339 — a malformed stamp is silently ignored by
+// the Flux controllers, so "it wrote something" is not enough.
+func TestRequestFluxReconcileStampsAFreshTimestamp(t *testing.T) {
+	t.Parallel()
+	c, dyn := newDynTestCluster(newWidget("podinfo", "flux-system"))
+	before := time.Now().Add(-time.Second)
+
+	if err := c.RequestFluxReconcile(context.Background(), ResourceKind("Widget"), "flux-system", "podinfo"); err != nil {
+		t.Fatalf("RequestFluxReconcile: %v", err)
+	}
+	got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(context.Background(), "podinfo", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	stamp, ok := got.GetAnnotations()[FluxReconcileAnnotation]
+	if !ok {
+		t.Fatalf("no %s annotation, got %+v", FluxReconcileAnnotation, got.GetAnnotations())
+	}
+	at, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		t.Fatalf("annotation %q is not RFC3339 — the controllers ignore a malformed stamp: %v", stamp, err)
+	}
+	if at.Before(before) {
+		t.Errorf("stamp %v is older than the call", at)
+	}
+}
+
+// TestFluxCommandStringsNameTheCommandThatRuns: the will-run line documents
+// the kubectl kute actually issues, not the `flux` equivalent it has no
+// binary for. The resource arg is fully qualified for a substituted kind.
+func TestFluxCommandStringsNameTheCommandThatRuns(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 1, 14, 7, 2, 0, time.UTC)
+
+	got := FluxSuspendCommandString(ResourceKind("Kustomization"), "flux-system", "aim-workers", true)
+	want := `kubectl patch kustomization/aim-workers --type merge -p '{"spec":{"suspend":true}}' -n flux-system`
+	if got != want {
+		t.Errorf("suspend:\n got %s\nwant %s", got, want)
+	}
+
+	got = FluxReconcileCommandString(ResourceKind("Kustomization"), "flux-system", "aim-workers", at)
+	want = `kubectl annotate kustomization/aim-workers reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite -n flux-system`
+	if got != want {
+		t.Errorf("reconcile:\n got %s\nwant %s", got, want)
+	}
+
+	// A substituted kind must render its fully-qualified resource, or the
+	// pasted command resolves to 18a's Helm-3 kind or to nothing.
+	withSubstitution(t, KindFluxHelmRelease, substitutedKinds[KindFluxHelmRelease])
+	got = FluxSuspendCommandString(KindFluxHelmRelease, "flux-system", "podinfo", true)
+	if !strings.Contains(got, "helmreleases.helm.toolkit.fluxcd.io/podinfo") {
+		t.Errorf("expected the fully-qualified resource arg, got %s", got)
 	}
 }

@@ -89,6 +89,19 @@ type Mutator interface {
 	// sets key=value directly under .data — unlike Secret, ConfigMap's .data
 	// is already plain text, so there's no .stringData split to make.
 	PatchConfigMapData(ctx context.Context, namespace, name, key, value string, remove bool) error
+	// SetFluxSuspend sets or clears spec.suspend on a Flux object — what
+	// `flux suspend`/`flux resume` do, as a plain API patch with no flux
+	// binary anywhere in the path (docs/design README.md §30a; contrast
+	// §18a's HelmRollback, which does shell out to helm). kind is the
+	// registry kind and resolves to its real GVR through the dynamic
+	// client, the same resolution PatchMeta's CRD fallback uses.
+	SetFluxSuspend(ctx context.Context, kind ResourceKind, namespace, name string, suspend bool) error
+	// RequestFluxReconcile stamps reconcile.fluxcd.io/requestedAt with a
+	// fresh RFC3339 timestamp — what `flux reconcile` does, and the same
+	// annotate-to-trigger mechanism RolloutRestart already uses on a
+	// workload. Non-destructive: it asks for the reconciliation that would
+	// have happened on the next interval anyway.
+	RequestFluxReconcile(ctx context.Context, kind ResourceKind, namespace, name string) error
 }
 
 // ConfigMapConsumerRef is one workload that references a ConfigMap from its
@@ -278,6 +291,48 @@ func (c *Cluster) Drain(ctx context.Context, node string) (int, error) {
 // Helm's own storage/rollback logic isn't reproduced here.
 func (c *Cluster) HelmRollback(ctx context.Context, namespace, name string, toRevision int) error {
 	return HelmRollback(ctx, namespace, name, toRevision)
+}
+
+// SetFluxSuspend implements Mutator: a one-field merge patch on spec.suspend.
+func (c *Cluster) SetFluxSuspend(ctx context.Context, kind ResourceKind, namespace, name string, suspend bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot suspend %s: empty name", kind)
+	}
+	return c.patchDynamic(ctx, kind, namespace, name, fmt.Appendf(nil, `{"spec":{"suspend":%t}}`, suspend))
+}
+
+// RequestFluxReconcile implements Mutator by reusing PatchMeta rather than
+// opening a second annotation path: the reconcile request *is* an ordinary
+// metadata write, and PatchMeta already owns the typed-vs-dynamic dispatch
+// for every kind.
+func (c *Cluster) RequestFluxReconcile(ctx context.Context, kind ResourceKind, namespace, name string) error {
+	return c.PatchMeta(ctx, kind, namespace, name, true,
+		FluxReconcileAnnotation, time.Now().UTC().Format(time.RFC3339), false)
+}
+
+// FluxSuspendCommandString renders the kubectl patch kute actually issues —
+// not the `flux suspend kustomization podinfo` it is equivalent to.
+// §27a's rule (the will-run line names the command that *executes*)
+// outranks naming the more familiar one, and kute runs no flux binary.
+func FluxSuspendCommandString(kind ResourceKind, namespace, name string, suspend bool) string {
+	cmd := fmt.Sprintf(`kubectl patch %s/%s --type merge -p '{"spec":{"suspend":%t}}'`,
+		kind.ResourceArg(), name, suspend)
+	if namespace != "" {
+		cmd += " -n " + namespace
+	}
+	return cmd
+}
+
+// FluxReconcileCommandString renders the kubectl annotate kute issues for
+// §30a's 'r'. at is passed in rather than read from the clock so the
+// caller's will-run line and the patch it previews carry the same instant.
+func FluxReconcileCommandString(kind ResourceKind, namespace, name string, at time.Time) string {
+	cmd := fmt.Sprintf(`kubectl annotate %s/%s %s=%q --overwrite`,
+		kind.ResourceArg(), name, FluxReconcileAnnotation, at.UTC().Format(time.RFC3339))
+	if namespace != "" {
+		cmd += " -n " + namespace
+	}
+	return cmd
 }
 
 // RolloutUndo finds the ReplicaSet owned by name whose

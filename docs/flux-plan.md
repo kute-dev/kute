@@ -51,7 +51,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T6 | Kind keying, `GroupFlux`, collision fix | `[x]` | T1, T2 |
 | T7 | §30a descriptor, projection, status | `[x]` | T4, T6, G2 |
 | T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
-| T9 | Write seam: suspend / resume / reconcile | `[ ]` | T3 |
+| T9 | Write seam: suspend / resume / reconcile | `[x]` | T3 |
 | T10 | §30a verbs wired into browse | `[ ]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
 | T12 | §32a timeline learns git | `[ ]` | T2, G1 |
@@ -325,7 +325,7 @@ Also replace two Custom-only assumptions with the descriptor's own claim:
 
 **Goldens:** `test/golden/browse/flux-{80x24,120x36,120x36-dark,120x36-light}.golden`. Register `"flux"` in `goldenStatePrefixes` (`golden_states_test.go:612-617`) **and `truecolorStatePrefixes`** — the status-colour mapping is the whole point and plain goldens render colourless. Demo fixtures land here too (see "Fixtures" below).
 
-### T9 — `feat(kube): add Flux suspend, resume and reconcile to the write seam` `[ ]`
+### T9 — `feat(kube): add Flux suspend, resume and reconcile to the write seam` `[x]`
 
 `Mutator` (`mutate.go:24-92`):
 ```go

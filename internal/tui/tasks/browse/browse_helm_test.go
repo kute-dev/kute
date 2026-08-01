@@ -417,6 +417,14 @@ func (f *fakeHelmMutator) PatchSecretData(context.Context, string, string, strin
 func (f *fakeHelmMutator) PatchConfigMapData(context.Context, string, string, string, string, bool) error {
 	return nil
 }
+
+func (f *fakeHelmMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeHelmMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
 func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return nil

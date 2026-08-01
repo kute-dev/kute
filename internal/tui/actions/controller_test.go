@@ -94,6 +94,16 @@ func (f *fakeMutator) PatchConfigMapData(_ context.Context, namespace, name, key
 	return f.err
 }
 
+// Flux verbs (§30a). Recorded but inert: no test in this package drives
+// them, and the Mutator contract requires them.
+func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
 func deleteAction() tui.TaskAction {
 	return tui.TaskAction{
 		ID:    "delete-pod",

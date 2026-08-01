@@ -612,6 +612,14 @@ func (f *fakeRolloutMutator) PatchConfigMapData(context.Context, string, string,
 	return nil
 }
 
+func (f *fakeRolloutMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeRolloutMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
 // railFixture builds an object-scoped Pod owned (via its ReplicaSet) by
 // Deployment "nva-worker" with two rollout revisions (5 current, 4 prior) —
 // shared by the rail-focus and rollback tests below.

@@ -163,6 +163,16 @@ func (f *fakeMutator) PatchConfigMapData(context.Context, string, string, string
 	return nil
 }
 
+// Flux verbs (§30a). Recorded but inert: no test in this package drives
+// them, and the Mutator contract requires them.
+func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {crashLoopPod("worker-0", "default", "node-a")},

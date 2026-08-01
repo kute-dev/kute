@@ -86,6 +86,16 @@ func (f *fakeMutator) PatchConfigMapData(context.Context, string, string, string
 	return nil
 }
 
+// Flux verbs (§30a). Recorded but inert: no test in this package drives
+// them, and the Mutator contract requires them.
+func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+	return nil
+}
+
+func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
 func newSession() *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "test-cluster"}}
 }
