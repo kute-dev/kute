@@ -57,6 +57,25 @@ type Row struct {
 	// keypress time — see kube.NodeShellUnavailable.
 	NodeShellUnavailable string
 
+	// Suspended marks a Flux row whose spec.suspend is set (§30a). It rides
+	// outside Cells for the same reason Cordoned does: §30a's 's' verb
+	// toggles this state, so browse needs to know which direction to mutate
+	// at keypress time, and the health strip counts it.
+	Suspended bool
+
+	// StatusText is a projection's own one-word summary of the row's health
+	// ("ready", "reconciling", "suspended"), for a detail view's title chip.
+	// Empty for every kind with nothing to say beyond its primary condition
+	// — 14d falls back to reading the condition itself, so no per-kind
+	// knowledge leaks into that screen.
+	StatusText string
+
+	// SubLine is a second, full-width line rendered under the row: §30a puts
+	// the Ready condition's message there verbatim, because it is prose a
+	// table cell could only ellipsize. Empty on rows with nothing to add,
+	// which is most of them.
+	SubLine string
+
 	// Outdated marks an 18a Helm release whose chart has a newer version in
 	// the local repo cache. It rides outside Cells for the same reason
 	// Cordoned does: the health strip and the 19a overview both need the
@@ -173,6 +192,13 @@ type Descriptor struct {
 	// APIGroup for the dim "cert-manager.io/v1" tag (docs/design README.md
 	// §14a).
 	APIVersion string
+	// StatusSemantics reports that this descriptor's Project derives a real
+	// status. 14a's two never-fake-health fallbacks — the strip's "no status
+	// semantics · NAME + AGE only" note and the faint neutral row glyph —
+	// apply only to a Custom descriptor *without* it. A Flux list whose rows
+	// are all suspended is all-Neutral but emphatically does have status
+	// semantics, and saying otherwise there would be a lie.
+	StatusSemantics bool
 	// Flux marks a discovered kind in one of Flux's API groups (§30a): it
 	// carries spec.suspend and honours reconcile.fluxcd.io/requestedAt, so
 	// §30a's suspend/resume and reconcile verbs apply. The one flag browse

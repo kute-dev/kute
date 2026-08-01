@@ -3,6 +3,9 @@ package resources
 import (
 	"slices"
 	"testing"
+	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -123,5 +126,182 @@ func TestNoFluxKindsOmitsTheFluxGroup(t *testing.T) {
 		if g.ID == GroupFlux {
 			t.Fatal("a non-Flux cluster must not get a Flux group")
 		}
+	}
+}
+
+// fluxObj builds an unstructured Flux object. conds are {type,status,message}
+// triples flattened; suspend is applied only when true, matching the real
+// shape where spec.suspend is absent rather than false.
+func fluxObj(kind, name string, suspend bool, spec map[string]any, status map[string]any) *unstructured.Unstructured {
+	obj := map[string]any{
+		"apiVersion": kube.FluxGroupKustomize + "/v1",
+		"kind":       kind,
+		"metadata": map[string]any{
+			"name": name, "namespace": "flux-system",
+			"creationTimestamp": time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	if spec == nil {
+		spec = map[string]any{}
+	}
+	if suspend {
+		spec["suspend"] = true
+	}
+	obj["spec"] = spec
+	if status != nil {
+		obj["status"] = status
+	}
+	return &unstructured.Unstructured{Object: obj}
+}
+
+func cond(typ, status, message string) map[string]any {
+	return map[string]any{
+		"type": typ, "status": status, "message": message,
+		"lastTransitionTime": time.Now().Add(-4 * time.Minute).UTC().Format(time.RFC3339),
+	}
+}
+
+func conds(cs ...map[string]any) map[string]any {
+	out := make([]any, len(cs))
+	for i, c := range cs {
+		out[i] = c
+	}
+	return map[string]any{"conditions": out}
+}
+
+// TestProjectFluxResourceStatus is §30a's precedence table. Two rows here
+// are what the generic conditionStatus read got wrong: a reconciling object
+// (Ready=False + Reconciling=True) rendered a red ✕ as if it had failed,
+// and a suspended object rendered a green ● off its frozen Ready condition.
+func TestProjectFluxResourceStatus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		obj       *unstructured.Unstructured
+		wantGlyph string
+		wantClass StatusClass
+		wantReady string
+		wantSusp  bool
+	}{
+		{
+			name:      "suspended outranks a stale Ready=True",
+			obj:       fluxObj("Kustomization", "infra", true, nil, conds(cond("Ready", "True", "Applied revision: main@sha1:abc"))),
+			wantGlyph: "‖", wantClass: StatusNeutral, wantReady: "suspended", wantSusp: true,
+		},
+		{
+			name:      "stalled is terminal failure",
+			obj:       fluxObj("Kustomization", "bad", false, nil, conds(cond("Ready", "False", "path not found"), cond("Stalled", "True", "path not found"))),
+			wantGlyph: "✕", wantClass: StatusFail, wantReady: "False",
+		},
+		{
+			name:      "reconciling with Ready=False is progress, not failure",
+			obj:       fluxObj("Kustomization", "rolling", false, nil, conds(cond("Ready", "False", "building manifests"), cond("Reconciling", "True", "building manifests"))),
+			wantGlyph: "◌", wantClass: StatusWarn, wantReady: "False",
+		},
+		{
+			name:      "ready",
+			obj:       fluxObj("Kustomization", "ok", false, nil, conds(cond("Ready", "True", "Applied revision: main@sha1:abc"))),
+			wantGlyph: "●", wantClass: StatusOK, wantReady: "True",
+		},
+		{
+			name:      "not ready with no Reconciling is failure",
+			obj:       fluxObj("Kustomization", "broken", false, nil, conds(cond("Ready", "False", "health check failed after 2m0s"))),
+			wantGlyph: "✕", wantClass: StatusFail, wantReady: "False",
+		},
+		{
+			name:      "unknown Ready",
+			obj:       fluxObj("Kustomization", "huh", false, nil, conds(cond("Ready", "Unknown", "reconciliation in progress"))),
+			wantGlyph: "▲", wantClass: StatusWarn, wantReady: "Unknown",
+		},
+		{
+			name:      "no conditions yet is pending, not neutral",
+			obj:       fluxObj("Kustomization", "fresh", false, nil, nil),
+			wantGlyph: "▲", wantClass: StatusWarn, wantReady: "–",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			row := projectFluxResource(tc.obj)
+			if row.Glyph != tc.wantGlyph {
+				t.Errorf("glyph = %q, want %q", row.Glyph, tc.wantGlyph)
+			}
+			if row.Status != tc.wantClass {
+				t.Errorf("class = %v, want %v", row.Status, tc.wantClass)
+			}
+			if row.Cells[1] != tc.wantReady {
+				t.Errorf("READY cell = %q, want %q", row.Cells[1], tc.wantReady)
+			}
+			if row.Suspended != tc.wantSusp {
+				t.Errorf("Suspended = %v, want %v", row.Suspended, tc.wantSusp)
+			}
+		})
+	}
+}
+
+// TestFluxSubLineCarriesTheConditionMessageVerbatim pins §30a's "the message
+// text IS the diagnosis" rule: never paraphrased, never truncated here, and
+// absent on a healthy row where it would only repeat the REVISION cell.
+func TestFluxSubLineCarriesTheConditionMessageVerbatim(t *testing.T) {
+	t.Parallel()
+	msg := "health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'"
+	failing := projectFluxResource(fluxObj("Kustomization", "aim-workers", false, nil, conds(cond("Ready", "False", msg))))
+	if failing.SubLine != msg {
+		t.Errorf("SubLine = %q, want the message verbatim %q", failing.SubLine, msg)
+	}
+	healthy := projectFluxResource(fluxObj("Kustomization", "ok", false, nil, conds(cond("Ready", "True", "Applied revision: main@sha1:abcdef1"))))
+	if healthy.SubLine != "" {
+		t.Errorf("a healthy row should carry no sub-line, got %q", healthy.SubLine)
+	}
+}
+
+// TestFluxRevisionAndSource covers the three shapes Flux uses for "what is
+// deployed" and "from where", measured against a real cluster.
+func TestFluxRevisionAndSource(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		obj            *unstructured.Unstructured
+		wantRev, wantS string
+	}{
+		{
+			name: "kustomization: lastAppliedRevision + sourceRef",
+			obj: fluxObj("Kustomization", "flux-system", false,
+				map[string]any{"sourceRef": map[string]any{"kind": "GitRepository", "name": "flux-system"}},
+				map[string]any{"lastAppliedRevision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef"}),
+			wantRev: "master@efd398b", wantS: "git/flux-system",
+		},
+		{
+			name: "gitrepository: artifact revision, and it IS the source",
+			obj: fluxObj("GitRepository", "flux-system", false, nil,
+				map[string]any{"artifact": map[string]any{"revision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef"}}),
+			wantRev: "master@efd398b", wantS: "–",
+		},
+		{
+			name: "helmrelease: history head chartVersion, chart sourceRef",
+			obj: fluxObj("HelmRelease", "cert-manager", false,
+				map[string]any{"chart": map[string]any{"spec": map[string]any{
+					"chart": "cert-manager", "version": "v1.21.0",
+					"sourceRef": map[string]any{"kind": "HelmRepository", "name": "jetstack"}}}},
+				map[string]any{"lastAttemptedRevision": "v1.21.0"}),
+			wantRev: "v1.21.0", wantS: "helm/jetstack",
+		},
+		{
+			name:    "nothing deployed yet",
+			obj:     fluxObj("Kustomization", "fresh", false, nil, nil),
+			wantRev: "–", wantS: "–",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			row := projectFluxResource(tc.obj)
+			if row.Cells[2] != tc.wantRev {
+				t.Errorf("REVISION = %q, want %q", row.Cells[2], tc.wantRev)
+			}
+			if row.Cells[3] != tc.wantS {
+				t.Errorf("SOURCE = %q, want %q", row.Cells[3], tc.wantS)
+			}
+		})
 	}
 }

@@ -9,16 +9,317 @@
 package resources
 
 import (
+	"strings"
+	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"github.com/kute-dev/kute/internal/kube"
 )
 
+// fluxColumns is §30a's curated column set, the same for every Flux kind.
+//
+// Every Flux CRD declares exactly Ready, Status and Age (plus URL on the
+// source kinds) — measured across all 11 CRDs on a real cluster. READY and
+// AGE are kept; the declared Status column is *not* a cell, because its
+// value is prose ("health check failed after 2m0s: Deployment/aim-stage/
+// aim-worker status: 'InProgress'") that a table cell can only ellipsize
+// into uselessness — it renders verbatim as the row's sub-line instead.
+// REVISION and SOURCE are derived (Flux declares neither) and answer the
+// two questions the declared set cannot: what is deployed, and from where.
+var fluxColumns = []string{"Name", "Ready", "Revision", "Source", "Reconciled", "Age"}
+
 // fluxDescriptor builds the §30a list Descriptor for one discovered Flux
-// kind.
+// kind. Custom stays true — 14d detail routing, 14c's API-group type label
+// and 14a's breadcrumb version tag all key off it and all remain correct.
 func fluxDescriptor(dk kube.DiscoveredKind) Descriptor {
-	d := CustomDescriptor(dk)
-	d.Group = GroupFlux
-	d.Icon = "⇅"
-	d.Describe = "flux resource · " + dk.Group
-	d.Flux = true
-	return d
+	return Descriptor{
+		Kind:            dk.RegistryKind(),
+		Group:           GroupFlux,
+		Display:         capitalizePlural(dk.Plural),
+		Icon:            "⇅",
+		Columns:         fluxColumns,
+		FlexColumn:      "Source",
+		Describe:        "flux resource · " + dk.Group,
+		ClusterScoped:   dk.ClusterScoped,
+		Custom:          true,
+		Flux:            true,
+		StatusSemantics: true,
+		APIGroup:        dk.Group,
+		APIVersion:      dk.GVR.Version,
+		Project:         projectFluxResource,
+		HealthLabel:     fluxHealthLabel,
+		HealthGlyph:     fluxHealthGlyph,
+	}
+}
+
+// fluxHealthLabel is §30a's health-strip wording: "12 ready · 2 reconciling
+// · 1 stalled · 3 suspended".
+func fluxHealthLabel(class StatusClass) string {
+	switch class {
+	case StatusOK:
+		return "ready"
+	case StatusWarn:
+		return "reconciling"
+	case StatusFail:
+		return "failed"
+	default:
+		return "suspended"
+	}
+}
+
+// fluxHealthGlyph renders §30a's two departures from the generic set: a
+// suspended object's ‖ (Neutral) and a reconciling one's ◌ (Warn).
+func fluxHealthGlyph(class StatusClass) string {
+	switch class {
+	case StatusNeutral:
+		return "‖" // ‖
+	case StatusWarn:
+		return "◌" // ◌
+	default:
+		return DefaultHealthGlyph(class)
+	}
+}
+
+// projectFluxResource is §30a's status derivation, in strict precedence.
+//
+// Suspended outranks everything because a suspended object's conditions are
+// frozen at whatever they said when reconciliation stopped: reporting Ready
+// from a paused object is reporting a fact that has stopped being true.
+// Stalled is terminal failure. Reconciling with Ready=False is *normal
+// progress* — treating it as failure is the single most common way a GitOps
+// dashboard cries wolf, and is exactly what the generic conditionStatus
+// read got wrong.
+//
+// Nothing here requires Reconciling or Stalled to be present: on a settled
+// cluster the only condition is Ready, so the table degrades to the plain
+// Ready read rather than to "unknown".
+func projectFluxResource(obj runtime.Object) Row {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return metaRow(obj)
+	}
+	ns, name, age := metaOf(obj)
+
+	suspended := fluxSuspended(u)
+	glyph, class, ready := fluxStatus(u, suspended)
+
+	row := Row{
+		Namespace: ns,
+		Name:      name,
+		Cells: []string{
+			name,
+			ready,
+			fluxRevision(u),
+			fluxSource(u),
+			fluxReconciled(u),
+			shortAge(age),
+		},
+		Status:     class,
+		Glyph:      glyph,
+		GlyphClass: class,
+		Suspended:  suspended,
+		StatusText: fluxStatusText(class, suspended),
+		SubLine:    fluxSubLine(u, suspended),
+	}
+	return row
+}
+
+// fluxSuspended reads spec.suspend, which is absent rather than false on an
+// unsuspended object.
+func fluxSuspended(u *unstructured.Unstructured) bool {
+	v, _, _ := unstructured.NestedBool(u.Object, "spec", "suspend")
+	return v
+}
+
+// fluxStatus applies §30a's precedence, returning the glyph, the class and
+// the READY cell's text.
+func fluxStatus(u *unstructured.Unstructured, suspended bool) (glyph string, class StatusClass, ready string) {
+	if suspended {
+		return "‖", StatusNeutral, "suspended" // ‖
+	}
+	if cond, ok := fluxCondition(u, "Stalled"); ok && cond.status == "True" {
+		return "✕", StatusFail, "False" // ✕
+	}
+	readyCond, hasReady := fluxCondition(u, "Ready")
+	switch {
+	case hasReady && readyCond.status == "True":
+		return "●", StatusOK, "True" // ●
+	case hasReady && readyCond.status == "False":
+		// Reconciling alongside a False Ready is progress, not failure.
+		if rec, ok := fluxCondition(u, "Reconciling"); ok && rec.status == "True" {
+			return "◌", StatusWarn, "False" // ◌
+		}
+		return "✕", StatusFail, "False" // ✕
+	case hasReady:
+		return "▲", StatusWarn, readyCond.status // ▲ (Unknown)
+	}
+	// No Ready condition at all. Unlike 14a's neutral "no status semantics"
+	// fallback this is a real pending state — every Flux kind has a status
+	// subresource its controller always writes — and keeping Neutral to mean
+	// exactly "suspended" is what keeps the strip's suspended count honest.
+	if rec, ok := fluxCondition(u, "Reconciling"); ok && rec.status == "True" {
+		return "◌", StatusWarn, "–" // ◌
+	}
+	return "▲", StatusWarn, "–" // ▲
+}
+
+// fluxStatusText is the one-word summary a detail view's title chip shows,
+// so 14d needs no Flux-specific condition knowledge of its own.
+func fluxStatusText(class StatusClass, suspended bool) string {
+	if suspended {
+		return "suspended"
+	}
+	switch class {
+	case StatusOK:
+		return "ready"
+	case StatusWarn:
+		return "reconciling"
+	case StatusFail:
+		return "failed"
+	default:
+		return ""
+	}
+}
+
+// fluxSubLine is the row's second line: the Ready condition's message
+// verbatim (the CRD's own declared Status column, moved out of a cell
+// because it is prose), or on a suspended row the drift signal.
+//
+// A healthy row gets no sub-line — the message there is just "Applied
+// revision: <sha>", which the REVISION cell already says.
+func fluxSubLine(u *unstructured.Unstructured, suspended bool) string {
+	if suspended {
+		return "suspended"
+	}
+	cond, ok := fluxCondition(u, "Ready")
+	if !ok || cond.status == "True" || cond.message == "" {
+		return ""
+	}
+	return cond.message
+}
+
+type fluxCond struct{ status, reason, message, lastTransition string }
+
+// fluxCondition finds one condition by type.
+func fluxCondition(u *unstructured.Unstructured, typ string) (fluxCond, bool) {
+	conds, _, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
+	for _, c := range conds {
+		cm, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		if t, _, _ := unstructured.NestedString(cm, "type"); t != typ {
+			continue
+		}
+		status, _, _ := unstructured.NestedString(cm, "status")
+		reason, _, _ := unstructured.NestedString(cm, "reason")
+		message, _, _ := unstructured.NestedString(cm, "message")
+		lt, _, _ := unstructured.NestedString(cm, "lastTransitionTime")
+		return fluxCond{status: status, reason: reason, message: message, lastTransition: lt}, true
+	}
+	return fluxCond{}, false
+}
+
+// fluxRevision is what this object actually has deployed, across the three
+// shapes Flux uses for it.
+func fluxRevision(u *unstructured.Unstructured) string {
+	for _, path := range [][]string{
+		{"status", "lastAppliedRevision"},   // Kustomization
+		{"status", "artifact", "revision"},  // sources
+		{"status", "lastAttemptedRevision"}, // HelmRelease (applied is null)
+	} {
+		if v, _, _ := unstructured.NestedString(u.Object, path...); v != "" {
+			return shortRevision(v)
+		}
+	}
+	// HelmRelease's real deployed version lives in its history head.
+	hist, _, _ := unstructured.NestedSlice(u.Object, "status", "history")
+	if len(hist) > 0 {
+		if hm, ok := hist[0].(map[string]any); ok {
+			if v, _, _ := unstructured.NestedString(hm, "chartVersion"); v != "" {
+				return v
+			}
+		}
+	}
+	return "–"
+}
+
+// shortRevision collapses Flux's "<ref>@<algo>:<hex>" revision into
+// "<ref>@<7 hex>", the form that fits a column and that a human compares.
+// A revision without that shape (a chart version like "v1.21.0") is left
+// exactly as it is.
+func shortRevision(rev string) string {
+	at := strings.LastIndex(rev, "@")
+	if at < 0 {
+		return rev
+	}
+	ref, digest := rev[:at], rev[at+1:]
+	if colon := strings.Index(digest, ":"); colon >= 0 {
+		digest = digest[colon+1:]
+	}
+	if len(digest) > 7 {
+		digest = digest[:7]
+	}
+	if digest == "" {
+		return ref
+	}
+	return ref + "@" + digest
+}
+
+// fluxSource names what this object reconciles from. The source kinds
+// themselves read "–": they are the source, and their declared URL column
+// carries the identity.
+func fluxSource(u *unstructured.Unstructured) string {
+	for _, base := range [][]string{
+		{"spec", "sourceRef"},
+		{"spec", "chart", "spec", "sourceRef"}, // HelmRelease
+		{"spec", "chartRef"},                   // HelmRelease with an OCI chart
+	} {
+		kind, _, _ := unstructured.NestedString(u.Object, append(append([]string{}, base...), "kind")...)
+		name, _, _ := unstructured.NestedString(u.Object, append(append([]string{}, base...), "name")...)
+		if name == "" {
+			continue
+		}
+		if kind == "" {
+			return name
+		}
+		return shortSourceKind(kind) + "/" + name
+	}
+	return "–"
+}
+
+// shortSourceKind abbreviates a sourceRef kind to the design's compact form
+// ("git/aim-config", not "GitRepository/aim-config").
+func shortSourceKind(kind string) string {
+	switch kind {
+	case "GitRepository":
+		return "git"
+	case "OCIRepository":
+		return "oci"
+	case "HelmRepository":
+		return "helm"
+	case "HelmChart":
+		return "chart"
+	case "Bucket":
+		return "bucket"
+	default:
+		return strings.ToLower(kind)
+	}
+}
+
+// fluxReconciled is how long ago the Ready condition last changed — the
+// closest honest answer to "when did this last do something". Flux records
+// no separate reconcile timestamp.
+func fluxReconciled(u *unstructured.Unstructured) string {
+	cond, ok := fluxCondition(u, "Ready")
+	if !ok || cond.lastTransition == "" {
+		return "–"
+	}
+	ts, err := time.Parse(time.RFC3339, cond.lastTransition)
+	if err != nil {
+		return "–"
+	}
+	return shortAge(time.Since(ts)) + " ago"
 }
