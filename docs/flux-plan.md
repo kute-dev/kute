@@ -47,7 +47,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T2 | Registry-kind ↔ API-kind substitution seam | `[x]` | — |
 | T3 | Delete + patch a custom resource (dynamic fallback) | `[x]` | — |
 | T4 | Health-strip glyph into the descriptor | `[x]` | — |
-| T5 | Design-doc sections §30a/§31a/§32a | `[ ]` | G1, G2, G3 |
+| T5 | Design-doc sections §30a/§31a/§32a | `[x]` | G1, G2, G3 |
 | T6 | Kind keying, `GroupFlux`, collision fix | `[x]` | T1, T2 |
 | T7 | §30a descriptor, projection, status | `[x]` | T4, T6, G2 |
 | T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
@@ -234,7 +234,7 @@ Add `Descriptor.HealthGlyph func(StatusClass) string` + `DefaultHealthGlyph`, de
 
 **Acceptance:** every existing golden byte-identical. That's the whole test.
 
-### T5 — `docs(design): add §30a/§31a/§32a — Flux CD support` `[ ]`
+### T5 — `docs(design): add §30a/§31a/§32a — Flux CD support` `[x]`
 
 **§29a is taken** — it's `v.0.3.0.dc.html`'s keybar-grammar section, cited in 8 places including `verbs.go:40` and `browse/keys.go:290`. Sections go after §28b; add to `## Files`. Lands before the feature code so every implementation commit can cite it. Each section carries its rationale, per the doc's convention. The load-bearing ones:
 
