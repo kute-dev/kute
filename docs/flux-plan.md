@@ -38,6 +38,14 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
+**As of 2026-08-01: 11 of 13 tasks and all 3 gates closed.** Flux kinds are
+correctly keyed, grouped, projected, rendered and mutable, and the timeline
+carries revision rows. Outstanding: **T11** (the §31a detail screen — `↵` on
+a Flux row currently falls through to the generic 14d detail, which works
+but shows none of 31a's failure card, chain grid or inventory) and **T13**
+(e2e). One §32a increment is also outstanding — the persisted commit-subject
+cache, see G1.
+
 | # | task | status | depends on |
 |---|---|---|---|
 | G1 | Commit subject + SHA binding | `[x]` **resolved: via Events, not artifact** | — |
@@ -53,9 +61,9 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[x]` | T3 |
 | T10 | §30a verbs wired into browse | `[x]` | T8, T9 |
-| T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
+| T11 | §31a Kustomization detail screen | `[ ]` **not started** | T10, G1 |
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
-| T13 | E2E coverage | `[ ]` | T10, T11, T12 |
+| T13 | E2E coverage | `[ ]` **not started** | T10, T11, T12 |
 
 ---
 
