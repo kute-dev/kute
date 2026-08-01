@@ -368,6 +368,9 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, helmGroup)
 	}
+	if m.fluxVerbsApply() {
+		groups = append(groups, m.fluxKeybarGroup())
+	}
 	if m.kind == kube.KindCustomResourceDefinition {
 		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
 	}

@@ -479,6 +479,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.grouped() || m.desc.Flux {
 			m.toggleGroup()
 		}
+	case "o":
+		if m.fluxVerbsApply() {
+			if cmd, ok := m.openSelectedFluxSource(); ok {
+				return m, cmd
+			}
+		}
 	case "ctrl+r":
 		if m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
@@ -487,6 +493,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		switch {
+		case m.fluxVerbsApply():
+			// §30a's reconcile. Ahead of the retry cases below because a
+			// Flux list in TaskStateReady is by definition not in the
+			// offline/error states those handle.
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginFluxReconcile(row)
+			}
 		case m.kind == kube.KindForward && m.state == tui.TaskStateReady:
 			return m, m.restartSelectedForward()
 		case m.offline() && m.retrier != nil:
@@ -556,6 +569,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.beginStopAllForwards()
 		}
 	case "s":
+		if m.fluxVerbsApply() {
+			// §30a's suspend/resume. NodeShell's own 's' below is Node-only,
+			// so the two never contend on the same row.
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginFluxSuspend(row)
+			}
+		}
 		// Same gate as 'x' above, and a stronger reason for it: kubectl debug
 		// creates a privileged node-debugger pod, so a node shell writes to
 		// the cluster before the user types anything.

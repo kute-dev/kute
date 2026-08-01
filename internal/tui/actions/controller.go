@@ -296,6 +296,13 @@ func (c *Controller) execute() tea.Cmd {
 		case "force-delete":
 			err = mutator.DeleteResourceForced(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
+		case "flux-suspend", "flux-resume":
+			err = mutator.SetFluxSuspend(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
+				action.Scope.ResourceName, action.Scope.Verb == "flux-suspend")
+		case "flux-reconcile":
+			err = mutator.RequestFluxReconcile(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
 		case "rollout-restart":
 			err = mutator.RolloutRestart(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)

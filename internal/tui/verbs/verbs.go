@@ -170,6 +170,43 @@ var (
 		ID: "rollout-restart", Key: "ctrl-r", Label: "restart",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
+	// FluxReconcile is §30a's 'r' on a Flux row: a fresh
+	// reconcile.fluxcd.io/requestedAt timestamp — the same
+	// annotate-to-trigger mechanism RolloutRestart uses, on a different
+	// object. TierNone, no confirm.
+	//
+	// It keeps bare 'r' against the objection recorded on RolloutRestart
+	// above, deliberately and for a reason that does not generalize. That
+	// verb was moved off 'r' because a single unmodified letter fired an
+	// unconfirmed pod restart across a whole Deployment with zero friction.
+	// Reconcile is not that: it asks for the reconciliation Flux would have
+	// performed on its own interval anyway, so the worst case of a
+	// mistaken press is that a sync happens early. 'r' is also what `flux
+	// reconcile` is spelled, and this screen's other meanings for 'r'
+	// (retry a failed load, restart a forward) are reachable only in states
+	// a Flux row is not in. Do not copy this exemption to a verb that
+	// changes cluster state the controller wasn't already going to make.
+	FluxReconcile = Verb{
+		ID: "flux-reconcile", Key: "r", Label: "reconcile",
+		Tier: actions.TierNone, Mutating: true,
+	}
+	// FluxSuspend is §30a's 's': one verb, two directions, exactly Cordon's
+	// shape — the Scope.Verb is "flux-suspend" or "flux-resume" depending on
+	// the row, and browse flips the keybar label to match. TierNone for
+	// Cordon's reason: reversible and immediate, and resume puts the object
+	// back exactly where it was.
+	//
+	// Kinds stays nil because the Flux kind set is *discovered* at connect,
+	// not known at compile time; browse gates it on Descriptor.Flux instead.
+	FluxSuspend = Verb{
+		ID: "flux-suspend", Key: "s", Label: "suspend",
+		Tier: actions.TierNone, Mutating: true,
+	}
+	// FluxSource is §30a's 'o': jump to the object this one reconciles
+	// from. Read-only navigation, so no tier and not mutating.
+	FluxSource = Verb{
+		ID: "flux-source", Key: "o", Label: "source",
+	}
 	Cordon = Verb{
 		ID: "cordon", Key: "C", Label: "cordon",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
@@ -343,6 +380,7 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
+	FluxReconcile, FluxSuspend, FluxSource,
 	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,

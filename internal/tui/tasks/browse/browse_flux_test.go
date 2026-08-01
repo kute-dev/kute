@@ -11,6 +11,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 func kustomizationDK() kube.DiscoveredKind {
@@ -183,5 +184,107 @@ func TestFluxSuspendedRowStaysVisibleAndSortsAboveHealthy(t *testing.T) {
 	if strings.Count(view, "suspended") != 2 { // strip segment + READY cell
 		t.Errorf("expected 'suspended' exactly twice (strip + cell), got %d:\n%s",
 			strings.Count(view, "suspended"), view)
+	}
+}
+
+// fluxModelWithMutator is fluxModel plus a wired write seam.
+func fluxModelWithMutator(t *testing.T, mut *fakeMutator, objs ...runtime.Object) Model {
+	t.Helper()
+	reg, groups := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{kustomizationDK()}, nil)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Kustomization"): objs,
+	}}
+	session := newSession()
+	session.Registry, session.Groups = reg, groups
+	session.Location.Kind = kube.ResourceKind("Kustomization")
+	session.Location.Namespace = "flux-system"
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	return step(t, m, m.Init()())
+}
+
+// TestFluxSuspendVerbFlipsDirectionWithTheRow is Cordon's shape: one key,
+// two directions, chosen by the row's own state rather than by a mode.
+func TestFluxSuspendVerbFlipsDirectionWithTheRow(t *testing.T) {
+	mut := &fakeMutator{}
+	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if len(mut.fluxSuspends) != 1 || mut.fluxSuspends[0] != "flux-system/aim-apps=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.fluxSuspends)
+	}
+
+	mut2 := &fakeMutator{}
+	m2 := fluxModelWithMutator(t, mut2, kustomization("aim-infra", true, "True", "ok"))
+	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
+	if len(mut2.fluxSuspends) != 1 || mut2.fluxSuspends[0] != "flux-system/aim-infra=false" {
+		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.fluxSuspends)
+	}
+	// The keybar has to say which direction it will go, or the single key is
+	// a coin flip.
+	if !strings.Contains(plain(m2.Render()), "resume") {
+		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
+	}
+	if !strings.Contains(plain(m.Render()), "suspend") {
+		t.Errorf("keybar should read 'suspend' on an active row")
+	}
+}
+
+// TestFluxReconcileVerbAnnotates covers §30a's 'r' — and that it does not
+// collide with the retry meaning 'r' carries in browse's error states,
+// since a ready Flux list is not in one.
+func TestFluxReconcileVerbAnnotates(t *testing.T) {
+	mut := &fakeMutator{}
+	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+	m = step(t, m, tea.KeyPressMsg{Text: "r"})
+	if len(mut.fluxReconciles) != 1 || mut.fluxReconciles[0] != "flux-system/aim-apps" {
+		t.Fatalf("expected a reconcile call, got %v", mut.fluxReconciles)
+	}
+	// The will-run line names the kubectl kute actually issues, never the
+	// `flux reconcile` it is equivalent to — §27a's rule. It rides the
+	// keybar's RightNote, the same channel scale and bulk-delete use, so it
+	// sheds at narrow widths; assert the content, then that it reaches the
+	// bar when there is room for it.
+	if !strings.Contains(m.execFeedback, "kubectl annotate") {
+		t.Errorf("will-run line = %q, want a kubectl annotate", m.execFeedback)
+	}
+	if strings.Contains(m.execFeedback, "flux reconcile") {
+		t.Errorf("will-run line must not name a binary kute never runs: %q", m.execFeedback)
+	}
+	if !strings.Contains(m.execFeedback, kube.FluxReconcileAnnotation) {
+		t.Errorf("will-run line should name the annotation: %q", m.execFeedback)
+	}
+	m.SetSize(240, 36)
+	if !strings.Contains(plain(m.Render()), "kubectl annotate") {
+		t.Errorf("expected the will-run line in the keybar at a wide width:\n%s", plain(m.Render()))
+	}
+}
+
+// TestFluxSourceVerbJumpsToTheSource covers 'o'.
+func TestFluxSourceVerbJumpsToTheSource(t *testing.T) {
+	mut := &fakeMutator{}
+	m := fluxModelWithMutator(t, mut, kustomization("aim-apps", false, "True", "ok"))
+
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "o"})
+	if cmd == nil {
+		t.Fatal("expected a goto cmd from 'o'")
+	}
+	msg, ok := cmd().(tui.GotoResourceMsg)
+	if !ok {
+		t.Fatalf("expected GotoResourceMsg, got %T", cmd())
+	}
+	if msg.Kind != kube.ResourceKind("GitRepository") || msg.Name != "flux-system" {
+		t.Errorf("expected a jump to GitRepository/flux-system, got %+v", msg)
+	}
+}
+
+// TestFluxVerbsAreInertWithoutAMutator guards the read-only case: no write
+// seam wired means the keys do nothing rather than panic.
+func TestFluxVerbsAreInertWithoutAMutator(t *testing.T) {
+	m := fluxModel(t, kustomization("aim-apps", false, "True", "ok"))
+	for _, key := range []string{"s", "r"} {
+		m = step(t, m, tea.KeyPressMsg{Text: key})
+	}
+	if strings.Contains(plain(m.Render()), "suspend") {
+		t.Errorf("keybar should not offer suspend without a mutator")
 	}
 }

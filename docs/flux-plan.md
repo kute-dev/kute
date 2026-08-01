@@ -52,7 +52,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T7 | §30a descriptor, projection, status | `[x]` | T4, T6, G2 |
 | T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[x]` | T3 |
-| T10 | §30a verbs wired into browse | `[ ]` | T8, T9 |
+| T10 | §30a verbs wired into browse | `[x]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
 | T12 | §32a timeline learns git | `[ ]` | T2, G1 |
 | T13 | E2E coverage | `[ ]` | T10, T11, T12 |
@@ -342,7 +342,7 @@ RequestFluxReconcile(ctx, kind ResourceKind, namespace, name string) error
 
 **Tests:** `TestSetFluxSuspendPatchesSpecSuspend`, `TestRequestFluxReconcileStampsAnnotation` — assert recorded **dynamic-client** actions (patch type, exact body, GVR, RFC3339-parseable stamp). `newTestCluster` (`mutate_test.go:15`) needs a `dynClient`+`discovered` variant.
 
-### T10 — `feat(tui): reconcile, suspend and jump to source from a Flux row` `[ ]`
+### T10 — `feat(tui): reconcile, suspend and jump to source from a Flux row` `[x]`
 
 `internal/tui/verbs/verbs.go`, all gated on `Descriptor.Flux` (`Kinds` stays nil — the Flux kind set is discovered, not compile-time, so `AppliesTo` has no production caller here):
 

@@ -305,6 +305,9 @@
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>f</code> starts a port-forward without suspending anything: a chip appears in the header and stays live while you keep browsing. <code>s</code> on a node opens a root shell on the node itself.</li>
       </ul>
 
+      <h3>Flux CD</h3>
+      <p>Kustomizations, HelmReleases and sources get real columns — what revision is applied, which repository it came from, and when it last reconciled — with the failure reason printed under the row, verbatim, exactly as Flux wrote it. A reconciling object is not a failing one, and a suspended one stays at the top of the list rather than sinking in with the healthy rows: it is the object quietly drifting from git. <code>r</code> reconciles and <code>s</code> suspends or resumes, both plain API calls — the <code>flux</code> binary is never required.</p>
+
       <h3>Helm releases</h3>
       <p>Helm releases are just another kind in the list — you can browse them, read their values with <code>v</code>, and open the revision history with <code>h</code>, all without the <code>helm</code> binary installed. Rolling back with <code>R</code> is the one thing that shells out to real <code>helm</code>.</p>
 
@@ -555,6 +558,15 @@
           <tr><td><kbd>v</kbd></td><td>values</td></tr>
           <tr><td><kbd>h</kbd></td><td>history — the revision rail</td></tr>
           <tr><td><kbd>R</kbd></td><td>rollback</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Flux CD</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>r</kbd></td><td>reconcile</td></tr>
+          <tr><td><kbd>s</kbd></td><td>suspend / resume</td></tr>
+          <tr><td><kbd>o</kbd></td><td>source — jump to the repository it syncs from</td></tr>
         </tbody>
       </table>
 

@@ -113,6 +113,13 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		"meta": true, "add-secret-key": true, "add-configmap-key": true,
 		"restart-configmap-consumers": true,
 		"exec":                        true, "node-shell": true, "edit": true,
+		// §30a. Suspend is Cordon's exact shape: reversible and immediate,
+		// and resume restores the prior state exactly. Reconcile requests
+		// the sync Flux would have run on its own interval anyway, so it
+		// makes no change the controller wasn't already going to make —
+		// the one property that lets it keep a bare letter (see
+		// FluxReconcile's own comment for why that doesn't generalize).
+		"flux-suspend": true, "flux-reconcile": true,
 	}
 	for _, v := range All {
 		if v.Mutating && v.Tier == actions.TierNone && !untiered[v.ID] {

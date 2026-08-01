@@ -2,6 +2,7 @@ package browse
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -48,6 +49,8 @@ type fakeMutator struct {
 	scaled               []int32
 	setImages            []string // "namespace/name container=image"
 	setResources         []string // "namespace/name container" of every SetResources call
+	fluxSuspends         []string // "namespace/name=true|false" of every SetFluxSuspend call
+	fluxReconciles       []string // "namespace/name" of every RequestFluxReconcile call
 	dryRun               bool     // true if the most recent SetResources call was a dry-run
 	metaPatches          []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
 	secretDataPatches    []string // "namespace/name key=value" or "...key-" for a removal
@@ -188,11 +191,19 @@ func (f *fakeMutator) PatchConfigMapData(_ context.Context, namespace, name, key
 
 // Flux verbs (§30a). Recorded but inert: no test in this package drives
 // them, and the Mutator contract requires them.
-func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, namespace, name string, suspend bool) error {
+func (f *fakeMutator) SetFluxSuspend(_ context.Context, _ kube.ResourceKind, namespace, name string, suspend bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.fluxSuspends = append(f.fluxSuspends, fmt.Sprintf("%s/%s=%t", namespace, name, suspend))
 	return nil
 }
 
-func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+func (f *fakeMutator) RequestFluxReconcile(_ context.Context, _ kube.ResourceKind, namespace, name string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.fluxReconciles = append(f.fluxReconciles, namespace+"/"+name)
 	return nil
 }
 
