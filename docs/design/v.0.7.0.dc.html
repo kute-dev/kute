@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">24</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">cert-manager — the issuance chain</h1>
+  </div>
+  <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 900px; line-height: 1.7;">Issuers, ClusterIssuers, CertificateRequests: generic registry kinds (spec 14a), no new screens. What earns chrome: the Certificate ↵ resolves the request → order → challenge chain and promotes the deepest failure — plus an expiry column and one renew verb, all registry data.</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 24A ══════════════════ -->
+    <div id="24a" data-screen-label="24a Certificate issuance chain" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Certificate ↵ — chain resolved, deepest failure on top</span>
+        <span style="font-size: 12px; color: #676780;">same promotion as pod detail's last-termination · orders &amp; challenges never need their own screens</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">nva-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">certificate/web-tls</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Chain</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span><span style="color: #ef6a6a;">✕</span> <span style="color: #f0b7b7;">Ready=False · Issuing</span></span>
+          <span style="color: #9a9ab2;">attempt 4 · next retry in 2m</span>
+          <span style="margin-left: auto; color: #676780;">chain resolved from the watch · live</span>
+        </div>
+
+        <div style="margin: 10px 14px; border: 1px solid #4a2430; border-radius: 6px; background: #170e13; padding: 8px 12px;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span style="color: #ef6a6a; font-weight: 700;">✕ challenge failed</span>
+            <span style="color: #9a9ab2;">dns-01 · app.nva.dev</span>
+            <span style="margin-left: auto; color: #676780;">8m ago · order/web-tls-1-2847563921</span>
+          </div>
+          <div style="color: #f0b7b7; margin-top: 2px;">propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.nva.dev</div>
+          <div style="color: #676780; font-size: 11px; margin-top: 2px;">message verbatim from challenge status · deepest failure in the chain, found for you</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.5fr) minmax(0,1fr) 70px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>CHAIN</span><span>STATE</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.5fr) minmax(0,1fr) 70px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #d8d8e8;">certificate/web-tls</span>
+          <span style="color: #e8c74a;">Ready=False · Issuing</span>
+          <span style="color: #676780; text-align: right;">41d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.5fr) minmax(0,1fr) 70px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #d8d8e8;"><span style="color: #44445c;">└ </span>certificaterequest/web-tls-1</span>
+          <span style="color: #9a9ab2;">Approved · not Ready</span>
+          <span style="color: #676780; text-align: right;">8m</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.5fr) minmax(0,1fr) 70px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #ef6a6a;">✕</span>
+          <span style="color: #d8d8e8;"><span style="color: #44445c;">&nbsp;&nbsp;└ </span>order/web-tls-1-2847563921</span>
+          <span style="color: #ef6a6a;">errored</span>
+          <span style="color: #676780; text-align: right;">8m</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.5fr) minmax(0,1fr) 70px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #ef6a6a;">✕</span>
+          <span style="color: #f0f0fa;"><span style="color: #44445c;">&nbsp;&nbsp;&nbsp;&nbsp;└ </span>challenge/web-tls-1-2847563921-0</span>
+          <span style="color: #ef6a6a;">dns-01 · pending → failed</span>
+          <span style="color: #676780; text-align: right;">8m</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 5px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">refs</span>
+          <span style="color: #9a9ab2;">secret/web-tls-cert · <span style="color: #ef6a6a;">missing</span></span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #9a9ab2;">clusterissuer/letsencrypt-prod · <span style="color: #34d17b;">Ready</span></span>
+          <span style="margin-left: auto; color: #676780;">↵ on a ref jumps to it</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CHAIN</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">open object</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">renew</span></span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">yaml</span></span>
+          <span><span style="color: #a78bfa;">e</span> <span style="color: #676780;">events</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">back</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">help</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>A stuck cert is the canonical scattered-objects problem: the answer lives three hops away, Certificate → CertificateRequest → Order → Challenge. Kute walks ownerRefs from the watch and <span style="color: #e9e2ff;">promotes the deepest failure message, verbatim</span> — same move as pod detail putting last-termination first (spec 5a).</li>
+          <li>The chain rows are selectable: `↵` lands on the object's generic CRD detail / YAML (spec 14d) — so <span style="color: #e9e2ff;">Orders, Challenges, and CertificateRequests never need destination screens of their own</span>. They stay generic registry kinds, reached through the chain.</li>
+          <li>For non-ACME issuers the chain is just two rows (cert → request) — the recipe degrades, no special casing. A healthy cert shows a green strip and no failure card: <span style="color: #e9e2ff;">zero chrome until earned</span>.</li>
+          <li>The refs strip resolves the target Secret (secret semantics from spec 21a) and the Issuer/ClusterIssuer, with live existence + Ready state — `↵` jumps to either.</li>
+          <li>Same skeleton as every detail view: header bar · failure card · rows · strip · keybar. Nothing here is a describe page.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 24B ══════════════════ -->
+    <div id="24b" data-screen-label="24b Certificates list with expiry" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Certificates list — expiry as a first-class column</span>
+        <span style="font-size: 12px; color: #676780;">registry data over spec 14a · same expiry semantics as the ingress TLS column (spec 23a)</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">nva-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Certificates</span>
+          <span style="color: #44445c; font-size: 11px;">cert-manager.io/v1</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">4</span> <span style="color: #676780;">ready</span></span>
+          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">issuing</span></span>
+          <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">not ready</span></span>
+          <span><span style="color: #e8c74a;">◷</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">&lt;30d</span></span>
+          <span style="margin-left: auto; color: #676780;">6 certificates · unhealthy + soonest expiry first</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>EXPIRES</span><span>RENEWAL</span><span>ISSUER</span><span style="text-align: right;">AGE</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #ef6a6a;">✕</span>
+          <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">web-tls</span>
+          <span style="color: #ef6a6a;">False</span>
+          <span style="color: #ef6a6a;">—</span>
+          <span style="color: #ef6a6a; white-space: nowrap;">issuing · 4 tries</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">41d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+          <span style="color: #e8c74a;">◷</span>
+          <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">admin-tls</span>
+          <span style="color: #9a9ab2;">True</span>
+          <span style="color: #e8c74a;">22d</span>
+          <span style="color: #9a9ab2;">in <span style="color: #e8c74a;">−8d</span> · auto</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">70d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">new-svc-tls</span>
+          <span style="color: #e8c74a;">False</span>
+          <span style="color: #676780;">—</span>
+          <span style="color: #e8c74a;">first issue</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">4m</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span>
+          <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">api-tls</span>
+          <span style="color: #9a9ab2;">True</span>
+          <span style="color: #676780;">61d</span>
+          <span style="color: #676780;">in 31d · auto</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">41d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span>
+          <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">grafana-tls</span>
+          <span style="color: #9a9ab2;">True</span>
+          <span style="color: #676780;">62d</span>
+          <span style="color: #676780;">in 32d · auto</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">62d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span>
+          <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">internal-ca</span>
+          <span style="color: #9a9ab2;">True</span>
+          <span style="color: #676780;">8y</span>
+          <span style="color: #676780;">in 7y · auto</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">selfsigned</span>
+          <span style="color: #676780; text-align: right;">90d</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CERTS</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">chain</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">renew</span></span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">yaml</span></span>
+          <span><span style="color: #a78bfa;">e</span> <span style="color: #676780;">events</span></span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">help</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>Pure registry data over the generic CRD list (spec 14a): <span style="color: #e9e2ff;">EXPIRES from status.notAfter, RENEWAL from status.renewalTime</span> — yellow &lt;30d, red expired, exactly the ingress TLS column semantics (spec 23a). No new machinery.</li>
+          <li>Sort is the standard unhealthy-first with one addition: among ready certs, <span style="color: #e9e2ff;">soonest expiry floats up</span>. The ◷ &lt;30d count joins the strip — and feeds cluster triage / TROUBLE (spec 19a), where `certificate/web-tls · Issuing` already appears.</li>
+          <li>`↵` opens the chain (<a href="#24a">24a</a>). Everything else — y/e/ctrl-d, marks, filter — is the stock list kit.</li>
+          <li>Issuers and ClusterIssuers stay generic lists: NAME · READY · certs count (a reverse-ref column, same join kit as Gateway ⇄ HTTPRoute) · AGE. `↵` on an issuer filters Certificates to it — a filtered table, not a screen.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 24C ══════════════════ -->
+    <div id="24c" data-screen-label="24c Force-renew will-run line" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24c</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">r — force renew, with its will-run line</span>
+        <span style="font-size: 12px; color: #676780;">reversible tier · executes on ↵ · no modal</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #e8c74a;">◷</span>
+          <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">admin-tls</span>
+          <span style="color: #9a9ab2;">True</span>
+          <span style="color: #e8c74a;">22d</span>
+          <span style="color: #9a9ab2;">in <span style="color: #e8c74a;">−8d</span> · auto</span>
+          <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+          <span style="color: #676780; text-align: right;">70d</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #d8d8e8;">cmctl renew admin-tls -n nva-stage</span>
+          <span style="margin-left: auto; color: #676780;"><span style="color: #a78bfa;">↵</span> renew · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CERTS</span>
+          <span style="color: #676780;">renew admin-tls?</span>
+          <span style="margin-left: auto; color: #44445c;">reversible · cert-manager reissues, old secret kept until the new one is ready</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 11px; color: #55556e;">after ↵ — inline confirmation, screen never changes</span>
+        <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 8px; overflow: hidden; font-size: 12.5px; line-height: 1.5;">
+          <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 60px 90px 140px 140px 48px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+            <span style="color: #e8c74a;">◐</span>
+            <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">admin-tls</span>
+            <span style="color: #e8c74a;">False</span>
+            <span style="color: #676780;">22d</span>
+            <span style="color: #e8c74a; white-space: nowrap;">issuing · manual</span>
+            <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
+            <span style="color: #676780; text-align: right;">70d</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+            <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CERTS</span>
+            <span style="color: #34d17b;">✓ renewal requested · admin-tls</span>
+            <span style="margin-left: auto; color: #676780;"><span style="color: #a78bfa;">↵</span> watch the chain</span>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>Renew is <span style="color: #e9e2ff;">reversible tier</span> — cert-manager reissues into a new secret and keeps serving the old one until it's ready — so it gets the inline will-run line, not a modal. Friction scales with risk.</li>
+          <li>The honest line is <span style="color: #e9e2ff;">cmctl, not kubectl</span>: renewal is an Issuing condition patch on the status subresource, which plain kubectl can't express cleanly. Kute performs the same patch itself — cmctl need not be installed; the line is copyable documentation, same contract as everywhere.</li>
+          <li>After `↵` the row flips to issuing in place and the keybar confirms — <span style="color: #e9e2ff;">no toast, no navigation</span>. `↵` again opens the chain (<a href="#24a">24a</a>) to watch it land.</li>
+          <li>Works identically from the list (<a href="#24b">24b</a>) and the chain view. On a PROD context, renew stays reversible tier — it's delete that escalates, not reissue.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: &quot;3200px&quot;},
+  &quot;showNotes&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;description&quot;: &quot;Show rationale notes under each option&quot;}
+}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showNotes: this.props.showNotes ?? true };
+  }
+}
+</script>
+</body>
+</html>
