@@ -10,7 +10,7 @@
   "siteURL": "https://kute.dev/",
   "releaseVersion": "0.4.0",
   "signedFrom": "v0.4.0-beta.1",
-  "footerTag": "Your cluster, in plain sight. Navigation only when you ask.",
+  "footerTag": "Your cluster, in plain sight. Answers, not objects.",
   "pages": [
     {
       "slug": "index",
