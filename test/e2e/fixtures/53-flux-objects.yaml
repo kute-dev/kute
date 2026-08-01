@@ -1,0 +1,133 @@
+# Flux objects with hand-written status. No controller runs, so every state
+# below is permanent — which is the point: §30a's status precedence needs a
+# suspended object, a failing one and a reconciling one all on screen at
+# once, and a real Flux install would reconcile them into a single state
+# within seconds.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: kute-config
+  namespace: kute-e2e
+spec:
+  interval: 1m
+  url: https://github.com/kute-dev/e2e-config
+  ref:
+    branch: main
+status:
+  artifact:
+    revision: main@sha1:8f3c2a1b4d5e6f708192a3b4c5d6e7f809102030
+    lastUpdateTime: "2026-08-01T09:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Succeeded
+      message: stored artifact for revision 'main@sha1:8f3c2a1b'
+      lastTransitionTime: "2026-08-01T09:00:00Z"
+---
+# ✕ failed, and applied — the pair that distinguishes "unhealthy" from
+# "drifted". Its inventory names the api Deployment from 10-workloads.yaml,
+# so §31a's drill-through resolves against a real object.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kute-workers
+  namespace: kute-e2e
+spec:
+  interval: 5m
+  path: ./clusters/e2e/workers
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: kute-config
+status:
+  lastAppliedRevision: main@sha1:8f3c2a1b4d5e6f708192a3b4c5d6e7f809102030
+  inventory:
+    entries:
+      - id: kute-e2e_api_apps_Deployment
+        v: v1
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: HealthCheckFailed
+      message: "health check failed after 2m0s: Deployment/kute-e2e/api status: 'InProgress'"
+      lastTransitionTime: "2026-08-01T09:00:00Z"
+---
+# ‖ suspended, carrying a STALE Ready=True — the object that proves
+# suspension outranks a frozen condition. Also drifted: its applied revision
+# is behind the source's artifact revision above.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kute-infra
+  namespace: kute-e2e
+spec:
+  interval: 5m
+  suspend: true
+  path: ./clusters/e2e/infra
+  sourceRef:
+    kind: GitRepository
+    name: kute-config
+status:
+  lastAppliedRevision: main@sha1:2b91f04c5d6e7f8091a2b3c4d5e6f70819203040
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ReconciliationSucceeded
+      message: "Applied revision: main@sha1:2b91f04c"
+      lastTransitionTime: "2026-07-26T09:00:00Z"
+---
+# ◌ reconciling — Ready=False *and* Reconciling=True, which the generic CRD
+# read renders as a red failure.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kute-apps
+  namespace: kute-e2e
+spec:
+  interval: 5m
+  path: ./clusters/e2e/apps
+  sourceRef:
+    kind: GitRepository
+    name: kute-config
+status:
+  lastAppliedRevision: main@sha1:8f3c2a1b4d5e6f708192a3b4c5d6e7f809102030
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: Progressing
+      message: building manifests
+      lastTransitionTime: "2026-08-01T09:00:00Z"
+    - type: Reconciling
+      status: "True"
+      reason: ProgressingWithRetry
+      message: building manifests
+      lastTransitionTime: "2026-08-01T09:00:00Z"
+---
+# The collision's other half: a Flux HelmRelease that must NOT appear in
+# §18a's Helm Releases list, and must not evict it either.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kute-podinfo
+  namespace: kute-e2e
+spec:
+  interval: 15m
+  chart:
+    spec:
+      chart: podinfo
+      version: 6.5.4
+      sourceRef:
+        kind: HelmRepository
+        name: podinfo
+status:
+  lastAttemptedRevision: 6.5.4
+  history:
+    - chartName: podinfo
+      chartVersion: 6.5.4
+      version: 1
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: InstallSucceeded
+      message: Helm install succeeded
+      lastTransitionTime: "2026-08-01T09:00:00Z"

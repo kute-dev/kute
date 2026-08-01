@@ -37,7 +37,7 @@ func fluxDescriptor(dk kube.DiscoveredKind) Descriptor {
 	return Descriptor{
 		Kind:            dk.RegistryKind(),
 		Group:           GroupFlux,
-		Display:         capitalizePlural(dk.Plural),
+		Display:         fluxDisplay(dk),
 		Icon:            "⇅",
 		Columns:         fluxColumns,
 		FlexColumn:      "Name",
@@ -52,6 +52,23 @@ func fluxDescriptor(dk kube.DiscoveredKind) Descriptor {
 		HealthLabel:     fluxHealthLabel,
 		HealthGlyph:     fluxHealthGlyph,
 	}
+}
+
+// fluxDisplay names the kind for the breadcrumb, the goto palette and the
+// strip. A substituted kind gets a "Flux " prefix, and only a substituted
+// one does.
+//
+// The prefix exists exactly where the collision made the bare name
+// ambiguous: "Helmreleases" and §18a's "Helm Releases" are one keystroke
+// apart in the fuzzy palette, so `g "helm"` became a coin flip between two
+// genuinely different kinds. Kustomizations and the source kinds collide
+// with nothing and keep their own plural.
+func fluxDisplay(dk kube.DiscoveredKind) string {
+	name := capitalizePlural(dk.Plural)
+	if dk.RegistryKind() != kube.ResourceKind(dk.Kind) {
+		return "Flux " + name
+	}
+	return name
 }
 
 // fluxHealthLabel is §30a's health-strip wording: "12 ready · 2 reconciling

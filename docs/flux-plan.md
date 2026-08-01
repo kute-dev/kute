@@ -38,9 +38,17 @@ The vision fence from the design holds: **kute never installs or bootstraps Flux
 
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
-**As of 2026-08-01: 12 of 13 tasks and all 3 gates closed.** Flux kinds are
+**As of 2026-08-01: all 13 tasks and all 3 gates closed.** Flux kinds are
 correctly keyed, grouped, projected, rendered and mutable, and the timeline
-carries revision rows. Outstanding: **T13** (e2e). One §32a increment is also outstanding — the persisted commit-subject
+carries revision rows. Outstanding: only §32a's persisted commit-subject cache (see G1) — until it
+lands, a subject shows only for a commit observed inside the Event TTL.
+
+**One thing the e2e run surfaced:** with both HelmRelease kinds served,
+`g "helm"` became a coin flip between §18a's "Helm Releases" and Flux's
+"Helmreleases" — one keystroke apart in the fuzzy palette. A substituted
+kind now takes a "Flux " display prefix, and only a substituted one does:
+Kustomizations and the source kinds collide with nothing and keep their own
+plural. One §32a increment is also outstanding — the persisted commit-subject
 cache, see G1.
 
 | # | task | status | depends on |
@@ -60,7 +68,7 @@ cache, see G1.
 | T10 | §30a verbs wired into browse | `[x]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[x]` | T10, G1 |
 | T12 | §32a timeline learns git | `[x]` | T2, G1 |
-| T13 | E2E coverage | `[ ]` **not started** | T10, T11, T12 |
+| T13 | E2E coverage | `[x]` | T10, T11, T12 |
 
 ---
 
@@ -466,7 +474,7 @@ silently vanished under the fake while the real cluster worked. Fixed in
 both readers, with `TestDemoFluxEventsCarryTheRevisionAnnotation` guarding
 it.
 
-## T13 — `test(e2e): cover the Flux list, the Helm-release name collision, suspend and reconcile` `[ ]`
+## T13 — `test(e2e): cover the Flux list, the Helm-release name collision, suspend and reconcile` `[x]`
 
 Fixtures `52-flux-crds.yaml` + `53-flux-objects.yaml` with hand-written `spec.suspend`/`status.conditions`/`status.inventory`. **No Flux controller** — nothing reconciles, which is exactly what makes assertions durable under the "never assert on transient state" rule. Extend `scripts/e2e-cluster.sh` `apply_fixtures` (`:66-76`) skip list + a `wait --for=condition=Established`.
 

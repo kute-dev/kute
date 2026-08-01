@@ -1,0 +1,99 @@
+# Flux CD's own CRDs, trimmed to what §30a reads. Installed without any Flux
+# controller: nothing reconciles these, which is exactly what makes the
+# assertions durable rather than transient (test/e2e/harness.go's third
+# rule). A spec.suspend nothing clears stays true; a Ready=False nothing
+# retries stays False.
+#
+# The printer columns are the ones real Flux CRDs declare, measured across
+# all 11 on a live cluster: Ready and Status everywhere, plus URL on the
+# source kinds. §30a's list is curated and ignores them, but 14b's CRDs list
+# renders them, and the collision test below depends on the group being real.
+#
+# No status subresource on purpose — the objects in 53-flux-objects.yaml set
+# status through a plain apply, which a status subresource would drop.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: kustomizations.kustomize.toolkit.fluxcd.io
+spec:
+  group: kustomize.toolkit.fluxcd.io
+  scope: Namespaced
+  names:
+    plural: kustomizations
+    singular: kustomization
+    kind: Kustomization
+    listKind: KustomizationList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Status
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].message
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+# The load-bearing one: this Kind collides with §18a's synthetic Helm-3
+# release kind. Before the substitution, discovering it silently replaced
+# the Helm Releases list and hid every Flux HelmRelease.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: helmreleases.helm.toolkit.fluxcd.io
+spec:
+  group: helm.toolkit.fluxcd.io
+  scope: Namespaced
+  names:
+    plural: helmreleases
+    singular: helmrelease
+    kind: HelmRelease
+    listKind: HelmReleaseList
+  versions:
+    - name: v2
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Status
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].message
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gitrepositories.source.toolkit.fluxcd.io
+spec:
+  group: source.toolkit.fluxcd.io
+  scope: Namespaced
+  names:
+    plural: gitrepositories
+    singular: gitrepository
+    kind: GitRepository
+    listKind: GitRepositoryList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: URL
+          type: string
+          jsonPath: .spec.url
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

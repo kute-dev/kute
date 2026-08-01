@@ -65,14 +65,27 @@ write_kubeconfig() {
 
 apply_fixtures() {
   log "applying fixtures to ${NAMESPACE}"
-  # The CRD has to be Established before its own custom resources can be
-  # applied, so 51-widgets.yaml is deliberately not in the first sweep.
+  # A CRD has to be Established before its own custom resources can be
+  # applied, so the instance fixtures are deliberately not in the first
+  # sweep.
   for f in "${FIXTURE_DIR}"/*.yaml; do
-    [[ "$(basename "$f")" == "51-widgets.yaml" ]] && continue
+    case "$(basename "$f")" in
+      51-widgets.yaml|53-flux-objects.yaml) continue ;;
+    esac
     kc apply -f "$f" >/dev/null
   done
   kc wait --for=condition=Established --timeout=90s crd/widgets.kute.dev >/dev/null
   kc apply -f "${FIXTURE_DIR}/51-widgets.yaml" >/dev/null
+
+  # Flux's CRDs are installed without any Flux controller — nothing
+  # reconciles the objects, which is what keeps their hand-written status
+  # (suspended, failing, reconciling) permanent instead of transient.
+  for crd in kustomizations.kustomize.toolkit.fluxcd.io \
+             helmreleases.helm.toolkit.fluxcd.io \
+             gitrepositories.source.toolkit.fluxcd.io; do
+    kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
+  done
+  kc apply -f "${FIXTURE_DIR}/53-flux-objects.yaml" >/dev/null
 
   log "waiting for the api rollout"
   kc -n "$NAMESPACE" rollout status deployment/api --timeout=180s >/dev/null

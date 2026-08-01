@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">0.6.0</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">Argo CD support — one tier shallower than Flux, on purpose</h1>
+  </div>
+  <p style="margin: 0 0 16px 92px; font-size: 12px; color: #676780; max-width: 1100px;">Flux earned a bespoke join view (<a href="#30b">30b</a>) because it has no UI. Argo has a good dashboard — so kute doesn't rebuild it. 0.6.0 is the 30a/32a treatment only: a curated registry entry for Application, the same timeline enrichment, and honest kubectl verbs. The line kute owns is the 2am terminal moment — see the Degraded app, jump to its broken workload, read the exit code, no browser, no SSO.</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 33A ══════════════════ -->
+    <div id="33a" data-screen-label="33a Argo Applications list — curated kind" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">33a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Applications list — sync × health as two honest columns</span>
+        <span style="font-size: 12px; color: #676780;">same registry machinery as <a href="#30a">30a</a> · degraded first</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">argocd</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Applications</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>SYNC</span><span>HEALTH</span><span>REVISION</span><span>SYNCED</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-billing</span><span style="color: #9a9ab2;">Synced</span><span style="color: #ef6a6a;">Degraded</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c</span><span style="color: #676780;">11m ago</span><span style="color: #676780; text-align: right;">92d</span>
+        </div>
+        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">Deployment/aim-billing-api: container "api" is in CrashLoopBackOff — exit 1, 2m ago · ↵ opens it</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #d9a94a;">●</span><span style="color: #d8d8e8;">aim-frontend</span><span style="color: #d9a94a;">OutOfSync</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c · −3</span><span style="color: #676780;">2h ago</span><span style="color: #676780; text-align: right;">92d</span>
+        </div>
+        <div style="padding: 0 14px 4px 46px; color: #8a7a4a; font-size: 11.5px;">auto-sync off · source is 3 commits ahead of live state</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #9a9ab2;">◌</span><span style="color: #d8d8e8;">aim-search</span><span style="color: #9a9ab2;">Syncing</span><span style="color: #9a9ab2;">Progressing</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">now</span><span style="color: #676780; text-align: right;">92d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-api</span><span style="color: #9a9ab2;">Synced</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">18m ago</span><span style="color: #676780; text-align: right;">92d</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 6 synced · healthy</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">ARGOAPP</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">resources</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">refresh</span></span>
+          <span><span style="color: #a78bfa;">S</span> <span style="color: #676780;">sync</span></span>
+          <span><span style="color: #a78bfa;">u</span> <span style="color: #676780;">dashboard url</span></span>
+          <span style="color: #26263a;">│</span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
+        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">THE THREE VERBS — ALL PLAIN API CALLS, NO ARGOCD BINARY, NO SSO</div>
+        <div style="display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 2px 14px; padding: 4px 14px 8px; font-size: 12px;">
+          <span style="color: #55556e;">r refresh</span><span style="color: #9a9ab2;">kubectl annotate application/aim-frontend -n argocd argocd.argoproj.io/refresh=normal --overwrite</span>
+          <span style="color: #55556e;">S sync</span><span style="color: #9a9ab2;">kubectl patch application/aim-frontend -n argocd --type merge -p '{"operation":{"sync":{"revision":"main"}}}'</span>
+          <span style="color: #55556e;">u url</span><span style="color: #9a9ab2;">copies https://argocd.aim.dev/applications/argocd/aim-frontend — the deep link, when the dashboard is the right tool</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Sync and health are independent axes, so they get independent columns</span> — Synced+Degraded (billing: git is right, workload is sick) and OutOfSync+Healthy (frontend: drift, nothing broken) are different incidents. Sort order: Degraded → OutOfSync → Progressing → Healthy.</li>
+          <li><span style="color: #e9e2ff;">The sub-line does the diagnosis</span> — Argo's own status already names the sickest resource; kute prints it verbatim and ↵ routes straight to that Deployment (principle 4), skipping the app-detail hop entirely.</li>
+          <li><span style="color: #e9e2ff;">Sync is `reversible`-class with the will-run line</span> — patching `.operation` is exactly what the argocd CLI does; kute just shows it. `prune=true` sync would be `delete`-class (y/N in keybar).</li>
+          <li><span style="color: #e9e2ff;">`u` is the concession to the dashboard</span> — for sync waves, app-of-apps graphs, and diffs, the right tool exists; kute hands you the deep link (URL from argocd-cm) instead of imitating it. No 30b-style tree for Argo, by design.</li>
+          <li>drift delta `−3` reuses the 30b convention; commit-subject enrichment follows the same 4-tier ladder as Flux (event parse → per-context cache → local git by SHA → SHA only).</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 34A ══════════════════ -->
+    <div id="34a" data-screen-label="34a Timeline with Argo sync events" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">34a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Timeline — Argo syncs join the same stream as Flux revisions</span>
+        <span style="font-size: 12px; color: #676780;">extends <a href="#32a">32a</a> · one more event source, zero new screens</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-prod</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Timeline · 30m</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 6px 14px 4px; font-size: 12px;">
+          <span style="color: #676780;">09:41</span><span style="color: #ef6a6a;">▲</span>
+          <span><span style="color: #f0f0fa;">CrashLoopBackOff</span> <span style="color: #676780;">pod/aim-billing-api-6d8f2-kq4wz · exit 1</span> <span style="color: #44445c;">×5</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
+          <span style="color: #676780;">09:38</span><span style="color: #9a9ab2;">●</span>
+          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/aim-billing-api · image aim-billing:2.7.0 → 2.8.0</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
+          <span style="color: #676780;">09:38</span><span style="color: #a78bfa;">◆</span>
+          <span><span style="color: #c4b5fd;">Sync applied</span> <span style="color: #676780;">application/aim-billing · main@e41b90c · "billing: switch to async invoice worker" · auto-sync</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
+          <span style="color: #676780;">09:22</span><span style="color: #a78bfa;">◆</span>
+          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/aim-workers · main@9d04c7e · "chore: bump base images"</span></span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 8px 84px; color: #44445c; font-size: 11px;">earlier — quiet · 31 routine reconciles + refreshes deduped</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">TIMELINE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">open object</span></span>
+          <span><span style="color: #a78bfa;">v</span> <span style="color: #676780;">copy revision</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">One ◆ marker, two GitOps engines</span> — a cluster running both Flux and Argo (common mid-migration) gets one causal stream: 09:38 sync → rollout → crashloop reads top-down as the incident story. The timeline doesn't care who applied the commit.</li>
+          <li><span style="color: #e9e2ff;">Source: argocd-application-controller Events</span> (OperationCompleted / ResourceUpdated) already in the watch cache — same mechanism, dedup, and 1h-TTL caveat as Flux; commit subject via the same 4-tier ladder.</li>
+          <li>"auto-sync" vs an initiator name matters at 2am — was this a human or the machine? Argo's operation state records `initiatedBy`; kute prints it.</li>
+          <li>Nothing here renders on a non-Argo cluster — no ◆ rows, no column, no chrome (principle 6).</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2100},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}"></script>
+</body>
+</html>
