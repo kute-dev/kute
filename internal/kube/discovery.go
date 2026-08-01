@@ -59,6 +59,22 @@ type DiscoveredKind struct {
 	CRDName string
 }
 
+// RegistryKind is the ResourceKind the kind registry addresses dk by:
+// ResourceKind(dk.Kind) unless dk's (Group, Kind) pair is in the
+// substitution table, in which case the substituted key.
+//
+// Every lookup that resolves a ResourceKind against the discovery snapshot
+// goes through this, so a substituted key still finds the real GVR — only
+// the map key changes, never the coordinates kute watches.
+func (dk DiscoveredKind) RegistryKind() ResourceKind {
+	for k, s := range substitutedKinds {
+		if s.group == dk.Group && s.apiKind == dk.Kind {
+			return k
+		}
+	}
+	return ResourceKind(dk.Kind)
+}
+
 // ParseDiscoveredKind extracts a DiscoveredKind from one CRD object's
 // unstructured form. It is pure (no cluster access) so it's unit-testable
 // against hand-built fixtures, and exported so resources.projectCRD (the

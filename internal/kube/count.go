@@ -72,7 +72,7 @@ func (c *Cluster) resourceFor(kind ResourceKind) (gvr schema.GroupVersionResourc
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, dk := range c.discovered {
-		if ResourceKind(dk.Kind) == kind && dk.GVR.Version != "" {
+		if dk.RegistryKind() == kind && dk.GVR.Version != "" {
 			return dk.GVR, dk.ClusterScoped, true
 		}
 	}

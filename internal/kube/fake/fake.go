@@ -683,7 +683,7 @@ func (c *Cluster) ObjectEvents(ctx context.Context, namespace string, kind kube.
 	out := make([]kube.Event, 0, len(objs))
 	for _, obj := range objs {
 		ev, ok := obj.(*corev1.Event)
-		if !ok || ev.InvolvedObject.Kind != string(kind) || ev.InvolvedObject.Name != name {
+		if !ok || ev.InvolvedObject.Kind != kind.APIKind() || ev.InvolvedObject.Name != name {
 			continue
 		}
 		out = append(out, kube.Event{

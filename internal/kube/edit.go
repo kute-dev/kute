@@ -2,14 +2,16 @@ package kube
 
 import (
 	"os/exec"
-	"strings"
 )
 
-// editArgs builds the kubectl edit argv for EditSpec — kind lowercased is a
-// valid kubectl singular resource name for every registered ResourceKind
-// (the same resolution NodeShellSpec relies on implicitly via "node/"+node).
+// editArgs builds the kubectl edit argv for EditSpec. ResourceArg is what
+// makes the resource name resolvable for every registered ResourceKind —
+// the lowercased Kind for almost all of them (the same resolution
+// NodeShellSpec relies on implicitly via "node/"+node), and the
+// fully-qualified <plural>.<group> for a kind whose registry key isn't its
+// API Kind, where the bare name wouldn't resolve at all.
 func editArgs(kind ResourceKind, namespace, name string) []string {
-	args := []string{"edit", strings.ToLower(string(kind)) + "/" + name}
+	args := []string{"edit", kind.ResourceArg() + "/" + name}
 	if namespace != "" {
 		args = append(args, "-n", namespace)
 	}

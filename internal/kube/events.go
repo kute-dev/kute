@@ -46,7 +46,7 @@ func (c *Cluster) ObjectEvents(ctx context.Context, namespace string, kind Resou
 			events = append(events, ev)
 		}
 	}
-	return filterEventsByInvolvedObject(events, string(kind), name), nil
+	return filterEventsByInvolvedObject(events, kind.APIKind(), name), nil
 }
 
 // NamespaceEvents returns every cached Event in namespace ("" = every

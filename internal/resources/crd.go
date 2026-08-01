@@ -37,7 +37,7 @@ func CustomDescriptor(dk kube.DiscoveredKind) Descriptor {
 	columns = append(columns, "Age")
 
 	return Descriptor{
-		Kind:          kube.ResourceKind(dk.Kind),
+		Kind:          dk.RegistryKind(),
 		Group:         GroupCustomResources,
 		Display:       capitalizePlural(dk.Plural),
 		Icon:          "◆",
@@ -152,7 +152,7 @@ func httpRouteDescriptor(dk kube.DiscoveredKind) Descriptor {
 	columns = append(columns, "Age")
 
 	return Descriptor{
-		Kind:          kube.ResourceKind(dk.Kind),
+		Kind:          dk.RegistryKind(),
 		Group:         GroupCustomResources,
 		Display:       capitalizePlural(dk.Plural),
 		Icon:          "◆",
@@ -291,7 +291,7 @@ func projectCRD(counter InstanceCounter) func(obj runtime.Object) Row {
 
 		count := 0
 		if counter != nil {
-			count = counter.CountInstances(kube.ResourceKind(dk.Kind))
+			count = counter.CountInstances(dk.RegistryKind())
 		}
 
 		return Row{
@@ -305,7 +305,7 @@ func projectCRD(counter InstanceCounter) func(obj runtime.Object) Row {
 			// string — browse's ↵ on a CRD row reads it back to build the
 			// GotoKindMsg that jumps into 14a's instance list, the same
 			// opaque-id convention Forward's session ID already uses.
-			Key: dk.Kind,
+			Key: string(dk.RegistryKind()),
 		}
 	}
 }
@@ -381,7 +381,7 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 	if len(discovered) > 0 {
 		kinds := make([]kube.ResourceKind, 0, len(discovered))
 		for _, dk := range discovered {
-			kinds = append(kinds, kube.ResourceKind(dk.Kind))
+			kinds = append(kinds, dk.RegistryKind())
 		}
 		groups = append(groups, Group{ID: GroupCustomResources, Icon: "◆", Kinds: kinds})
 	}

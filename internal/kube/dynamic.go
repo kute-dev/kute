@@ -185,13 +185,13 @@ func customKindsFrom(lists []*metav1.APIResourceList, crdNames map[string]bool) 
 // appears once per version in discovery; the preferred version sorts first
 // within a group, so the first sighting wins.
 func dedupeDiscovered(in []DiscoveredKind) []DiscoveredKind {
-	seen := make(map[string]bool, len(in))
+	seen := make(map[ResourceKind]bool, len(in))
 	out := make([]DiscoveredKind, 0, len(in))
 	for _, dk := range in {
-		if seen[dk.Kind] {
+		if seen[dk.RegistryKind()] {
 			continue
 		}
-		seen[dk.Kind] = true
+		seen[dk.RegistryKind()] = true
 		out = append(out, dk)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
@@ -219,7 +219,7 @@ func (c *Cluster) ensureDynamicKindFor(kind ResourceKind) bool {
 	var match DiscoveredKind
 	var found bool
 	for _, dk := range c.discovered {
-		if ResourceKind(dk.Kind) == kind && dk.Established && dk.GVR.Version != "" {
+		if dk.RegistryKind() == kind && dk.Established && dk.GVR.Version != "" {
 			match, found = dk, true
 			break
 		}
@@ -299,7 +299,7 @@ func (c *Cluster) fetchPrinterColumns(ctx context.Context, kind ResourceKind) bo
 	}
 	var crdName string
 	for _, dk := range c.discovered {
-		if ResourceKind(dk.Kind) == kind {
+		if dk.RegistryKind() == kind {
 			crdName = dk.CRDName
 			break
 		}

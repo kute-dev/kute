@@ -1,8 +1,57 @@
 package kube
 
+import "strings"
+
 // ResourceKind identifies a Kubernetes resource type the UI can list. The string
 // value is the API Kind, used for display and as the registry key.
+//
+// For almost every kind the two are the same string. The exceptions are in
+// substitutedKinds below: a discovered kind whose API Kind is already taken
+// in resources.Registry gets a different registry key, because the registry
+// is keyed on ResourceKind alone and Register is last-write-wins. Anywhere
+// the kind has to travel back out to the API server or to kubectl, use
+// APIKind or ResourceArg rather than string(k) — see their doc comments for
+// what breaks otherwise.
 type ResourceKind string
+
+// substituted describes a registry kind whose key is deliberately not its
+// API Kind.
+type substituted struct {
+	apiKind  string // metadata.kind on the wire, and Event.involvedObject.kind
+	group    string // the API group that disambiguates it from the collision
+	resource string // "<plural>.<group>", the unambiguous kubectl resource arg
+}
+
+// substitutedKinds is the whole substitution table. Deliberately tiny: a
+// substitution costs the invariant that a ResourceKind is its API Kind, so
+// it is only worth paying where two kinds genuinely collide.
+var substitutedKinds = map[ResourceKind]substituted{}
+
+// APIKind is the Kubernetes Kind behind k. Identical to string(k) for every
+// kind but a substituted one.
+//
+// Anything comparing against a field the API server populated —
+// Event.involvedObject.kind, an ownerReference's Kind — must go through
+// this. Comparing string(k) instead silently matches nothing, which reads
+// as "this object has no events" rather than as a bug.
+func (k ResourceKind) APIKind() string {
+	if s, ok := substitutedKinds[k]; ok {
+		return s.apiKind
+	}
+	return string(k)
+}
+
+// ResourceArg renders k as a kubectl resource argument: the lowercased Kind
+// for everything normal, the fully-qualified "<plural>.<group>" for a
+// substituted kind, where the bare name would either fail to resolve or
+// resolve to the wrong resource. Used by every command string kute prints
+// as copyable documentation, and by the kubectl edit handoff.
+func (k ResourceKind) ResourceArg() string {
+	if s, ok := substitutedKinds[k]; ok {
+		return s.resource
+	}
+	return strings.ToLower(string(k))
+}
 
 const (
 	KindPod                   ResourceKind = "Pod"

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">0.5.0</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">Flux CD support — GitOps state becomes an answer, not a CRD dump</h1>
+  </div>
+  <p style="margin: 0 0 16px 92px; font-size: 12px; color: #676780; max-width: 1100px;">Flux clusters already work today — Kustomization and HelmRelease are CRDs, so they get the generic list/detail/search from <a href="#14a">14a</a>/<a href="#14d">14d</a> for free. 0.5.0 promotes them to curated registry entries: real columns, real status derivation, real verbs. The vision fence holds — kute never installs or bootstraps Flux (not a deployment pipeline); it reads, reconciles, and suspends. And like Helm-without-the-helm-binary (<a href="#18a">18a</a>), every Flux verb is a plain API call — the flux binary is never required.</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 30A ══════════════════ -->
+    <div id="30a" data-screen-label="30a Kustomizations list — curated kind" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">30a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Kustomizations list — reconcile state as a first-class table</span>
+        <span style="font-size: 12px; color: #676780;">unhealthy first · suspended is a state, not a footnote</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">flux-system</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Kustomizations</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>NAME</span><span>READY</span><span>REVISION</span><span>SOURCE</span><span>RECONCILED</span><span style="text-align: right;">AGE</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-workers</span><span style="color: #ef6a6a;">False</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">4m ago</span><span style="color: #676780; text-align: right;">148d</span>
+        </div>
+        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;">aim-infra</span><span style="color: #d9a94a;">suspended</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">6d ago</span><span style="color: #676780; text-align: right;">148d</span>
+        </div>
+        <div style="padding: 0 14px 4px 46px; color: #8a7a4a; font-size: 11.5px;">suspended 6d by dana · source is 9 commits ahead</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-apps</span><span style="color: #9a9ab2;">True</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/aim-config</span><span style="color: #676780;">2m ago</span><span style="color: #676780; text-align: right;">148d</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 84px minmax(0,1.2fr) minmax(0,1fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">flux-system</span><span style="color: #9a9ab2;">True</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">git/flux-system</span><span style="color: #676780;">1m ago</span><span style="color: #676780; text-align: right;">148d</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 3 ready</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">KUSTOMIZE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">inventory</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">reconcile</span></span>
+          <span><span style="color: #a78bfa;">s</span> <span style="color: #676780;">suspend/resume</span></span>
+          <span><span style="color: #a78bfa;">o</span> <span style="color: #676780;">source</span></span>
+          <span style="color: #26263a;">│</span>
+          <span><span style="color: #a78bfa;">ctrl-d</span> <span style="color: #676780;">delete</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
+        <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">R PRESSED ON aim-workers — THE WILL-RUN LINE, NO FLUX BINARY REQUIRED</div>
+        <div style="padding: 4px 14px 8px; font-size: 12px;"><span style="color: #55556e;">will run</span>  <span style="color: #9a9ab2;">kubectl annotate kustomization/aim-workers -n flux-system reconcile.fluxcd.io/requestedAt="2026-08-01T14:07:02Z" --overwrite</span></div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Pure registry entry, zero new screens</span> — columns, status derivation (Ready condition + suspend flag + stalled), and four kind-scoped verbs. HelmRelease, GitRepository, OCIRepository, and ImageUpdateAutomation are four more rows in the same table of data.</li>
+          <li><span style="color: #e9e2ff;">Condition message verbatim, on the row</span> — the health-check failure renders exactly as Flux wrote it (principle 4), and ↵ routes to the failing object, not to the Kustomization's describe page.</li>
+          <li><span style="color: #e9e2ff;">Suspended is amber, not gray</span> — a paused Kustomization silently drifting from git is a risk state; the sub-line says who suspended it and how far behind it is. Suspend/resume is `reversible` class — executes immediately, no modal.</li>
+          <li>Every verb is an annotation or spec patch on the API server, printed as its kubectl equivalent — same contract as Helm browse (<a href="#18a">18a</a>): no shelling out, works where the flux binary isn't installed.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 30B ══════════════════ -->
+    <div id="30b" data-screen-label="30b Flux tree — grouped by source chain" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">30b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Flux tree — one screen, grouped by what each source drives</span>
+        <span style="font-size: 12px; color: #676780;">alternative to 30a · answers "what does this repo control?"</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Flux</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+          <span></span><span>SOURCE / RECONCILER</span><span>KIND</span><span>REVISION</span><span>RECONCILED</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa; font-weight: 700;">aim-config</span><span style="color: #676780;">GitRepo</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1 · 3m ago</span><span style="color: #676780;">1m ago</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;"><span style="color: #44445c;">└─</span> aim-workers</span><span style="color: #676780;">Kustomize</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">4m ago</span>
+        </div>
+        <div style="padding: 0 14px 4px 66px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-apps</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@8f3c2a1</span><span style="color: #676780;">2m ago</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #d9a94a;">‖</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-infra</span><span style="color: #676780;">Kustomize</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@2b91f04 · −9</span><span style="color: #676780;">6d ago</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #f0f0fa; font-weight: 700;">bitnami-charts</span><span style="color: #676780;">HelmRepo</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">index · 14m ago</span><span style="color: #676780;">14m ago</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1.4fr) 110px minmax(0,1.2fr) 100px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;"><span style="color: #44445c;">└─</span> aim-redis</span><span style="color: #676780;">HelmRelease</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">redis 19.6.1</span><span style="color: #676780;">31m ago</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 2 sources · 5 reconcilers ready</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">FLUX</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">inventory</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">reconcile</span></span>
+          <span><span style="color: #a78bfa;">s</span> <span style="color: #676780;">suspend/resume</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">The join is the value</span> — Flux's failure mode is chain-shaped (source fetches, reconciler applies, workload rolls out), and no kubectl view shows the chain. Same both-ways-join argument as Gateway API (<a href="#23b">23b</a>).</li>
+          <li><span style="color: #e9e2ff;">Drift is a delta, not a timestamp</span> — `−9` on aim-infra means the source is 9 commits ahead of what's applied; you read staleness without comparing SHAs by eye.</li>
+          <li>Risk: this is a bespoke screen, which cuts against "kinds are data, not code" (principle 5). Honest framing: 30a is the registry baseline that ships either way; 30b is a computed join view on top — same class of exception as the incident timeline (<a href="#16a">16a</a>).</li>
+          <li>`r` on a source row reconciles the source; on a reconciler row it reconciles with-source — one key, scope follows the cursor, will-run line shows the difference.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 31A ══════════════════ -->
+    <div id="31a" data-screen-label="31a Kustomization detail — failure promoted" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">31a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Kustomization detail — why is it broken, then what it manages</span>
+        <span style="font-size: 12px; color: #676780;">↵ from 30a/30b · same recipe as pod detail <a href="#5a">5a</a></span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">flux-system</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #676780;">Kustomizations</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">aim-workers</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="margin: 10px 14px 0; padding: 8px 12px; background: #12090b; border: 1px solid #4a1d22; border-radius: 6px;">
+          <div style="display: flex; align-items: baseline; gap: 10px; font-size: 11px; letter-spacing: 0.06em;">
+            <span style="color: #ef6a6a; font-weight: 700;">RECONCILE FAILED · 4m ago · retry in 3m 12s</span>
+          </div>
+          <div style="color: #d98a8a; margin-top: 2px;">health check failed after 2m0s: Deployment/aim-stage/aim-worker status: 'InProgress'</div>
+          <div style="color: #676780; font-size: 11.5px; margin-top: 2px;">↵ opens Deployment/aim-worker · its pod is CrashLoopBackOff — exit 137, OOMKilled, 4m ago</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 3px 14px; padding: 10px 14px 6px; font-size: 12px;">
+          <span style="color: #55556e;">source</span><span style="color: #9a9ab2;">git/aim-config · ./clusters/stage/workers · interval 5m</span>
+          <span style="color: #55556e;">source revision</span><span style="color: #9a9ab2;">main@8f3c2a1 · "fix: raise worker memory limit (#412)" · dana · 7m ago</span>
+          <span style="color: #55556e;">applied revision</span><span style="color: #9a9ab2;">main@8f3c2a1 <span style="color: #34d17b;">· in sync</span> — applied, failing health checks</span>
+          <span style="color: #55556e;">depends on</span><span style="color: #9a9ab2;">aim-infra <span style="color: #d9a94a;">· suspended 6d</span></span>
+        </div>
+
+        <div style="padding: 2px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">INVENTORY · 14 OBJECTS · 1 NOT READY</div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 130px 64px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa; margin-top: 2px;">
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-worker</span><span style="color: #676780;">Deployment</span><span style="color: #ef6a6a;">3/4</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 130px 64px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-worker-config</span><span style="color: #676780;">ConfigMap</span><span style="color: #676780;">—</span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 8px 46px; color: #44445c; font-size: 11px;">+ 12 ready</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">KUSTOMIZE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">open object</span></span>
+          <span><span style="color: #a78bfa;">r</span> <span style="color: #676780;">reconcile</span></span>
+          <span><span style="color: #a78bfa;">s</span> <span style="color: #676780;">suspend</span></span>
+          <span><span style="color: #a78bfa;">o</span> <span style="color: #676780;">source</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Failure card first, chain second, inventory third</span> — the exact pod-detail promotion rule (<a href="#5a">5a</a>): kute has already followed the health check to the Deployment to the pod, and prints the real reason (exit 137) inside the Flux failure card. Zero digs.</li>
+          <li><span style="color: #e9e2ff;">The commit message is the change description</span> — source revision shows subject line + author, fetched from the GitRepository artifact metadata already on the cluster. No git remote access, no tokens.</li>
+          <li><span style="color: #e9e2ff;">"in sync — applied, failing health checks"</span> distinguishes the two failure families: drift (not applied) vs unhealthy (applied, workload sick). One line kills the most common Flux misdiagnosis.</li>
+          <li>Suspended dependency surfaces here too — aim-infra amber in `depends on`, because a suspended dependency is the second most common "why won't it reconcile".</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 32A ══════════════════ -->
+    <div id="32a" data-screen-label="32a Timeline with git revisions" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">32a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Incident timeline learns git — "what changed?" now names the commit</span>
+        <span style="font-size: 12px; color: #676780;">extends <a href="#16a">16a</a> · no new screen, one new event source</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Timeline · 30m</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 6px 14px 4px; font-size: 12px;">
+          <span style="color: #676780;">14:07</span><span style="color: #ef6a6a;">▲</span>
+          <span><span style="color: #f0f0fa;">BackOff</span> <span style="color: #676780;">pod/aim-worker-7f9c4-x2vq8 · restarting failed container</span> <span style="color: #44445c;">×12</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
+          <span style="color: #676780;">14:03</span><span style="color: #ef6a6a;">▲</span>
+          <span><span style="color: #f0f0fa;">OOMKilled</span> <span style="color: #676780;">pod/aim-worker-7f9c4-x2vq8 · exit 137</span> <span style="color: #44445c;">×3</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
+          <span style="color: #676780;">14:02</span><span style="color: #9a9ab2;">●</span>
+          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/aim-worker · 4 replicas updating · image aim-worker:3.4.1 → 3.5.0</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
+          <span style="color: #676780;">14:02</span><span style="color: #a78bfa;">◆</span>
+          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/aim-workers · main@8f3c2a1 · "fix: raise worker memory limit (#412)" · dana</span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
+          <span style="color: #676780;">13:44</span><span style="color: #9a9ab2;">●</span>
+          <span><span style="color: #f0f0fa;">Reconciled</span> <span style="color: #676780;">kustomization/aim-apps · main@4c9e7b2 · no changes</span></span>
+        </div>
+        <div style="display: flex; padding: 2px 14px 8px 84px; color: #44445c; font-size: 11px;">earlier — quiet · 22 routine reconciles deduped</div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">TIMELINE</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">open object</span></span>
+          <span><span style="color: #a78bfa;">v</span> <span style="color: #676780;">copy revision</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">all keys</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">This is the whole point of Flux support</span> — the timeline's question is "what changed?", and on a GitOps cluster the true answer is a commit. Revision-applied events (◆, the only purple marker) slot into the existing deduped stream; reading top-down gives the causal chain: commit → rollout → OOM → backoff.</li>
+          <li><span style="color: #e9e2ff;">No new machinery</span> — Flux controllers already emit these as Kubernetes Events; kute's dedup + enrichment attaches the commit subject from the source artifact. Works on 16a unchanged for non-Flux clusters: no Flux, no ◆ rows, zero chrome (principle 6).</li>
+          <li>Routine no-change reconciles collapse into the "quiet" line — 22 identical events would otherwise bury the one revision that mattered.</li>
+          <li>`v` copies `main@8f3c2a1` — the thing you paste into `git show` or the incident channel.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2100},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}"></script>
+</body>
+</html>

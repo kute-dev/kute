@@ -609,7 +609,7 @@ func metaResourceArg(kind ResourceKind) string {
 	case KindDeployment, KindStatefulSet, KindDaemonSet:
 		return workloadResourceArg(kind)
 	default:
-		return strings.ToLower(string(kind))
+		return kind.ResourceArg()
 	}
 }
 
@@ -715,7 +715,7 @@ func RolloutRestartCommandString(kind ResourceKind, namespace, name string) stri
 // 6b's all-namespaces triage) omits `-n` rather than naming a namespace the
 // command wouldn't actually be scoped to.
 func DeleteCommandString(kind ResourceKind, namespace string, names []string) string {
-	cmd := fmt.Sprintf("kubectl delete %s %s", strings.ToLower(string(kind)), strings.Join(names, " "))
+	cmd := fmt.Sprintf("kubectl delete %s %s", kind.ResourceArg(), strings.Join(names, " "))
 	if namespace != "" {
 		cmd += " -n " + namespace
 	}
