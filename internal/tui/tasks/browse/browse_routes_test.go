@@ -26,7 +26,7 @@ func TestIngressSortsUnhealthyFirst(t *testing.T) {
 		{Name: "aaa-healthy", Status: resources.StatusOK},
 		{Name: "zzz-broken", Status: resources.StatusFail},
 	}
-	sortForDisplay(kube.KindIngress, "default", rows)
+	sortForDisplay(kube.KindIngress, "default", rows, false)
 	if rows[0].Name != "zzz-broken" || rows[1].Name != "aaa-healthy" {
 		t.Fatalf("expected unhealthy-first order [zzz-broken, aaa-healthy], got %v", []string{rows[0].Name, rows[1].Name})
 	}

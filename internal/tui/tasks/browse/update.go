@@ -474,7 +474,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "tab":
-		if m.grouped() {
+		// Grouped mode expands a namespace group; a §30a Flux list expands
+		// its single healthy-tail fold, which exists ungrouped too.
+		if m.grouped() || m.desc.Flux {
 			m.toggleGroup()
 		}
 	case "ctrl+r":

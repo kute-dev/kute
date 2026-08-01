@@ -41,6 +41,12 @@ const (
 	// rowKindCollapsedSummary is a fully-healthy group's single
 	// "▸ ns · N pods · all running" line, replacing the header entirely.
 	rowKindCollapsedSummary
+	// rowKindSubLine is a full-width continuation line rendered directly
+	// under its data row, carrying resources.Row.SubLine — §30a puts the
+	// Flux Ready condition's message there verbatim. Never a selectable
+	// stop: the row above it is the thing verbs act on, and stopping on a
+	// line that has no object would make ctrl-d ambiguous.
+	rowKindSubLine
 )
 
 // displayRow is one line browse renders/selects — either a real data row or
@@ -53,6 +59,8 @@ type displayRow struct {
 	row       filterMatch            // rowKindData only
 	counts    resources.HealthCounts // rowKindHeader/rowKindCollapsedSummary
 	folded    int                    // rowKindFold/rowKindCollapsedSummary: rows represented
+	text      string                 // rowKindSubLine only
+	subClass  resources.StatusClass  // rowKindSubLine only: its parent row's class
 }
 
 // buildDisplayRows expands visible into 6b's render/selection list —
@@ -73,11 +81,30 @@ type displayRow struct {
 //
 // expanded[namespace] renders rowKindHeader + every row in the group, the
 // original (pre-collapse) 6b behavior.
-func buildDisplayRows(visible []filterMatch, grouped bool, expanded map[string]bool) []displayRow {
+func buildDisplayRows(visible []filterMatch, grouped bool, expanded map[string]bool, foldHealthy bool) []displayRow {
 	if !grouped {
-		rows := make([]displayRow, len(visible))
-		for i, fm := range visible {
-			rows[i] = displayRow{kind: rowKindData, namespace: fm.row.Namespace, row: fm}
+		// §30a's ungrouped fold: unhealthy rows stay shown, the healthy tail
+		// collapses to one "+N ready" line. sortForDisplay has already put
+		// the unhealthy ones first, so the split is a prefix count. The fold
+		// line carries an empty namespace, which is the key toggleGroup
+		// flips — there is no namespace to expand in ungrouped mode, so ""
+		// stands in as the single fold's own key.
+		if foldHealthy && !expanded[""] {
+			unhealthy := 0
+			for unhealthy < len(visible) && staysVisible(visible[unhealthy].row) {
+				unhealthy++
+			}
+			if folded := len(visible) - unhealthy; folded > 0 && unhealthy > 0 {
+				out := make([]displayRow, 0, unhealthy+2)
+				for _, fm := range visible[:unhealthy] {
+					out = appendWithSubLine(out, fm)
+				}
+				return append(out, displayRow{kind: rowKindFold, folded: folded})
+			}
+		}
+		rows := make([]displayRow, 0, len(visible))
+		for _, fm := range visible {
+			rows = appendWithSubLine(rows, fm)
 		}
 		return rows
 	}
@@ -104,20 +131,48 @@ func buildDisplayRows(visible []filterMatch, grouped bool, expanded map[string]b
 			// case (no spurious "+0 running" fold line).
 			out = append(out, displayRow{kind: rowKindHeader, namespace: ns, counts: nsCounts})
 			for k := i; k < j; k++ {
-				out = append(out, displayRow{kind: rowKindData, namespace: ns, row: visible[k]})
+				out = appendWithSubLine(out, visible[k])
 			}
 		case unhealthy == 0:
 			out = append(out, displayRow{kind: rowKindCollapsedSummary, namespace: ns, counts: nsCounts, folded: j - i})
 		default:
 			out = append(out, displayRow{kind: rowKindHeader, namespace: ns, counts: nsCounts})
 			for k := i; k < i+unhealthy; k++ {
-				out = append(out, displayRow{kind: rowKindData, namespace: ns, row: visible[k]})
+				out = appendWithSubLine(out, visible[k])
 			}
 			out = append(out, displayRow{kind: rowKindFold, namespace: ns, folded: j - i - unhealthy})
 		}
 		i = j
 	}
 	return out
+}
+
+// appendWithSubLine appends fm's data row plus, when the projection gave it
+// one, its continuation line. Driven by the row's own data rather than by a
+// per-kind flag: a projection that has something to say says it.
+func appendWithSubLine(out []displayRow, fm filterMatch) []displayRow {
+	out = append(out, displayRow{kind: rowKindData, namespace: fm.row.Namespace, row: fm})
+	if fm.row.SubLine != "" {
+		out = append(out, displayRow{kind: rowKindSubLine, namespace: fm.row.Namespace, text: fm.row.SubLine, subClass: fm.row.Status})
+	}
+	return out
+}
+
+// selectableStop reports whether the cursor may land on a line of this
+// kind. Headers and sub-lines are pass-through decoration; fold and
+// collapsed-summary lines ARE valid stops, since a fully-collapsed group
+// has no data rows at all and would otherwise be unreachable.
+func selectableStop(kind displayRowKind) bool {
+	return kind != rowKindHeader && kind != rowKindSubLine
+}
+
+// staysVisible reports whether a row is exempt from §30a's healthy-tail
+// fold. Unhealthy rows obviously are; so is a suspended one, because
+// folding it away would make it exactly the footnote §30a says it must not
+// be. Matches rowHealthRank's ordering, so the exempt rows are always the
+// sorted prefix.
+func staysVisible(r resources.Row) bool {
+	return isUnhealthy(r.Status) || r.Suspended
 }
 
 func isUnhealthy(status resources.StatusClass) bool {

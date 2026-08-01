@@ -100,6 +100,13 @@ var fixedWidths = map[string]int{
 	"App Ver":  10, // "15.4.0"
 	"Rev":      5,  // revision number, right-aligned ("REV" + the arrow allowance)
 	"Updated":  10, // "3d ago" / "12m ago"
+	// §30a Flux columns. READY holds the widest word it renders
+	// ("suspended"); REVISION holds "master@efd398b"; SOURCE holds
+	// "helm/prometheus-community", the longest seen on a real cluster.
+	"Ready":      10,
+	"Revision":   16,
+	"Source":     26,
+	"Reconciled": 12, // "RECONCILED" + the 2-cell sort-arrow allowance
 }
 
 func minWidthFor(title string) int {

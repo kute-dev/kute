@@ -40,7 +40,7 @@ func fluxDescriptor(dk kube.DiscoveredKind) Descriptor {
 		Display:         capitalizePlural(dk.Plural),
 		Icon:            "⇅",
 		Columns:         fluxColumns,
-		FlexColumn:      "Source",
+		FlexColumn:      "Name",
 		Describe:        "flux resource · " + dk.Group,
 		ClusterScoped:   dk.ClusterScoped,
 		Custom:          true,
@@ -184,14 +184,20 @@ func fluxStatusText(class StatusClass, suspended bool) string {
 }
 
 // fluxSubLine is the row's second line: the Ready condition's message
-// verbatim (the CRD's own declared Status column, moved out of a cell
-// because it is prose), or on a suspended row the drift signal.
+// verbatim — the CRD's own declared Status column, moved out of a cell
+// because it is prose.
 //
-// A healthy row gets no sub-line — the message there is just "Applied
-// revision: <sha>", which the REVISION cell already says.
+// Three rows deliberately get none. A healthy row's message is just
+// "Applied revision: <sha>", which the REVISION cell already says. A
+// suspended row's would only repeat the READY cell's own "suspended" —
+// §30a draws a drift note there ("source is N commits ahead"), but that
+// needs the source object's artifact revision, which is a cross-kind read
+// a projection can't make, and the commit *count* is unbuildable at all
+// (see docs/flux-plan.md G1). Saying nothing beats saying the same word
+// twice.
 func fluxSubLine(u *unstructured.Unstructured, suspended bool) string {
 	if suspended {
-		return "suspended"
+		return ""
 	}
 	cond, ok := fluxCondition(u, "Ready")
 	if !ok || cond.status == "True" || cond.message == "" {

@@ -265,10 +265,13 @@ func (m Model) columnHeaderLine(theme tui.Theme, width int) string {
 // total.
 func (m Model) healthStripLine(theme tui.Theme, width int) string {
 	counts := m.desc.Health(m.rows)
-	if m.desc.Custom && len(m.rows) > 0 && counts.OK+counts.Warn+counts.Fail == 0 {
+	if m.desc.Custom && !m.desc.StatusSemantics && len(m.rows) > 0 && counts.OK+counts.Warn+counts.Fail == 0 {
 		// docs/design README.md §14a: a CRD kind whose instances carry no
 		// Ready/Available condition at all gets no fake health — the strip
-		// drops the per-status counts and says so instead.
+		// drops the per-status counts and says so instead. Gated on
+		// StatusSemantics because a §30a Flux list whose rows are *all*
+		// suspended is all-Neutral too, and telling the user that kind has
+		// no status semantics would be a lie about a kind that has them.
 		faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 		note := faint.Render("no status semantics · NAME + AGE only")
 		right := lipgloss.NewStyle().Foreground(theme.TextDim).Render(fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display)))
@@ -850,6 +853,14 @@ func (m Model) tableBody(width, height int) string {
 				GroupStyle:  groupLineStyle(theme, rowKindFold, selected),
 			})
 			continue
+		case rowKindSubLine:
+			// Indented past the glyph column so it reads as a continuation
+			// of the row above rather than a row of its own.
+			rows = append(rows, components.Row{
+				GroupHeader: "  " + dr.text,
+				GroupStyle:  subLineStyle(theme, dr.subClass),
+			})
+			continue
 		}
 
 		fm := dr.row
@@ -928,7 +939,7 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 				cells[i].Text = defaultGlyphFor(glyphClass)
 			}
 			cells[i].Style = st.status[glyphClass]
-			if m.desc.Custom && r.Status == resources.StatusNeutral {
+			if m.desc.Custom && !m.desc.StatusSemantics && r.Status == resources.StatusNeutral {
 				// docs/design README.md §14a: a CRD instance with no
 				// Ready/Available condition at all — "never fake
 				// health" — renders TextFaint, not the generic Neutral/
@@ -1084,6 +1095,21 @@ func (m Model) foldLine(folded int) string {
 // newRowCellStyles already uses for cells, so a selected group line's
 // background reads as one continuous fill across Table's bar + content
 // split (renderGroupRowV2).
+// subLineStyle colors a §30a continuation line: muted rather than the full
+// status hue, so the verbatim condition message reads as supporting detail
+// and doesn't compete with the glyph column it explains. Never selected —
+// selectableStop keeps the cursor off these lines.
+func subLineStyle(theme tui.Theme, class resources.StatusClass) lipgloss.Style {
+	fg := theme.TextFaint
+	switch class {
+	case resources.StatusFail:
+		fg = theme.BadMuted
+	case resources.StatusWarn, resources.StatusNeutral:
+		fg = theme.Muted.Warn
+	}
+	return lipgloss.NewStyle().Foreground(fg)
+}
+
 func groupLineStyle(theme tui.Theme, kind displayRowKind, selected bool) lipgloss.Style {
 	fg := theme.AccentHi
 	switch kind {

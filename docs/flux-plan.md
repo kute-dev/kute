@@ -50,7 +50,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 | T5 | Design-doc sections §30a/§31a/§32a | `[ ]` | G1, G2, G3 |
 | T6 | Kind keying, `GroupFlux`, collision fix | `[x]` | T1, T2 |
 | T7 | §30a descriptor, projection, status | `[x]` | T4, T6, G2 |
-| T8 | §30a row rendering — sub-lines, fold, strip | `[~]` | T7, G3 |
+| T8 | §30a row rendering — sub-lines, fold, strip | `[x]` | T7, G3 |
 | T9 | Write seam: suspend / resume / reconcile | `[ ]` | T3 |
 | T10 | §30a verbs wired into browse | `[ ]` | T8, T9 |
 | T11 | §31a Kustomization detail screen | `[ ]` | T10, G1 |
@@ -308,7 +308,7 @@ New `Descriptor` fields: `Flux bool`, `StatusSemantics bool`, `HealthGlyph` (T4)
 
 **Test:** `resources/flux_test.go` · `TestProjectFluxResourceStatus`, the 6-row table. Fails today: suspended → `●`/OK off the stale Ready; reconciling → `✕`.
 
-### T8 — `feat(tui): show why a Flux object is failing on the row itself` `[ ]`
+### T8 — `feat(tui): show why a Flux object is failing on the row itself` `[x]`
 
 Two additions to the row model, both with **existing machinery**:
 

@@ -41,6 +41,27 @@ func healthRank(class resources.StatusClass) int {
 	}
 }
 
+// rowHealthRank orders one row worst-first. It is healthRank plus §30a's
+// one addition: a suspended Flux object sorts *above* a healthy one, ahead
+// of OK and behind Warn.
+//
+// Suspended is StatusNeutral, which for every other kind means "finished,
+// nothing to see" (a Completed pod) and correctly sinks to the bottom. For
+// Flux it means an operator stopped reconciliation and the object may be
+// silently drifting from git — a risk state, and §30a's whole framing is
+// that it is "a state, not a footnote". Only Flux projections set
+// Row.Suspended, so no other kind's order changes.
+func rowHealthRank(r resources.Row) int {
+	if r.Suspended {
+		return 2
+	}
+	if rank := healthRank(r.Status); rank >= 2 {
+		// Shift OK and Neutral down one to make room for suspended above them.
+		return rank + 1
+	}
+	return healthRank(r.Status)
+}
+
 // sortForDisplay reorders rows in place for workload kinds; it's a no-op
 // (preserving resources.List's namespace/name order) for every other kind.
 // namespace == "" (6b's all-namespaces triage, docs/design README.md §6b)
@@ -51,7 +72,11 @@ func healthRank(class resources.StatusClass) int {
 // alphabetical within each of those two partitions — then unhealthy-first
 // *within* each namespace — a single namespace's rows sort exactly as 2a's
 // plain unhealthy-first.
-func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row) {
+// unhealthyFirst adds the §30a Flux kinds to the workload set: their whole
+// point is triage ("unhealthy first · suspended is a state, not a
+// footnote"), and a Kustomization that failed to reconcile has to be at the
+// top for the same reason a crashlooping pod does.
+func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst bool) {
 	if kind == kube.KindCustomResourceDefinition {
 		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
 		// own Cells[1] is the CRD's API group; Name breaks ties within a
@@ -65,7 +90,7 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 		})
 		return
 	}
-	if !workloadKinds[kind] {
+	if !workloadKinds[kind] && !unhealthyFirst {
 		return
 	}
 	grouped := namespace == ""
@@ -78,7 +103,7 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 			}
 			return rows[i].Namespace < rows[j].Namespace
 		}
-		ri, rj := healthRank(rows[i].Status), healthRank(rows[j].Status)
+		ri, rj := rowHealthRank(rows[i]), rowHealthRank(rows[j])
 		if ri != rj {
 			return ri < rj
 		}
@@ -124,7 +149,7 @@ func (m *Model) applySort() {
 		m.applyUserSort(m.rows)
 		return
 	}
-	sortForDisplay(m.kind, m.namespace, m.rows)
+	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux)
 }
 
 // applyUserSort stable-sorts rows by m.sortColumn/m.sortAsc — a no-op if

@@ -25,7 +25,7 @@ func (m *Model) recomputeVisible() {
 // expandedGroups — called whenever either changes (recomputeVisible,
 // toggleGroup).
 func (m *Model) rebuildDisplay() {
-	m.display = buildDisplayRows(m.visible, m.grouped(), m.expandedGroups)
+	m.display = buildDisplayRows(m.visible, m.grouped(), m.expandedGroups, m.desc.Flux)
 }
 
 // selectedName returns the currently selected row's name, or "" when
@@ -99,27 +99,34 @@ func (m *Model) restoreSelection(name string) {
 // matters if display somehow ends on a header (shouldn't happen, but keeps
 // this from ever leaving m.selected on an unselectable line).
 func (m *Model) snapPastHeader() {
-	if len(m.display) == 0 || m.display[m.selected].kind != rowKindHeader {
+	if len(m.display) == 0 || selectableStop(m.display[m.selected].kind) {
 		return
 	}
 	for i := m.selected + 1; i < len(m.display); i++ {
-		if m.display[i].kind != rowKindHeader {
+		if selectableStop(m.display[i].kind) {
 			m.selected = i
 			return
 		}
 	}
 	for i := m.selected - 1; i >= 0; i-- {
-		if m.display[i].kind != rowKindHeader {
+		if selectableStop(m.display[i].kind) {
 			m.selected = i
 			return
 		}
 	}
 }
 
-// moveSelection shifts the selection by delta, skipping over rowKindHeader
-// entries (never selectable — fold/collapsed-summary lines ARE valid stops,
-// since a fully-collapsed group has no rowKindData entries at all and would
-// otherwise be unreachable), and scrolls the offset to follow it.
+// moveSelection shifts the selection by delta, skipping over the
+// unselectable line kinds (see selectableStop — fold/collapsed-summary
+// lines ARE valid stops, since a fully-collapsed group has no rowKindData
+// entries at all and would otherwise be unreachable), and scrolls the
+// offset to follow it.
+//
+// When the scan runs off the end without finding a selectable stop, the
+// cursor stays exactly where it was rather than coming to rest on a
+// decoration line. That case only became reachable with §30a's sub-lines: a
+// header is always followed by a row in its own group, but a sub-line can
+// be the very last line in the list.
 func (m *Model) moveSelection(delta int) {
 	if len(m.display) == 0 {
 		m.selected, m.offset = 0, 0
@@ -132,11 +139,13 @@ func (m *Model) moveSelection(delta int) {
 			break
 		}
 		next = cand
-		if m.display[next].kind != rowKindHeader {
-			break
+		if selectableStop(m.display[next].kind) {
+			m.selected = next
+			m.clampOffset()
+			return
 		}
 	}
-	m.selected = clamp(next, 0, len(m.display)-1)
+	// No selectable stop in that direction — hold position.
 	m.clampOffset()
 }
 
@@ -151,6 +160,12 @@ func (m *Model) toggleGroup() {
 		return
 	}
 	ns := m.display[m.selected].namespace
+	if !m.grouped() {
+		// Ungrouped mode has no namespace groups — §30a's single healthy-tail
+		// fold is keyed on "" instead, so tab toggles it from anywhere in the
+		// list rather than only from the fold line itself.
+		ns = ""
+	}
 	if m.expandedGroups == nil {
 		m.expandedGroups = make(map[string]bool)
 	}
