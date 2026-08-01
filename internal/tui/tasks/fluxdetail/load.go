@@ -210,10 +210,11 @@ func buildInventory(ctx context.Context, lister resources.RawLister, u *unstruct
 			}
 		}
 		for _, r := range byKind[kind] {
-			item := inventoryItem{Kind: kind, Namespace: r.namespace, Name: r.name, Ready: "–", Status: resources.StatusNeutral, Glyph: "·"}
+			item := inventoryItem{Kind: kind, Namespace: r.namespace, Name: r.name, Ready: "–", Status: resources.StatusNeutral}
 			if o, ok := byName[r.namespace+"/"+r.name]; ok {
-				item.Ready, item.Status, item.Glyph = objectReadiness(o)
+				item.Ready, item.Status = objectReadiness(o)
 			}
+			item.Glyph = inventoryGlyph(item.Status)
 			out = append(out, item)
 		}
 	}
@@ -233,7 +234,15 @@ func parseInventoryID(id string) (namespace, name string, kind kube.ResourceKind
 // objectReadiness is the inventory's per-object health read. Workloads
 // answer with their replica counts, which is the number an operator acts
 // on; everything else falls back to a Ready-style condition, then to "–".
-func objectReadiness(o runtime.Object) (ready string, class resources.StatusClass, glyph string) {
+//
+// It returns the class alone and never a glyph: the glyph is a pure
+// function of the class (inventoryGlyph), and returning both invited the
+// two to disagree — which they did, every branch answering "●" so that a
+// not-ready object was distinguished from a ready one by colour alone. That
+// is precisely what the app's glyph vocabulary exists to avoid, since the
+// 256-colour and no-colour degradation paths (CLAUDE.md's terminal
+// capability rule) render a red dot and a green dot identically.
+func objectReadiness(o runtime.Object) (ready string, class resources.StatusClass) {
 	// Workload kinds come out of the informer caches *typed*, not
 	// unstructured — only discovered CRDs are unstructured. Handling just
 	// the unstructured shape silently rendered every Deployment in an
@@ -255,9 +264,9 @@ func objectReadiness(o runtime.Object) (ready string, class resources.StatusClas
 			}
 			text := fmt.Sprintf("%d/%d", avail, desired)
 			if avail >= desired {
-				return text, resources.StatusOK, "●"
+				return text, resources.StatusOK
 			}
-			return text, resources.StatusFail, "●"
+			return text, resources.StatusFail
 		}
 		conds, _, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
 		for _, c := range conds {
@@ -271,28 +280,40 @@ func objectReadiness(o runtime.Object) (ready string, class resources.StatusClas
 			}
 			st, _, _ := unstructured.NestedString(cm, "status")
 			if st == "True" {
-				return "ready", resources.StatusOK, "●"
+				return "ready", resources.StatusOK
 			}
-			return "not ready", resources.StatusFail, "●"
+			return "not ready", resources.StatusFail
 		}
 	}
 	if pod, ok := o.(*corev1.Pod); ok {
 		if pod.Status.Phase == corev1.PodRunning {
-			return "running", resources.StatusOK, "●"
+			return "running", resources.StatusOK
 		}
-		return strings.ToLower(string(pod.Status.Phase)), resources.StatusFail, "●"
+		return strings.ToLower(string(pod.Status.Phase)), resources.StatusFail
 	}
-	return "–", resources.StatusNeutral, "·"
+	return "–", resources.StatusNeutral
+}
+
+// inventoryGlyph is the shared status vocabulary (resources.DefaultHealthGlyph
+// — ● ▲ ✕), with one departure: an object the caches couldn't resolve at all
+// renders "·" rather than the generic Neutral "○". ○ means *completed* in
+// the pod vocabulary, and claiming a workload finished when kute simply has
+// no reading on it would be a fact the screen doesn't have.
+func inventoryGlyph(class resources.StatusClass) string {
+	if class == resources.StatusNeutral {
+		return "·"
+	}
+	return resources.DefaultHealthGlyph(class)
 }
 
 // replicaCell renders a workload's ready/desired pair — the number an
 // operator acts on, and the one a health check is actually waiting for.
-func replicaCell(ready, desired int32) (string, resources.StatusClass, string) {
+func replicaCell(ready, desired int32) (string, resources.StatusClass) {
 	text := fmt.Sprintf("%d/%d", ready, desired)
 	if desired > 0 && ready < desired {
-		return text, resources.StatusFail, "●"
+		return text, resources.StatusFail
 	}
-	return text, resources.StatusOK, "●"
+	return text, resources.StatusOK
 }
 
 func derefInt32(p *int32) int32 {

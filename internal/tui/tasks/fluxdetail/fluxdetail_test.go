@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
@@ -155,5 +158,53 @@ func TestHelmReleaseSaysWhyItHasNoInventory(t *testing.T) {
 	view := plain(upd.(*Model).Render())
 	if !strings.Contains(view, "inventory not published by this kind") {
 		t.Errorf("expected the explicit no-inventory note:\n%s", view)
+	}
+}
+
+// TestInventoryStatusIsAGlyphNotJustAColour: every branch of
+// objectReadiness used to answer "●" and let the foreground colour carry
+// ready-vs-not, which the app's own terminal-degradation path defeats — a
+// red dot and a green dot are the same character once the 256-colour or
+// no-colour fallback flattens the palette (CLAUDE.md, terminal capability
+// degradation). The shape has to carry the fact.
+func TestInventoryStatusIsAGlyphNotJustAColour(t *testing.T) {
+	four := int32(4)
+	tests := []struct {
+		name      string
+		obj       runtime.Object
+		wantReady string
+		wantGlyph string
+	}{
+		{"deployment fully ready", &appsv1.Deployment{
+			Spec:   appsv1.DeploymentSpec{Replicas: &four},
+			Status: appsv1.DeploymentStatus{ReadyReplicas: 4},
+		}, "4/4", tui.GlyphRunning},
+		{"deployment short of its replicas", &appsv1.Deployment{
+			Spec:   appsv1.DeploymentSpec{Replicas: &four},
+			Status: appsv1.DeploymentStatus{ReadyReplicas: 3},
+		}, "3/4", tui.GlyphFailed},
+		{"running pod", &corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodRunning}}, "running", tui.GlyphRunning},
+		{"failed pod", &corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodFailed}}, "failed", tui.GlyphFailed},
+		// An object kute has no readiness reading for renders "·", never
+		// the generic Neutral "○" — ○ means *completed* in the pod
+		// vocabulary, and this object may be doing anything at all.
+		{"no readiness to read", &corev1.ConfigMap{}, "–", "·"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ready, class := objectReadiness(tc.obj)
+			if ready != tc.wantReady {
+				t.Errorf("ready = %q, want %q", ready, tc.wantReady)
+			}
+			if got := inventoryGlyph(class); got != tc.wantGlyph {
+				t.Errorf("glyph = %q, want %q", got, tc.wantGlyph)
+			}
+		})
+	}
+
+	// And the rendered band carries it, distinguishable with colour stripped.
+	view := plain(demoModel(t, "nebula-workers").Render())
+	if !strings.Contains(view, tui.GlyphFailed+" nebula-worker") {
+		t.Errorf("expected the failing workload to render %s in the inventory:\n%s", tui.GlyphFailed, view)
 	}
 }
