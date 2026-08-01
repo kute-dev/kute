@@ -417,7 +417,7 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	m.beginMeta()
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // navigation -> editing mode
-	m = step(t, m, tea.KeyPressMsg{Text: "2"})           // "aim-worker" -> "aim-worker2"
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})          // "aim-worker" -> "aim-worker2"
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // save -> opens the confirm
 
 	if m.pendingMeta == nil {

@@ -100,8 +100,8 @@ func goldenHelmHistoryFixtures(t *testing.T) map[string]string {
 		"80x24.golden":           goldentest.Plain(goldenHelmHistoryModel(t, 80, 24).Render()),
 		"overflow-120x36.golden": goldentest.Plain(goldenOverflowHistoryModel(t, 120, 36).Render()),
 		"overflow-80x24.golden":  goldentest.Plain(goldenOverflowHistoryModel(t, 80, 24).Render()),
-		"loading-120x36.golden": goldentest.Plain(goldenLoadingHistoryModel(t, 120, 36).Render()),
-		"loading-80x24.golden":  goldentest.Plain(goldenLoadingHistoryModel(t, 80, 24).Render()),
+		"loading-120x36.golden":  goldentest.Plain(goldenLoadingHistoryModel(t, 120, 36).Render()),
+		"loading-80x24.golden":   goldentest.Plain(goldenLoadingHistoryModel(t, 80, 24).Render()),
 	}
 }
 

@@ -142,4 +142,3 @@ func TestExecRefusedWhileOffline(t *testing.T) {
 		t.Error("'x' stayed refused after reconnecting")
 	}
 }
-

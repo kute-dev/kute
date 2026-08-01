@@ -44,40 +44,50 @@ type typedKind struct {
 // no watch-error handler attached. One table, one registration path.
 var typedKinds = map[ResourceKind]typedKind{
 	KindPod: {
-		gvr:      schema.GroupVersionResource{Version: "v1", Resource: "pods"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Pods().Informer() },
+		gvr: schema.GroupVersionResource{Version: "v1", Resource: "pods"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Pods().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Core().V1().Pods().Lister()
 			return listNamespaced(l.List, l.Pods, ns, sel)
 		},
 	},
 	KindService: {
-		gvr:      schema.GroupVersionResource{Version: "v1", Resource: "services"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Services().Informer() },
+		gvr: schema.GroupVersionResource{Version: "v1", Resource: "services"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Services().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Core().V1().Services().Lister()
 			return listNamespaced(l.List, l.Services, ns, sel)
 		},
 	},
 	KindIngress: {
-		gvr:      schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Networking().V1().Ingresses().Informer() },
+		gvr: schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Networking().V1().Ingresses().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Networking().V1().Ingresses().Lister()
 			return listNamespaced(l.List, l.Ingresses, ns, sel)
 		},
 	},
 	KindConfigMap: {
-		gvr:      schema.GroupVersionResource{Version: "v1", Resource: "configmaps"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().ConfigMaps().Informer() },
+		gvr: schema.GroupVersionResource{Version: "v1", Resource: "configmaps"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().ConfigMaps().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Core().V1().ConfigMaps().Lister()
 			return listNamespaced(l.List, l.ConfigMaps, ns, sel)
 		},
 	},
 	KindSecret: {
-		gvr:      schema.GroupVersionResource{Version: "v1", Resource: "secrets"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Secrets().Informer() },
+		gvr: schema.GroupVersionResource{Version: "v1", Resource: "secrets"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Secrets().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Core().V1().Secrets().Lister()
 			return listNamespaced(l.List, l.Secrets, ns, sel)
@@ -94,8 +104,10 @@ var typedKinds = map[ResourceKind]typedKind{
 		},
 	},
 	KindEvent: {
-		gvr:      schema.GroupVersionResource{Version: "v1", Resource: "events"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Events().Informer() },
+		gvr: schema.GroupVersionResource{Version: "v1", Resource: "events"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Events().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Core().V1().Events().Lister()
 			return listNamespaced(l.List, l.Events, ns, sel)
@@ -104,7 +116,9 @@ var typedKinds = map[ResourceKind]typedKind{
 	KindNode: {
 		gvr:           schema.GroupVersionResource{Version: "v1", Resource: "nodes"},
 		clusterScoped: true,
-		informer:      func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Nodes().Informer() },
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Nodes().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, _ string, sel labels.Selector) ([]runtime.Object, error) {
 			return listAll(f.Core().V1().Nodes().Lister().List, sel)
 		},
@@ -112,38 +126,48 @@ var typedKinds = map[ResourceKind]typedKind{
 	KindNamespace: {
 		gvr:           schema.GroupVersionResource{Version: "v1", Resource: "namespaces"},
 		clusterScoped: true,
-		informer:      func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Core().V1().Namespaces().Informer() },
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Core().V1().Namespaces().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, _ string, sel labels.Selector) ([]runtime.Object, error) {
 			return listAll(f.Core().V1().Namespaces().Lister().List, sel)
 		},
 	},
 	KindDeployment: {
-		gvr:      schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().Deployments().Informer() },
+		gvr: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Apps().V1().Deployments().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Apps().V1().Deployments().Lister()
 			return listNamespaced(l.List, l.Deployments, ns, sel)
 		},
 	},
 	KindDaemonSet: {
-		gvr:      schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().DaemonSets().Informer() },
+		gvr: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Apps().V1().DaemonSets().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Apps().V1().DaemonSets().Lister()
 			return listNamespaced(l.List, l.DaemonSets, ns, sel)
 		},
 	},
 	KindStatefulSet: {
-		gvr:      schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().StatefulSets().Informer() },
+		gvr: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Apps().V1().StatefulSets().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Apps().V1().StatefulSets().Lister()
 			return listNamespaced(l.List, l.StatefulSets, ns, sel)
 		},
 	},
 	KindReplicaSet: {
-		gvr:      schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Apps().V1().ReplicaSets().Informer() },
+		gvr: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Apps().V1().ReplicaSets().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Apps().V1().ReplicaSets().Lister()
 			return listNamespaced(l.List, l.ReplicaSets, ns, sel)
@@ -160,16 +184,20 @@ var typedKinds = map[ResourceKind]typedKind{
 		},
 	},
 	KindJob: {
-		gvr:      schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Batch().V1().Jobs().Informer() },
+		gvr: schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Batch().V1().Jobs().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Batch().V1().Jobs().Lister()
 			return listNamespaced(l.List, l.Jobs, ns, sel)
 		},
 	},
 	KindCronJob: {
-		gvr:      schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Batch().V1().CronJobs().Informer() },
+		gvr: schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Batch().V1().CronJobs().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Batch().V1().CronJobs().Lister()
 			return listNamespaced(l.List, l.CronJobs, ns, sel)
@@ -186,16 +214,20 @@ var typedKinds = map[ResourceKind]typedKind{
 		},
 	},
 	KindRole: {
-		gvr:      schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().Roles().Informer() },
+		gvr: schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Rbac().V1().Roles().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Rbac().V1().Roles().Lister()
 			return listNamespaced(l.List, l.Roles, ns, sel)
 		},
 	},
 	KindRoleBinding: {
-		gvr:      schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"},
-		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().RoleBindings().Informer() },
+		gvr: schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"},
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Rbac().V1().RoleBindings().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, ns string, sel labels.Selector) ([]runtime.Object, error) {
 			l := f.Rbac().V1().RoleBindings().Lister()
 			return listNamespaced(l.List, l.RoleBindings, ns, sel)
@@ -204,7 +236,9 @@ var typedKinds = map[ResourceKind]typedKind{
 	KindClusterRole: {
 		gvr:           schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"},
 		clusterScoped: true,
-		informer:      func(f informers.SharedInformerFactory) cache.SharedIndexInformer { return f.Rbac().V1().ClusterRoles().Informer() },
+		informer: func(f informers.SharedInformerFactory) cache.SharedIndexInformer {
+			return f.Rbac().V1().ClusterRoles().Informer()
+		},
 		list: func(f informers.SharedInformerFactory, _ string, sel labels.Selector) ([]runtime.Object, error) {
 			return listAll(f.Rbac().V1().ClusterRoles().Lister().List, sel)
 		},

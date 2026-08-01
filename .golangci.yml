@@ -58,3 +58,10 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+
+# gofmt runs as a check, not just a convention. Five files had drifted out
+# of gofmt shape before this was wired, because nothing in CI looked —
+# `golangci-lint run` reports them now, and `golangci-lint fmt` fixes them.
+formatters:
+  enable:
+    - gofmt

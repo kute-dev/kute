@@ -605,7 +605,7 @@ func (m Model) permissionDeniedBody(width, height int) string {
 	recover := func(k, l, n string) string {
 		line := key.Render(k) + label.Render(" "+l)
 		if n != "" {
-			line += note.Render(" — "+n)
+			line += note.Render(" — " + n)
 		}
 		return line
 	}
