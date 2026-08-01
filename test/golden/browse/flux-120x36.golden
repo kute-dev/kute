@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › flux-system › Kustomizations kustomize.toolkit.fluxcd.io/v1 (g to jump)        ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ● 3 ready   ◌ 1 reconciling   ✕ 1 failed   ‖ 1 suspended                                            6 kustomizations  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                READY       REVISION          SOURCE                      RECONCILED      AGE  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ✕  nebula-workers                      False       master@efd398b    git/flux-system             3h ago          12d  
+    health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'                          
+  ◌  nebula-config                       False       master@efd398b    git/flux-system             1h ago          40d  
+    Reconciliation in progress                                                                                          
+  ‖  nebula-infra                        suspended   master@efd398b    git/flux-system             9h ago          40d  
+  + 3 ready · ↹ expand                                                                                                  
+  1–6 of 6                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   KUSTOMIZATIONS  r reconcile  s suspend  o source │ ctrl-d delete                                             ? help  

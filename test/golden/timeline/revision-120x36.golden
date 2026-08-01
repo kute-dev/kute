@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › flux-system › Timeline · all time                                              ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+⇅ 1 rollout   ↺ 0 restarts   ▲ 1 warnings                                                         all time · merged feed
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  WHEN       +CHANGE  WHAT                                                                                        OBJECT
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ 2m      ◆  +2m      Revision applied · kustomization/nebula-workers · master@efd398b ·            Kustomization/nebul…
+▎                     "openwebui bumped to 16.0.0"                                                                      
+  4m      ⇅  ROLLOUT deploy/nebula-worker · rev 7 · image nebula-worker:16.0.0                                          
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  9m      ▲  before   Unhealthy · Readiness probe failed: HTTP probe failed with statuscode: 503    Pod/nebula-worker-6…
+  52m     ◆  before   Revision applied · kustomization/nebula-workers · master@7c1a9f4              Kustomization/nebul…
+▸ normal 1 normal events — ReconciliationSucceeded…                                                             ↹ expand
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   TIMELINE  esc back  ↵ open │ w warnings only  t time window │ / filter │ tab expand/collapse normal │ v copy revision

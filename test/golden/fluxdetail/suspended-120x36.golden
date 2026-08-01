@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › flux-system › Kustomizations › nebula-infra                                    ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+SUSPENDED · reconciliation is paused                                                                                    
+source ahead · git/flux-system is at main@8f3c2a1                                                                       
+                                                                                                                        
+source            git/flux-system · ./clusters/stage/infra · interval 5m                                                
+source revision   main@8f3c2a1                                                                                          
+applied revision  main@2b91f04 · source ahead                                                                           
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   KUSTOMIZE  esc back │ r reconcile  s resume │ o source  y yaml                                               ? help  

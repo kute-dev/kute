@@ -347,6 +347,103 @@ func goldenHelmModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// --- 30a: Flux reconcilers (Kustomizations) ---
+
+// goldenFluxObject builds one Kustomization with deterministic ages.
+//
+// Both timestamps are relative to time.Now() because AGE and RECONCILED are
+// both `time.Since` reads (resources/flux.go): an absolute fixture instant
+// would render a different number every day the golden aged. The offsets are
+// deliberately far from shortAge's rounding boundaries (12d, 3h) so a slow
+// run can't tip a cell into the next unit mid-suite.
+func goldenFluxObject(name string, ageDays int, suspend bool, conds ...map[string]any) *unstructured.Unstructured {
+	created := time.Now().Add(-time.Duration(ageDays)*24*time.Hour - 7*time.Hour)
+	spec := map[string]any{
+		"interval":  "10m0s",
+		"path":      "./clusters/nebula",
+		"sourceRef": map[string]any{"kind": "GitRepository", "name": "flux-system"},
+	}
+	if suspend {
+		spec["suspend"] = true
+	}
+	status := map[string]any{
+		"lastAppliedRevision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef",
+	}
+	if len(conds) > 0 {
+		status["conditions"] = anySlice(conds)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": kube.FluxGroupKustomize + "/v1",
+		"kind":       "Kustomization",
+		"metadata": map[string]any{
+			"name": name, "namespace": "flux-system",
+			"creationTimestamp": created.Format(time.RFC3339),
+		},
+		"spec":   spec,
+		"status": status,
+	}}
+}
+
+func anySlice(conds []map[string]any) []any {
+	out := make([]any, 0, len(conds))
+	for _, c := range conds {
+		out = append(out, c)
+	}
+	return out
+}
+
+// goldenFluxCondition builds one status condition, transitioned hoursAgo.
+func goldenFluxCondition(typ, status, message string, hoursAgo int) map[string]any {
+	return map[string]any{
+		"type": typ, "status": status, "message": message,
+		"lastTransitionTime": time.Now().Add(-time.Duration(hoursAgo)*time.Hour - 20*time.Minute).Format(time.RFC3339),
+	}
+}
+
+// goldenFluxModel renders §30a with one row per branch of its status
+// precedence, which is the whole reason the kind is curated rather than
+// generic: a failing reconciler (✕, message verbatim on the sub-line), one
+// mid-reconcile (◌ — Ready=False with Reconciling=True is *progress*, and
+// the generic descriptor's flat Ready read would paint it red), a suspended
+// one carrying a stale Ready=True (‖ — the fixture that proves suspension
+// outranks a frozen condition), and a healthy tail folded away behind them.
+//
+// The strip, the sub-lines, the fold and all three departures from the
+// generic glyph set therefore land in one frame.
+func goldenFluxModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	reg, groups := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{kustomizationDK()}, nil)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Kustomization"): {
+			goldenFluxObject("nebula-workers", 12, false,
+				goldenFluxCondition("Ready", "False",
+					"health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'", 3)),
+			goldenFluxObject("nebula-config", 40, false,
+				goldenFluxCondition("Ready", "False", "Reconciliation in progress", 1),
+				goldenFluxCondition("Reconciling", "True", "Building manifests", 1)),
+			goldenFluxObject("nebula-infra", 40, true,
+				goldenFluxCondition("Ready", "True", "Applied revision: master@sha1:efd398be", 9)),
+			goldenFluxObject("flux-system", 40, false,
+				goldenFluxCondition("Ready", "True", "Applied revision: master@sha1:efd398be", 2)),
+			goldenFluxObject("nebula-apps", 12, false,
+				goldenFluxCondition("Ready", "True", "Applied revision: master@sha1:efd398be", 2)),
+			goldenFluxObject("observability", 8, false,
+				goldenFluxCondition("Ready", "True", "Applied revision: master@sha1:efd398be", 5)),
+		},
+	}}
+	sess := newSession()
+	sess.Registry, sess.Groups = reg, groups
+	sess.Location.Namespace = "flux-system"
+	sess.Location.Kind = kube.ResourceKind("Kustomization")
+	// A mutator is wired so the keybar renders §30a's own verb block
+	// (r/s/o) — fluxVerbsApply gates it on one, and the suspend hint's
+	// label flipping with the cursor row is part of what the fixture pins.
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	return m
+}
+
 // --- 8b: destructive-action confirm (ctrl-d delete) ---
 //
 // Both friction tiers render inline in this same package's Body()/keybar —
@@ -613,6 +710,7 @@ var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
+	"flux",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -654,6 +752,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenMetaModel(t, width, height)
 	case "meta-confirm":
 		return goldenMetaConfirmModel(t, width, height)
+	case "flux":
+		return goldenFluxModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -705,6 +805,11 @@ func TestGoldenStateFixtures(t *testing.T) {
 var truecolorStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
+	// §30a's status mapping is the entire justification for the curated
+	// descriptor, and it is a colour claim: suspended must not read as
+	// failed, reconciling must not read as failed. A plain golden renders
+	// all three identically.
+	"flux",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

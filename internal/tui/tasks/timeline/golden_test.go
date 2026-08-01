@@ -93,12 +93,39 @@ func goldenObjectModel(width, height int) Model {
 	return loadFixedFeed(m, feed, rail, "checkout-api")
 }
 
+// goldenRevisionModel builds §32a's git-aware feed: two ◆ revision rows —
+// one naming its commit, one bare — above the rollout they explain.
+//
+// Both halves of §32a's degradation are in one frame on purpose. The
+// subject is only ever available from a source-controller event that ages
+// out at the ~1h Event TTL (docs/flux-plan.md G1/T14), so "◆ … master@efd398b"
+// with no quoted message is not a defect to be fixed later but the honest
+// steady state for any commit kute wasn't running for — the fixture pins
+// that the two render as the same kind of row, differing only by the
+// trailing subject.
+func goldenRevisionModel(width, height int) Model {
+	entries := []kube.TimelineEntry{
+		{Time: goldenNow.Add(-2 * time.Minute), Kind: kube.TimelineRevision, Object: "Kustomization/nebula-workers", Namespace: "flux-system", Reason: "ReconciliationSucceeded", GitRevision: "master@efd398b", CommitSubject: "openwebui bumped to 16.0.0"},
+		{Time: goldenNow.Add(-4 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/nebula-worker", Namespace: "flux-system", Reason: "Rollout", Message: "revision 7 · nebula-worker:16.0.0", Revision: 7, Image: "nebula-worker:16.0.0"},
+		{Time: goldenNow.Add(-9 * time.Minute), Kind: kube.TimelineEvent, Object: "Pod/nebula-worker-6b8f7d-2xq4z", Namespace: "flux-system", Severity: "Warning", Reason: "Unhealthy", Message: "Readiness probe failed: HTTP probe failed with statuscode: 503"},
+		// No subject: the "stored artifact" event that carried it expired
+		// before this session started, and kute never invents one.
+		{Time: goldenNow.Add(-52 * time.Minute), Kind: kube.TimelineRevision, Object: "Kustomization/nebula-workers", Namespace: "flux-system", Reason: "ReconciliationSucceeded", GitRevision: "master@7c1a9f4"},
+		{Time: goldenNow.Add(-58 * time.Minute), Kind: kube.TimelineEvent, Object: "Kustomization/nebula-workers", Namespace: "flux-system", Severity: "Normal", Reason: "ReconciliationSucceeded", Message: "Reconciliation finished in 1.40s, next run in 10m0s"},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "flux-system"})
+	m.SetSize(width, height)
+	return loadFixedFeed(m, entries, nil, "")
+}
+
 func goldenFixtures() map[string]string {
 	return map[string]string{
 		"namespace-120x36.golden": goldentest.Plain(goldenNamespaceModel(120, 36).Render()),
 		"namespace-80x24.golden":  goldentest.Plain(goldenNamespaceModel(80, 24).Render()),
 		"object-120x36.golden":    goldentest.Plain(goldenObjectModel(120, 36).Render()),
 		"object-80x24.golden":     goldentest.Plain(goldenObjectModel(80, 24).Render()),
+		"revision-120x36.golden":  goldentest.Plain(goldenRevisionModel(120, 36).Render()),
+		"revision-80x24.golden":   goldentest.Plain(goldenRevisionModel(80, 24).Render()),
 	}
 }
 
@@ -147,9 +174,20 @@ func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	dark.session = &tui.Session{Location: loc, Theme: tui.Dark()}
 	light := goldenObjectModel(120, 36)
 	light.session = &tui.Session{Location: loc, Theme: tui.Light()}
+	// §32a's ◆ is the feed's only AccentHi marker — a hue that exists
+	// nowhere else in the app — so the revision state earns truecolor
+	// fixtures of its own: a plain golden renders it colourless and can't
+	// tell it apart from the ⇅ rollout anchor it sits beside.
+	fluxLoc := tui.Location{Context: "microk8s-cluster", Namespace: "flux-system"}
+	fluxDark := goldenRevisionModel(120, 36)
+	fluxDark.session = &tui.Session{Location: fluxLoc, Theme: tui.Dark()}
+	fluxLight := goldenRevisionModel(120, 36)
+	fluxLight.session = &tui.Session{Location: fluxLoc, Theme: tui.Light()}
 	return map[string]string{
-		"object-120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
-		"object-120x36-light.golden": goldentest.Truecolor(light.Render()),
+		"object-120x36-dark.golden":    goldentest.Truecolor(dark.Render()),
+		"object-120x36-light.golden":   goldentest.Truecolor(light.Render()),
+		"revision-120x36-dark.golden":  goldentest.Truecolor(fluxDark.Render()),
+		"revision-120x36-light.golden": goldentest.Truecolor(fluxLight.Render()),
 	}
 }
 

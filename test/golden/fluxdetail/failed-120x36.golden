@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › flux-system › Kustomizations › nebula-workers                                  ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+RECONCILE FAILED · HealthCheckFailed · 4m ago · retry in 3m 12s                                                         
+health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'                              
+▸ opens Deployment/nebula-worker · 3/4                                                                                  
+                                                                                                                        
+source            git/flux-system · ./clusters/stage/workers · interval 5m                                              
+source revision   main@8f3c2a1                                                                                          
+applied revision  main@8f3c2a1 · in sync — applied, failing health checks                                               
+INVENTORY · 3 OBJECTS · 1 NOT READY                                                                                     
+▎ ● nebula-worker                   Deployment        3/4                                                               
+  + 2 ready · ↹ expand                                                                                                  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   KUSTOMIZE  esc back  ↵ open object │ r reconcile  s suspend │ o source  y yaml │ tab expand/collapse ready   ? help  
