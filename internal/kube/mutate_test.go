@@ -8,7 +8,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -502,6 +505,74 @@ func TestPatchMetaUnsupportedKindReturnsError(t *testing.T) {
 	c, _ := newTestCluster()
 	if err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", false, "k", "v", false); err == nil {
 		t.Fatal("expected an error for a kind with no typed client and no discovered dynamic GVR")
+	}
+}
+
+// widgetGVR/newDynTestCluster back the custom-resource write paths: a
+// cluster whose only knowledge of "Widget" is the discovery snapshot, with
+// no informer ever started for it. That is deliberately the harder case —
+// resolution through resourceFor is what makes it work, and getDynKind
+// alone would not.
+var widgetGVR = schema.GroupVersionResource{Group: "example.test.io", Version: "v1", Resource: "widgets"}
+
+func newDynTestCluster(objs ...runtime.Object) (*Cluster, *dynamicfake.FakeDynamicClient) {
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme, map[schema.GroupVersionResource]string{widgetGVR: "WidgetList"}, objs...)
+	return &Cluster{
+		clientset: fake.NewSimpleClientset(),
+		dynClient: dyn,
+		discovered: []DiscoveredKind{{
+			GVR: widgetGVR, Kind: "Widget", Plural: "widgets", Group: "example.test.io",
+			Versions:    []CRDVersion{{Name: "v1", Served: true, Storage: true}},
+			Established: true, CRDName: "widgets.example.test.io",
+		}},
+	}, dyn
+}
+
+func newWidget(name, ns string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "example.test.io/v1",
+		"kind":       "Widget",
+		"metadata":   map[string]any{"name": name, "namespace": ns},
+	}}
+}
+
+// TestDeleteResourceFallsBackToTheDynamicClient covers the gap that made
+// ctrl-d fail on every discovered CRD row while the keybar advertised it.
+func TestDeleteResourceFallsBackToTheDynamicClient(t *testing.T) {
+	t.Parallel()
+	c, dyn := newDynTestCluster(newWidget("thing", "default"))
+
+	if err := c.DeleteResource(context.Background(), ResourceKind("Widget"), "default", "thing"); err != nil {
+		t.Fatalf("DeleteResource: %v", err)
+	}
+	if _, err := dyn.Resource(widgetGVR).Namespace("default").Get(context.Background(), "thing", metav1.GetOptions{}); err == nil {
+		t.Fatal("expected the custom resource to be gone")
+	}
+}
+
+// TestPatchMetaReachesACustomResourceWithNoInformerStarted pins the second
+// half of the same fix: PatchMeta used to resolve through getDynKind, which
+// only knows kinds whose informer already started, so 26a failed on an
+// object the user reached without browsing its list first.
+func TestPatchMetaReachesACustomResourceWithNoInformerStarted(t *testing.T) {
+	t.Parallel()
+	c, dyn := newDynTestCluster(newWidget("thing", "default"))
+
+	if _, ok := c.getDynKind(ResourceKind("Widget")); ok {
+		t.Fatal("precondition: no informer should be registered for Widget")
+	}
+	err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", true, "team", "platform", false)
+	if err != nil {
+		t.Fatalf("PatchMeta: %v", err)
+	}
+	got, err := dyn.Resource(widgetGVR).Namespace("default").Get(context.Background(), "thing", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.GetAnnotations()["team"] != "platform" {
+		t.Errorf("annotation not applied, got %+v", got.GetAnnotations())
 	}
 }
 

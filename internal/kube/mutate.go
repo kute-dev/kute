@@ -152,8 +152,50 @@ func (c *Cluster) deleteResource(ctx context.Context, kind ResourceKind, namespa
 	case KindNode:
 		return cs.CoreV1().Nodes().Delete(ctx, name, opts)
 	default:
-		return fmt.Errorf("delete is not supported for kind %s", kind)
+		// Every discovered CRD lands here. Without this fallback ctrl-d
+		// failed on every custom-resource row while the keybar advertised
+		// it — the verb registry offers Delete on any kind, so the write
+		// seam has to be able to honour that on any kind.
+		ri, err := c.dynamicResourceFor(kind, namespace)
+		if err != nil {
+			return err
+		}
+		return ri.Delete(ctx, name, opts)
 	}
+}
+
+// dynamicResourceFor resolves kind to a dynamic client handle, scoped to
+// namespace when the kind is namespaced.
+//
+// It goes through resourceFor rather than getDynKind alone, so it answers
+// for a discovered kind whose instance informer has never started — which
+// is the ordinary case for a write reached from a screen that didn't have
+// to list the kind first.
+func (c *Cluster) dynamicResourceFor(kind ResourceKind, namespace string) (dynamic.ResourceInterface, error) {
+	if c.dynClient == nil {
+		return nil, fmt.Errorf("%s is not supported: no dynamic client", kind)
+	}
+	gvr, clusterScoped, ok := c.resourceFor(kind)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a known resource kind", kind)
+	}
+	res := c.dynClient.Resource(gvr)
+	if clusterScoped || namespace == "" {
+		return res, nil
+	}
+	return res.Namespace(namespace), nil
+}
+
+// patchDynamic issues one JSON merge patch against a dynamically-resolved
+// kind — the shared body of every write that has to reach a kind outside
+// the typed clientset switches above.
+func (c *Cluster) patchDynamic(ctx context.Context, kind ResourceKind, namespace, name string, patch []byte) error {
+	ri, err := c.dynamicResourceFor(kind, namespace)
+	if err != nil {
+		return err
+	}
+	_, err = ri.Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
 }
 
 // RolloutRestart patches kind's pod template annotations with a fresh
@@ -500,10 +542,9 @@ func SetResourcesCommandString(kind ResourceKind, namespace, name, container str
 
 // PatchMeta implements Mutator against the live clientset. It mirrors
 // deleteResource's per-kind switch (same kind list — the typed clients this
-// app talks to), but falls back to the dynamic client by discovered GVR for
-// any kind outside that switch, which is what actually makes this work on
-// CRDs (deleteResource has no such fallback today; that gap is pre-existing
-// and out of scope here).
+// app talks to), and like it falls back to the dynamic client by discovered
+// GVR for any kind outside that switch, which is what makes both work on
+// CRDs.
 func (c *Cluster) PatchMeta(ctx context.Context, kind ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error {
 	if name == "" {
 		return fmt.Errorf("cannot patch %s: empty name", kind)
@@ -543,16 +584,11 @@ func (c *Cluster) PatchMeta(ctx context.Context, kind ResourceKind, namespace, n
 	case KindNode:
 		_, err = cs.CoreV1().Nodes().Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
 	default:
-		dk, ok := c.getDynKind(kind)
-		if !ok {
-			return fmt.Errorf("labels/annotations are not supported for kind %s", kind)
-		}
-		res := c.dynClient.Resource(dk.gvr)
-		var ri dynamic.ResourceInterface = res
-		if dk.namespaced && namespace != "" {
-			ri = res.Namespace(namespace)
-		}
-		_, err = ri.Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+		// Via patchDynamic (and so resourceFor) rather than getDynKind, so
+		// this works on a discovered kind whose instance informer never
+		// started — 26a is reachable on an object the user arrived at
+		// without browsing its list.
+		err = c.patchDynamic(ctx, kind, namespace, name, patch)
 	}
 	return err
 }
