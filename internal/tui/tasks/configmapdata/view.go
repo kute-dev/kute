@@ -65,7 +65,7 @@ func (m Model) Header() tui.HeaderState {
 
 // Strips renders two lines: the key count (with a live → N preview while an
 // add/remove is in flight, matching 26a/27b's own precedent), and 27a's own
-// consumer strip — "deploy/aim-worker ↗ env · deploy/aim-gateway ↗ volume"
+// consumer strip — "deploy/nva-worker ↗ env · deploy/nva-gateway ↗ volume"
 // left, "pods don't reload configmaps on their own" right (docs/design
 // README.md §27a).
 func (m Model) Strips(width int) []string {
@@ -103,7 +103,7 @@ func (m Model) Strips(width int) []string {
 	return []string{countLine, consumersLine}
 }
 
-// consumerRefText renders one consumer as "deploy/aim-worker ↗ env" — the
+// consumerRefText renders one consumer as "deploy/nva-worker ↗ env" — the
 // same short workload-arg forms (deploy/sts/ds) kubectl-command rendering
 // uses elsewhere (kube.ConfigMapConsumerRestartCommandString), so the strip
 // and the will-run restart lines name workloads identically.

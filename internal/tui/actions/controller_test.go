@@ -261,10 +261,10 @@ func TestExecuteDispatchesSetMetaToPatchMeta(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	cmd := c.Begin(TierNone, tui.TaskAction{
-		ID:    "set-meta-default/aim-worker/env",
-		Label: "Set label env on aim-worker?",
+		ID:    "set-meta-default/nva-worker/env",
+		Label: "Set label env on nva-worker?",
 		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindDeployment), ResourceName: "aim-worker", Namespace: "default",
+			ResourceKind: string(kube.KindDeployment), ResourceName: "nva-worker", Namespace: "default",
 			Verb: "set-meta", IsMutating: true,
 			MetaKey: "env", MetaValue: "staging", MetaOverwrite: true,
 		},
@@ -276,8 +276,8 @@ func TestExecuteDispatchesSetMetaToPatchMeta(t *testing.T) {
 	if msg.Err != nil {
 		t.Fatalf("unexpected error: %v", msg.Err)
 	}
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "Deployment/default/aim-worker labels env=staging" {
-		t.Fatalf("metaPatches = %v, want one Deployment/default/aim-worker labels env=staging patch", mut.metaPatches)
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "Deployment/default/nva-worker labels env=staging" {
+		t.Fatalf("metaPatches = %v, want one Deployment/default/nva-worker labels env=staging patch", mut.metaPatches)
 	}
 }
 
@@ -285,10 +285,10 @@ func TestExecuteDispatchesSecretDataToPatchSecretData(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	cmd := c.Begin(TierNone, tui.TaskAction{
-		ID:    "add-secret-key-default/aim-secrets/SMTP_PASSWORD",
-		Label: "Add key SMTP_PASSWORD to aim-secrets?",
+		ID:    "add-secret-key-default/nva-secrets/SMTP_PASSWORD",
+		Label: "Add key SMTP_PASSWORD to nva-secrets?",
 		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindSecret), ResourceName: "aim-secrets", Namespace: "default",
+			ResourceKind: string(kube.KindSecret), ResourceName: "nva-secrets", Namespace: "default",
 			Verb: "secret-data", IsMutating: true,
 			SecretKey: "SMTP_PASSWORD", SecretValue: "hunter2-staging",
 		},
@@ -300,8 +300,8 @@ func TestExecuteDispatchesSecretDataToPatchSecretData(t *testing.T) {
 	if msg.Err != nil {
 		t.Fatalf("unexpected error: %v", msg.Err)
 	}
-	if len(mut.secretDataPatches) != 1 || mut.secretDataPatches[0] != "default/aim-secrets SMTP_PASSWORD=hunter2-staging" {
-		t.Fatalf("secretDataPatches = %v, want one default/aim-secrets SMTP_PASSWORD=hunter2-staging patch", mut.secretDataPatches)
+	if len(mut.secretDataPatches) != 1 || mut.secretDataPatches[0] != "default/nva-secrets SMTP_PASSWORD=hunter2-staging" {
+		t.Fatalf("secretDataPatches = %v, want one default/nva-secrets SMTP_PASSWORD=hunter2-staging patch", mut.secretDataPatches)
 	}
 }
 
@@ -309,10 +309,10 @@ func TestExecuteDispatchesConfigMapDataToPatchConfigMapData(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	cmd := c.Begin(TierNone, tui.TaskAction{
-		ID:    "add-configmap-key-default/aim-config/LOG_LEVEL",
-		Label: "Add key LOG_LEVEL to aim-config?",
+		ID:    "add-configmap-key-default/nva-config/LOG_LEVEL",
+		Label: "Add key LOG_LEVEL to nva-config?",
 		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindConfigMap), ResourceName: "aim-config", Namespace: "default",
+			ResourceKind: string(kube.KindConfigMap), ResourceName: "nva-config", Namespace: "default",
 			Verb: "configmap-data", IsMutating: true,
 			ConfigMapKey: "LOG_LEVEL", ConfigMapValue: "debug",
 		},
@@ -324,8 +324,8 @@ func TestExecuteDispatchesConfigMapDataToPatchConfigMapData(t *testing.T) {
 	if msg.Err != nil {
 		t.Fatalf("unexpected error: %v", msg.Err)
 	}
-	if len(mut.configMapDataPatches) != 1 || mut.configMapDataPatches[0] != "default/aim-config LOG_LEVEL=debug" {
-		t.Fatalf("configMapDataPatches = %v, want one default/aim-config LOG_LEVEL=debug patch", mut.configMapDataPatches)
+	if len(mut.configMapDataPatches) != 1 || mut.configMapDataPatches[0] != "default/nva-config LOG_LEVEL=debug" {
+		t.Fatalf("configMapDataPatches = %v, want one default/nva-config LOG_LEVEL=debug patch", mut.configMapDataPatches)
 	}
 	if len(mut.rolloutRestarts) != 0 {
 		t.Fatalf("rolloutRestarts = %v, want none for a plain apply", mut.rolloutRestarts)
@@ -340,16 +340,16 @@ func TestExecuteConfigMapDataChainsRolloutRestart(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	cmd := c.Begin(TierNone, tui.TaskAction{
-		ID:    "edit-configmap-key-default/aim-config/LOG_LEVEL",
-		Label: "Update key LOG_LEVEL on aim-config?",
+		ID:    "edit-configmap-key-default/nva-config/LOG_LEVEL",
+		Label: "Update key LOG_LEVEL on nva-config?",
 		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindConfigMap), ResourceName: "aim-config", Namespace: "default",
+			ResourceKind: string(kube.KindConfigMap), ResourceName: "nva-config", Namespace: "default",
 			Verb: "configmap-data", IsMutating: true,
 			ConfigMapKey: "LOG_LEVEL", ConfigMapValue: "debug",
 			ConfigMapRestartConsumers: true,
 			ConfigMapConsumers: []kube.ConfigMapConsumerRef{
-				{Kind: kube.KindDeployment, Name: "aim-worker"},
-				{Kind: kube.KindStatefulSet, Name: "aim-db"},
+				{Kind: kube.KindDeployment, Name: "nva-worker"},
+				{Kind: kube.KindStatefulSet, Name: "nva-db"},
 			},
 		},
 	})
@@ -360,7 +360,7 @@ func TestExecuteConfigMapDataChainsRolloutRestart(t *testing.T) {
 	if msg.Err != nil {
 		t.Fatalf("unexpected error: %v", msg.Err)
 	}
-	want := []string{"Deployment/default/aim-worker", "StatefulSet/default/aim-db"}
+	want := []string{"Deployment/default/nva-worker", "StatefulSet/default/nva-db"}
 	if len(mut.rolloutRestarts) != len(want) || mut.rolloutRestarts[0] != want[0] || mut.rolloutRestarts[1] != want[1] {
 		t.Fatalf("rolloutRestarts = %v, want %v", mut.rolloutRestarts, want)
 	}

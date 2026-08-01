@@ -1,4 +1,4 @@
-  kute │ test-cluster › aim-stage › secret/aim-secrets › Data                                       ● connected · 12ms  
+  kute │ test-cluster › nva-stage › secret/nva-secrets › Data                                       ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Opaque · 3 keys → 4                                                 values decode in memory only · re-masked on exit  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -9,7 +9,7 @@
 + SMTP_PASSWORD               hunter2-staging  · visible while typing · ctrl-x re-mask                             new  
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  will run kubectl patch secret/aim-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n aim-stage    
+  will run kubectl patch secret/nva-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n nva-stage    
                                                                                                                         
                                                                                                                         
                                                                                                                         

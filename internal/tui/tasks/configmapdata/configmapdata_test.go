@@ -184,7 +184,7 @@ func newModel(t *testing.T, sess *tui.Session, cm *corev1.ConfigMap, mut *fakeMu
 }
 
 func TestLoadRendersRowsAndKeyCount(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{
+	cm := cmObj("nva-stage", "nva-config", map[string]string{
 		"LOG_LEVEL": "info",
 		"FEATURE_X": "on",
 	})
@@ -210,10 +210,10 @@ func TestLoadRendersRowsAndKeyCount(t *testing.T) {
 }
 
 func TestConsumerStripListsEnvAndVolumeReferences(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	extra := map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment:  {deploymentEnvFrom("aim-stage", "aim-worker", "aim-config")},
-		kube.KindStatefulSet: {statefulSetVolume("aim-stage", "aim-db", "aim-config")},
+		kube.KindDeployment:  {deploymentEnvFrom("nva-stage", "nva-worker", "nva-config")},
+		kube.KindStatefulSet: {statefulSetVolume("nva-stage", "nva-db", "nva-config")},
 	}
 	m := newModel(t, newSession(), cm, nil, extra)
 
@@ -221,16 +221,16 @@ func TestConsumerStripListsEnvAndVolumeReferences(t *testing.T) {
 		t.Fatalf("expected 2 consumers, got %+v", m.consumers)
 	}
 	strip := plain(strings.Join(m.Strips(120), "\n"))
-	if !strings.Contains(strip, "deploy/aim-worker") || !strings.Contains(strip, "↗ env") {
+	if !strings.Contains(strip, "deploy/nva-worker") || !strings.Contains(strip, "↗ env") {
 		t.Fatalf("expected the Deployment env consumer in the strip, got %q", strip)
 	}
-	if !strings.Contains(strip, "sts/aim-db") || !strings.Contains(strip, "↗ volume") {
+	if !strings.Contains(strip, "sts/nva-db") || !strings.Contains(strip, "↗ volume") {
 		t.Fatalf("expected the StatefulSet volume consumer in the strip, got %q", strip)
 	}
 }
 
 func TestAddKeyNonProdAppliesImmediatelyAndRefreshes(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil)
 
@@ -268,7 +268,7 @@ func TestAddKeyNonProdAppliesImmediatelyAndRefreshes(t *testing.T) {
 }
 
 func TestAddKeyProdRequiresConfirmThenApplies(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", nil)
+	cm := cmObj("nva-stage", "nva-config", nil)
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, prodSession(), cm, mut, nil)
 
@@ -298,7 +298,7 @@ func TestAddKeyProdRequiresConfirmThenApplies(t *testing.T) {
 }
 
 func TestEnterOnSingleLineRowEditsInPlaceNonProdAppliesImmediately(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil)
 
@@ -329,11 +329,11 @@ func TestEnterOnSingleLineRowEditsInPlaceNonProdAppliesImmediately(t *testing.T)
 }
 
 func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	mut := &fakeMutator{cm: cm}
 	extra := map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment:  {deploymentEnvFrom("aim-stage", "aim-worker", "aim-config")},
-		kube.KindStatefulSet: {statefulSetVolume("aim-stage", "aim-db", "aim-config")},
+		kube.KindDeployment:  {deploymentEnvFrom("nva-stage", "nva-worker", "nva-config")},
+		kube.KindStatefulSet: {statefulSetVolume("nva-stage", "nva-db", "nva-config")},
 	}
 	m := newModel(t, newSession(), cm, mut, extra)
 	if len(m.consumers) != 2 {
@@ -352,7 +352,7 @@ func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
 	if cm.Data["LOG_LEVEL"] != "debug" {
 		t.Fatalf("expected the edit applied, cm.Data = %+v", cm.Data)
 	}
-	want := map[string]bool{"Deployment/aim-stage/aim-worker": true, "StatefulSet/aim-stage/aim-db": true}
+	want := map[string]bool{"Deployment/nva-stage/nva-worker": true, "StatefulSet/nva-stage/nva-db": true}
 	if len(mut.rolloutRestarts) != 2 {
 		t.Fatalf("rolloutRestarts = %v, want 2 entries", mut.rolloutRestarts)
 	}
@@ -367,7 +367,7 @@ func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
 }
 
 func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{
+	cm := cmObj("nva-stage", "nva-config", map[string]string{
 		"LOG_LEVEL": "info",
 		"FEATURE_X": "on",
 	})
@@ -394,7 +394,7 @@ func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
 }
 
 func TestFailedEditRestoresEditModeWithErrorAndAttemptedValue(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	mut := &fakeMutator{cm: cm, err: fakeError{}}
 	m := newModel(t, newSession(), cm, mut, nil)
 
@@ -426,7 +426,7 @@ type fakeError struct{}
 func (fakeError) Error() string { return "configmap is immutable" }
 
 func TestMultilineRowFoldsAndEOpensBufferEditor(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{
+	cm := cmObj("nva-stage", "nva-config", map[string]string{
 		"nginx.conf": "server {\n  listen 80;\n}",
 	})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
@@ -450,7 +450,7 @@ func TestMultilineRowFoldsAndEOpensBufferEditor(t *testing.T) {
 }
 
 func TestEnterOnMultilineRowAlsoOpensBufferEditor(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "a\nb"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"nginx.conf": "a\nb"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
@@ -463,7 +463,7 @@ func TestEnterOnMultilineRowAlsoOpensBufferEditor(t *testing.T) {
 }
 
 func TestMultilineBufferEditorEditsAndAppliesWithCtrlO(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "a\nb"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"nginx.conf": "a\nb"})
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil)
 
@@ -484,7 +484,7 @@ func TestMultilineBufferEditorEditsAndAppliesWithCtrlO(t *testing.T) {
 }
 
 func TestMultilineBufferEditorEnterInsertsNewline(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "ab\ncd"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"nginx.conf": "ab\ncd"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "e"})
@@ -507,7 +507,7 @@ func TestMultilineBufferEditorEnterInsertsNewline(t *testing.T) {
 }
 
 func TestMultilineBufferEditorEscDiscardsWithoutApplying(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "a\nb"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"nginx.conf": "a\nb"})
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil)
 
@@ -528,7 +528,7 @@ func TestMultilineBufferEditorEscDiscardsWithoutApplying(t *testing.T) {
 // pill and drop add/remove from the keybar while disconnected, not just
 // browse.
 func TestKeybarGoesOfflineAndHidesAddRemove(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "dial timeout"})

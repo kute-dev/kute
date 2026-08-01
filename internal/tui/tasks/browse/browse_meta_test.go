@@ -21,7 +21,7 @@ func metaDeployment(ns, name string, labels, annotations, selector map[string]st
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels, Annotations: annotations},
 		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
-			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "aim-worker:1.0"}}},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "nva-worker:1.0"}}},
 		}},
 	}
 	if selector != nil {
@@ -63,8 +63,8 @@ func TestMetaEditableGating(t *testing.T) {
 }
 
 func TestBeginMetaBuildsSortedRowsFromCurrentValues(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker",
-		map[string]string{"team": "platform", "app": "aim-worker"},
+	dep := metaDeployment("default", "nva-worker",
+		map[string]string{"team": "platform", "app": "nva-worker"},
 		map[string]string{"kute.dev/owner": "platform-oncall"},
 		nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
@@ -76,8 +76,8 @@ func TestBeginMetaBuildsSortedRowsFromCurrentValues(t *testing.T) {
 	if len(t2.labels) != 2 || t2.labels[0].key != "app" || t2.labels[1].key != "team" {
 		t.Fatalf("labels = %+v, want sorted [app team]", t2.labels)
 	}
-	if t2.labels[0].current != "aim-worker" || t2.labels[0].input.Value() != "aim-worker" {
-		t.Errorf("app row = %+v, want current/buffer aim-worker", t2.labels[0])
+	if t2.labels[0].current != "nva-worker" || t2.labels[0].input.Value() != "nva-worker" {
+		t.Errorf("app row = %+v, want current/buffer nva-worker", t2.labels[0])
 	}
 	if len(t2.annotations) != 1 || t2.annotations[0].key != "kute.dev/owner" {
 		t.Fatalf("annotations = %+v, want [kute.dev/owner]", t2.annotations)
@@ -85,14 +85,14 @@ func TestBeginMetaBuildsSortedRowsFromCurrentValues(t *testing.T) {
 }
 
 func TestJoinedLabelGetsSelectorWarning(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"app": "aim-worker", "env": "stage"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"app": "nva-worker", "env": "stage"}, nil, nil)
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "default"},
-		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "aim-worker"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "nva-worker"}},
 	}
 	pods := []runtime.Object{
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p1", Namespace: "default", Labels: map[string]string{"app": "aim-worker"}}},
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p2", Namespace: "default", Labels: map[string]string{"app": "aim-worker"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p1", Namespace: "default", Labels: map[string]string{"app": "nva-worker"}}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p2", Namespace: "default", Labels: map[string]string{"app": "nva-worker"}}},
 		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "p3", Namespace: "default", Labels: map[string]string{"app": "other"}}},
 	}
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
@@ -110,8 +110,8 @@ func TestJoinedLabelGetsSelectorWarning(t *testing.T) {
 			env = &m.pendingMeta.labels[i]
 		}
 	}
-	if app.joinService != "aim-worker" || app.joinPodCount != 2 {
-		t.Errorf("app row join = %q/%d, want aim-worker/2", app.joinService, app.joinPodCount)
+	if app.joinService != "nva-worker" || app.joinPodCount != 2 {
+		t.Errorf("app row join = %q/%d, want nva-worker/2", app.joinService, app.joinPodCount)
 	}
 	if env.joinService != "" {
 		t.Errorf("env row should carry no join, got %q", env.joinService)
@@ -119,9 +119,9 @@ func TestJoinedLabelGetsSelectorWarning(t *testing.T) {
 }
 
 func TestImmutableSelectorLabelIsReadOnlyAndBlocksEdits(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker",
-		map[string]string{"app": "aim-worker", "team": "platform"}, nil,
-		map[string]string{"app": "aim-worker"})
+	dep := metaDeployment("default", "nva-worker",
+		map[string]string{"app": "nva-worker", "team": "platform"}, nil,
+		map[string]string{"app": "nva-worker"})
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	if !m.beginMeta() {
 		t.Fatal("beginMeta returned false")
@@ -148,7 +148,7 @@ func TestImmutableSelectorLabelIsReadOnlyAndBlocksEdits(t *testing.T) {
 }
 
 func TestNavigationModeIgnoresPrintableCharacters(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -172,7 +172,7 @@ func TestNavigationModeIgnoresPrintableCharacters(t *testing.T) {
 // value buffer has it, mirroring the rest of the panel's own bidirectional
 // tab convention instead of only going key -> value.
 func TestAddHotkeyStartsAddModeAndShiftTabReturnsToKey(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -199,7 +199,7 @@ func TestAddHotkeyStartsAddModeAndShiftTabReturnsToKey(t *testing.T) {
 }
 
 func TestTabSwitchesFocusedSectionIndependentOfCursor(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker",
+	dep := metaDeployment("default", "nva-worker",
 		map[string]string{"team": "platform"}, map[string]string{"kute.dev/owner": "platform-oncall"}, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -223,7 +223,7 @@ func TestTabSwitchesFocusedSectionIndependentOfCursor(t *testing.T) {
 }
 
 func TestControllerManagedAnnotationIsReadOnly(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", nil,
+	dep := metaDeployment("default", "nva-worker", nil,
 		map[string]string{
 			"deployment.kubernetes.io/revision":                "42",
 			"kubectl.kubernetes.io/last-applied-configuration": "{}",
@@ -242,7 +242,7 @@ func TestControllerManagedAnnotationIsReadOnly(t *testing.T) {
 }
 
 func TestHelmOwnedNoteOnManagedByRowOnly(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker",
+	dep := metaDeployment("default", "nva-worker",
 		map[string]string{"app.kubernetes.io/managed-by": "Helm", "team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	if !m.beginMeta() {
@@ -257,7 +257,7 @@ func TestHelmOwnedNoteOnManagedByRowOnly(t *testing.T) {
 }
 
 func TestEditNonJoinedLabelAppliesImmediately(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"env": "stage"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"env": "stage"}, nil, nil)
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -269,7 +269,7 @@ func TestEditNonJoinedLabelAppliesImmediately(t *testing.T) {
 	if m.actions.Active() {
 		t.Error("a non-joined edit is TierNone and should execute immediately, not confirm")
 	}
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker labels env=stageg" {
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker labels env=stageg" {
 		t.Errorf("metaPatches = %v, want one env=stageg label patch", mut.metaPatches)
 	}
 	// docs/design README.md §26a: "confirm → execute → refresh → show
@@ -294,10 +294,10 @@ func TestEditNonJoinedLabelAppliesImmediately(t *testing.T) {
 }
 
 func TestEditJoinedLabelRequiresConfirmThenApplies(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"app": "aim-worker"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"app": "nva-worker"}, nil, nil)
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "default"},
-		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "aim-worker"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "nva-worker"}},
 	}
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{
@@ -306,7 +306,7 @@ func TestEditJoinedLabelRequiresConfirmThenApplies(t *testing.T) {
 	m.beginMeta()
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // navigation -> editing mode
-	m = step(t, m, tea.KeyPressMsg{Text: "2"})          // "aim-worker" -> "aim-worker2"
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})          // "nva-worker" -> "nva-worker2"
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // save (join-escalated, so this opens the confirm)
 
 	if len(mut.metaPatches) != 0 {
@@ -319,27 +319,27 @@ func TestEditJoinedLabelRequiresConfirmThenApplies(t *testing.T) {
 		t.Fatal("the panel should stay open under the inline confirm, not close to the generic table+confirm view")
 	}
 	pending := m.actions.Pending()
-	if pending == nil || pending.Scope.MetaJoinService != "aim-worker" {
-		t.Fatalf("pending scope = %+v, want MetaJoinService aim-worker", pending)
+	if pending == nil || pending.Scope.MetaJoinService != "nva-worker" {
+		t.Fatalf("pending scope = %+v, want MetaJoinService nva-worker", pending)
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker labels app=aim-worker2" {
-		t.Errorf("metaPatches after confirm = %v, want one app=aim-worker2 label patch", mut.metaPatches)
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker labels app=nva-worker2" {
+		t.Errorf("metaPatches after confirm = %v, want one app=nva-worker2 label patch", mut.metaPatches)
 	}
 	if m.pendingMeta == nil {
 		t.Fatal("the panel should stay open after the confirmed edit applies")
 	}
-	if got := m.pendingMeta.labels[0].current; got != "aim-worker2" {
-		t.Errorf("refreshed current = %q, want aim-worker2", got)
+	if got := m.pendingMeta.labels[0].current; got != "nva-worker2" {
+		t.Errorf("refreshed current = %q, want nva-worker2", got)
 	}
-	if want := "updated app=aim-worker2"; m.pendingMeta.message != want {
+	if want := "updated app=nva-worker2"; m.pendingMeta.message != want {
 		t.Errorf("message = %q, want %q", m.pendingMeta.message, want)
 	}
 }
 
 func TestRemoveKeyRequiresConfirmThenApplies(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -356,7 +356,7 @@ func TestRemoveKeyRequiresConfirmThenApplies(t *testing.T) {
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker labels team-" {
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker labels team-" {
 		t.Errorf("metaPatches = %v, want one team removal", mut.metaPatches)
 	}
 	// docs/design README.md §26a: the panel stays open after a removal too
@@ -377,7 +377,7 @@ func TestRemoveKeyRequiresConfirmThenApplies(t *testing.T) {
 // removal confirm: the row survives (nothing was ever applied) and the panel
 // stays open in navigation mode rather than closing.
 func TestCancellingRemoveConfirmKeepsPanelOpen(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -405,10 +405,10 @@ func TestCancellingRemoveConfirmKeepsPanelOpen(t *testing.T) {
 // applies, and that cancelling reverts the buffer instead of leaving a
 // half-applied edit behind.
 func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"app": "aim-worker"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"app": "nva-worker"}, nil, nil)
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "default"},
-		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "aim-worker"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "nva-worker"}},
 	}
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{
@@ -417,7 +417,7 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	m.beginMeta()
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // navigation -> editing mode
-	m = step(t, m, tea.KeyPressMsg{Text: "2"})          // "aim-worker" -> "aim-worker2"
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})          // "nva-worker" -> "nva-worker2"
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // save -> opens the confirm
 
 	if m.pendingMeta == nil {
@@ -426,16 +426,16 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	if m.pendingMeta.editing {
 		t.Error("editing should end once input hands off to the confirm")
 	}
-	if got := m.pendingMeta.labels[0].input.Value(); got != "aim-worker2" {
-		t.Errorf("buffer while confirming = %q, want aim-worker2", got)
+	if got := m.pendingMeta.labels[0].input.Value(); got != "nva-worker2" {
+		t.Errorf("buffer while confirming = %q, want nva-worker2", got)
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "n"}) // cancel
 	if m.pendingMeta == nil {
 		t.Fatal("cancelling should leave the panel open")
 	}
-	if got := m.pendingMeta.labels[0].input.Value(); got != "aim-worker" {
-		t.Errorf("buffer after cancel = %q, want reverted to aim-worker", got)
+	if got := m.pendingMeta.labels[0].input.Value(); got != "nva-worker" {
+		t.Errorf("buffer after cancel = %q, want reverted to nva-worker", got)
 	}
 	if len(mut.metaPatches) != 0 {
 		t.Fatalf("metaPatches after cancel = %v, want none", mut.metaPatches)
@@ -450,16 +450,16 @@ func TestJoinedLabelEditKeepsPanelOpenThroughConfirm(t *testing.T) {
 	if m.pendingMeta == nil {
 		t.Fatal("the panel should stay open once the confirmed edit applies")
 	}
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker labels app=aim-worker2" {
-		t.Errorf("metaPatches = %v, want one app=aim-worker2 label patch", mut.metaPatches)
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker labels app=nva-worker2" {
+		t.Errorf("metaPatches = %v, want one app=nva-worker2 label patch", mut.metaPatches)
 	}
-	if got := m.pendingMeta.labels[0].current; got != "aim-worker2" {
-		t.Errorf("refreshed current = %q, want aim-worker2", got)
+	if got := m.pendingMeta.labels[0].current; got != "nva-worker2" {
+		t.Errorf("refreshed current = %q, want nva-worker2", got)
 	}
 }
 
 func TestAddLabelHappyPath(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -477,7 +477,7 @@ func TestAddLabelHappyPath(t *testing.T) {
 	}
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker labels tier=gold" {
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker labels tier=gold" {
 		t.Errorf("metaPatches = %v, want one tier=gold label patch", mut.metaPatches)
 	}
 	if m.pendingMeta == nil {
@@ -495,7 +495,7 @@ func TestAddLabelHappyPath(t *testing.T) {
 }
 
 func TestAddAnnotationHappyPath(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", nil, map[string]string{"kute.dev/owner": "platform-oncall"}, nil)
+	dep := metaDeployment("default", "nva-worker", nil, map[string]string{"kute.dev/owner": "platform-oncall"}, nil)
 	mut := &fakeMutator{}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -514,7 +514,7 @@ func TestAddAnnotationHappyPath(t *testing.T) {
 	}
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/aim-worker annotations note=hi" {
+	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "default/nva-worker annotations note=hi" {
 		t.Errorf("metaPatches = %v, want one note=hi annotation patch", mut.metaPatches)
 	}
 	if want := "added note=hi"; m.pendingMeta == nil || m.pendingMeta.message != want {
@@ -523,7 +523,7 @@ func TestAddAnnotationHappyPath(t *testing.T) {
 }
 
 func TestAddModeEscCancelsWithoutClosingPanel(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -538,7 +538,7 @@ func TestAddModeEscCancelsWithoutClosingPanel(t *testing.T) {
 }
 
 func TestEditingModeInsertsReservedLettersLiterally(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -561,7 +561,7 @@ func TestEditingModeInsertsReservedLettersLiterally(t *testing.T) {
 }
 
 func TestEditingModeEscRevertsBufferAndReturnsToNavigation(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -581,7 +581,7 @@ func TestEditingModeEscRevertsBufferAndReturnsToNavigation(t *testing.T) {
 }
 
 func TestCopyKeyEqualsValueReturnsClipboardCmd(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -592,7 +592,7 @@ func TestCopyKeyEqualsValueReturnsClipboardCmd(t *testing.T) {
 }
 
 func TestEscClosesPanel(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
@@ -609,7 +609,7 @@ func TestEscClosesPanel(t *testing.T) {
 // refetched, so the object's real (unchanged) value never overwrites the
 // still-in-progress edit.
 func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"env": "stage"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"env": "stage"}, nil, nil)
 	mut := &fakeMutator{err: errors.New("admission webhook denied the request")}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -641,7 +641,7 @@ func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
 // TestFailedAddRestoresAddModeWithErrorAndAttemptedValues mirrors the edit
 // case for the add sub-flow.
 func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	mut := &fakeMutator{err: errors.New("field is immutable")}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
@@ -677,7 +677,7 @@ func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
 // row survives (never spliced out locally) and the error shows in
 // navigation mode, since there's no buffer to fall back into editing.
 func TestFailedRemoveRestoresRowWithError(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker", map[string]string{"team": "platform"}, nil, nil)
+	dep := metaDeployment("default", "nva-worker", map[string]string{"team": "platform"}, nil, nil)
 	mut := &fakeMutator{err: errors.New("etcdserver: request timed out")}
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()

@@ -1,14 +1,14 @@
-  kute │ microk8s-cluster › aim-stage › Deployments (g to jump)                                            ● connected  
+  kute │ microk8s-cluster › nva-stage › Deployments (g to jump)                                            ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ✕ 1 degraded                                                                                           1 deployments  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                                 RDY    ROLLOUT               IMAGE                       AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▎ ✕  aim-worker                                           0/4    progressing ▸         registry.aim.dev/aim-wo…     0s  
+▎ ✕  nva-worker                                           0/4    progressing ▸         registry.nva.dev/nva-wo…     0s  
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ LABELS · 4                                                                                                       │  
-  │   app=                                aim-worker                                     ⚠ selector · svc/aim-worker │  
+  │   app=                                nva-worker                                     ⚠ selector · svc/nva-worker │  
   │   app.kubernetes.io/managed-by=       Helm                                        helm-owned · edits survive un… │  
   │ › env=                                was stage · staging                                          editing value │  
   │   team=                               platform                                                                   │  
@@ -20,7 +20,7 @@
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  will run kubectl label deploy/aim-worker env=staging --overwrite -n aim-stage             metadata only — no rollout  
+  will run kubectl label deploy/nva-worker env=staging --overwrite -n nva-stage             metadata only — no rollout  
                                                                                                                         
                                                                                                                         
                                                                                                                         

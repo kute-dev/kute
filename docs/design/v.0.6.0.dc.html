@@ -49,18 +49,18 @@
           <span></span><span>NAME</span><span>SYNC</span><span>HEALTH</span><span>REVISION</span><span>SYNCED</span><span style="text-align: right;">AGE</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
-          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">aim-billing</span><span style="color: #9a9ab2;">Synced</span><span style="color: #ef6a6a;">Degraded</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c</span><span style="color: #676780;">11m ago</span><span style="color: #676780; text-align: right;">92d</span>
+          <span style="color: #ef6a6a;">●</span><span style="color: #f0f0fa;">nva-billing</span><span style="color: #9a9ab2;">Synced</span><span style="color: #ef6a6a;">Degraded</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c</span><span style="color: #676780;">11m ago</span><span style="color: #676780; text-align: right;">92d</span>
         </div>
-        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">Deployment/aim-billing-api: container "api" is in CrashLoopBackOff — exit 1, 2m ago · ↵ opens it</div>
+        <div style="padding: 0 14px 4px 46px; color: #d98a8a; font-size: 11.5px; background: #1d1633; border-left: 2px solid #a78bfa;">Deployment/nva-billing-api: container "api" is in CrashLoopBackOff — exit 1, 2m ago · ↵ opens it</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #d9a94a;">●</span><span style="color: #d8d8e8;">aim-frontend</span><span style="color: #d9a94a;">OutOfSync</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c · −3</span><span style="color: #676780;">2h ago</span><span style="color: #676780; text-align: right;">92d</span>
+          <span style="color: #d9a94a;">●</span><span style="color: #d8d8e8;">nva-frontend</span><span style="color: #d9a94a;">OutOfSync</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@e41b90c · −3</span><span style="color: #676780;">2h ago</span><span style="color: #676780; text-align: right;">92d</span>
         </div>
         <div style="padding: 0 14px 4px 46px; color: #8a7a4a; font-size: 11.5px;">auto-sync off · source is 3 commits ahead of live state</div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #9a9ab2;">◌</span><span style="color: #d8d8e8;">aim-search</span><span style="color: #9a9ab2;">Syncing</span><span style="color: #9a9ab2;">Progressing</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">now</span><span style="color: #676780; text-align: right;">92d</span>
+          <span style="color: #9a9ab2;">◌</span><span style="color: #d8d8e8;">nva-search</span><span style="color: #9a9ab2;">Syncing</span><span style="color: #9a9ab2;">Progressing</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">now</span><span style="color: #676780; text-align: right;">92d</span>
         </div>
         <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 92px 100px minmax(0,1.2fr) 100px 48px; gap: 0 12px; padding: 4px 14px; border-left: 2px solid transparent;">
-          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">aim-api</span><span style="color: #9a9ab2;">Synced</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">18m ago</span><span style="color: #676780; text-align: right;">92d</span>
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">nva-api</span><span style="color: #9a9ab2;">Synced</span><span style="color: #9a9ab2;">Healthy</span><span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">main@f77d215</span><span style="color: #676780;">18m ago</span><span style="color: #676780; text-align: right;">92d</span>
         </div>
         <div style="display: flex; padding: 2px 14px 6px 46px; color: #44445c; font-size: 11px;">+ 6 synced · healthy</div>
 
@@ -79,9 +79,9 @@
       <div style="width: 960px; background: #0b0b10; border: 1px solid #1c1c2c; border-radius: 6px; overflow: hidden;">
         <div style="padding: 4px 14px 0; color: #55556e; font-size: 11px; letter-spacing: 0.06em;">THE THREE VERBS — ALL PLAIN API CALLS, NO ARGOCD BINARY, NO SSO</div>
         <div style="display: grid; grid-template-columns: 90px minmax(0,1fr); gap: 2px 14px; padding: 4px 14px 8px; font-size: 12px;">
-          <span style="color: #55556e;">r refresh</span><span style="color: #9a9ab2;">kubectl annotate application/aim-frontend -n argocd argocd.argoproj.io/refresh=normal --overwrite</span>
-          <span style="color: #55556e;">S sync</span><span style="color: #9a9ab2;">kubectl patch application/aim-frontend -n argocd --type merge -p '{"operation":{"sync":{"revision":"main"}}}'</span>
-          <span style="color: #55556e;">u url</span><span style="color: #9a9ab2;">copies https://argocd.aim.dev/applications/argocd/aim-frontend — the deep link, when the dashboard is the right tool</span>
+          <span style="color: #55556e;">r refresh</span><span style="color: #9a9ab2;">kubectl annotate application/nva-frontend -n argocd argocd.argoproj.io/refresh=normal --overwrite</span>
+          <span style="color: #55556e;">S sync</span><span style="color: #9a9ab2;">kubectl patch application/nva-frontend -n argocd --type merge -p '{"operation":{"sync":{"revision":"main"}}}'</span>
+          <span style="color: #55556e;">u url</span><span style="color: #9a9ab2;">copies https://argocd.nva.dev/applications/argocd/nva-frontend — the deep link, when the dashboard is the right tool</span>
         </div>
       </div>
 
@@ -110,7 +110,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-prod</span>
+          <span style="color: #a78bfa;">nva-prod</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Timeline · 30m</span>
           <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
@@ -118,19 +118,19 @@
 
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 6px 14px 4px; font-size: 12px;">
           <span style="color: #676780;">09:41</span><span style="color: #ef6a6a;">▲</span>
-          <span><span style="color: #f0f0fa;">CrashLoopBackOff</span> <span style="color: #676780;">pod/aim-billing-api-6d8f2-kq4wz · exit 1</span> <span style="color: #44445c;">×5</span></span>
+          <span><span style="color: #f0f0fa;">CrashLoopBackOff</span> <span style="color: #676780;">pod/nva-billing-api-6d8f2-kq4wz · exit 1</span> <span style="color: #44445c;">×5</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px;">
           <span style="color: #676780;">09:38</span><span style="color: #9a9ab2;">●</span>
-          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/aim-billing-api · image aim-billing:2.7.0 → 2.8.0</span></span>
+          <span><span style="color: #f0f0fa;">Rollout</span> <span style="color: #676780;">deploy/nva-billing-api · image nva-billing:2.7.0 → 2.8.0</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
           <span style="color: #676780;">09:38</span><span style="color: #a78bfa;">◆</span>
-          <span><span style="color: #c4b5fd;">Sync applied</span> <span style="color: #676780;">application/aim-billing · main@e41b90c · "billing: switch to async invoice worker" · auto-sync</span></span>
+          <span><span style="color: #c4b5fd;">Sync applied</span> <span style="color: #676780;">application/nva-billing · main@e41b90c · "billing: switch to async invoice worker" · auto-sync</span></span>
         </div>
         <div style="display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; font-size: 12px; background: #100c1d; border-left: 2px solid #a78bfa;">
           <span style="color: #676780;">09:22</span><span style="color: #a78bfa;">◆</span>
-          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/aim-workers · main@9d04c7e · "chore: bump base images"</span></span>
+          <span><span style="color: #c4b5fd;">Revision applied</span> <span style="color: #676780;">kustomization/nva-workers · main@9d04c7e · "chore: bump base images"</span></span>
         </div>
         <div style="display: flex; padding: 2px 14px 8px 84px; color: #44445c; font-size: 11px;">earlier — quiet · 31 routine reconciles + refreshes deduped</div>
 

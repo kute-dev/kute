@@ -692,7 +692,7 @@ func MetaCommandString(kind ResourceKind, namespace, name string, isAnnotation b
 // metaResourceArg renders kind as kubectl's resource arg for
 // MetaCommandString — the same short forms workloadResourceArg already gives
 // Deployment/StatefulSet/DaemonSet (matching docs/design README.md §26a's own
-// `deploy/aim-worker` example), falling back to the lowercased kind name for
+// `deploy/nva-worker` example), falling back to the lowercased kind name for
 // every other kind (DeleteCommandString's own convention for arbitrary
 // kinds, CRDs included).
 func metaResourceArg(kind ResourceKind) string {
@@ -772,8 +772,8 @@ func configMapDataPatchJSON(key, value string, remove bool) string {
 // PatchConfigMapData runs — 27a's "will run" documentation line. Unlike
 // SecretDataCommandString, the value is never masked: ConfigMap data isn't
 // sensitive, and docs/design README.md §27a's own mockup line shows it
-// verbatim (`kubectl patch cm/aim-config --type merge -p
-// '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`).
+// verbatim (`kubectl patch cm/nva-config --type merge -p
+// '{"data":{"LOG_LEVEL":"debug"}}' -n nva-stage`).
 func ConfigMapDataCommandString(namespace, name, key, value string, remove bool) string {
 	arg := "cm/" + name
 	if remove {

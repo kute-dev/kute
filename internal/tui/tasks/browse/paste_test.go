@@ -100,7 +100,7 @@ func TestPasteIntoScaleReplacesPrefill(t *testing.T) {
 // has to re-match after a paste as it does after typing.
 func TestPasteIntoSetImageRematchesHistory(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
@@ -117,7 +117,7 @@ func TestPasteIntoSetImageRematchesHistory(t *testing.T) {
 // TestPasteIntoMetaBuffers walks 26a's three buffers: the add row's key and
 // value (paste follows tab focus) and a row's own edit buffer.
 func TestPasteIntoMetaBuffers(t *testing.T) {
-	dep := metaDeployment("default", "aim-worker",
+	dep := metaDeployment("default", "nva-worker",
 		map[string]string{"team": "platform"}, nil, nil)
 	m := newMetaModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	if !m.beginMeta() {
@@ -230,8 +230,8 @@ func TestPasteChordRequestsClipboard(t *testing.T) {
 // TestPasteIntoSetResourcesField: the selected quantity field takes the paste
 // and clears its unset/invalid flags, as the typed path does.
 func TestPasteIntoSetResourcesField(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
 	m := New(Config{Session: session, Lister: resourcesLister(dep, rs, pod), Mutator: &fakeMutator{}})

@@ -901,8 +901,8 @@ func (m Model) previousRollout(e kube.TimelineEntry) (kube.TimelineEntry, bool) 
 
 // shortImage drops the registry/path prefix from a container image
 // reference, keeping just the trailing "name:tag" component —
-// "r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108" renders as
-// "aim.bp.app:5.31.0.58108". Nobody needs the internal registry host in a
+// "registry.example.com/aim/nva.bp.app:5.31.0.58108" renders as
+// "nva.bp.app:5.31.0.58108". Nobody needs the internal registry host in a
 // narrow rail card or a truncated feed row.
 func shortImage(image string) string {
 	if i := strings.LastIndex(image, "/"); i >= 0 {
@@ -953,7 +953,7 @@ func compactImageTransition(prev, next string) string {
 // way an Event's already reads).
 func entrySummary(e kube.TimelineEntry) string {
 	if e.Kind == kube.TimelineRevision {
-		// "Revision applied · kustomization/aim-workers · master@efd398b"
+		// "Revision applied · kustomization/nva-workers · master@efd398b"
 		// plus the commit subject when the cluster actually had one — the
 		// subject lives only in a source-controller event that expires, so
 		// its absence is normal and never faked (§31a/§32a).

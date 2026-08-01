@@ -1079,10 +1079,10 @@ func TestSelectedRowsHaveNoUnstyledBackgroundGap(t *testing.T) {
 
 func TestShortImageDropsRegistryPrefix(t *testing.T) {
 	cases := map[string]string{
-		"r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108": "aim.bp.app:5.31.0.58108",
-		"gcr.io/my-project/my-image:tag":                     "my-image:tag",
-		"nginx:1.27":                                         "nginx:1.27",
-		"checkout-api":                                       "checkout-api",
+		"registry.example.com/aim/nva.bp.app:5.31.0.58108": "nva.bp.app:5.31.0.58108",
+		"gcr.io/my-project/my-image:tag":                   "my-image:tag",
+		"nginx:1.27":                                       "nginx:1.27",
+		"checkout-api":                                     "checkout-api",
 	}
 	for in, want := range cases {
 		if got := shortImage(in); got != want {
@@ -1103,7 +1103,7 @@ func TestRailCardShowsShortImage(t *testing.T) {
 			OwnerReferences:   []metav1.OwnerReference{{Kind: "Deployment", Name: "nva-worker"}},
 		},
 		Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Image: "r.vayner.systems:30080/aim/aim.bp.app:5.31.0.58108"}},
+			Containers: []corev1.Container{{Image: "registry.example.com/aim/nva.bp.app:5.31.0.58108"}},
 		}}},
 	}
 	pod := testPod("nva-worker-9k2ss", "node-a", 0)
@@ -1121,7 +1121,7 @@ func TestRailCardShowsShortImage(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	view := plain(m.Render())
-	if !strings.Contains(view, "aim.bp.app:5.31.0.58108") {
+	if !strings.Contains(view, "nva.bp.app:5.31.0.58108") {
 		t.Fatalf("expected the short image name in view:\n%s", view)
 	}
 	if strings.Contains(view, "r.vayner.systems") {

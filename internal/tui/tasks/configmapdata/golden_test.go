@@ -15,25 +15,25 @@ import (
 )
 
 // goldenConfigMapDataModel builds a deterministic 27a Data view: docs/
-// design/v.0.2.0.dc.html's own §27a mockup scenario — cm/aim-config in
-// aim-stage with a short key, one consumer of each reference kind, so the
+// design/v.0.2.0.dc.html's own §27a mockup scenario — cm/nva-config in
+// nva-stage with a short key, one consumer of each reference kind, so the
 // consumer strip has something real to show.
 func goldenConfigMapDataModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	cm := cmObj("aim-stage", "aim-config", map[string]string{
+	cm := cmObj("nva-stage", "nva-config", map[string]string{
 		"LOG_LEVEL": "info",
 		"FEATURE_X": "on",
 	})
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindConfigMap:   {cm},
-		kube.KindDeployment:  {deploymentEnvFrom("aim-stage", "aim-worker", "aim-config")},
-		kube.KindStatefulSet: {statefulSetVolume("aim-stage", "aim-gateway", "aim-config")},
+		kube.KindDeployment:  {deploymentEnvFrom("nva-stage", "nva-worker", "nva-config")},
+		kube.KindStatefulSet: {statefulSetVolume("nva-stage", "nva-gateway", "nva-config")},
 	}}
 	sess := newSession()
-	sess.Location.Namespace = "aim-stage"
+	sess.Location.Namespace = "nva-stage"
 	m := New(Config{
 		Session: sess, Lister: lister, Mutator: &fakeMutator{cm: cm},
-		Namespace: "aim-stage", Name: "aim-config",
+		Namespace: "nva-stage", Name: "nva-config",
 	})
 	m.SetSize(width, height)
 	m = step(t, m, m.Init()())
@@ -77,16 +77,16 @@ func goldenConfigMapDataEditModel(t *testing.T, width, height int) Model {
 // shared buffer editor.
 func goldenConfigMapDataMultilineModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	cm := cmObj("aim-stage", "aim-config", map[string]string{
-		"nginx.conf": "server {\n  listen 80;\n  server_name aim.internal;\n}",
+	cm := cmObj("nva-stage", "nva-config", map[string]string{
+		"nginx.conf": "server {\n  listen 80;\n  server_name nva.internal;\n}",
 		"LOG_LEVEL":  "info",
 	})
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindConfigMap: {cm}}}
 	sess := newSession()
-	sess.Location.Namespace = "aim-stage"
+	sess.Location.Namespace = "nva-stage"
 	m := New(Config{
 		Session: sess, Lister: lister, Mutator: &fakeMutator{cm: cm},
-		Namespace: "aim-stage", Name: "aim-config",
+		Namespace: "nva-stage", Name: "nva-config",
 	})
 	m.SetSize(width, height)
 	m = step(t, m, m.Init()())

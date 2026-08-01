@@ -21,7 +21,7 @@ func setImageAge(d time.Duration) metav1.Time { return metav1.NewTime(time.Now()
 
 func replicasPtr(n int32) *int32 { return &n }
 
-// twoContainerDeployment is "aim-worker": worker (the container under edit)
+// twoContainerDeployment is "nva-worker": worker (the container under edit)
 // plus a sidecar, so tab-cycling has something real to exercise.
 func twoContainerDeployment(ns, name, workerImage string) *appsv1.Deployment {
 	return &appsv1.Deployment{
@@ -88,7 +88,7 @@ func newSetImageModel(t *testing.T, mut *fakeMutator, objs map[kube.ResourceKind
 
 func TestIOpensSetImagePrefilledToCurrentTag(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
@@ -96,8 +96,8 @@ func TestIOpensSetImagePrefilledToCurrentTag(t *testing.T) {
 		t.Fatal("expected pendingSetImage set after 'i'")
 	}
 	t2 := m.pendingSetImage
-	if t2.repo != "registry.aim.dev/aim-worker" || t2.input.Value() != "3.4.1" {
-		t.Fatalf("repo/buffer = %q/%q, want registry.aim.dev/aim-worker/3.4.1", t2.repo, t2.input.Value())
+	if t2.repo != "registry.nva.dev/nva-worker" || t2.input.Value() != "3.4.1" {
+		t.Fatalf("repo/buffer = %q/%q, want registry.nva.dev/nva-worker/3.4.1", t2.repo, t2.input.Value())
 	}
 	if !t2.unchanged() {
 		t.Fatal("expected the just-opened prefill to read as unchanged (same as current image)")
@@ -109,7 +109,7 @@ func TestIOpensSetImagePrefilledToCurrentTag(t *testing.T) {
 
 func TestTabCyclesContainersAndRecomputesHistory(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
@@ -126,9 +126,9 @@ func TestTabCyclesContainersAndRecomputesHistory(t *testing.T) {
 }
 
 func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
-	dep := twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.2")
-	rsCur := replicaSetRevision("default", "aim-worker-r43", "aim-worker", "registry.aim.dev/aim-worker:3.4.2", 43, 2*24*time.Hour)
-	rsOld := replicaSetRevision("default", "aim-worker-r42", "aim-worker", "registry.aim.dev/aim-worker:3.4.1", 42, 21*24*time.Hour)
+	dep := twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.2")
+	rsCur := replicaSetRevision("default", "nva-worker-r43", "nva-worker", "registry.nva.dev/nva-worker:3.4.2", 43, 2*24*time.Hour)
+	rsOld := replicaSetRevision("default", "nva-worker-r42", "nva-worker", "registry.nva.dev/nva-worker:3.4.1", 42, 21*24*time.Hour)
 
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {dep},
@@ -151,20 +151,20 @@ func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
 
 func TestCtrlUTogglesFullRefEditing(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
 	t2 := m.pendingSetImage
-	if !t2.fullRef || t2.input.Value() != "registry.aim.dev/aim-worker:3.4.1" {
-		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.aim.dev/aim-worker:3.4.1", t2.fullRef, t2.input.Value())
+	if !t2.fullRef || t2.input.Value() != "registry.nva.dev/nva-worker:3.4.1" {
+		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.nva.dev/nva-worker:3.4.1", t2.fullRef, t2.input.Value())
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
 	t2 = m.pendingSetImage
-	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.aim.dev/aim-worker" {
-		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.aim.dev/aim-worker", t2.fullRef, t2.input.Value(), t2.repo)
+	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.nva.dev/nva-worker" {
+		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.nva.dev/nva-worker", t2.fullRef, t2.input.Value(), t2.repo)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestCtrlUTogglesFullRefEditing(t *testing.T) {
 // in the middle, not append at the end.
 func TestLeftRightMoveCursorForMidBufferEditing(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	if m.pendingSetImage.input.Position() != len("3.4.1") {
@@ -213,7 +213,7 @@ func TestLeftRightMoveCursorForMidBufferEditing(t *testing.T) {
 func TestEnterOnUnchangedTagIsNoOp(t *testing.T) {
 	mut := &fakeMutator{}
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
@@ -229,7 +229,7 @@ func TestEnterOnUnchangedTagIsNoOp(t *testing.T) {
 func TestEnterCommitsSetImageThroughMutatorNonProd(t *testing.T) {
 	mut := &fakeMutator{}
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
@@ -241,7 +241,7 @@ func TestEnterCommitsSetImageThroughMutatorNonProd(t *testing.T) {
 	if m.actions.Active() {
 		t.Fatal("non-PROD set-image is TierNone and should execute immediately, not show a confirm")
 	}
-	want := "default/aim-worker worker=registry.aim.dev/aim-worker:3.4.12"
+	want := "default/nva-worker worker=registry.nva.dev/nva-worker:3.4.12"
 	if len(mut.setImages) != 1 || mut.setImages[0] != want {
 		t.Fatalf("setImages = %v, want [%q]", mut.setImages, want)
 	}
@@ -250,7 +250,7 @@ func TestEnterCommitsSetImageThroughMutatorNonProd(t *testing.T) {
 func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 	mut := &fakeMutator{}
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, true)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
@@ -267,7 +267,7 @@ func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 	}
 
 	kb := m.Keybar()
-	want := "kubectl set image deploy/aim-worker worker=registry.aim.dev/aim-worker:3.4.12 -n default"
+	want := "kubectl set image deploy/nva-worker worker=registry.nva.dev/nva-worker:3.4.12 -n default"
 	if !strings.Contains(kb.RightNote, want) {
 		t.Fatalf("RightNote = %q, want it to contain %q", kb.RightNote, want)
 	}
@@ -281,7 +281,7 @@ func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 func TestEscCancelsSetImagePanel(t *testing.T) {
 	mut := &fakeMutator{}
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
@@ -369,7 +369,7 @@ func TestStatefulSetHistoryReadsControllerRevisions(t *testing.T) {
 
 func TestINoOpsWithoutMutator(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.1")},
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}}
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment

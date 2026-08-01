@@ -390,8 +390,8 @@ func TestSetResourcesRejectsNoChangedFields(t *testing.T) {
 
 func TestSetResourcesCommandStringPlainSet(t *testing.T) {
 	t.Parallel()
-	got := SetResourcesCommandString(KindDeployment, "aim-stage", "aim-worker", "worker", ResourceEdits{MEMLimit: strPtr("768Mi")})
-	want := "kubectl set resources deploy/aim-worker -c worker --limits=memory=768Mi -n aim-stage"
+	got := SetResourcesCommandString(KindDeployment, "nva-stage", "nva-worker", "worker", ResourceEdits{MEMLimit: strPtr("768Mi")})
+	want := "kubectl set resources deploy/nva-worker -c worker --limits=memory=768Mi -n nva-stage"
 	if got != want {
 		t.Errorf("SetResourcesCommandString = %q, want %q", got, want)
 	}
@@ -428,25 +428,25 @@ func TestMetaCommandStringSetOverwriteAndRemove(t *testing.T) {
 	}{
 		{
 			name: "overwrite existing label", key: "env", value: "staging", overwrite: true,
-			want: "kubectl label deploy/aim-worker env=staging --overwrite -n aim-stage",
+			want: "kubectl label deploy/nva-worker env=staging --overwrite -n nva-stage",
 		},
 		{
 			name: "new label, no overwrite flag", key: "tier", value: "gold",
-			want: "kubectl label deploy/aim-worker tier=gold -n aim-stage",
+			want: "kubectl label deploy/nva-worker tier=gold -n nva-stage",
 		},
 		{
 			name: "annotation set", isAnnotation: true, key: "kute.dev/owner", value: "platform-oncall", overwrite: true,
-			want: "kubectl annotate deploy/aim-worker kute.dev/owner=platform-oncall --overwrite -n aim-stage",
+			want: "kubectl annotate deploy/nva-worker kute.dev/owner=platform-oncall --overwrite -n nva-stage",
 		},
 		{
 			name: "label removal ignores overwrite", key: "team", remove: true, overwrite: true,
-			want: "kubectl label deploy/aim-worker team- -n aim-stage",
+			want: "kubectl label deploy/nva-worker team- -n nva-stage",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := MetaCommandString(KindDeployment, "aim-stage", "aim-worker", tt.isAnnotation, tt.key, tt.value, tt.remove, tt.overwrite)
+			got := MetaCommandString(KindDeployment, "nva-stage", "nva-worker", tt.isAnnotation, tt.key, tt.value, tt.remove, tt.overwrite)
 			if got != tt.want {
 				t.Errorf("MetaCommandString = %q, want %q", got, tt.want)
 			}
@@ -466,15 +466,15 @@ func TestMetaCommandStringOmitsNamespaceForClusterScopedKind(t *testing.T) {
 func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
 	t.Parallel()
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
-		Name: "aim-worker", Namespace: "default", Labels: map[string]string{"env": "stage"},
+		Name: "nva-worker", Namespace: "default", Labels: map[string]string{"env": "stage"},
 	}}
 	c, cs := newTestCluster(deploy)
 	ctx := context.Background()
 
-	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", false, "env", "staging", false); err != nil {
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "nva-worker", false, "env", "staging", false); err != nil {
 		t.Fatalf("PatchMeta set: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(ctx, "nva-worker", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -482,10 +482,10 @@ func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
 		t.Errorf("labels[env] = %q, want staging", got.Labels["env"])
 	}
 
-	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", true, "kute.dev/owner", "platform-oncall", false); err != nil {
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "nva-worker", true, "kute.dev/owner", "platform-oncall", false); err != nil {
 		t.Fatalf("PatchMeta annotate: %v", err)
 	}
-	got, err = cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	got, err = cs.AppsV1().Deployments("default").Get(ctx, "nva-worker", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -493,10 +493,10 @@ func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
 		t.Errorf("annotations[kute.dev/owner] = %q, want platform-oncall", got.Annotations["kute.dev/owner"])
 	}
 
-	if err := c.PatchMeta(ctx, KindDeployment, "default", "aim-worker", false, "env", "", true); err != nil {
+	if err := c.PatchMeta(ctx, KindDeployment, "default", "nva-worker", false, "env", "", true); err != nil {
 		t.Fatalf("PatchMeta remove: %v", err)
 	}
-	got, err = cs.AppsV1().Deployments("default").Get(ctx, "aim-worker", metav1.GetOptions{})
+	got, err = cs.AppsV1().Deployments("default").Get(ctx, "nva-worker", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -592,19 +592,19 @@ func TestSecretDataCommandStringMasksValueAndRendersRemoval(t *testing.T) {
 		{
 			name: "add masks the value",
 			key:  "SMTP_PASSWORD",
-			want: `kubectl patch secret/aim-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n aim-stage`,
+			want: `kubectl patch secret/nva-secrets --type merge -p '{"stringData":{"SMTP_PASSWORD":"••••••"}}' -n nva-stage`,
 		},
 		{
 			name:   "removal renders the null literal, no mask needed",
 			key:    "SMTP_PASSWORD",
 			remove: true,
-			want:   `kubectl patch secret/aim-secrets --type merge -p '{"data":{"SMTP_PASSWORD":null}}' -n aim-stage`,
+			want:   `kubectl patch secret/nva-secrets --type merge -p '{"data":{"SMTP_PASSWORD":null}}' -n nva-stage`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := SecretDataCommandString("aim-stage", "aim-secrets", tt.key, tt.remove)
+			got := SecretDataCommandString("nva-stage", "nva-secrets", tt.key, tt.remove)
 			if got != tt.want {
 				t.Errorf("SecretDataCommandString = %q, want %q", got, tt.want)
 			}
@@ -623,16 +623,16 @@ func TestSecretDataCommandStringMasksValueAndRendersRemoval(t *testing.T) {
 func TestPatchSecretDataSetsAndRemovesKeys(t *testing.T) {
 	t.Parallel()
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-secrets", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-secrets", Namespace: "default"},
 		Data:       map[string][]byte{"DATABASE_URL": []byte("postgres://old")},
 	}
 	c, cs := newTestCluster(secret)
 	ctx := context.Background()
 
-	if err := c.PatchSecretData(ctx, "default", "aim-secrets", "SMTP_PASSWORD", "hunter2-staging", false); err != nil {
+	if err := c.PatchSecretData(ctx, "default", "nva-secrets", "SMTP_PASSWORD", "hunter2-staging", false); err != nil {
 		t.Fatalf("PatchSecretData add: %v", err)
 	}
-	got, err := cs.CoreV1().Secrets("default").Get(ctx, "aim-secrets", metav1.GetOptions{})
+	got, err := cs.CoreV1().Secrets("default").Get(ctx, "nva-secrets", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -643,10 +643,10 @@ func TestPatchSecretDataSetsAndRemovesKeys(t *testing.T) {
 		t.Errorf("existing key data[DATABASE_URL] = %q, want unchanged", got.Data["DATABASE_URL"])
 	}
 
-	if err := c.PatchSecretData(ctx, "default", "aim-secrets", "DATABASE_URL", "", true); err != nil {
+	if err := c.PatchSecretData(ctx, "default", "nva-secrets", "DATABASE_URL", "", true); err != nil {
 		t.Fatalf("PatchSecretData remove: %v", err)
 	}
-	got, err = cs.CoreV1().Secrets("default").Get(ctx, "aim-secrets", metav1.GetOptions{})
+	got, err = cs.CoreV1().Secrets("default").Get(ctx, "nva-secrets", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -679,19 +679,19 @@ func TestConfigMapDataCommandStringRendersValueVerbatim(t *testing.T) {
 			name:  "add renders the real value",
 			key:   "LOG_LEVEL",
 			value: "debug",
-			want:  `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n aim-stage`,
+			want:  `kubectl patch cm/nva-config --type merge -p '{"data":{"LOG_LEVEL":"debug"}}' -n nva-stage`,
 		},
 		{
 			name:   "removal renders the null literal",
 			key:    "LOG_LEVEL",
 			remove: true,
-			want:   `kubectl patch cm/aim-config --type merge -p '{"data":{"LOG_LEVEL":null}}' -n aim-stage`,
+			want:   `kubectl patch cm/nva-config --type merge -p '{"data":{"LOG_LEVEL":null}}' -n nva-stage`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ConfigMapDataCommandString("aim-stage", "aim-config", tt.key, tt.value, tt.remove)
+			got := ConfigMapDataCommandString("nva-stage", "nva-config", tt.key, tt.value, tt.remove)
 			if got != tt.want {
 				t.Errorf("ConfigMapDataCommandString = %q, want %q", got, tt.want)
 			}
@@ -705,12 +705,12 @@ func TestConfigMapConsumerRestartCommandStringAcrossKinds(t *testing.T) {
 		ref  ConfigMapConsumerRef
 		want string
 	}{
-		{ConfigMapConsumerRef{Kind: KindDeployment, Name: "aim-worker"}, "kubectl rollout restart deploy/aim-worker -n aim-stage"},
-		{ConfigMapConsumerRef{Kind: KindStatefulSet, Name: "aim-db"}, "kubectl rollout restart sts/aim-db -n aim-stage"},
-		{ConfigMapConsumerRef{Kind: KindDaemonSet, Name: "aim-agent"}, "kubectl rollout restart ds/aim-agent -n aim-stage"},
+		{ConfigMapConsumerRef{Kind: KindDeployment, Name: "nva-worker"}, "kubectl rollout restart deploy/nva-worker -n nva-stage"},
+		{ConfigMapConsumerRef{Kind: KindStatefulSet, Name: "nva-db"}, "kubectl rollout restart sts/nva-db -n nva-stage"},
+		{ConfigMapConsumerRef{Kind: KindDaemonSet, Name: "nva-agent"}, "kubectl rollout restart ds/nva-agent -n nva-stage"},
 	}
 	for _, tt := range tests {
-		got := ConfigMapConsumerRestartCommandString("aim-stage", tt.ref)
+		got := ConfigMapConsumerRestartCommandString("nva-stage", tt.ref)
 		if got != tt.want {
 			t.Errorf("ConfigMapConsumerRestartCommandString(%+v) = %q, want %q", tt.ref, got, tt.want)
 		}
@@ -722,16 +722,16 @@ func TestConfigMapConsumerRestartCommandStringAcrossKinds(t *testing.T) {
 func TestPatchConfigMapDataSetsAndRemovesKeys(t *testing.T) {
 	t.Parallel()
 	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-config", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-config", Namespace: "default"},
 		Data:       map[string]string{"LOG_LEVEL": "info"},
 	}
 	c, cs := newTestCluster(cm)
 	ctx := context.Background()
 
-	if err := c.PatchConfigMapData(ctx, "default", "aim-config", "FEATURE_X", "on", false); err != nil {
+	if err := c.PatchConfigMapData(ctx, "default", "nva-config", "FEATURE_X", "on", false); err != nil {
 		t.Fatalf("PatchConfigMapData add: %v", err)
 	}
-	got, err := cs.CoreV1().ConfigMaps("default").Get(ctx, "aim-config", metav1.GetOptions{})
+	got, err := cs.CoreV1().ConfigMaps("default").Get(ctx, "nva-config", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -742,10 +742,10 @@ func TestPatchConfigMapDataSetsAndRemovesKeys(t *testing.T) {
 		t.Errorf("existing key data[LOG_LEVEL] = %q, want unchanged", got.Data["LOG_LEVEL"])
 	}
 
-	if err := c.PatchConfigMapData(ctx, "default", "aim-config", "LOG_LEVEL", "", true); err != nil {
+	if err := c.PatchConfigMapData(ctx, "default", "nva-config", "LOG_LEVEL", "", true); err != nil {
 		t.Fatalf("PatchConfigMapData remove: %v", err)
 	}
-	got, err = cs.CoreV1().ConfigMaps("default").Get(ctx, "aim-config", metav1.GetOptions{})
+	got, err = cs.CoreV1().ConfigMaps("default").Get(ctx, "nva-config", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

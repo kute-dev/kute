@@ -208,7 +208,7 @@ could be dropped without disturbing anything else.
 
 ## 3. Measured effect
 
-Real numbers from `aks-aim-prod-eastus2-02` via `scripts/measure-cluster-payload.sh`
+Real numbers from `aks-nva-prod-eastus2-02` via `scripts/measure-cluster-payload.sh`
 (48 CRDs, 91 pods, 2 nodes, 14 namespaces):
 
 | | before | after |
@@ -229,7 +229,7 @@ is now effectively instant.
 
 ### Observed on the real cluster
 
-Run against `aks-aim-prod-eastus2-02` over an SSH port-forward — the setup that started
+Run against `aks-nva-prod-eastus2-02` over an SSH port-forward — the setup that started
 this, where startup used to take 1–2 minutes with the connection banner flapping
 throughout. Qualitative, as reported by the user, not instrumented:
 
@@ -456,7 +456,7 @@ LIST takes 60–90 s at ~130 KB/s, which straddles the API server's 60 s request
 dies partway through with `stream error: … INTERNAL_ERROR; received from peer`, the
 reflector retries the same doomed request, and the cache never syncs. Reported as a Helm
 Releases screen that had been loading for **over 2000 seconds** while
-`helm list -n aim-uat` answered in 4 s and the same build over SSH *on the node* opened
+`helm list -n nva-uat` answered in 4 s and the same build over SSH *on the node* opened
 instantly — same 8 MB, no VPN in between.
 
 Measured on that cluster, from the workstation:
@@ -465,7 +465,7 @@ Measured on that cluster, from the workstation:
 |---|---|
 | cluster-wide informer (what shipped in §5.2) | fails at 62.9 s, never syncs |
 | same with `limit=50` | still 62.9 s — RV=0 lists ignore `limit`, served whole from the watch cache |
-| informer scoped to `aim-uat` | 255 Secrets in 13.4 s, synced |
+| informer scoped to `nva-uat` | 255 Secrets in 13.4 s, synced |
 
 So `ensureHelmSecrets` now takes the namespace being read and keys one informer per
 namespace ("" still meaning all). `KindSynced(KindHelmRelease)` answers for the scope of

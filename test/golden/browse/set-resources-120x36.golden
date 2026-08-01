@@ -4,7 +4,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                                 RDY    ROLLOUT               IMAGE                       AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▎ ●  aim-worker                                           4/4    stable                registry.aim.dev/aim-wo…    30d  
+▎ ●  nva-worker                                           4/4    stable                registry.nva.dev/nva-wo…    30d  
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ container   worker   usage: from the metrics poll                        ✕ OOMKilled 4m ago at the current limit │  
@@ -17,7 +17,7 @@
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  will run kubectl set resources deploy/aim-worker -c worker --limits=memory=768Mi -n default                           
+  will run kubectl set resources deploy/nva-worker -c worker --limits=memory=768Mi -n default                           
                                                                                                                         
                                                                                                                         
                                                                                                                         

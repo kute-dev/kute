@@ -195,7 +195,7 @@ func TestTerminalFieldNamesTheEmulator(t *testing.T) {
 }
 
 // Nothing guarantees a terminal sets any of these — an unset one is left
-// out rather than reported as empty, which would read as a claim.
+// out rather than reported as empty, which would read as a clnva.
 func TestTerminalFieldOmitsUnsetVariables(t *testing.T) {
 	for _, name := range terminalEnv {
 		t.Setenv(name, "")

@@ -4,15 +4,15 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                                 RDY    ROLLOUT               IMAGE                       AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▎ ●  aim-worker                                           4/4    stable                registry.aim.dev/aim-wo…    30d  
+▎ ●  nva-worker                                           4/4    stable                registry.nva.dev/nva-wo…    30d  
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
   │ container   worker   metrics-sidecar                                                          ↹ switch container │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
-  │ image › registry.aim.dev/aim-worker:3.4.2                                     editing tag · ctrl-u edit full ref │  
+  │ image › registry.nva.dev/nva-worker:3.4.2                                     editing tag · ctrl-u edit full ref │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │ TAG         SEEN           FROM                                                                                  │  
-  │   3.4.3     40m ago        deploy/aim-worker · aim-prod                                                          │  
+  │   3.4.3     40m ago        deploy/nva-worker · nva-prod                                                          │  
   │ › 3.4.2     2d · current   rev 43 · this deployment                                                              │  
   │   3.4.1     21d · rev 42   rollout history · rollback target                                                     │  
   ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯  

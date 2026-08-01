@@ -10,7 +10,7 @@ import (
 // TestPasteIntoInlineEditBuffer: '↵' on a short value edits it in place, and a
 // paste lands in that buffer.
 func TestPasteIntoInlineEditBuffer(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
@@ -32,7 +32,7 @@ func TestPasteIntoInlineEditBuffer(t *testing.T) {
 // pasted newline must stay a newline — 'e' opens a textarea, so pasting a
 // whole config file is the point of it.
 func TestPasteIntoBufferEditorKeepsNewlines(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"nginx.conf": "a\nb"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"nginx.conf": "a\nb"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "e"})
@@ -49,7 +49,7 @@ func TestPasteIntoBufferEditorKeepsNewlines(t *testing.T) {
 // TestPasteIntoAddRowBuffers: 'a' opens the two-buffer add row; a paste
 // follows focus across tab.
 func TestPasteIntoAddRowBuffers(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -70,7 +70,7 @@ func TestPasteIntoAddRowBuffers(t *testing.T) {
 // TestPasteWithNoBufferOpenIsIgnored: the grid's own keys are bare letters, so
 // a stray paste must go nowhere.
 func TestPasteWithNoBufferOpenIsIgnored(t *testing.T) {
-	cm := cmObj("aim-stage", "aim-config", map[string]string{"LOG_LEVEL": "info"})
+	cm := cmObj("nva-stage", "nva-config", map[string]string{"LOG_LEVEL": "info"})
 	m := newModel(t, newSession(), cm, &fakeMutator{cm: cm}, nil)
 
 	m = step(t, m, tea.PasteMsg{Content: "nope"})

@@ -12,7 +12,7 @@ import (
 // §27b), and a pasted secret value is the realistic case — nobody retypes a
 // generated password.
 func TestPasteIntoAddRowBuffers(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -38,7 +38,7 @@ func TestPasteIntoAddRowBuffers(t *testing.T) {
 // TestPasteIntoEditBuffer: '↵' on an existing row decodes the real value for a
 // rewrite, and a paste replaces/extends it like typing does.
 func TestPasteIntoEditBuffer(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
@@ -55,7 +55,7 @@ func TestPasteIntoEditBuffer(t *testing.T) {
 // TestPasteWithNoBufferOpenIsIgnored: the grid's own keys are bare letters, so
 // a stray paste must not open a buffer or land anywhere.
 func TestPasteWithNoBufferOpenIsIgnored(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.PasteMsg{Content: "nope"})

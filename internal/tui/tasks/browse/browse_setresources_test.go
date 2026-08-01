@@ -14,7 +14,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 )
 
-// resourcesDeployment is "aim-worker": a single "worker" container with
+// resourcesDeployment is "nva-worker": a single "worker" container with
 // cpu/mem request+limit already set, so 25a's panel has real CURRENT values
 // to prefill and nudge from.
 func resourcesDeployment(ns, name string) *appsv1.Deployment {
@@ -22,7 +22,7 @@ func resourcesDeployment(ns, name string) *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: 1, CreationTimestamp: setImageAge(30 * 24 * time.Hour)},
 		Spec: appsv1.DeploymentSpec{Replicas: replicasPtr(2), Template: corev1.PodTemplateSpec{
 			Spec: corev1.PodSpec{Containers: []corev1.Container{
-				{Name: "worker", Image: "aim-worker:1.0", Resources: corev1.ResourceRequirements{
+				{Name: "worker", Image: "nva-worker:1.0", Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m"), corev1.ResourceMemory: resource.MustParse("512Mi")},
 					Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("512Mi")},
 				}},
@@ -71,8 +71,8 @@ func resourcesLister(dep *appsv1.Deployment, rs *appsv1.ReplicaSet, pod *corev1.
 }
 
 func TestBeginSetResourcesPrefillsFieldsFromContainerSpec(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -99,8 +99,8 @@ func TestBeginSetResourcesPrefillsFieldsFromContainerSpec(t *testing.T) {
 }
 
 func TestNudgeAdjustsBySaneStepsAndClampsAtZero(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -140,8 +140,8 @@ func TestNudgeAdjustsBySaneStepsAndClampsAtZero(t *testing.T) {
 }
 
 func TestUnsetFieldThenTypingClearsUnset(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -161,8 +161,8 @@ func TestUnsetFieldThenTypingClearsUnset(t *testing.T) {
 }
 
 func TestLeftRightArrowsMoveCursorForMidStringEdits(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -205,8 +205,8 @@ func TestLeftRightArrowsMoveCursorForMidStringEdits(t *testing.T) {
 }
 
 func TestInvalidQuantityBlocksApply(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	mut := &fakeMutator{}
 	session := newSession()
@@ -232,8 +232,8 @@ func TestInvalidQuantityBlocksApply(t *testing.T) {
 }
 
 func TestRequestGreaterThanLimitBlocksApply(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	mut := &fakeMutator{}
 	session := newSession()
@@ -263,8 +263,8 @@ func TestRequestGreaterThanLimitBlocksApply(t *testing.T) {
 }
 
 func TestOnlyChangedFieldsGoIntoEdits(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -289,14 +289,14 @@ func TestOnlyChangedFieldsGoIntoEdits(t *testing.T) {
 }
 
 func TestContainerTabSwitchRecomputesFields(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
 	dep.Spec.Template.Spec.Containers = append(dep.Spec.Template.Spec.Containers, corev1.Container{
 		Name: "metrics-sidecar", Image: "sidecar:0.9.1",
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("128Mi")},
 		},
 	})
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -318,8 +318,8 @@ func TestContainerTabSwitchRecomputesFields(t *testing.T) {
 }
 
 func TestSetResourcesCommitsThroughMutatorNonProd(t *testing.T) {
-	dep := resourcesDeployment("default", "aim-worker")
-	rs, pod := resourcesOwnerChain("default", "aim-worker")
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
 	lister := resourcesLister(dep, rs, pod)
 	mut := &fakeMutator{}
 	session := newSession()

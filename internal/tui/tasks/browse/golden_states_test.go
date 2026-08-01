@@ -422,14 +422,14 @@ func goldenMarksModel(t *testing.T, width, height int) Model {
 
 func goldenSetImageModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	dep := twoContainerDeployment("default", "aim-worker", "registry.aim.dev/aim-worker:3.4.2")
-	rsOldest := replicaSetRevision("default", "aim-worker-r41", "aim-worker", "registry.aim.dev/aim-worker:3.4.0", 41, 23*24*time.Hour)
-	rsOld := replicaSetRevision("default", "aim-worker-r42", "aim-worker", "registry.aim.dev/aim-worker:3.4.1", 42, 21*24*time.Hour)
-	rsCur := replicaSetRevision("default", "aim-worker-r43", "aim-worker", "registry.aim.dev/aim-worker:3.4.2", 43, 2*24*time.Hour)
+	dep := twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.2")
+	rsOldest := replicaSetRevision("default", "nva-worker-r41", "nva-worker", "registry.nva.dev/nva-worker:3.4.0", 41, 23*24*time.Hour)
+	rsOld := replicaSetRevision("default", "nva-worker-r42", "nva-worker", "registry.nva.dev/nva-worker:3.4.1", 42, 21*24*time.Hour)
+	rsCur := replicaSetRevision("default", "nva-worker-r43", "nva-worker", "registry.nva.dev/nva-worker:3.4.2", 43, 2*24*time.Hour)
 	sighting := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "aim-prod", CreationTimestamp: setImageAge(40 * time.Minute)},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "nva-prod", CreationTimestamp: setImageAge(40 * time.Minute)},
 		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
-			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.3"}}},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.nva.dev/nva-worker:3.4.3"}}},
 		}},
 	}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
@@ -460,10 +460,10 @@ func goldenSetImageModel(t *testing.T, width, height int) Model {
 func goldenSetResourcesModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "default", Generation: 1, CreationTimestamp: setImageAge(30 * 24 * time.Hour)},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "default", Generation: 1, CreationTimestamp: setImageAge(30 * 24 * time.Hour)},
 		Spec: appsv1.DeploymentSpec{Replicas: replicasPtr(4), Template: corev1.PodTemplateSpec{
 			Spec: corev1.PodSpec{Containers: []corev1.Container{
-				{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.2", Resources: corev1.ResourceRequirements{
+				{Name: "worker", Image: "registry.nva.dev/nva-worker:3.4.2", Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m"), corev1.ResourceMemory: resource.MustParse("512Mi")},
 					Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1"), corev1.ResourceMemory: resource.MustParse("512Mi")},
 				}},
@@ -473,13 +473,13 @@ func goldenSetResourcesModel(t *testing.T, width, height int) Model {
 	}
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "aim-worker-r43", Namespace: "default",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "aim-worker"}},
+			Name: "nva-worker-r43", Namespace: "default",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "nva-worker"}},
 		},
 	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "aim-worker-r43-x8z2p", Namespace: "default",
+			Name: "nva-worker-r43-x8z2p", Namespace: "default",
 			OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: rs.Name}},
 		},
 		Status: corev1.PodStatus{
@@ -519,12 +519,12 @@ func goldenSetResourcesModel(t *testing.T, width, height int) Model {
 // --- 26a: labels/annotations inline editor ---
 
 // goldenMetaModel builds the exact scenario docs/design/v.0.2.0.dc.html's
-// 26a mockup illustrates: a "deploy/aim-worker" Deployment in "aim-stage"
-// whose labels/annotations match the mockup's own rows (app=aim-worker
+// 26a mockup illustrates: a "deploy/nva-worker" Deployment in "nva-stage"
+// whose labels/annotations match the mockup's own rows (app=nva-worker
 // carrying the Service-selector join warning, env=stage, team=platform,
 // app.kubernetes.io/managed-by=Helm carrying the Helm-owned note; annotations
 // kute.dev/owner=platform-oncall and deployment.kubernetes.io/revision=42
-// read-only), a svc/aim-worker Service whose selector matches app=aim-worker,
+// read-only), a svc/nva-worker Service whose selector matches app=nva-worker,
 // and 4 Pods that Service currently selects (the mockup's "detaches 4 pods"
 // figure). The cursor is moved to the env= row (rows sort alphabetically:
 // app, app.kubernetes.io/managed-by, env, team) and "ing" is typed onto the
@@ -535,9 +535,9 @@ func goldenMetaModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "aim-worker", Namespace: "aim-stage",
+			Name: "nva-worker", Namespace: "nva-stage",
 			Labels: map[string]string{
-				"app":                          "aim-worker",
+				"app":                          "nva-worker",
 				"env":                          "stage",
 				"team":                         "platform",
 				"app.kubernetes.io/managed-by": "Helm",
@@ -548,19 +548,19 @@ func goldenMetaModel(t *testing.T, width, height int) Model {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{Replicas: replicasPtr(4), Template: corev1.PodTemplateSpec{
-			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.aim.dev/aim-worker:3.4.2"}}},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "worker", Image: "registry.nva.dev/nva-worker:3.4.2"}}},
 		}},
 	}
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "aim-worker", Namespace: "aim-stage"},
-		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "aim-worker"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "nva-worker", Namespace: "nva-stage"},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "nva-worker"}},
 	}
 	pods := make([]runtime.Object, 0, 4)
 	for i := range 4 {
 		pods = append(pods, &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "aim-worker-" + string(rune('a'+i)), Namespace: "aim-stage",
-				Labels: map[string]string{"app": "aim-worker"},
+				Name: "nva-worker-" + string(rune('a'+i)), Namespace: "nva-stage",
+				Labels: map[string]string{"app": "nva-worker"},
 			},
 		})
 	}
@@ -571,7 +571,7 @@ func goldenMetaModel(t *testing.T, width, height int) Model {
 	}}
 	sess := newSession()
 	sess.Location.Kind = kube.KindDeployment
-	sess.Location.Namespace = "aim-stage"
+	sess.Location.Namespace = "nva-stage"
 	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
@@ -601,7 +601,7 @@ func goldenMetaConfirmModel(t *testing.T, width, height int) Model {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyUp}) // up to app= (labels sort: app, app.kubernetes.io/managed-by, env, team)
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	m = step(t, m, tea.KeyPressMsg{Text: "2"}) // "aim-worker" -> "aim-worker2"
+	m = step(t, m, tea.KeyPressMsg{Text: "2"}) // "nva-worker" -> "nva-worker2"
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	return m
 }

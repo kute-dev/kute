@@ -15,21 +15,21 @@ import (
 )
 
 // goldenSecretDataModel builds a deterministic 27b Data view: docs/design/
-// v.0.2.0.dc.html's own §27b mockup scenario — secret/aim-secrets in
-// aim-stage with three existing masked keys.
+// v.0.2.0.dc.html's own §27b mockup scenario — secret/nva-secrets in
+// nva-stage with three existing masked keys.
 func goldenSecretDataModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{
-		"DATABASE_URL": []byte("postgres://user:pass@db.aim-stage.svc:5432/aim"),
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{
+		"DATABASE_URL": []byte("postgres://user:pass@db.nva-stage.svc:5432/aim"),
 		"API_TOKEN":    []byte("0123456789abcdef0123456789abcdef012345"),
-		"SMTP_USER":    []byte("no-reply@aim.dev"),
+		"SMTP_USER":    []byte("no-reply@nva.dev"),
 	})
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindSecret: {secret}}}
 	sess := newSession()
-	sess.Location.Namespace = "aim-stage"
+	sess.Location.Namespace = "nva-stage"
 	m := New(Config{
 		Session: sess, Lister: lister, Mutator: &fakeMutator{secret: secret},
-		Namespace: "aim-stage", Name: "aim-secrets",
+		Namespace: "nva-stage", Name: "nva-secrets",
 	})
 	m.SetSize(width, height)
 	m = step(t, m, m.Init()())

@@ -1,7 +1,7 @@
-  kute │ test-cluster › aim-stage › cm/aim-config › Data    ● connected · 12ms  
+  kute │ test-cluster › nva-stage › cm/nva-config › Data    ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────
   2 keys → 3                                                                    
-  deploy/aim-worker ↗ env · sts/aim-gateway ↗ volume                            
+  deploy/nva-worker ↗ env · sts/nva-gateway ↗ volume                            
 ────────────────────────────────────────────────────────────────────────────────
   KEY                   VALUE                                             SIZE  
   FEATURE_X             on                                                 2 B  
@@ -9,7 +9,7 @@
 + RETRIES               3                                                  new  
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-  will run kubectl patch cm/aim-config --type merge -p '{"data":{"RETRIES":"3"}…
+  will run kubectl patch cm/nva-config --type merge -p '{"data":{"RETRIES":"3"}…
                                                                                 
                                                                                 
                                                                                 

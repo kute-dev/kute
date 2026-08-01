@@ -1,7 +1,7 @@
-  kute │ test-cluster › aim-stage › cm/aim-config › Data                                            ● connected · 12ms  
+  kute │ test-cluster › nva-stage › cm/nva-config › Data                                            ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   2 keys                                                                                                                
-  deploy/aim-worker ↗ env · sts/aim-gateway ↗ volume                         pods don't reload configmaps on their own  
+  deploy/nva-worker ↗ env · sts/nva-gateway ↗ volume                         pods don't reload configmaps on their own  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   KEY                         VALUE                                                                               SIZE  
 › FEATURE_X                   was on · debug                                                                       2 B  
@@ -9,7 +9,7 @@
 + a add key                                                                                                             
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  will run kubectl patch cm/aim-config --type merge -p '{"data":{"FEATURE_X":"debug"}}' -n aim-stage                    
+  will run kubectl patch cm/nva-config --type merge -p '{"data":{"FEATURE_X":"debug"}}' -n nva-stage                    
                                                                                                                         
                                                                                                                         
                                                                                                                         

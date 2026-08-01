@@ -146,7 +146,7 @@ func newModel(t *testing.T, sess *tui.Session, secret *corev1.Secret, mut *fakeM
 }
 
 func TestLoadRendersMaskedRowsAndKeyCount(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{
 		"DATABASE_URL": []byte("postgres://old"),
 		"API_TOKEN":    []byte("abcdef1234567890"),
 	})
@@ -172,7 +172,7 @@ func TestLoadRendersMaskedRowsAndKeyCount(t *testing.T) {
 }
 
 func TestAddKeyNonProdAppliesImmediatelyAndRefreshes(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -215,7 +215,7 @@ func TestAddKeyNonProdAppliesImmediatelyAndRefreshes(t *testing.T) {
 }
 
 func TestAddKeyProdRequiresConfirmThenApplies(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, prodSession(), secret, mut)
 
@@ -245,7 +245,7 @@ func TestAddKeyProdRequiresConfirmThenApplies(t *testing.T) {
 }
 
 func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{
 		"DATABASE_URL": []byte("postgres://old"),
 		"API_TOKEN":    []byte("abcdef"),
 	})
@@ -275,7 +275,7 @@ func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
 }
 
 func TestFailedAddRestoresAddModeWithErrorAndAttemptedValues(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	mut := &fakeMutator{secret: secret, err: fakeError{}}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -312,7 +312,7 @@ type fakeError struct{}
 func (fakeError) Error() string { return "secret is immutable" }
 
 func TestShiftTabReturnsFocusFromValueToKey(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -327,7 +327,7 @@ func TestShiftTabReturnsFocusFromValueToKey(t *testing.T) {
 }
 
 func TestCtrlXTogglesMaskAndPlainXStaysTypeable(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -352,7 +352,7 @@ func TestCtrlXTogglesMaskAndPlainXStaysTypeable(t *testing.T) {
 }
 
 func TestEnterOnExistingRowDecodesAndEditsNonProdAppliesImmediately(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -390,7 +390,7 @@ func TestEnterOnExistingRowDecodesAndEditsNonProdAppliesImmediately(t *testing.T
 }
 
 func TestEnterOnUnchangedValueExitsEditingWithoutApplying(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -409,7 +409,7 @@ func TestEnterOnUnchangedValueExitsEditingWithoutApplying(t *testing.T) {
 }
 
 func TestEditProdRequiresConfirmThenApplies(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, prodSession(), secret, mut)
 
@@ -435,7 +435,7 @@ func TestEditProdRequiresConfirmThenApplies(t *testing.T) {
 }
 
 func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret, err: fakeError{}}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -460,7 +460,7 @@ func TestFailedEditRestoresEditingModeWithErrorAndAttemptedValue(t *testing.T) {
 }
 
 func TestEscCancelsEditWithoutApplying(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte("postgres://old")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -482,7 +482,7 @@ func TestEscCancelsEditWithoutApplying(t *testing.T) {
 // there are no changes" behavior: a plain idle navigation state renders no
 // band at all, not a static "no changes" placeholder line.
 func TestWillRunStripHiddenWhenIdle(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"K": []byte("v")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"K": []byte("v")})
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	if strip := m.willRunStrip(m.Theme(), 120); strip != "" {
@@ -495,7 +495,7 @@ func TestWillRunStripHiddenWhenIdle(t *testing.T) {
 }
 
 func TestWillRunStripShowsWhileAdding(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
@@ -505,7 +505,7 @@ func TestWillRunStripShowsWhileAdding(t *testing.T) {
 }
 
 func TestEscDiscardsAddRowWithoutApplying(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
@@ -524,7 +524,7 @@ func TestEscDiscardsAddRowWithoutApplying(t *testing.T) {
 }
 
 func TestEscFromNavigationReturnsToPreviousTask(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", nil)
+	secret := secretObj("nva-stage", "nva-secrets", nil)
 	m := newModel(t, newSession(), secret, nil)
 
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "esc"})
@@ -540,7 +540,7 @@ func TestEscFromNavigationReturnsToPreviousTask(t *testing.T) {
 // (docs/design README.md §52, §301): secretdata must show the OFFLINE pill
 // and drop add/remove from the keybar while disconnected, not just browse.
 func TestKeybarGoesOfflineAndHidesAddRemove(t *testing.T) {
-	secret := secretObj("aim-stage", "aim-secrets", map[string][]byte{"K": []byte("v")})
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"K": []byte("v")})
 	mut := &fakeMutator{secret: secret}
 	m := newModel(t, newSession(), secret, mut)
 
