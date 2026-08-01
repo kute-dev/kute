@@ -487,6 +487,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// descriptor.
 		if msg.Kind == kube.KindCustomResourceDefinition && m.session != nil && m.session.Cluster != nil {
 			m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
+			m.refreshGotoPaletteCorpus()
 		}
 	case kube.CRDsDiscoveredMsg:
 		// The one connect path where discovery finishes outside any
@@ -499,6 +500,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for the active task to react to here.
 		if m.session != nil && m.session.Cluster != nil {
 			m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
+			m.refreshGotoPaletteCorpus()
 		}
 		return m, nil
 	case UpdateCheckedMsg:
@@ -991,6 +993,24 @@ func (m *Model) refreshPalette() {
 	case palette.ScopeResource:
 		m.refreshWhoCanResourcePalette()
 	}
+}
+
+// refreshGotoPaletteCorpus re-ranks an *open* jump palette after the kind
+// registry itself changed underneath it — a discovered kind landing, or a
+// custom kind's printer columns arriving.
+//
+// The corpus is snapshotted when the palette opens, so without this a kind
+// discovery finds while the palette is up stays invisible until it's closed
+// and reopened: `g` pressed early in a connect offers the built-in kinds and
+// nothing else, and keeps offering exactly that however long it's held open,
+// with the CRD *object* rows the only thing a query like "kustomiz" can
+// match. Same shape as gotoCountsMsg's refresh — late data, re-rank in
+// place — and a no-op unless the jump palette is the one on screen.
+func (m *Model) refreshGotoPaletteCorpus() {
+	if m.palette == nil || m.palette.Scope != palette.ScopeGoto {
+		return
+	}
+	m.refreshGotoPalette()
 }
 
 // refreshGotoPalette rebuilds the goto palette's Items/Hint/Recent/Sel/

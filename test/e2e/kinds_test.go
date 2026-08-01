@@ -120,6 +120,24 @@ func TestKindScreens(t *testing.T) {
 	})
 }
 
+// TestJumpPaletteGainsKindsWhileOpen holds the palette open across discovery.
+//
+// Its corpus is snapshotted when it opens, so a kind discovery finds a moment
+// later used to stay invisible until the palette was closed and reopened —
+// and a query for it does not come back empty, it matches the kind's own CRD
+// row and jumps to CustomResourceDefinitions, which is a wrong answer rather
+// than a missing one.
+//
+// 'g' is the very first key here, before even the connect wait, which is what
+// puts the open palette ahead of discovery. On a cluster whose discovery beats
+// it the assertion is merely true on arrival — it can be vacuous, never wrong.
+func TestJumpPaletteGainsKindsWhileOpen(t *testing.T) {
+	a := Launch(t)
+	a.Press("g")
+	a.Type("kustomiz")
+	a.WaitFor("Kustomizations", Settle)
+}
+
 // openFrom jumps to a kind's list, puts the cursor on the named row and
 // opens it.
 //
