@@ -40,7 +40,7 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
 | # | task | status | depends on |
 |---|---|---|---|
-| G1 | Verify `status.artifact` git metadata | `[x]` **resolved: no commit metadata** | — |
+| G1 | Commit subject + SHA binding | `[x]` **resolved: via Events, not artifact** | — |
 | G2 | Verify Flux declared printer columns | `[x]` **resolved** | — |
 | G3 | Verify suspension attribution is recoverable | `[x]` **resolved: not recoverable** | — |
 | T1 | `demoDiscoveredKind` API-group fix | `[x]` | — |
@@ -61,38 +61,57 @@ Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ## Gates — resolve before the tasks that depend on them
 
-### G1 — What `status.artifact` carries `[x]` RESOLVED 2026-08-01
-**Answer: no commit metadata exists on the cluster.** Measured against a real Flux
-GitRepository:
+### G1 — Commit subject and revision binding `[x]` RESOLVED 2026-08-01
+
+**`status.artifact` carries no commit metadata** — measured:
 
 ```json
-{
-  "digest": "sha256:df7055d9…",
-  "lastUpdateTime": "2026-07-31T13:31:17Z",
-  "path": "gitrepository/flux-system/flux-system/efd398be….tar.gz",
-  "revision": "master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef",
-  "size": 847813,
-  "url": "http://source-controller.flux-system.svc…/…tar.gz"
-}
+{"digest":"sha256:df7055d9…","lastUpdateTime":"2026-07-31T13:31:17Z",
+ "path":"gitrepository/flux-system/flux-system/efd398be….tar.gz",
+ "revision":"master@sha1:efd398bed98a38348c7702355ecd98fc11ac2bef",
+ "size":847813,"url":"http://source-controller…/…tar.gz"}
 ```
 
-There is no commit subject, no author, and no `metadata` map at all. The design's
-"fetched from the GitRepository artifact metadata already on the cluster" is not
-achievable — source-controller publishes the tarball's coordinates, not the
-commit's content.
+No subject, no author, no `metadata` map. The tarball also excludes `.git`.
 
-**Binding consequences:**
-- §31a's `source revision` line shows `master@efd398b` and the artifact's
-  `lastUpdateTime` age. **No `"fix: raise worker memory limit (#412)" · dana`.**
-- §32a renders `Revision applied · kustomization/x · master@efd398b`. The commit
-  subject — which §32a's own note calls "the whole point" — is not available
-  without git access, which the same design forbids. The causal chain
-  (revision → rollout → OOM → backoff) still reads top-down; only the subject
-  line is missing, and `v` still copies the SHA to paste into `git show`.
-- **Drift is a boolean, not a count.** `−9 commits ahead` needs `git log`.
-  Compare the Kustomization's `status.lastAppliedRevision` against its source's
-  `status.artifact.revision`: equal → in sync; different → `source ahead`
-  (with both short SHAs). Never a number.
+**But the subject is on the cluster — in source-controller's Events.** On
+storing a new artifact it emits, on the GitRepository, a message of the form
+`stored artifact for commit '<subject>'`. The subject is embedded in the
+event message. (Not observable on the reference cluster at time of writing:
+no commit had landed inside the Event TTL, so only the steady-state variant
+`no changes since last reconciliation: observed revision '<rev>'` was
+present — same reason code, `GitOperationSucceeded`, different message.
+Parse on the message shape, not the reason, which has varied across
+source-controller versions between `NewArtifact` and `GitOperationSucceeded`.)
+
+**The revision binding is exact, and needs no parsing.** Kustomization
+events carry the revision as an event *annotation*:
+
+```json
+{"reason":"ReconciliationSucceeded",
+ "message":"Reconciliation finished in 1.40s, next run in 10m0s",
+ "metadata":{"annotations":{
+   "kustomize.toolkit.fluxcd.io/revision":"master@sha1:efd398bed98a…",
+   "kustomize.toolkit.fluxcd.io/commit_status":"update"}}}
+```
+
+So §32a reads the SHA from the annotation and only the *subject* from prose.
+
+**Design (§32a):**
+1. **Primary** — parse the subject out of source-controller GitRepository
+   events already in the watch cache. No new watch: 9b/16a already read Events.
+2. **Cache** — persist `(repo, sha) → subject` into per-context state the
+   moment it is seen. **Events expire (~1h)**, so without this the subject
+   vanishes from timeline rows older than the TTL, which is exactly when a
+   timeline is most useful. Schema change ⇒ version bump + migration, per the
+   persisted-state invariant.
+3. **Degrade** — no event and no cache entry ⇒ render `master@efd398b`
+   alone. **Never fetch the git remote; no tokens.**
+
+**Drift stays a boolean.** `−9 commits ahead` needs `git log` and remains
+unbuildable: compare the Kustomization's `status.lastAppliedRevision` with
+its source's `status.artifact.revision` — equal is in sync, different is
+`source ahead`. Never a count.
 
 ### G2 — Flux's declared printer columns `[x]` RESOLVED 2026-08-01
 
