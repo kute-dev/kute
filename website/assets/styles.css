@@ -607,6 +607,24 @@ p { margin: 0; }
 /* alternate column counts for .term-row, used by mockups that aren't the pods table shape */
 .term-row.term-grid-4 { grid-template-columns: 22px 1.6fr 1fr 100px; }
 .term-row.term-grid-5 { grid-template-columns: 20px 1.3fr 60px 1.1fr 90px; }
+/* the Flux tree (30b): glyph · source/reconciler · kind · revision · reconciled.
+   The revision cell carries the drift note ("main@2b91f04 · source ahead"),
+   which is the widest thing on the row — it gets the larger share and never
+   wraps, since a two-line cell would make one row twice the height of the
+   rest and break the scan down the column. */
+.term-row.term-grid-flux { grid-template-columns: 22px 1.15fr 82px 1.5fr 80px; }
+.term-row.term-grid-flux > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.term-row .child { color: var(--text-secondary); }
+.term-row .tree { color: var(--text-ghost); }
+
+/* a condition message rendered verbatim under its own row (30a/30b) — a
+   continuation of the row above, never a selectable line of its own */
+.term-subline {
+  padding: 0 16px 6px 60px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* small section captions inside a .term-body (CAPACITY, NODES, TROUBLE, …) */
 .term-section-label {

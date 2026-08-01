@@ -15,7 +15,7 @@
     {
       "slug": "index",
       "title": "kute — the incident console for Kubernetes",
-      "description": "kute makes a cluster's actual state visible without digging — the broken thing sorts to the top, every action shows the command it will run first, and nothing goes blank when the connection drops. Try it in one command, no cluster needed.",
+      "description": "kute makes a cluster's actual state visible without digging — the broken thing sorts to the top, every action shows the command it will run first, and nothing goes blank when the connection drops. Reads Helm releases and Flux CD reconcilers without either binary installed. Try it in one command, no cluster needed.",
       "canonical": "https://kute.dev/",
       "ogTitle": "kute — the incident console for Kubernetes",
       "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
@@ -26,7 +26,7 @@
     {
       "slug": "guide",
       "title": "Guide — using kute, the incident console for Kubernetes",
-      "description": "How to drive kute: getting started, jumping between resources with the palettes, diagnosing a failing pod, following logs, changing a workload safely, production safeguards, configuration, and the full keyboard reference.",
+      "description": "How to drive kute: getting started, jumping between resources with the palettes, diagnosing a failing pod, following logs, changing a workload safely, reading a Flux GitOps chain, production safeguards, configuration, and the full keyboard reference.",
       "canonical": "https://kute.dev/guide.html",
       "ogTitle": "Guide — using kute, the incident console for Kubernetes",
       "ogDescription": "From your first screen to a production delete — how to drive kute, with recordings you can follow along with.",

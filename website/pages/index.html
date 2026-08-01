@@ -145,11 +145,60 @@
         <ul>
           <li class="surf-row"><span class="surf-name">Ingress &amp; Gateway routing</span><span class="surf-desc">resolved to the backend that actually answers</span></li>
           <li class="surf-row"><span class="surf-name">Helm releases</span><span class="surf-desc">browse and roll back without the helm binary</span></li>
+          <li class="surf-row"><span class="surf-name"><a href="/guide.html#gitops">Flux CD</a></span><span class="surf-desc">the source → reconciler chain, drift, reconcile and suspend</span></li>
           <li class="surf-row"><span class="surf-name">YAML, and your editor</span><span class="surf-desc">read it here or edit it in <code>$EDITOR</code></span></li>
           <li class="surf-row"><span class="surf-name">Dark and light</span><span class="surf-desc">follows your terminal, or pick one</span></li>
           <li class="surf-row"><span class="surf-name">Older terminals</span><span class="surf-desc">256-colour and ASCII fallbacks</span></li>
           <li class="surf-row"><span class="surf-name">Update notice</span><span class="surf-desc">a quiet chip — kute never updates itself</span></li>
         </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= GITOPS / FLUX ================= -->
+<section class="deepdive" id="gitops">
+  <div class="wrap">
+    <div class="deepdive-row">
+      <div class="deepdive-copy reveal">
+        <span class="eyebrow">gitops</span>
+        <h2>Flux, read the way Flux actually works.</h2>
+        <p>A generic CRD view asks one question — does <code>Ready</code> say true? — and on a Flux cluster the answer misleads. A reconciler mid-sync is working, not broken. A suspended one reports whatever it said before someone paused it. kute knows the difference, so a healthy GitOps cluster stops rendering as a column of red.</p>
+        <ul class="deepdive-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>The chain, on one screen.</strong> Each repository with the Kustomizations and HelmReleases it drives nested under it — the join you otherwise make in your head from two <code>kubectl</code> lists.</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>Why it failed, on the row.</strong> The condition message verbatim, exactly as Flux wrote it — and <code>↵</code> resolves a failing health check to the workload it is waiting on.</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>Suspended stays in front of you.</strong> A paused Kustomization is the one quietly drifting from git, so it sorts above the healthy rows in amber instead of sinking in with them.</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>The commit behind the change.</strong> In the incident timeline, a revision lands as its own row — the SHA, and the commit message when the cluster still knows it.</li>
+        </ul>
+        <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);"><code>r</code> reconciles, <code>s</code> suspends or resumes — plain API calls, so the <code>flux</code> binary is never required. kute never installs or bootstraps Flux, and never writes to your Git repository: that is CI's job.</p>
+      </div>
+      <div class="reveal">
+        <div class="term" role="img" aria-label="kute's Flux tree: a GitRepository with its Kustomizations nested under it — one failing a health check with the reason printed under the row, one suspended and behind its source, one mid-reconcile — plus a chart repository with its HelmRelease, and a healthy chain folded away">
+          <div class="term-header">
+            <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> prod-eks <span class="sep">›</span> <span class="kind">Flux</span></span>
+            <span class="term-status"><span class="live">● connected · 9ms</span></span>
+          </div>
+          <div class="term-strip">
+            <span><span class="g-good">● 3 ready</span> &nbsp; <span class="g-warn">◌ 1 reconciling</span> &nbsp; <span class="g-bad">✕ 2 failed</span> &nbsp; <span class="g-warn">‖ 1 suspended</span></span>
+            <span>3 sources · 7 reconcilers</span>
+          </div>
+          <div class="term-body">
+            <div class="term-row head term-grid-flux"><span></span><span>SOURCE / RECONCILER</span><span>KIND</span><span>REVISION</span><span class="right">RECONCILED</span></div>
+            <div class="term-row term-grid-flux"><span class="dot good">●</span><span class="name">nebula-config</span><span class="dim">GitRepo</span><span class="dim">main@8f3c2a1 · 3m ago</span><span class="right dim">3m ago</span></div>
+            <div class="term-row sel term-grid-flux"><span class="dot bad">✕</span><span class="name"><span class="tree">└─</span> nebula-workers</span><span class="dim">Kustomize</span><span class="dim">main@8f3c2a1</span><span class="right dim">4m ago</span></div>
+            <div class="term-subline">health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'</div>
+            <div class="term-row term-grid-flux"><span class="dot warn">‖</span><span class="name child"><span class="tree">└─</span> nebula-infra</span><span class="dim">Kustomize</span><span class="g-warn">main@2b91f04 · source ahead</span><span class="right dim">6d ago</span></div>
+            <div class="term-row term-grid-flux"><span class="dot warn">◌</span><span class="name child"><span class="tree">└─</span> nebula-apps</span><span class="dim">Kustomize</span><span class="dim">main@8f3c2a1</span><span class="right dim">2m ago</span></div>
+            <div class="term-row term-grid-flux"><span class="dot good">●</span><span class="name">bitnami-charts</span><span class="dim">HelmRepo</span><span class="dim">index · 14m ago</span><span class="right dim">14m ago</span></div>
+            <div class="term-row term-grid-flux"><span class="dot bad">✕</span><span class="name child"><span class="tree">└─</span> nebula-redis</span><span class="dim">HelmRelease</span><span class="dim">redis 19.6.1</span><span class="right dim">12m ago</span></div>
+            <div class="term-subline">Helm install failed: timed out waiting for the condition</div>
+            <div class="term-group-collapsed"><span><span class="g-arrow">▸</span>+ 1 source · 3 reconcilers ready</span><span class="g-note">healthy · collapsed</span></div>
+          </div>
+          <div class="term-keybar">
+            <span><span class="pill">FLUX</span> &nbsp; <span class="key">↵</span> inventory · <span class="key">r</span> reconcile with source · <span class="key">s</span> suspend</span>
+            <span>drift, not just status</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
