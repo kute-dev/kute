@@ -93,7 +93,13 @@ func (m *Model) beginEdit(firstDigit string) {
 	row := &m.rows[m.selected]
 	row.editing = true
 	row.editInput = textinput.New()
-	row.editInput.SetStyles(tui.TextInputStyles(m.Theme()))
+	// Editing only ever happens on the selected row, so the typed digits
+	// render on the same SelBg highlight as the rest of the row — the same
+	// textinput-on-SelBg treatment tasks/secretdata applies (secretdata
+	// model.go).
+	styles := tui.TextInputStyles(m.Theme())
+	styles.Focused.Text = styles.Focused.Text.Background(m.Theme().SelBg)
+	row.editInput.SetStyles(styles)
 	row.editInput.Prompt = ""
 	row.editInput.CharLimit = 5
 	row.editInput.SetValue(firstDigit)

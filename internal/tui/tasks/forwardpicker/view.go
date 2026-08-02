@@ -99,18 +99,33 @@ func (m Model) panelHeader(theme tui.Theme) string {
 
 func (m Model) portLine(theme tui.Theme, i int, row portRow) string {
 	selected := i == m.selected
+	// rowFill paints the row's gap cells with the row's own background —
+	// SelBg when selected, transparent (BgPalette is empty) otherwise —
+	// because an outer Background wrap is cancelled by each inner span's
+	// ANSI reset, leaving plain spaces to fall back to the terminal's
+	// background (palette's fillSpaces is the same convention).
+	var rowFill lipgloss.Style
 	marker := "  "
 	glyphStyle := lipgloss.NewStyle().Foreground(theme.Good)
 	nameStyle := lipgloss.NewStyle().Foreground(theme.Text)
 	containerStyle := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	localStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	if selected {
-		bg := theme.SelBg
-		marker = lipgloss.NewStyle().Foreground(theme.Accent).Render("▸ ")
-		nameStyle = nameStyle.Background(bg).Bold(true)
-		containerStyle = containerStyle.Background(bg)
-		localStyle = localStyle.Background(bg)
-		glyphStyle = glyphStyle.Background(bg)
+		rowFill = lipgloss.NewStyle().Background(theme.SelBg)
+		marker = lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg).Render("▸ ")
+		nameStyle = nameStyle.Background(theme.SelBg).Bold(true)
+		containerStyle = containerStyle.Background(theme.SelBg)
+		localStyle = localStyle.Background(theme.SelBg)
+		glyphStyle = glyphStyle.Background(theme.SelBg)
+	}
+	fill := func(n int) string {
+		if n <= 0 {
+			return ""
+		}
+		if selected {
+			return rowFill.Render(strings.Repeat(" ", n))
+		}
+		return strings.Repeat(" ", n)
 	}
 
 	label := strconv.Itoa(int(row.Port))
@@ -119,18 +134,18 @@ func (m Model) portLine(theme tui.Theme, i int, row portRow) string {
 	}
 	name := nameStyle.Render(label)
 	if row.Container != "" {
-		name += "  " + containerStyle.Render("container "+row.Container)
+		name += fill(2) + containerStyle.Render("container "+row.Container)
 	}
 
 	local := m.localPortText(row)
 	localText := localStyle.Render(local)
 	if row.editing {
-		localText = lipgloss.NewStyle().Foreground(theme.Text).Render("localhost:") + row.editInput.View()
+		localText = lipgloss.NewStyle().Foreground(theme.Text).Background(theme.SelBg).Render("localhost:") + row.editInput.View()
 	}
 
-	left := marker + glyphStyle.Render("●") + " " + name
+	left := marker + glyphStyle.Render("●") + fill(1) + name
 	gap := max(panelWidth-lipgloss.Width(left)-lipgloss.Width(localText)-1, 1)
-	return left + strings.Repeat(" ", gap) + localText
+	return left + fill(gap) + localText
 }
 
 func (m Model) localPortText(row portRow) string {

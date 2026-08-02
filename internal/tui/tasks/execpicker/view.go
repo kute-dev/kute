@@ -106,18 +106,34 @@ func (m Model) panelHeader(theme tui.Theme) string {
 
 func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) string {
 	selected := i == m.selected
+	// rowFill paints the row's gap cells with the row's own background —
+	// SelBg when selected, transparent (BgPalette is empty) otherwise —
+	// because an outer Background wrap is cancelled by each inner span's
+	// ANSI reset, leaving plain spaces to fall back to the terminal's
+	// background (palette's fillSpaces is the same convention).
+	var rowFill lipgloss.Style
 	marker := "  "
 	nameStyle := lipgloss.NewStyle().Foreground(theme.Text)
 	imgStyle := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	stateStyle := lipgloss.NewStyle().Foreground(theme.Good)
 	shellStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
 	if selected {
-		marker = lipgloss.NewStyle().Foreground(theme.Accent).Render("▸ ")
+		rowFill = lipgloss.NewStyle().Background(theme.SelBg)
+		marker = lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg).Render("▸ ")
 		bg := theme.SelBg
 		nameStyle = nameStyle.Background(bg).Bold(true)
 		imgStyle = imgStyle.Background(bg)
 		stateStyle = stateStyle.Background(bg)
 		shellStyle = shellStyle.Background(bg)
+	}
+	fill := func(n int) string {
+		if n <= 0 {
+			return ""
+		}
+		if selected {
+			return rowFill.Render(strings.Repeat(" ", n))
+		}
+		return strings.Repeat(" ", n)
 	}
 
 	glyph, text := "●", "running"
@@ -133,13 +149,13 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 	if c.IsSidecar {
 		img += " sidecar"
 	}
-	name := nameStyle.Render(c.Name) + "  " + imgStyle.Render(img)
+	name := nameStyle.Render(c.Name) + fill(2) + imgStyle.Render(img)
 	state := stateStyle.Render(glyph + " " + text)
 	shells := shellStyle.Render(m.shellsText(c.Name))
 
 	left := marker + name
 	gap := max(panelWidth-lipgloss.Width(left)-lipgloss.Width(state)-lipgloss.Width(shells)-2, 1)
-	return left + strings.Repeat(" ", gap) + state + "  " + shells
+	return left + fill(gap) + state + fill(2) + shells
 }
 
 // shellsText renders one row's right-aligned shells cell (docs/design
