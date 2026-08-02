@@ -1,6 +1,8 @@
 package poddetail
 
 import (
+	"fmt"
+
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
@@ -68,12 +70,17 @@ func (m Model) Keybar() tui.Keybar {
 	if m.found && m.openForward != nil {
 		verbGroup = append(verbGroup, verbs.Forward.Hint())
 	}
-	// o/i share one hint slot (owner/ingress jump, mvp-tasks.md poddetail
-	// follow-up) — spelling them out as two separate entries doesn't fit
-	// this band's width budget alongside everything else already curated
-	// here (5a's kitchen-sink fixture already renders at ~zero slack).
-	if m.pod.Owner != "" {
-		verbGroup = append(verbGroup, tui.KeyHint{Key: "o/i", Label: "related"})
+	// RELATED's numbered entries (owner workload, fronting Ingress) share
+	// one hint slot keyed to however many are actually resolved — spelling
+	// each one out doesn't fit this band's width budget alongside everything
+	// else already curated here (5a's kitchen-sink fixture already renders
+	// at ~zero slack).
+	if n := len(m.related); n > 0 {
+		key := "1"
+		if n > 1 {
+			key = fmt.Sprintf("1-%d", n)
+		}
+		verbGroup = append(verbGroup, tui.KeyHint{Key: key, Label: "related"})
 	}
 	if len(verbGroup) > 0 {
 		groups = append(groups, verbGroup)

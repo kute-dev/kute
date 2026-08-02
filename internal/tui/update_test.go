@@ -153,9 +153,10 @@ func TestRootModelUNoopWithoutFactory(t *testing.T) {
 // TestGotoUpdateItemOpensPanelWithoutUnwindingStack pins ":update"
 // (docs/design README.md §28b) opening 28b from two levels deep in the
 // stack and popping back to the level right below it on esc, not all the
-// way to root — unlike a real kind/resource jump, which does unwind to
-// root (a browse-only message landing on a non-browse screen otherwise
-// does nothing).
+// way to root — the same "one jump = one esc back" contract a real kind/
+// resource jump now gets too (routeGoto, model.go), just via a different
+// message (OpenUpdatePanelMsg pushes directly onto whatever's active,
+// rather than needing a fresh browse view built for it).
 func TestGotoUpdateItemOpensPanelWithoutUnwindingStack(t *testing.T) {
 	t.Parallel()
 
@@ -183,8 +184,8 @@ func TestGotoUpdateItemOpensPanelWithoutUnwindingStack(t *testing.T) {
 	// OpenUpdatePanelMsg-producing closure) rather than pushing directly —
 	// the real tea.Program runtime executes it and feeds the result back
 	// through Update; drive that by hand here, the same way
-	// TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches does for
-	// GotoResourceMsg.
+	// TestRootModelGotoFromPushedScreenPushesFreshBrowseAndPreservesHistory
+	// does for GotoKindMsg.
 	var cmd tea.Cmd
 	updated, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(tui.Model)

@@ -229,10 +229,11 @@ func (m Model) isProd() bool {
 	return m.session.Config.IsProd(m.session.Location.Context)
 }
 
-// openSelectedObject is 16a/16b's "↵ goes to the object": pop back to
-// whatever pushed this screen and dispatch a jump to the entry's involved
-// object — the same tea.Sequence(BackMsg, GotoResourceMsg) pair tasks/events'
-// own openSelectedObject already established.
+// openSelectedObject is 16a/16b's "↵ goes to the object": dispatch a jump
+// to the entry's involved object via tui.GotoResource, the same navigation
+// tasks/events' own openSelectedObject and the root shell's palette Enter
+// use — model.go's routeGoto pushes a fresh browse view retargeted at the
+// destination and keeps this timeline screen one esc-back away.
 func (m Model) openSelectedObject() (tea.Cmd, bool) {
 	row, ok := m.selectedRow()
 	if !ok {
@@ -242,11 +243,7 @@ func (m Model) openSelectedObject() (tea.Cmd, bool) {
 	if kind == "" || name == "" {
 		return nil, false
 	}
-	ns := row.Namespace
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
-	), true
+	return tui.GotoResource(m.session, kind, row.Namespace, name), true
 }
 
 // openSelectedEvents is the 'e' global verb: pushes 9b scoped exactly like

@@ -195,29 +195,21 @@ func (m Model) selectedListenerRouteFilter() (string, bool) {
 // attached routes (its ATTACHED cell text, "gw/<name>") rather than every
 // HTTPRoute in the namespace, since a wildcard listener can't be told apart
 // from another one on the same Gateway by hostname alone. Both go through
-// the same BackMsg+GotoResourceMsg/GotoKindMsg sequence poddetail/events
-// already use to leave the current screen and ask whatever pushed it to
-// jump.
+// tui.GotoResource/GotoKind, the same navigation poddetail/events/the root
+// shell's palette Enter all use.
 func (m Model) openSelectedEnter() (tea.Cmd, bool) {
 	if m.flavor == flavorGateway {
 		filter, ok := m.selectedListenerRouteFilter()
 		if !ok {
 			return nil, false
 		}
-		return tea.Sequence(
-			func() tea.Msg { return tui.BackMsg{} },
-			func() tea.Msg { return tui.GotoKindMsg{Kind: kube.KindHTTPRoute, Filter: filter} },
-		), true
+		return tui.GotoKind(m.session, kube.KindHTTPRoute, filter), true
 	}
 	row, ok := m.selectedRouteRow()
 	if !ok || row.backendName == "" {
 		return nil, false
 	}
-	ns, name := row.backendNS, row.backendName
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindService, Namespace: ns, Name: name} },
-	), true
+	return tui.GotoResource(m.session, kube.KindService, row.backendNS, row.backendName), true
 }
 
 // openParentGateway resolves 'p' on an HTTPRoute (§23b: "p opens the
@@ -227,11 +219,7 @@ func (m Model) openParentGateway() (tea.Cmd, bool) {
 	if m.flavor != flavorRoute || m.parentGatewayName == "" {
 		return nil, false
 	}
-	ns, name := m.parentGatewayNS, m.parentGatewayName
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindGateway, Namespace: ns, Name: name} },
-	), true
+	return tui.GotoResource(m.session, kube.KindGateway, m.parentGatewayNS, m.parentGatewayName), true
 }
 
 // openSelectedTLSSecret resolves '↵' on a focused TLS strip fact (§23a: "a
@@ -245,11 +233,7 @@ func (m Model) openSelectedTLSSecret() (tea.Cmd, bool) {
 	if name == "" {
 		return nil, false
 	}
-	ns := m.namespace
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindSecret, Namespace: ns, Name: name} },
-	), true
+	return tui.GotoResource(m.session, kube.KindSecret, m.namespace, name), true
 }
 
 // copySelectedURL resolves 'y' on an Ingress row (§23a: "y copies the full

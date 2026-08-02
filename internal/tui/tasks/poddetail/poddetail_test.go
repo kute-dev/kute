@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -604,6 +605,44 @@ func TestOpenLogsUsesSelectedContainer(t *testing.T) {
 	}
 	if openedContainer != "sidecar" {
 		t.Fatalf("openLogs called with container %q, want sidecar", openedContainer)
+	}
+}
+
+// TestOpenRelatedJumpsToOwner covers the RELATED sidebar's numbered jump
+// (docs/design README.md §5a): pressing '1' on a pod whose owner resolves to
+// a Deployment must fire tui.GotoResource for that Deployment — the digit
+// keys' replacement for the old 'o' shortcut. tui.GotoResource is the same
+// navigation the root shell's 'g' palette fires (model.go's routeGoto pushes
+// a fresh browse view and keeps poddetail one esc-back away, rather than
+// this screen needing to pop itself via a BackMsg first).
+func TestOpenRelatedJumpsToOwner(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {crashLoopPod("worker-0", "default", "node-a")},
+		kube.KindReplicaSet: {&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "worker-abc123", Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "worker"}},
+			},
+		}},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-0"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != 1 {
+		t.Fatalf("related = %+v, want exactly one entry (the owning Deployment)", m.related)
+	}
+
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "1"})
+	if cmd == nil {
+		t.Fatalf("expected '1' to return a command")
+	}
+	gotoMsg, ok := cmd().(tui.GotoResourceMsg)
+	if !ok {
+		t.Fatalf("expected a GotoResourceMsg, got %T", cmd())
+	}
+	if gotoMsg.Kind != kube.KindDeployment || gotoMsg.Namespace != "default" || gotoMsg.Name != "worker" {
+		t.Fatalf("GotoResourceMsg = %+v, want Deployment/default/worker", gotoMsg)
 	}
 }
 

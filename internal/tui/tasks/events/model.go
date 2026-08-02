@@ -177,15 +177,12 @@ func (m Model) selectedRow() (displayRow, bool) {
 	return m.rows[m.selected], true
 }
 
-// openSelectedObject is 9b's "↵ go to object": pop back to whatever pushed
-// this screen and dispatch a jump to the event's involved object, via the
-// same tui.BackMsg/GotoResourceMsg pair the root shell's palette Enter
-// already uses — the real tea.Program runtime runs a tea.Sequence's Cmds in
-// order and feeds each result back through Update, so this needs no new
-// root-shell plumbing (poddetail's own doc comment flagged this exact
-// "tea.Sequence(BackMsg, GotoResourceMsg)" shape as the follow-up once a key
-// existed to hang it on — this is that key). A no-op for the folded summary
-// row or an involvedObject kind the registry doesn't carry (e.g.
+// openSelectedObject is 9b's "↵ go to object": dispatch a jump to the
+// event's involved object via tui.GotoResource, the same navigation the
+// root shell's palette Enter fires — model.go's routeGoto pushes a fresh
+// browse view retargeted at the destination and keeps this events screen
+// one esc-back away, rather than discarding it. A no-op for the folded
+// summary row or an involvedObject kind the registry doesn't carry (e.g.
 // "Endpoints") — ok reports whether a navigation was dispatched.
 func (m Model) openSelectedObject() (tea.Cmd, bool) {
 	row, ok := m.selectedRow()
@@ -196,11 +193,7 @@ func (m Model) openSelectedObject() (tea.Cmd, bool) {
 	if kind == "" || name == "" {
 		return nil, false
 	}
-	ns := row.group.Namespace
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
-	), true
+	return tui.GotoResource(m.session, kind, row.group.Namespace, name), true
 }
 
 // openSelectedYAML pushes 8a for the selected row's involved object (the

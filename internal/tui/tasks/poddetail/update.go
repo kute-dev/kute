@@ -1,16 +1,8 @@
 package poddetail
 
 import (
-	"context"
-	"strings"
-
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -36,11 +28,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
-		// The pod itself, plus the two caches its panels are built from:
-		// Events feeds the EVENTS grid, and ReplicaSets resolve the owner
-		// hop up to a Deployment for the meta grid.
+		// The pod itself, plus the caches its panels are built from without
+		// displaying directly: Events feeds the EVENTS grid; ReplicaSets
+		// resolve the owner hop up to a Deployment for the meta grid and
+		// RELATED's numbered owner entry; Services/Ingresses resolve
+		// RELATED's numbered fronting-Ingress entry (load.go's
+		// resolveRelatedItems) — a kind read but not listed here goes stale
+		// (CLAUDE.md: a screen reading a kind it doesn't display must still
+		// reload on it).
 		switch msg.Kind {
-		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet:
+		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet, kube.KindService, kube.KindIngress:
 			if m.lister != nil {
 				return m, m.load()
 			}
@@ -111,6 +108,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.eventRows = msg.events
 	m.eventsErr = msg.eventsErr
 	m.controller = msg.controller
+	m.related = msg.related
 	if m.selectedContainer >= len(m.pod.ContainerInfos) {
 		m.selectedContainer = max(len(m.pod.ContainerInfos)-1, 0)
 	}
@@ -168,12 +166,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}
-	case "o":
-		if cmd, ok := m.openOwnerWorkload(); ok {
-			return m, cmd
-		}
-	case "i":
-		if cmd, ok := m.openIngress(); ok {
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if cmd, ok := m.openRelated(int(msg.String()[0] - '1')); ok {
 			return m, cmd
 		}
 	case "x":
@@ -287,6 +281,7 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	m.pod = kube.Pod{}
 	m.eventRows = nil
 	m.eventsErr = nil
+	m.related = nil
 	m.selectedContainer = 0
 	m.state = tui.TaskStateLoading
 	m.feedback = "Loading " + m.name + "..."
@@ -362,163 +357,22 @@ func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
-// openOwnerWorkload is 'o': "go to the owning Deployment/StatefulSet".
-// tea.Sequence(BackMsg, GotoResourceMsg) is the same pair events'
-// openSelectedObject uses (poddetail's own doc comment flagged this exact
-// shape as the eventual follow-up once a key existed to hang it on — this
-// is that key) — BackMsg pops to whatever pushed poddetail (browse, in the
-// common case), then GotoResourceMsg asks it to jump. ok is false when the
-// owner can't be resolved to a Deployment or StatefulSet (e.g. a
-// DaemonSet/Job-owned pod, or no owner at all), so the key stays a no-op.
-func (m Model) openOwnerWorkload() (tea.Cmd, bool) {
-	kind, name, ok := m.resolveOwnerWorkload()
-	if !ok {
+// openRelated jumps to the RELATED sidebar's (idx+1)-th entry — the digit
+// keys' replacement for the old 'o'/'i' shortcuts. tui.GotoResource fires
+// the same navigation the 'g' goto palette's own resource picks do,
+// pre-filled: model.go's routeGoto pushes a fresh browse view retargeted at
+// the destination and keeps poddetail one esc-back away, rather than
+// discarding it. ok is false when idx is out of range, so a digit with
+// nothing behind it stays a no-op. The targets themselves are resolved once
+// in load() (load.go's resolveRelatedItems), not here — render/key-handling
+// code stays free of the synchronous lookups that used to live in this
+// file's own resolveOwnerWorkload/resolveIngress.
+func (m Model) openRelated(idx int) (tea.Cmd, bool) {
+	if idx < 0 || idx >= len(m.related) {
 		return nil, false
 	}
-	ns := m.namespace
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name} },
-	), true
-}
-
-// resolveOwnerWorkload resolves the pod's owning Deployment or StatefulSet.
-// A StatefulSet owns its pods directly (m.pod.Owner is already
-// "StatefulSet/name"), but a Deployment never appears as a pod's direct
-// owner — the pod only points at its ReplicaSet — so reaching the
-// Deployment costs one extra ReplicaSet lookup against the cached informer
-// to read *its* OwnerReference in turn.
-func (m Model) resolveOwnerWorkload() (kube.ResourceKind, string, bool) {
-	if !m.found || m.lister == nil {
-		return "", "", false
-	}
-	kind, name, ok := splitOwner(m.pod.Owner)
-	if !ok {
-		return "", "", false
-	}
-	switch kind {
-	case kube.KindStatefulSet:
-		return kube.KindStatefulSet, name, true
-	case kube.KindReplicaSet:
-		ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
-		defer cancel()
-		objs, err := m.lister.ListRaw(ctx, kube.KindReplicaSet, m.namespace)
-		if err != nil {
-			return "", "", false
-		}
-		for _, obj := range objs {
-			rs, ok := obj.(*appsv1.ReplicaSet)
-			if !ok || rs.Name != name {
-				continue
-			}
-			if depKind, depName, ok := splitOwner(ownerRef(rs.OwnerReferences)); ok && depKind == kube.KindDeployment {
-				return kube.KindDeployment, depName, true
-			}
-		}
-	}
-	return "", "", false
-}
-
-// splitOwner parses an "Owner/name" string (kube.PodFromObject's ownerRef
-// shape, e.g. "ReplicaSet/nva-worker-abc123") into its kind/name.
-func splitOwner(owner string) (kube.ResourceKind, string, bool) {
-	kind, name, found := strings.Cut(owner, "/")
-	if !found || kind == "" || name == "" {
-		return "", "", false
-	}
-	return kube.ResourceKind(kind), name, true
-}
-
-// ownerRef mirrors kube.PodFromObject's own unexported helper of the same
-// name (pods.go), duplicated here since a ReplicaSet's OwnerReferences need
-// the identical "Kind/Name" projection and that helper isn't exported.
-func ownerRef(refs []metav1.OwnerReference) string {
-	if len(refs) == 0 {
-		return ""
-	}
-	return refs[0].Kind + "/" + refs[0].Name
-}
-
-// openIngress is 'i': "go to the Ingress that routes to this pod" —
-// resolve the Services whose label selector matches the pod, then the
-// Ingress whose rules/default backend name one of those Services, and jump
-// to the first match via the same BackMsg/GotoResourceMsg pair
-// openOwnerWorkload uses. ok is false when no Ingress can be resolved (no
-// matching Service, no Ingress referencing it, or several matches — this
-// keeps the single-key jump unambiguous rather than guessing).
-func (m Model) openIngress() (tea.Cmd, bool) {
-	name, ok := m.resolveIngress()
-	if !ok {
-		return nil, false
-	}
-	ns := m.namespace
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kube.KindIngress, Namespace: ns, Name: name} },
-	), true
-}
-
-func (m Model) resolveIngress() (string, bool) {
-	if !m.found || m.lister == nil {
-		return "", false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
-	defer cancel()
-
-	svcObjs, err := m.lister.ListRaw(ctx, kube.KindService, m.namespace)
-	if err != nil {
-		return "", false
-	}
-	podLabels := labels.Set(m.pod.Labels)
-	matched := map[string]bool{}
-	for _, obj := range svcObjs {
-		svc, ok := obj.(*corev1.Service)
-		if !ok || len(svc.Spec.Selector) == 0 {
-			continue
-		}
-		if labels.SelectorFromSet(svc.Spec.Selector).Matches(podLabels) {
-			matched[svc.Name] = true
-		}
-	}
-	if len(matched) == 0 {
-		return "", false
-	}
-
-	ingObjs, err := m.lister.ListRaw(ctx, kube.KindIngress, m.namespace)
-	if err != nil {
-		return "", false
-	}
-	name := ""
-	for _, obj := range ingObjs {
-		ing, ok := obj.(*networkingv1.Ingress)
-		if !ok || !ingressReferencesServices(ing, matched) {
-			continue
-		}
-		if name != "" && name != ing.Name {
-			return "", false // ambiguous — more than one Ingress fronts this pod
-		}
-		name = ing.Name
-	}
-	return name, name != ""
-}
-
-// ingressReferencesServices reports whether ing's default backend or any
-// rule's paths name one of services.
-func ingressReferencesServices(ing *networkingv1.Ingress, services map[string]bool) bool {
-	if b := ing.Spec.DefaultBackend; b != nil && b.Service != nil && services[b.Service.Name] {
-		return true
-	}
-	for _, rule := range ing.Spec.Rules {
-		if rule.HTTP == nil {
-			continue
-		}
-		for _, path := range rule.HTTP.Paths {
-			if path.Backend.Service != nil && services[path.Backend.Service.Name] {
-				return true
-			}
-		}
-	}
-	return false
+	item := m.related[idx]
+	return tui.GotoResource(m.session, item.Kind, m.namespace, item.Name), true
 }
 
 // openSelectedForward resolves 'f' for the loaded pod (docs/design

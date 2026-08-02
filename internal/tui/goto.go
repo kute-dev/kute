@@ -630,13 +630,9 @@ func gotoDispatch(sess *Session, item palette.Item) tea.Cmd {
 	}
 	switch target.action {
 	case gotoSwitchKind:
-		pushRecentKind(sess, target.kind)
-		kind := target.kind
-		return func() tea.Msg { return GotoKindMsg{Kind: kind} }
+		return GotoKind(sess, target.kind, "")
 	case gotoOpenResource:
-		pushRecentKind(sess, target.kind)
-		msg := GotoResourceMsg{Kind: target.kind, Namespace: target.namespace, Name: target.name}
-		return func() tea.Msg { return msg }
+		return GotoResource(sess, target.kind, target.namespace, target.name)
 	case gotoSwitchNamespace:
 		pushRecentNamespace(sess, target.namespace)
 		ns := target.namespace
@@ -645,4 +641,29 @@ func gotoDispatch(sess *Session, item palette.Item) tea.Cmd {
 		return func() tea.Msg { return OpenUpdatePanelMsg{} }
 	}
 	return nil
+}
+
+// GotoResource fires the same navigation gotoDispatch's gotoOpenResource
+// case does — pre-filled, without ever opening the palette — so 'g' and
+// every screen's own "jump to related object" action (poddetail's RELATED
+// sidebar, events'/timeline's ↵, routetable's jumps, overview's
+// trouble/changes list) share one goto machinery: the same recents
+// bookkeeping here, and (via routeGoto in model.go's Update, once the
+// returned cmd's message actually arrives) the same push-a-fresh-browse,
+// one-esc-back semantics. sess may be nil (a screen with no session wired,
+// e.g. in tests) — the message still fires, just without the recents push.
+func GotoResource(sess *Session, kind kube.ResourceKind, namespace, name string) tea.Cmd {
+	if sess != nil {
+		pushRecentKind(sess, kind)
+	}
+	return func() tea.Msg { return GotoResourceMsg{Kind: kind, Namespace: namespace, Name: name} }
+}
+
+// GotoKind mirrors GotoResource for a bare kind switch (routetable's
+// Gateway → HTTPRoute listener-filter jump, gotoDispatch's gotoSwitchKind).
+func GotoKind(sess *Session, kind kube.ResourceKind, filter string) tea.Cmd {
+	if sess != nil {
+		pushRecentKind(sess, kind)
+	}
+	return func() tea.Msg { return GotoKindMsg{Kind: kind, Filter: filter} }
 }

@@ -9,10 +9,11 @@
 // CHANGES (the timeline's rollout feed, cluster-wide, 30m) sit in the
 // right. `↹` cycles focus between the three selectable panels (NODES/
 // TROUBLE/CHANGES — CAPACITY is facts only); every focused row's ↵ lands on
-// an existing screen (11b node detail, or back-and-jump to the object, the
-// same tea.Sequence(BackMsg, GotoResourceMsg) pair tasks/timeline's own
-// openSelectedObject already establishes for the identical "pushed on top
-// of browse" shape). `t`/`e` escape to the full cluster-wide timeline/
+// an existing screen (11b node detail, or a jump to the object via
+// tui.GotoResource, the same navigation tasks/timeline's own
+// openSelectedObject and the root shell's 'g' palette use — one esc back to
+// this overview screen, per model.go's routeGoto). `t`/`e` escape to the
+// full cluster-wide timeline/
 // events screens (namespace "" — the same all-namespaces convention
 // tasks/timeline and tasks/events already use).
 package overview

@@ -282,30 +282,13 @@ func TestEnterOnTroublePodBacksAndJumps(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected Enter on TROUBLE to return a command")
 	}
-	// tea.Sequence's result is an unexported slice-of-Cmd type — reflect
-	// over it rather than naming it, so this test doesn't depend on
-	// bubbletea internals.
-	v := reflect.ValueOf(cmd())
-	if v.Kind() != reflect.Slice {
-		t.Fatalf("expected a sequence of commands, got %T", cmd())
-	}
-	var sawBack, sawGoto bool
-	var gotoMsg tui.GotoResourceMsg
-	for i := range v.Len() {
-		sub, ok := v.Index(i).Interface().(tea.Cmd)
-		if !ok || sub == nil {
-			continue
-		}
-		switch out := sub().(type) {
-		case tui.BackMsg:
-			sawBack = true
-		case tui.GotoResourceMsg:
-			sawGoto = true
-			gotoMsg = out
-		}
-	}
-	if !sawBack || !sawGoto {
-		t.Fatalf("expected both BackMsg and GotoResourceMsg, got back=%v goto=%v", sawBack, sawGoto)
+	// tui.GotoResource fires the same navigation the root shell's 'g'
+	// palette does — model.go's routeGoto pushes a fresh browse view and
+	// keeps overview one esc-back away, rather than this screen needing to
+	// pop itself via a BackMsg first.
+	gotoMsg, ok := cmd().(tui.GotoResourceMsg)
+	if !ok {
+		t.Fatalf("expected a GotoResourceMsg, got %T", cmd())
 	}
 	if gotoMsg.Kind != kube.KindPod || gotoMsg.Name == "" {
 		t.Fatalf("GotoResourceMsg = %+v, want a Pod jump", gotoMsg)
@@ -380,19 +363,9 @@ func TestEnterOnOutdatedReleaseJumpsToTheHelmList(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected Enter on an outdated release to return a command")
 	}
-	v := reflect.ValueOf(cmd())
-	if v.Kind() != reflect.Slice {
-		t.Fatalf("expected a sequence of commands, got %T", cmd())
-	}
-	var gotoMsg tui.GotoResourceMsg
-	for i := range v.Len() {
-		sub, ok := v.Index(i).Interface().(tea.Cmd)
-		if !ok || sub == nil {
-			continue
-		}
-		if out, ok := sub().(tui.GotoResourceMsg); ok {
-			gotoMsg = out
-		}
+	gotoMsg, ok := cmd().(tui.GotoResourceMsg)
+	if !ok {
+		t.Fatalf("expected a GotoResourceMsg, got %T", cmd())
 	}
 	if gotoMsg.Kind != kube.KindHelmRelease || gotoMsg.Name != "certs" {
 		t.Fatalf("GotoResourceMsg = %+v, want a HelmRelease jump to certs — a hardcoded Pod kind sends it to the pods table", gotoMsg)

@@ -170,10 +170,9 @@ func cappedMax(n int) int {
 }
 
 // openSelected dispatches ↵ for whichever panel is focused: NODES pushes
-// 11b directly; TROUBLE/CHANGES pop back to whatever pushed this screen
-// (tasks/browse) and jump to the object there — the same tea.Sequence
-// (BackMsg, GotoResourceMsg) pair tasks/timeline's own openSelectedObject
-// already establishes for the identical "pushed on top of browse" shape.
+// 11b directly; TROUBLE/CHANGES jump to the object via tui.GotoResource
+// (jumpTo), the same navigation tasks/timeline's own openSelectedObject and
+// the root shell's palette Enter use.
 func (m Model) openSelected() (tea.Model, tea.Cmd, bool) {
 	switch m.focus {
 	case panelNodes:
@@ -205,10 +204,7 @@ func (m Model) openSelected() (tea.Model, tea.Cmd, bool) {
 }
 
 func (m Model) jumpTo(kind kube.ResourceKind, namespace, name string) tea.Cmd {
-	return tea.Sequence(
-		func() tea.Msg { return tui.BackMsg{} },
-		func() tea.Msg { return tui.GotoResourceMsg{Kind: kind, Namespace: namespace, Name: name} },
-	)
+	return tui.GotoResource(m.session, kind, namespace, name)
 }
 
 func clamp(v, lo, hi int) int {

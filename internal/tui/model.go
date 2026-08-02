@@ -372,6 +372,38 @@ func (m Model) setAllSizes(width, height int) {
 	}
 }
 
+// routeGoto is what makes a jump "fire the same goto machinery as g": when
+// the active task is already the resting browse view (empty stack), it
+// reports ok=false and the caller falls through to the existing
+// bottom-of-Update forward, so browse mutates itself in place exactly as
+// switching kind from its own resting state always has (no stack growth
+// for ordinary kind-switching from browse). Otherwise it builds a fresh
+// browse instance (m.buildBrowse), retargets it with msg, and pushes the
+// task that fired the jump onto the stack beneath it — so Escape walks
+// back exactly one level to it, the same contract every other pushed
+// screen already gives (CLAUDE.md: "esc always walks back exactly one
+// level"). Both GotoKindMsg (12a's kind-result Enter) and GotoResourceMsg
+// (12a's resource-result Enter, and every screen's own pre-filled "jump to
+// related object" action) route through here identically — there is
+// nothing palette-specific about it. ok is false with no buildBrowse
+// factory wired (the 10b no-kubeconfig setup screen never fires a jump, so
+// this is an untested but harmless dead branch).
+func (m *Model) routeGoto(msg tea.Msg) (tea.Cmd, bool) {
+	if len(m.stack) == 0 || m.buildBrowse == nil {
+		return nil, false
+	}
+	fresh := m.buildBrowse()
+	updated, cmd := fresh.Update(msg)
+	task, ok := updated.(Task)
+	if !ok {
+		return nil, false
+	}
+	m.stack = append(m.stack, m.task)
+	m.task = task
+	m.resizeTask()
+	return cmd, true
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Unwrap a reconnected cluster's forwarded event/conn message (see
 	// clusterwatch.go) to the same kube types the switch below and every
@@ -444,17 +476,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, next
 		}
 	case GotoKindMsg:
-		// Also forwarded to the task below: Session.Location stays the
-		// single source of truth for the breadcrumb, browse mutates its own
-		// kind/rows off the same message (mvp-plan.md Phase 2).
+		// routeGoto first, Session.Location write after: when it pushes a
+		// fresh browse view, that view's own browse.New reads
+		// Session.Location.Kind/Namespace to seed its *starting* kind/
+		// namespace — writing the destination there before building it
+		// would make the fresh instance start already "at" msg.Kind, so
+		// its own goToResource sees no change and never issues a load,
+		// leaving it stuck on the loading spinner forever (the bug this
+		// ordering fixes). browse.goToResource re-syncs Location.Kind/
+		// Namespace itself once it actually processes the change (in both
+		// the push and in-place-forward paths), so writing them here again
+		// afterward is a harmless, idempotent overwrite — kept for the
+		// in-place path, where it's still the only place Session.Location
+		// stays the single source of truth for the breadcrumb ahead of
+		// browse's own Update forwarding it (mvp-plan.md Phase 2).
+		cmd, pushed := m.routeGoto(msg)
 		if m.session != nil {
 			m.session.Location.Kind = msg.Kind
 		}
+		if pushed {
+			return m, cmd
+		}
 	case GotoResourceMsg:
+		cmd, pushed := m.routeGoto(msg)
 		if m.session != nil {
 			m.session.Location.Kind = msg.Kind
 			m.session.Location.Namespace = msg.Namespace
 			m.session.Location.Resource = msg.Name
+		}
+		if pushed {
+			return m, cmd
 		}
 	case SwitchNamespaceMsg:
 		if m.session != nil {
@@ -697,22 +748,15 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		var cmd tea.Cmd
 		switch scope {
 		case palette.ScopeGoto:
+			// The goto palette can be opened from any Screen, not just the
+			// root browse task (e.g. poddetail). No stack surgery needed
+			// here any more: the cmd below delivers a GotoKindMsg/
+			// GotoResourceMsg/OpenUpdatePanelMsg on a later Update cycle,
+			// and routeGoto (triggered from those message cases) is what
+			// pushes a fresh browse view and keeps the screen the palette
+			// was opened from one esc-back away — the same machinery every
+			// pre-filled "jump to related object" action now shares.
 			cmd = gotoDispatch(m.session, item)
-			target, isTarget := item.Data.(gotoTarget)
-			opensUpdate := isTarget && target.action == gotoOpenUpdatePanel
-			if cmd != nil && len(m.stack) > 0 && !opensUpdate {
-				// The goto palette can be opened from any Screen, not just
-				// the root browse task (e.g. poddetail) — but only browse
-				// handles GotoKindMsg/GotoResourceMsg. Unwind the stack back
-				// to the root task first, or the message lands on a screen
-				// that ignores it and the jump silently does nothing.
-				// ":update" is the one exception (opensUpdate): its
-				// OpenUpdatePanelMsg pushes onto whatever's already active
-				// (openUpdatePanel), so esc naturally returns to wherever
-				// the palette was opened from, not all the way to root.
-				m.task = m.stack[0]
-				m.stack = nil
-			}
 		case palette.ScopeNamespace:
 			cmd = namespaceDispatch(m.session, item)
 		case palette.ScopeContext:

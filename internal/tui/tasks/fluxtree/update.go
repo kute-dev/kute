@@ -216,13 +216,15 @@ func (m *Model) beginSuspend(row treeRow) tea.Cmd {
 // applied objects, so the inventory screen has no question to answer about
 // one).
 //
-// **Both push a task; neither navigates away.** A tea.Sequence(BackMsg,
-// GotoResourceMsg) — the move tasks/events and tasks/timeline make on ↵ —
-// pops this screen off the stack before jumping, so `esc` from wherever it
-// lands returns to whatever pushed *the tree*, and the tree itself is gone.
-// That is right for a feed you were reading *about* an object and wrong
-// here: the tree is a place you work from, and every ↵ out of it must be one
-// `esc` back in.
+// **Both push a task directly; neither goes through tui.GotoResource.**
+// tasks/events and tasks/timeline's own ↵ fire tui.GotoResource, which lands
+// on a *browse list* with the row selected (one esc back to whichever of
+// them fired it, since model.go's routeGoto pushes a fresh browse view
+// rather than navigating this screen away) — right for a feed you were
+// reading *about* an object. Here it's wrong: the tree is a place you work
+// from, and every ↵ out of it should land straight on the object's own
+// detail view, not a browse-list hop first — so this pushes the detail task
+// itself instead of asking browse to select a row.
 func (m Model) openSelectedDetail() (tea.Model, tea.Cmd, bool) {
 	row, ok := m.selectedRow()
 	if !ok || row.missing {

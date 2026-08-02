@@ -75,8 +75,8 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **CONTAINERS:** grid, header row sandwiched by top/bottom rule lines (same treatment as the main table's own header) — status glyph · name · image (dim, ellipsize) · state (`Waiting · backoff` red / `Running` green) · restarts right-aligned. `↑↓`/`j`/`k` move the selection (not shown in the keybar — see below); the selected row's full-width background (gaps included, not just the cell text) highlights — never `tab`, which is reserved app-wide for panel/grid focus switches, not in-grid row movement. `l` opens logs for whichever container is selected, not always the first.
 - **CPU/MEM bars**, inline on one line (`CPU ▮▯… 4m / 500m   MEM ▮▮… 246Mi / 256Mi`) with `used / limit` text, fenced above and below by the same rule-line treatment as the CONTAINERS header; MEM at 96% renders the bar and text red.
 - **EVENTS (newest first):** grid — type (`Warning` yellow/red, `Normal` blue) · reason · age · message (ellipsize).
-- **Right sidebar** (~25% width, bg `#0a0a0f`, left border): LABELS (`key=` dim, value bright), RELATED (purple links with `↗`: owner deploy, rs, svc, configmaps), TOLERATIONS.
-- **Keybar:** `l logs · x exec · o/i related │ ctrl-d delete │ [/] next/prev pod · ? help` — `esc back` and the CONTAINERS grid's `↑↓` both still work but are dropped from the legend (no room to spell out every implicit shortcut once the band's this full). `[/]` moves through the table's pod list **without leaving detail view**. `o`/`i` jump to the owning Deployment/StatefulSet or fronting Ingress via the shared goto machinery, same as everywhere else it's used (9b events, 16b timeline, 23a routing table, …) — not a stack push, so Escape from the destination behaves like any other browse screen rather than returning to this one specifically.
+- **Right sidebar** (~25% width, bg `#0a0a0f`, left border): LABELS (`key=` dim, value bright), RELATED — the owning Deployment/StatefulSet and the fronting Ingress, when resolvable, each rendered `N Kind/name ↗` (purple link, `N` a 1-based digit in RELATED's own dim color) — pressing that digit jumps via the shared goto machinery, same as everywhere else it's used (9b events, 16b timeline, 23a routing table, …): a fresh browse view opens on the target with poddetail pushed beneath it, so one `esc` back returns here. Resolved once per load, not on keypress, so the digits on screen always match what pressing them does. TOLERATIONS below it.
+- **Keybar:** `l logs · x exec · 1-2 related │ ctrl-d delete │ [/] next/prev pod · ? help` — the related-item hint's key text tracks however many RELATED actually resolved (`1` when there's just the one). `esc back` and the CONTAINERS grid's `↑↓` both still work but are dropped from the legend (no room to spell out every implicit shortcut once the band's this full). `[/]` moves through the table's pod list **without leaving detail view**.
 
 ### 5b — Log view (l from table or detail)
 - Breadcrumb: `… › nva-worker-9k2ss › logs · worker`; right status `▶ following` (green).
@@ -136,7 +136,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Summary strip: `▲ 4 warnings` (yellow) · `○ 31 normal` · right `last hour · deduped · warnings first`.
 - **Deduped, not a firehose:** repeats collapse to one row with a count column (`×41`). Columns: type glyph · REASON·OBJECT (two-line cell: reason colored by severity, object `pod/name` under it in `#676780` 11px) · MESSAGE (widest, verbatim) · × count · LAST right-aligned.
 - Red reserved for events tied to an actively-failing object (BackOff on the crashlooping pod); other warnings yellow. Normal events fold into one group line (`▸ normal · 31 events — Pulled · Created…`), `↹` expands.
-- Keys: `↵` go to object (its table, row selected) · `y` yaml (the selected row's involved object) · `w` warnings only · `t` time window · `/` filter. Events are a routing layer, not a dead end; also reachable per-object from pod detail. Also reachable from the goto palette's Events kind/alias (`g` → `e`), which routes here instead of the stock browse list.
+- Keys: `↵` go to object (its table, row selected — the same navigation the `g` goto palette fires, pre-filled, so one `esc` back returns to this events screen rather than discarding it) · `y` yaml (the selected row's involved object) · `w` warnings only · `t` time window · `/` filter. Events are a routing layer, not a dead end; also reachable per-object from pod detail. Also reachable from the goto palette's Events kind/alias (`g` → `e`), which routes here instead of the stock browse list.
 
 ### 10a — Exec container picker (`x` on a pod)
 - **Skipped entirely for single-container pods.** Small centered panel: header `exec › <pod>` + `2 containers`.
@@ -179,6 +179,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - Footer confirms the destination: `↵ jumps to Deployments in nva-stage — namespace and filter carry over`.
 - Whole jump is three keys (`g d ↵`), no modifier, no chord timing. Any second character makes it a plain fuzzy query, so "no" still finds Nodes and NetworkPolicies.
 - Jump always lands in the **current namespace**; cross-object jumps stay in detail-view RELATED links — one rule per mechanism.
+- **One goto machinery, one `esc` back.** Picking a destination from a pushed screen (poddetail, events, timeline, the routing table, the cluster overview, …) doesn't discard that screen: a fresh browse view opens on top of it, and `esc` returns to exactly where the jump was fired from — the same "one push, one pop" contract every other pushed screen already gives. Every detail screen's own pre-filled "jump to related object" action (poddetail's RELATED sidebar, events'/timeline's `↵`, the routing table's jumps, the overview's TROUBLE/CHANGES `↵`) fires this identical navigation, just without opening the palette to pick it.
 
 ### 13a — Port-forward picker (`f` on a pod/service/deployment row)
 - Same small centered panel recipe as the exec picker (10a). Header: `⇄ forward › <object>` + `pod · nva-stage · 2 ports`.
@@ -236,7 +237,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 16a — Incident timeline (namespace, `t`)
 - Breadcrumb `… › Timeline` + `last 30m` tag. Summary strip counts by kind of change: `⇅ 1 rollout · ↺ 41 restarts · ▲ warnings …`.
-- **One clock, newest first**: events + container restarts + rollout revisions merged into a single feed; rollouts (`⇅` purple) are the visual anchors. Each line: time · glyph · object · what changed; `↵` goes to the object.
+- **One clock, newest first**: events + container restarts + rollout revisions merged into a single feed; rollouts (`⇅` purple) are the visual anchors. Each line: time · glyph · object · what changed; `↵` goes to the object (12a/12b's goto machinery, pre-filled — one `esc` back returns here).
 - Answers "what changed in the last 30m" during an incident — the correlation view events (9b) can't give.
 
 ### 16b — Incident timeline (object-scoped)
@@ -263,7 +264,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 19a — Cluster overview (`g "ov"`)
 - Cluster-scoped (namespace drops from breadcrumb). Strip: top-line trouble counts + `v1.30.2 · 5 nodes · 125 pods · 6 namespaces`.
-- **A routing layer, not a dashboard** — two-column body, every line a selectable row whose `↵` lands on an existing screen: CAPACITY (cpu/mem/pods bars, same bar idiom) + NODES (pressure/cordoned first, `+ 3 ready` collapse) │ TROUBLE (cluster-wide unhealthy-first aggregation, then 18a's outdated Helm releases last — a chart behind its repo is the least urgent thing in the panel, and `↵` on one lands in the Helm list rather than the pods table; empty = `nothing unhealthy · 125 pods running` in green) + RECENT CHANGES (timeline's rollout feed, cluster-wide, 30m).
+- **A routing layer, not a dashboard** — two-column body, every line a selectable row whose `↵` lands on an existing screen (TROUBLE/CHANGES via 12a/12b's goto machinery, pre-filled — one `esc` back returns to this overview): CAPACITY (cpu/mem/pods bars, same bar idiom) + NODES (pressure/cordoned first, `+ 3 ready` collapse) │ TROUBLE (cluster-wide unhealthy-first aggregation, then 18a's outdated Helm releases last — a chart behind its repo is the least urgent thing in the panel, and `↵` on one lands in the Helm list rather than the pods table; empty = `nothing unhealthy · 125 pods running` in green) + RECENT CHANGES (timeline's rollout feed, cluster-wide, 30m).
 - `↹` next panel · `t` timeline · `e` events. **Not the start screen** — pods table (2a) remains the resting state. Keybar pill `OVERVIEW`.
 
 ### 20a — Bulk operations (marked set)
@@ -288,10 +289,10 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **Not a describe page** — one row per host+path → `service:port`, the join raw YAML makes you do in your head. Backends resolve live from the watch: green ● service exists + ready endpoints; red ✕ `service not found` (inline, never a tooltip); yellow ▲ `0 ready`.
 - The ingress **list** earns its keep first: NAME · CLASS · HOSTS · TLS (●/–) · BACKENDS (`3 ok · 1 broken`) · AGE. Strip counts unhealthy-first.
 - TLS column shows cert expiry from the referenced secret (yellow <30d, red expired); a strip above the keybar names each secret — `↵` there jumps to it (21a's secret semantics apply).
-- `↵` on a route → backend Service (9a's filtered-table recipe); `y` copies the full URL. Keybar pill `ROUTES`.
+- `↵` on a route → backend Service (12a/12b's goto machinery, pre-filled — one `esc` back returns to this routing table); `y` copies the full URL. Keybar pill `ROUTES`.
 
 ### 23b — HTTPRoute / Gateway API routing table
-- Gateway API splits routing across **two objects owned by different people** (Gateway = infra, HTTPRoute = app team, joined by parentRefs). Kute resolves the join both ways: the route's parent strip shows `gw/public › https:443 · ✓ accepted` (from `status.parents`); `p` opens the Gateway.
+- Gateway API splits routing across **two objects owned by different people** (Gateway = infra, HTTPRoute = app team, joined by parentRefs). Kute resolves the join both ways: the route's parent strip shows `gw/public › https:443 · ✓ accepted` (from `status.parents`); `p` opens the Gateway (same pre-filled goto jump, one `esc` back).
 - **Attachment status lives in the list**: HTTPRoute list gains ATTACHED (`✓ gw/public` green / `✕ not accepted` red with the condition message verbatim) — a valid-but-unattached route is the #1 Gateway API footgun.
 - One row per rule match → backendRef; weighted backends stack under their match (`└ same match`) with split percentages (canary weight yellow). Same ●/✕/▲ backend grammar as 23a.
 - Gateway `↵` mirrors it: listeners as rows (protocol:port · hostname · TLS + expiry · `12 routes attached`); `↵` on a listener filters to attached routes.
@@ -414,7 +415,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `↵` opens the selected resource's full view; `esc` walks back one level (detail → table; palette/filter → close). While a filter is being typed, `↵` never opens a destination (even for a kind that has one) — it commits the filter instead, keeping the query/rows/chrome as-is but releasing keys back to normal list navigation and verbs; a second `↵` then opens the selected row's destination same as unfiltered. `/` on a committed filter resumes editing the same query.
 - `j/k` and `↑↓` are synonyms for movement everywhere; in pod detail (5a) `[/]` moves to the next/prev sibling pod, and in generic custom resource detail (14d) `j/k` still means next/prev sibling resource.
 - Connection loss: switch to 4a automatically; keep the last snapshot; retry with exponential backoff and a visible countdown; disable mutating verbs. On reconnect, silently return to live and drop the stale strip.
-- RELATED/CONTROLLER links reuse the goto navigation (push detail view of the target).
+- RELATED/CONTROLLER links, and every detail screen's own pre-filled "jump to related object" action (9b/16a-b/23a-b/19a's `↵`), reuse the goto navigation `g` itself uses: a fresh browse view opens on the target kind with the row selected, pushed on top of the screen the jump was fired from — one `esc` back returns to it, the same contract every other pushed screen gives.
 - **Destructive-action policy:** reversible-and-immediate verbs (cordon) execute right away; delete and rollout restart are both tiered — inline `y/N` in non-prod, type-the-name modal in PROD contexts; drain and force-delete get the modal always. The PROD flag comes from a kubeconfig annotation, never a name heuristic.
 - `x` execs: single container → straight to shell; multiple → picker (10a). App suspends, shell takes the tty, exit restores the exact prior state.
 - `e` opens events (namespace-scoped from a list view; object-scoped from a detail view). `↵` on an event navigates to its object.

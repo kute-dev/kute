@@ -493,10 +493,17 @@ func (m Model) sidebarBlock(theme tui.Theme) string {
 	}
 
 	lines = append(lines, "", title.Render("RELATED"))
-	if m.pod.Owner != "" {
-		lines = append(lines, accent.Render(m.pod.Owner+" ↗"))
-	} else {
+	if len(m.related) == 0 {
 		lines = append(lines, dim.Render("none"))
+	} else {
+		// Numbered so a digit key (update.go's openRelated) can jump
+		// straight to it — replaces the old 'o'/'i' shortcuts. The number
+		// shares RELATED's own color (theme.TextFaint) rather than the link's
+		// accent, reading as a hint prefix rather than part of the link text.
+		num := lipgloss.NewStyle().Foreground(theme.TextFaint)
+		for i, item := range m.related {
+			lines = append(lines, num.Render(fmt.Sprintf("%d ", i+1))+accent.Render(item.Label+" ↗"))
+		}
 	}
 
 	lines = append(lines, "", title.Render("TOLERATIONS"))

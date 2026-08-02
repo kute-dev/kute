@@ -7,6 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -55,9 +58,122 @@ func (m Model) load() tea.Cmd {
 		}
 
 		controller := resolveControllerDisplay(ctx, lister, namespace, pod.Owner)
+		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, controller)
 
-		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller}
+		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller, related: related}
 	}
+}
+
+// relatedItem is one RELATED sidebar entry (docs/design README.md §5a) — a
+// numbered jump target resolved once here in load(), never in the render
+// path (CLAUDE.md: render functions are pure, no I/O), so pressing its
+// digit key (update.go's openRelated) can jump without a synchronous
+// lookup. Label is the pre-formatted "Kind/name" text sidebarBlock renders.
+type relatedItem struct {
+	Kind  kube.ResourceKind
+	Name  string
+	Label string
+}
+
+// resolveRelatedItems resolves RELATED's numbered entries: the owning
+// Deployment/StatefulSet (reusing controller's already-resolved
+// ReplicaSet→Deployment hop — DaemonSet/Job owners and an unresolved
+// ReplicaSet are deliberately excluded, matching the old 'o' shortcut's
+// scope) and the Ingress fronting this pod, if any.
+func resolveRelatedItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string, controller string) []relatedItem {
+	var items []relatedItem
+	if kind, name, ok := splitOwner(controller); ok && (kind == kube.KindDeployment || kind == kube.KindStatefulSet) {
+		items = append(items, relatedItem{Kind: kind, Name: name, Label: controller})
+	}
+	if lister != nil {
+		if name, ok := resolveIngressName(ctx, lister, namespace, podLabels); ok {
+			items = append(items, relatedItem{Kind: kube.KindIngress, Name: name, Label: string(kube.KindIngress) + "/" + name})
+		}
+	}
+	return items
+}
+
+// resolveIngressName resolves the Ingress that fronts a pod carrying
+// podLabels: the Services whose label selector matches it, then the
+// Ingress whose rules/default backend name one of those Services. ok is
+// false when no Ingress can be resolved (no matching Service, no Ingress
+// referencing it, or several matches — this keeps the numbered jump
+// unambiguous rather than guessing).
+func resolveIngressName(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string) (string, bool) {
+	svcObjs, err := lister.ListRaw(ctx, kube.KindService, namespace)
+	if err != nil {
+		return "", false
+	}
+	selector := labels.Set(podLabels)
+	matched := map[string]bool{}
+	for _, obj := range svcObjs {
+		svc, ok := obj.(*corev1.Service)
+		if !ok || len(svc.Spec.Selector) == 0 {
+			continue
+		}
+		if labels.SelectorFromSet(svc.Spec.Selector).Matches(selector) {
+			matched[svc.Name] = true
+		}
+	}
+	if len(matched) == 0 {
+		return "", false
+	}
+
+	ingObjs, err := lister.ListRaw(ctx, kube.KindIngress, namespace)
+	if err != nil {
+		return "", false
+	}
+	name := ""
+	for _, obj := range ingObjs {
+		ing, ok := obj.(*networkingv1.Ingress)
+		if !ok || !ingressReferencesServices(ing, matched) {
+			continue
+		}
+		if name != "" && name != ing.Name {
+			return "", false // ambiguous — more than one Ingress fronts this pod
+		}
+		name = ing.Name
+	}
+	return name, name != ""
+}
+
+// ingressReferencesServices reports whether ing's default backend or any
+// rule's paths name one of services.
+func ingressReferencesServices(ing *networkingv1.Ingress, services map[string]bool) bool {
+	if b := ing.Spec.DefaultBackend; b != nil && b.Service != nil && services[b.Service.Name] {
+		return true
+	}
+	for _, rule := range ing.Spec.Rules {
+		if rule.HTTP == nil {
+			continue
+		}
+		for _, path := range rule.HTTP.Paths {
+			if path.Backend.Service != nil && services[path.Backend.Service.Name] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// splitOwner parses an "Owner/name" string (kube.PodFromObject's ownerRef
+// shape, e.g. "ReplicaSet/nva-worker-abc123") into its kind/name.
+func splitOwner(owner string) (kube.ResourceKind, string, bool) {
+	kind, name, found := strings.Cut(owner, "/")
+	if !found || kind == "" || name == "" {
+		return "", "", false
+	}
+	return kube.ResourceKind(kind), name, true
+}
+
+// ownerRef mirrors kube.PodFromObject's own unexported helper of the same
+// name (pods.go), duplicated here since a ReplicaSet's OwnerReferences need
+// the identical "Kind/Name" projection and that helper isn't exported.
+func ownerRef(refs []metav1.OwnerReference) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	return refs[0].Kind + "/" + refs[0].Name
 }
 
 // resolveControllerDisplay resolves owner (pod.Owner, "Kind/name") for 5a's

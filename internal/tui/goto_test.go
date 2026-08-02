@@ -379,13 +379,88 @@ func (t *pushableScreenTask) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return t, nil
 }
 
-// TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches pins the fix
-// for the goto palette doing nothing from a pushed detail screen (e.g.
-// poddetail): GotoKindMsg/GotoResourceMsg are only handled by the browse
-// task, so selecting an item while a detail screen is active must first
-// unwind the stack back to the root browse task before the message is
-// dispatched, or the jump silently no-ops.
-func TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches(t *testing.T) {
+// sessionAwareBrowseStub mimics the one piece of real browse.Model
+// behavior that plain screenTask doesn't: browse.New seeds its *own*
+// starting kind from Session.Location.Kind at construction time, and
+// browse.goToResource only actually reloads when a Goto message's kind
+// differs from what the instance already has — an unrelated jump to the
+// kind it already shows is a no-op by design. If routeGoto ever mutates
+// Session.Location *before* calling buildBrowse, the fresh instance is
+// born already "at" the destination and this short-circuit swallows the
+// load that should have happened — the bug behind "jump gets stuck on the
+// loading screen" (real browse.Model's own doc comment on this exact
+// tradeoff: goToResource's early return when !kindChanged && !namespaceChanged).
+type sessionAwareBrowseStub struct {
+	screenTask
+	kind   kube.ResourceKind
+	loaded bool
+}
+
+func newSessionAwareBrowseStub(sess *tui.Session) *sessionAwareBrowseStub {
+	return &sessionAwareBrowseStub{screenTask: screenTask{name: "browse"}, kind: sess.Location.Kind}
+}
+
+func (t *sessionAwareBrowseStub) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if goto_, ok := msg.(tui.GotoResourceMsg); ok {
+		if goto_.Kind != t.kind {
+			t.kind = goto_.Kind
+			t.loaded = true
+		}
+		return t, nil
+	}
+	t.screenTask.Update(msg)
+	return t, nil
+}
+
+// TestRouteGotoBuildsFreshBrowseBeforeMutatingSessionLocation pins the fix
+// for a jump landing on a stuck loading screen: routeGoto must build the
+// fresh browse view (via buildBrowse, which reads Session.Location.Kind/
+// Namespace to seed the new instance's starting kind — same as a real
+// browse.New) before model.go's own Session.Location write, or the fresh
+// instance starts already "at" the destination and never loads anything.
+func TestRouteGotoBuildsFreshBrowseBeforeMutatingSessionLocation(t *testing.T) {
+	t.Parallel()
+	sess := &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "c", Kind: kube.KindPod}}
+
+	detail := &screenTask{name: "poddetail"}
+	browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: detail}
+	var fresh *sessionAwareBrowseStub
+	buildBrowse := func() tui.Task {
+		fresh = newSessionAwareBrowseStub(sess)
+		return fresh
+	}
+
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"}) // push poddetail
+	m := updated.(tui.Model)
+
+	// Simulate poddetail's RELATED digit firing a pre-filled jump to a
+	// different kind — the exact tui.GotoResourceMsg shape tui.GotoResource
+	// produces (poddetail's own openRelated).
+	updated, _ = m.Update(tui.GotoResourceMsg{Kind: kube.KindIngress, Namespace: "default", Name: "api"})
+	_ = updated.(tui.Model)
+
+	if fresh == nil {
+		t.Fatal("expected routeGoto to build a fresh browse task")
+	}
+	if !fresh.loaded {
+		t.Fatal("fresh browse view never loaded — Session.Location was mutated before it was built, so the fresh instance started already \"at\" the destination and its own change-detection saw nothing to do")
+	}
+}
+
+// TestRootModelGotoFromPushedScreenPushesFreshBrowseAndPreservesHistory pins
+// the fix for the goto palette discarding history from a pushed detail
+// screen (e.g. poddetail): GotoKindMsg/GotoResourceMsg are only handled by
+// the browse task, so picking a destination while a detail screen is active
+// used to unwind the *entire* stack back to root before dispatching —
+// discarding not just the detail screen but everything beneath it too.
+// Now routeGoto builds a fresh browse view (via the WithRootFactories
+// buildBrowse factory) and pushes the screen the palette was opened from
+// onto the stack beneath it, so one Escape returns to exactly where 'g' was
+// pressed, and a second Escape reaches the original browse task untouched
+// — "one jump = one esc back," the same contract a live push already gives.
+func TestRootModelGotoFromPushedScreenPushesFreshBrowseAndPreservesHistory(t *testing.T) {
 	t.Parallel()
 	lister := gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {gotoTestPod("default", "api-1")},
@@ -394,8 +469,13 @@ func TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches(t *testing.T)
 
 	detail := &screenTask{name: "poddetail"}
 	browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: detail}
+	freshBrowses := 0
+	buildBrowse := func() tui.Task {
+		freshBrowses++
+		return &screenTask{name: "browse"}
+	}
 
-	model := tui.NewWithSession(browseTask, sess)
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
 	m := updated.(tui.Model)
@@ -414,8 +494,11 @@ func TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches(t *testing.T)
 	if cmd == nil {
 		t.Fatalf("expected enter on the pre-selected kind to return a navigation cmd")
 	}
-	if !strings.Contains(m.View().Content, "browse") || strings.Contains(m.View().Content, "poddetail") {
-		t.Fatalf("expected the stack unwound back to browse immediately on dispatch:\n%s", m.View().Content)
+	// Picking a destination doesn't touch the stack by itself — only once
+	// the dispatched message actually arrives (below) does routeGoto act,
+	// same as any other tea.Cmd-driven navigation.
+	if !strings.Contains(m.View().Content, "poddetail") {
+		t.Fatalf("expected poddetail still active until the goto message arrives:\n%s", m.View().Content)
 	}
 
 	msg := cmd()
@@ -424,16 +507,29 @@ func TestRootModelGotoFromPushedScreenReturnsToBrowseAndDispatches(t *testing.T)
 	}
 	updated, _ = m.Update(msg)
 	m = updated.(tui.Model)
-	if len(browseTask.updates) != 1 {
-		t.Fatalf("expected the GotoKindMsg forwarded to the browse task, got %d forwards", len(browseTask.updates))
+	if freshBrowses != 1 {
+		t.Fatalf("expected routeGoto to build exactly one fresh browse task, got %d", freshBrowses)
+	}
+	if len(browseTask.updates) != 0 {
+		t.Fatalf("expected the original browse task untouched by the jump, got %d forwards", len(browseTask.updates))
+	}
+	if !strings.Contains(m.View().Content, "browse") {
+		t.Fatalf("expected the fresh browse view active after the jump:\n%s", m.View().Content)
 	}
 
-	// A subsequent back should have nothing left to pop to (the detail
-	// screen was discarded, not just hidden behind browse).
+	// esc back once returns to poddetail — the screen the palette was
+	// opened from, one level away exactly as a live push would give.
+	updated, _ = m.Update(tui.BackMsg{})
+	m = updated.(tui.Model)
+	if !strings.Contains(m.View().Content, "poddetail") {
+		t.Fatalf("expected the first esc back to land on poddetail:\n%s", m.View().Content)
+	}
+
+	// esc back again reaches the *original* browse task, still intact.
 	updated, _ = m.Update(tui.BackMsg{})
 	m = updated.(tui.Model)
 	if !strings.Contains(m.View().Content, "browse") {
-		t.Fatalf("expected browse to remain active with an empty stack:\n%s", m.View().Content)
+		t.Fatalf("expected the second esc back to land on the original browse task:\n%s", m.View().Content)
 	}
 }
 

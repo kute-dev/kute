@@ -329,11 +329,11 @@ func TestSourceRevisionReadsIndexForAChartRepo(t *testing.T) {
 //
 // tui.Model pushes the current task onto its back-stack precisely when a
 // task's Update returns a *different* task instance, and a tui.BackMsg pops
-// one level. So "↵ returns a new task, and never a BackMsg" is exactly the
-// property that makes esc come back — and the failure it guards is subtle:
-// the tea.Sequence(BackMsg, GotoResourceMsg) jump that tasks/events and
-// tasks/timeline make on ↵ pops this screen *before* navigating, which
-// leaves esc returning to whatever pushed the tree, with the tree gone.
+// one level. So "↵ returns a new task, and never a tui.GotoResource cmd" is
+// exactly the property that makes esc come back to the tree itself rather
+// than a browse list — the jump tasks/events and tasks/timeline make on ↵
+// (see fluxtree/update.go's openSelectedDetail doc comment for why that
+// shape is right for them and wrong here).
 func TestEnterPushesSoEscapeComesBack(t *testing.T) {
 	opened := map[string]bool{}
 	newTree := func(t *testing.T) *Model {

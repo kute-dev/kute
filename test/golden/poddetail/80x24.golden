@@ -5,7 +5,7 @@ nva-worker-9k2ss  ✕ CrashLoopBackOff  ↺ 6 restarts        │ LABELS
 ▌                                                         │ tier=backend        
 ▌ Last termination  exit 137 · OOMKilled · 4m ago         │                     
 ▌ Container worker exceeded memory limit 256Mi. Next      │ RELATED             
-▌ backoff ~5m.                                            │ ReplicaSet/nva-work…
+▌ backoff ~5m.                                            │ 1 Deployment/nva-wo…
 ▌                                                         │                     
                                                           │ TOLERATIONS         
 NODE         IP            QOS          CONTROLLER     …  │ node.kubernetes.io/…
@@ -21,4 +21,4 @@ CONTAINERS                                                │
 CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 2…  │                     
 ────────────────────────────────────────────────────────  │                     
 ────────────────────────────────────────────────────────────────────────────────
-   POD  l logs  x exec  o/i related │ ctrl-d delete │ [/] next/prev     ? help  
+   POD  l logs  x exec  1 related │ ctrl-d delete │ [/] next/prev       ? help  

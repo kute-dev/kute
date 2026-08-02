@@ -133,9 +133,13 @@ type Model struct {
 	gone bool
 	// controller is 5a's resolved CONTROLLER display text (loadedMsg's own
 	// field doc comment explains the ReplicaSet→Deployment hop) — separate
-	// from pod.Owner, which RELATED/'o' still read as the pod's direct,
-	// unresolved owner.
+	// from pod.Owner, which is the pod's direct, unresolved owner.
 	controller string
+	// related is the RELATED sidebar's numbered jump targets, resolved once
+	// in load() (loadedMsg's own field doc comment explains why) — pressing
+	// a digit key jumps to related[digit-1] the same way 'o'/'i' used to
+	// resolve on demand.
+	related []relatedItem
 
 	eventRows []kube.Event
 	// eventsErr is the last events fetch's failure — the EVENTS grid shows
@@ -177,6 +181,12 @@ type loadedMsg struct {
 	// Deployment never appears as a pod's direct owner. Resolved here
 	// (load()'s tea.Cmd) rather than in metaGrid, which must stay pure.
 	controller string
+	// related is the RELATED sidebar's numbered jump targets (owning
+	// Deployment/StatefulSet, fronting Ingress) — resolved here for the same
+	// reason controller is: metaGrid/sidebarBlock must stay pure, so a digit
+	// press can jump without a synchronous lookup (CLAUDE.md: render
+	// functions are pure, no I/O).
+	related []relatedItem
 }
 
 func New(cfg Config) Model {

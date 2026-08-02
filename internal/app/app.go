@@ -516,49 +516,23 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
 		sess.Lister = lister
 		sess.Metrics = demoCluster
-		openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
-		openYAML := openYAMLFunc(sess, demoCluster)
-		openExec := openExecFunc(sess, demoCluster)
-		openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
-		openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
-		openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
-		openEvents := openEventsFunc(sess, demoCluster, openYAML)
-		openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
-		openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
-		openObjectTimeline := openObjectTimelineFunc(sess, demoCluster, openObjectEvents)
-		b := browse.New(browse.Config{
-			Session:            sess,
-			Lister:             lister,
-			Metrics:            demoCluster,
-			NodeMetrics:        demoCluster,
-			Mutator:            demoCluster,
-			OpenLogs:           openLogs,
-			OpenNodeDetail:     openNodeDetail,
-			OpenPodDetail:      openPodDetail,
-			OpenYAML:           openYAML,
-			OpenEvents:         openEvents,
-			OpenTimeline:       openTimeline,
-			OpenObjectTimeline: browse.OpenObjectTimelineFunc(openObjectTimeline),
-			OpenExec:           browse.OpenExecFunc(openExec),
-			OpenForward:        openForward,
-			OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
-			OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
-			OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
-			OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
-			OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
-			OpenHelmHistory:    openHelmHistoryFunc(sess, demoCluster),
-			OpenHelmValues:     openHelmValuesFunc(sess),
-			OpenSecretData:     openSecretDataFunc(sess, demoCluster),
-			OpenConfigMapData:  openConfigMapDataFunc(sess, demoCluster),
-			OpenOverview:       openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
-			Forwards:           sess.Forwards,
-			Retrier:            demoCluster,
-		})
+		b := buildDemoBrowseTask(sess, demoCluster, clusterName, namespace)
 		// No restore-to-9b carve-out here (unlike the real-cluster branch
 		// above): BuildSession returns before ever reading PerContext for
 		// cfg.Demo (session.go), so Session.Location.Kind is always "" at
 		// this point — Location.Kind == KindEvent can't happen in demo mode.
-		model := tui.NewWithSession(&b, sess).WithUpdatePanel(buildUpdateFactory(sess, checker)).WithKeycast(cfg.Keycast)
+		//
+		// WithRootFactories(nil, ...): buildSetup stays nil (--demo never
+		// needs 4c's reconnect flow), but routeGoto (internal/tui/model.go)
+		// still needs a buildBrowse factory to push a fresh browse view for
+		// a jump fired from a pushed screen (poddetail's RELATED, events'/
+		// timeline's ↵, ...) — without it those jumps would silently no-op
+		// in --demo, the one path WithRootFactories was never wired for
+		// before this.
+		model := tui.NewWithSession(b, sess).
+			WithRootFactories(nil, buildDemoBrowseFactory(sess, demoCluster, clusterName, namespace)).
+			WithUpdatePanel(buildUpdateFactory(sess, checker)).
+			WithKeycast(cfg.Keycast)
 		return model, nil, demoCluster
 
 	default:
@@ -652,6 +626,61 @@ func buildSetupFactory(cfg Config, sess *tui.Session, cluster *kube.Cluster) fun
 // state — same import-cycle reasoning as buildSetupFactory.
 func buildBrowseFactory(cfg Config, sess *tui.Session, cluster *kube.Cluster) func() tui.Task {
 	return func() tui.Task { return buildBrowseTask(cfg, sess, cluster) }
+}
+
+// buildDemoBrowseTask constructs browse against demoCluster, per repo
+// convention — shared by NewModel's initial --demo wiring and
+// buildDemoBrowseFactory's rebuild so the two never drift, the same
+// relationship buildBrowseTask/buildBrowseFactory have for a real cluster.
+// clusterName/namespace are threaded through explicitly (rather than
+// re-derived from demoCluster) since namespace may already carry -n's
+// override by the time NewModel's demo branch calls this.
+func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterName, namespace string) *browse.Model {
+	lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
+	openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
+	openYAML := openYAMLFunc(sess, demoCluster)
+	openExec := openExecFunc(sess, demoCluster)
+	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
+	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
+	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
+	openEvents := openEventsFunc(sess, demoCluster, openYAML)
+	openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
+	openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
+	openObjectTimeline := openObjectTimelineFunc(sess, demoCluster, openObjectEvents)
+	b := browse.New(browse.Config{
+		Session:            sess,
+		Lister:             lister,
+		Metrics:            demoCluster,
+		NodeMetrics:        demoCluster,
+		Mutator:            demoCluster,
+		OpenLogs:           openLogs,
+		OpenNodeDetail:     openNodeDetail,
+		OpenPodDetail:      openPodDetail,
+		OpenYAML:           openYAML,
+		OpenEvents:         openEvents,
+		OpenTimeline:       openTimeline,
+		OpenObjectTimeline: browse.OpenObjectTimelineFunc(openObjectTimeline),
+		OpenExec:           browse.OpenExecFunc(openExec),
+		OpenForward:        openForward,
+		OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
+		OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
+		OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
+		OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
+		OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
+		OpenHelmHistory:    openHelmHistoryFunc(sess, demoCluster),
+		OpenHelmValues:     openHelmValuesFunc(sess),
+		OpenSecretData:     openSecretDataFunc(sess, demoCluster),
+		OpenConfigMapData:  openConfigMapDataFunc(sess, demoCluster),
+		OpenOverview:       openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
+		Forwards:           sess.Forwards,
+		Retrier:            demoCluster,
+	})
+	return &b
+}
+
+// buildDemoBrowseFactory mirrors buildBrowseFactory for --demo.
+func buildDemoBrowseFactory(sess *tui.Session, demoCluster *fake.Cluster, clusterName, namespace string) func() tui.Task {
+	return func() tui.Task { return buildDemoBrowseTask(sess, demoCluster, clusterName, namespace) }
 }
 
 // attemptReconnect is tasks/setup's Reconnect hook (10b's 'r'/'k', 4c's
