@@ -356,7 +356,7 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	task, cmd := m.openLogs(row.pod, m.width, m.height)
+	task, cmd := m.openLogs(row.pod, "", m.width, m.height)
 	return task, cmd, task != nil
 }
 

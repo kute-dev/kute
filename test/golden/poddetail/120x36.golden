@@ -11,11 +11,14 @@ NODE         IP            QOS          CONTROLLER                 AGE          
 worker-01    10.1.34.19    Burstable    Deployment/nva-worker ↗    3h                   │ node.kubernetes.io/not-ready …
                                                                                         │                               
 CONTAINERS                                                                              │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
      NAME                    IMAGE                    STATE                 RESTARTS    │                               
-  ▲  worker                  nva/worker:1.42.0        Waiting · CrashLoop…       6 ↺    │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
+▎ ▲  worker                  nva/worker:1.42.0        Waiting · CrashLoop…       6 ↺    │                               
   ●  metrics-sidecar         nva/sidecar:0.9.1        Running                    0 ↺    │                               
-CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m                                                          │                               
-MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                                                      │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
+CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                     │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
                                                                                         │                               
 EVENTS · newest first                                                                   │                               
 Warning   BackOff           1m      Back-off restarting failed container worker         │                               
@@ -29,8 +32,5 @@ Normal    Pulled            4m      Image already present on machine            
                                                                                         │                               
                                                                                         │                               
                                                                                         │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   POD  esc back │ [/] next/prev │ l logs  x exec  alt+o/i related  tab cycle │ ctrl-d delete                   ? help  
+   POD  l logs  x exec  o/i related │ ctrl-d delete │ [/] next/prev                                             ? help  

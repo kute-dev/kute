@@ -39,7 +39,9 @@ type OpenPodFunc func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd)
 
 // OpenLogsFunc pushes the log-stream screen for pod — same shape as
 // browse.OpenLogsFunc, so app.go can wire both from the same closure.
-type OpenLogsFunc func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd)
+// nodedetail has no per-container selection of its own, so it always
+// passes "" for container (falls back to index 0).
+type OpenLogsFunc func(pod kube.Pod, container string, width, height int) (tea.Model, tea.Cmd)
 
 // OpenExecFunc pushes tasks/execpicker (10a) for a pod row with more than one
 // container — same shape as browse.OpenExecFunc, duplicated per the repo's

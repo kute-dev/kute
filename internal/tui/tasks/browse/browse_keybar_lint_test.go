@@ -24,7 +24,7 @@ func TestKeybarNoDuplicateKeysPerKind(t *testing.T) {
 	t.Parallel()
 
 	stub := func(kube.Pod, []string, int, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
-	openLogs := func(kube.Pod, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
+	openLogs := func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 	openForward := func(kube.ForwardTarget, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 	openNodeDetail := func(string, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 	openHelmValues := func(kube.HelmRelease, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }

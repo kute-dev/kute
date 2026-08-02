@@ -103,11 +103,17 @@ type Config struct {
 	// Lister is optional — used only to refresh the pod's live restart
 	// count when synthesizing a reconnect boundary entry. A nil Lister
 	// falls back to the Restarts count captured when the screen opened.
-	Lister     resources.RawLister
-	Pod        SelectedPod
-	Streamer   kube.PodLogStreamer
-	MaxEntries int
-	TailLines  int64
+	Lister   resources.RawLister
+	Pod      SelectedPod
+	Streamer kube.PodLogStreamer
+	// InitialContainer names the container to start streaming (poddetail's
+	// 'l' opens on whichever row the CONTAINERS grid had selected) — empty
+	// falls back to index 0, unchanged from before this field existed. A
+	// name that isn't in Pod.Containers (stale selection, race with a pod
+	// update) falls back the same way rather than erroring.
+	InitialContainer string
+	MaxEntries       int
+	TailLines        int64
 }
 
 type Model struct {
@@ -154,12 +160,21 @@ func New(cfg Config) Model {
 		cfg.TailLines = DefaultTailLines
 	}
 
+	containerIdx := 0
+	for i, name := range cfg.Pod.Containers {
+		if name == cfg.InitialContainer {
+			containerIdx = i
+			break
+		}
+	}
+
 	return Model{
-		width:   tui.DefaultWidth,
-		height:  tui.DefaultHeight,
-		session: cfg.Session,
-		lister:  cfg.Lister,
-		pod:     cfg.Pod,
+		width:        tui.DefaultWidth,
+		height:       tui.DefaultHeight,
+		session:      cfg.Session,
+		lister:       cfg.Lister,
+		pod:          cfg.Pod,
+		containerIdx: containerIdx,
 		view: LogViewState{
 			AutoScroll: true,
 			Wrap:       true,
@@ -177,8 +192,10 @@ func New(cfg Config) Model {
 }
 
 // FromPod builds podlogs for pod, opened from browse/poddetail — the shape
-// every OpenLogsFunc caller in internal/app wires against.
-func FromPod(session *tui.Session, lister resources.RawLister, pod kube.Pod, streamer kube.PodLogStreamer) Model {
+// every OpenLogsFunc caller in internal/app wires against. initialContainer
+// is the container to start streaming (poddetail's CONTAINERS grid
+// selection) — empty falls back to index 0.
+func FromPod(session *tui.Session, lister resources.RawLister, pod kube.Pod, initialContainer string, streamer kube.PodLogStreamer) Model {
 	return New(Config{
 		Session: session,
 		Lister:  lister,
@@ -189,7 +206,8 @@ func FromPod(session *tui.Session, lister resources.RawLister, pod kube.Pod, str
 			Containers: pod.Containers,
 			Restarts:   pod.Restarts,
 		},
-		Streamer: streamer,
+		InitialContainer: initialContainer,
+		Streamer:         streamer,
 	})
 }
 

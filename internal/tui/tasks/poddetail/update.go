@@ -148,8 +148,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.moveSibling(1)
 	case "[":
 		return m, m.moveSibling(-1)
-	case "tab":
-		m.cycleContainer()
+	case "up", "k":
+		m.moveContainerSelection(-1)
+	case "down", "j":
+		m.moveContainerSelection(1)
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
@@ -166,11 +168,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}
-	case "alt+o":
+	case "o":
 		if cmd, ok := m.openOwnerWorkload(); ok {
 			return m, cmd
 		}
-	case "alt+i":
+	case "i":
 		if cmd, ok := m.openIngress(); ok {
 			return m, cmd
 		}
@@ -296,23 +298,39 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
-func (m *Model) cycleContainer() {
+// moveContainerSelection shifts the CONTAINERS grid's selected row by delta,
+// clamped rather than wrapping — same as browse's own moveSelection (j/k ≡
+// ↑↓ everywhere, CLAUDE.md convention).
+func (m *Model) moveContainerSelection(delta int) {
 	n := len(m.pod.ContainerInfos)
 	if n == 0 {
 		return
 	}
-	m.selectedContainer = (m.selectedContainer + 1) % n
+	next := m.selectedContainer + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= n {
+		next = n - 1
+	}
+	m.selectedContainer = next
 }
 
 // openSelectedLogs pushes the log-stream screen for the loaded pod — same
 // contract as browse.openSelectedLogs (ok is false when logs aren't wired
 // or nothing's loaded yet, so 'l' stays a no-op rather than pushing a
-// broken screen).
+// broken screen). Opens on whichever container the CONTAINERS grid has
+// selected, not always index 0 — the only screen among openLogs' three
+// callers with a per-container selection to hand off.
 func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	if m.openLogs == nil || !m.found {
 		return nil, nil, false
 	}
-	task, cmd := m.openLogs(m.pod, m.width, m.height)
+	container := ""
+	if m.selectedContainer < len(m.pod.ContainerInfos) {
+		container = m.pod.ContainerInfos[m.selectedContainer].Name
+	}
+	task, cmd := m.openLogs(m.pod, container, m.width, m.height)
 	return task, cmd, task != nil
 }
 
@@ -344,7 +362,7 @@ func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
-// openOwnerWorkload is alt+o: "go to the owning Deployment/StatefulSet".
+// openOwnerWorkload is 'o': "go to the owning Deployment/StatefulSet".
 // tea.Sequence(BackMsg, GotoResourceMsg) is the same pair events'
 // openSelectedObject uses (poddetail's own doc comment flagged this exact
 // shape as the eventual follow-up once a key existed to hang it on — this
@@ -421,7 +439,7 @@ func ownerRef(refs []metav1.OwnerReference) string {
 	return refs[0].Kind + "/" + refs[0].Name
 }
 
-// openIngress is alt+i: "go to the Ingress that routes to this pod" —
+// openIngress is 'i': "go to the Ingress that routes to this pod" —
 // resolve the Services whose label selector matches the pod, then the
 // Ingress whose rules/default backend name one of those Services, and jump
 // to the first match via the same BackMsg/GotoResourceMsg pair

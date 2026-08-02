@@ -40,7 +40,10 @@ type EventsReader interface {
 
 // OpenLogsFunc pushes the log-stream screen for pod — same shape as
 // browse.OpenLogsFunc, so app.go can wire both from the same closure.
-type OpenLogsFunc func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd)
+// container names which container to start streaming — poddetail passes
+// the CONTAINERS grid's selected row so 'l' opens on it rather than always
+// index 0.
+type OpenLogsFunc func(pod kube.Pod, container string, width, height int) (tea.Model, tea.Cmd)
 
 // OpenYAMLFunc pushes tasks/yamlview (8a) for the named object — same shape
 // as browse.OpenYAMLFunc.
@@ -130,7 +133,7 @@ type Model struct {
 	gone bool
 	// controller is 5a's resolved CONTROLLER display text (loadedMsg's own
 	// field doc comment explains the ReplicaSet→Deployment hop) — separate
-	// from pod.Owner, which RELATED/alt+o still read as the pod's direct,
+	// from pod.Owner, which RELATED/'o' still read as the pod's direct,
 	// unresolved owner.
 	controller string
 
@@ -145,8 +148,8 @@ type Model struct {
 	// red "◌ disconnected" mid-outage).
 	conn kube.ConnState
 
-	// selectedContainer highlights a row in the CONTAINERS grid ('tab'
-	// cycles it) — display-only in this pass, no exec/logs container
+	// selectedContainer highlights a row in the CONTAINERS grid (↑↓/j/k
+	// move it) — display-only in this pass, no exec/logs container
 	// targeting wired yet.
 	selectedContainer int
 

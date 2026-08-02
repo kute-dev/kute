@@ -328,7 +328,7 @@ func attachChangeCause(ctx context.Context, lister resources.RawLister, namespac
 // Deployment name — objectName itself when it already is one, or (for a
 // Pod) a walk through its ReplicaSet owner to that ReplicaSet's own
 // Deployment owner, the identical two-hop lookup poddetail's own
-// resolveOwnerWorkload makes for its "alt+o" related-Deployment jump
+// resolveOwnerWorkload makes for its "o" related-Deployment jump
 // (duplicated per the repo's package-local-seam convention — task packages
 // don't import each other). Every other object kind (Node, a StatefulSet-
 // owned pod, …) has no rollout-revision concept, so ok is false.

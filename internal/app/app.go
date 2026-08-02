@@ -1249,14 +1249,14 @@ func (s liveClusterLogStreamer) StreamPodLogs(ctx context.Context, req kube.LogS
 }
 
 func openLogsFunc(sess *tui.Session, lister resources.RawLister, streamer kube.PodLogStreamer, clusterName, namespace string) browse.OpenLogsFunc {
-	return func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd) {
+	return func(pod kube.Pod, container string, width, height int) (tea.Model, tea.Cmd) {
 		if pod.Context == "" {
 			pod.Context = clusterName
 		}
 		if pod.Namespace == "" {
 			pod.Namespace = namespace
 		}
-		logs := podlogs.FromPod(sess, lister, pod, streamer)
+		logs := podlogs.FromPod(sess, lister, pod, container, streamer)
 		logs.SetSize(width, height)
 		return &logs, logs.Start()
 	}

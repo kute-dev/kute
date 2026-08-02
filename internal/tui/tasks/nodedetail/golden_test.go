@@ -119,7 +119,7 @@ func goldenNodeDetailModel(t *testing.T, width, height int) Model {
 	// 11b's full hint set, not the degraded subset — same reasoning as
 	// poddetail's own golden model.
 	openPod := func(kube.Pod, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
-	openLogs := func(kube.Pod, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
+	openLogs := func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
 	openExec := func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
 	openYAML := func(kube.ResourceKind, string, string, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
 	openEvents := func(kube.ResourceKind, string, string, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }

@@ -333,7 +333,7 @@ func TestLogsKeyOpensLogsScreen(t *testing.T) {
 		kube.KindPod: {pod("default", "api-1")},
 	}}
 	opened := false
-	m := New(Config{Session: newSession(), Lister: lister, OpenLogs: func(p kube.Pod, w, h int) (tea.Model, tea.Cmd) {
+	m := New(Config{Session: newSession(), Lister: lister, OpenLogs: func(p kube.Pod, _ string, w, h int) (tea.Model, tea.Cmd) {
 		opened = true
 		if p.Name != "api-1" || p.Namespace != "default" {
 			t.Fatalf("unexpected pod passed to OpenLogs: %+v", p)

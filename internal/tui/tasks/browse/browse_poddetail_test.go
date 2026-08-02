@@ -103,7 +103,7 @@ func TestPodKeybarShowsOpenAndLogsWhenWired(t *testing.T) {
 	m := New(Config{
 		Session: newSession(), Lister: lister,
 		OpenPodDetail: func(kube.Pod, []string, int, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
-		OpenLogs:      func(kube.Pod, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
+		OpenLogs:      func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
 	})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())

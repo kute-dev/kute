@@ -118,7 +118,7 @@ func goldenPodDetailModel(t *testing.T, width, height int) Model {
 	sess.Location.Namespace = "nva-stage"
 	// The open seams + mutator + siblings are wired (no-op stubs) so the
 	// keybar renders §5a's full hint set, not the degraded subset.
-	openStub := func(kube.Pod, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
+	openStub := func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
 	openObjStub := func(kube.ResourceKind, string, string, int, int) (tea.Model, tea.Cmd) { return sentinelTask{}, nil }
 	m := New(Config{
 		Session: sess, Lister: lister, Metrics: metrics,

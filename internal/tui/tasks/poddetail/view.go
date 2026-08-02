@@ -295,7 +295,7 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 		{Title: "Restarts", Min: 8, Align: components.AlignRight},
 	}
 	rows := make([]components.Row, 0, len(m.pod.ContainerInfos))
-	for i, c := range m.pod.ContainerInfos {
+	for _, c := range m.pod.ContainerInfos {
 		var glyph string
 		var glyphStyle lipgloss.Style
 		stateStyle := lipgloss.NewStyle().Foreground(theme.Good)
@@ -327,15 +327,6 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 		if c.Restarts > 0 {
 			restartStyle = lipgloss.NewStyle().Foreground(theme.Warn)
 		}
-		// The selection wash only means something when tab has somewhere to
-		// go — a single-container pod renders plain (no stray highlight).
-		if i == m.selectedContainer && len(m.pod.ContainerInfos) > 1 {
-			nameStyle = nameStyle.Background(theme.SelBg)
-			imgStyle = imgStyle.Background(theme.SelBg)
-			stateStyle = stateStyle.Background(theme.SelBg)
-			restartStyle = restartStyle.Background(theme.SelBg)
-			glyphStyle = glyphStyle.Background(theme.SelBg)
-		}
 		rows = append(rows, components.Row{Cells: []components.Cell{
 			{Text: glyph, Style: glyphStyle},
 			{Text: c.Name, Style: nameStyle},
@@ -344,23 +335,40 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 			{Text: fmt.Sprintf("%d %s", c.Restarts, tui.GlyphRestarts), Style: restartStyle},
 		}})
 	}
-	t := components.Table{
-		Columns:     cols,
-		Rows:        rows,
-		Selected:    -1,
-		Width:       width,
-		Height:      len(rows) + 1,
-		HeaderStyle: lipgloss.NewStyle().Foreground(theme.TextFaint),
-		FooterStyle: lipgloss.NewStyle().Foreground(theme.TextGhost),
+	// The selection bar only means something when ↑↓ has somewhere to go —
+	// a single-container pod renders plain (no stray highlight). Selection
+	// goes through Table's own Selected/SelRowStyle/SelBarStyle (not a
+	// per-cell Background) so the highlight covers the inter-column gaps
+	// too, not just the cell text (components.Table.renderRowV2's own doc
+	// comment on the class of bug this avoids).
+	selected := -1
+	if len(m.pod.ContainerInfos) > 1 {
+		selected = m.selectedContainer
 	}
-	bars := m.barsLine(theme, width)
-	return title + "\n" + t.Render() + "\n" + bars
+	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
+	t := components.Table{
+		Columns:        cols,
+		Rows:           rows,
+		Selected:       selected,
+		Width:          width,
+		Height:         len(rows) + 2,
+		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint),
+		FooterStyle:    lipgloss.NewStyle().Foreground(theme.TextGhost),
+		SelBarStyle:    lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg),
+		SelRowStyle:    lipgloss.NewStyle().Background(theme.SelBg),
+		ShowHeaderRule: true,
+		RuleStyle:      rule,
+	}
+	hr := rule.Render(strings.Repeat("─", width))
+	bars := m.barsLine(theme)
+	return title + "\n" + hr + "\n" + t.Render() + "\n" + hr + "\n" + bars + "\n" + hr
 }
 
-// barsLine renders the CPU/MEM bars vs each container's summed limits
-// (docs/design README.md §5a: "CPU/MEM bars with used/limit text; MEM at
-// 96% renders the bar and text red").
-func (m Model) barsLine(theme tui.Theme, width int) string {
+// barsLine renders the CPU/MEM bars vs each container's summed limits, side
+// by side on one line (docs/design README.md §5a: "CPU/MEM bars with
+// used/limit text; MEM at 96% renders the bar and text red"), fenced by
+// containersBlock's own rule lines above/below.
+func (m Model) barsLine(theme tui.Theme) string {
 	barStyles := components.BarStyles{
 		Track: lipgloss.NewStyle().Foreground(theme.BarTrack),
 		Fill:  lipgloss.NewStyle().Foreground(theme.Accent),
@@ -381,9 +389,9 @@ func (m Model) barsLine(theme tui.Theme, width int) string {
 	memText := memStyle.Render(fmt.Sprintf("%s / %s", usageText(m.pod.MEM), limitText(m.pod.MEMLimitBytes, formatBytes)))
 
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
-	line1 := faint.Render("CPU ") + cpuBar + " " + cpuText
-	line2 := faint.Render("MEM ") + memBar + " " + memText
-	return line1 + "\n" + line2
+	cpu := faint.Render("CPU ") + cpuBar + " " + cpuText
+	mem := faint.Render("MEM ") + memBar + " " + memText
+	return cpu + "   " + mem
 }
 
 func ratio(used, limit int64) float64 {
@@ -507,9 +515,16 @@ func (m Model) sidebarBlock(theme tui.Theme) string {
 }
 
 // sidebarLine wraps one pre-styled sidebar content line with the border
-// gutter; joinColumns' Pad pads/clips it to the panel width.
+// gutter; joinColumns' Pad pads/clips it to the panel width. Styled through
+// TextGhost2 rather than Border — chrome.go's own header/strip/keybar rules
+// deliberately use the text ramp's ghost tones instead of Border/
+// BorderSubtle, which "nearly disappear against a real terminal's own
+// background once rendered without an explicit bg fill" (chrome.go's own
+// rationale); a bare "│" on this panel's unfilled background is exactly
+// that case, so it follows the same convention as every other rule in the
+// app instead of the darker token meant for filled/bordered surfaces.
 func sidebarLine(theme tui.Theme, content string) string {
-	return lipgloss.NewStyle().Foreground(theme.Border).Render("│ ") + content
+	return lipgloss.NewStyle().Foreground(theme.TextGhost2).Render("│ ") + content
 }
 
 // deleteConfirmModal renders 8b's type-the-name modal for the pod's delete

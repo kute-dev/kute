@@ -848,7 +848,7 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		pod = kube.Pod{Namespace: m.namespace, Name: row.Name}
 	}
-	task, cmd := m.openLogs(pod, m.width, m.height)
+	task, cmd := m.openLogs(pod, "", m.width, m.height)
 	return task, cmd, task != nil
 }
 

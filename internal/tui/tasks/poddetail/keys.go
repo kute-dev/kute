@@ -57,10 +57,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
-	if len(m.siblings) > 1 {
-		groups = append(groups, []tui.KeyHint{{Key: "[/]", Label: "next/prev"}})
-	}
+	groups := [][]tui.KeyHint{}
 	verbGroup := []tui.KeyHint{}
 	if m.openLogs != nil {
 		verbGroup = append(verbGroup, verbs.Logs.Hint())
@@ -71,21 +68,21 @@ func (m Model) Keybar() tui.Keybar {
 	if m.found && m.openForward != nil {
 		verbGroup = append(verbGroup, verbs.Forward.Hint())
 	}
-	// alt+o/i share one hint slot (owner/ingress jump, mvp-tasks.md poddetail
+	// o/i share one hint slot (owner/ingress jump, mvp-tasks.md poddetail
 	// follow-up) — spelling them out as two separate entries doesn't fit
 	// this band's width budget alongside everything else already curated
 	// here (5a's kitchen-sink fixture already renders at ~zero slack).
 	if m.pod.Owner != "" {
-		verbGroup = append(verbGroup, tui.KeyHint{Key: "alt+o/i", Label: "related"})
-	}
-	if len(m.pod.ContainerInfos) > 1 {
-		verbGroup = append(verbGroup, tui.KeyHint{Key: "tab", Label: "cycle"})
+		verbGroup = append(verbGroup, tui.KeyHint{Key: "o/i", Label: "related"})
 	}
 	if len(verbGroup) > 0 {
 		groups = append(groups, verbGroup)
 	}
 	if m.mutator != nil && !verbs.Delete.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Delete.Hint()})
+	}
+	if len(m.siblings) > 1 {
+		groups = append(groups, []tui.KeyHint{{Key: "[/]", Label: "next/prev"}})
 	}
 
 	// 4a's offline treatment (docs/design README.md §52, §301): mutating

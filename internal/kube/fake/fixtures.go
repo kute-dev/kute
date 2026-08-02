@@ -45,8 +45,8 @@ func NewDemo() *Cluster {
 	now := metav1.Now()
 	age := func(d time.Duration) metav1.Time { return metav1.NewTime(now.Add(-d)) }
 
-	// apiPod/workerPod carry OwnerReferences + labels so poddetail's alt+o
-	// (owning Deployment/StatefulSet) and alt+i (fronting Ingress) have real
+	// apiPod/workerPod carry OwnerReferences + labels so poddetail's 'o'
+	// (owning Deployment/StatefulSet) and 'i' (fronting Ingress) have real
 	// chains to resolve in --demo: apiPod -> ReplicaSet api-7d9f6c8 ->
 	// Deployment api -> Service api -> Ingress api; workerPod -> StatefulSet
 	// worker directly (no intermediate ReplicaSet, same as a real cluster).

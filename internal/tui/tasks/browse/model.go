@@ -48,8 +48,10 @@ type MetricsReader interface {
 
 // OpenLogsFunc pushes the log-stream screen for pod, mirroring the
 // pre-redesign pods screen's equivalent shape so app.go's existing streamer
-// wiring carries over unchanged.
-type OpenLogsFunc func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd)
+// wiring carries over unchanged. container names which container to start
+// streaming — empty falls back to index 0 (browse has no per-container
+// selection of its own, so it always passes "").
+type OpenLogsFunc func(pod kube.Pod, container string, width, height int) (tea.Model, tea.Cmd)
 
 // ConnRetrier lets browse trigger an immediate reconnect probe on 'r' while
 // offline (4a), bypassing the exponential backoff wait — satisfied by

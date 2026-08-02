@@ -564,7 +564,7 @@ func TestOpenLogsHandoff(t *testing.T) {
 		kube.KindPod: {runningPod("api-0", "default", "node-a")},
 	}}
 	var openedFor string
-	openLogs := func(pod kube.Pod, _, _ int) (tea.Model, tea.Cmd) {
+	openLogs := func(pod kube.Pod, _ string, _, _ int) (tea.Model, tea.Cmd) {
 		openedFor = pod.Name
 		return sentinelTask{}, nil
 	}
@@ -578,6 +578,32 @@ func TestOpenLogsHandoff(t *testing.T) {
 	}
 	if openedFor != "api-0" {
 		t.Fatalf("openLogs called for %q, want api-0", openedFor)
+	}
+}
+
+// TestOpenLogsUsesSelectedContainer covers the CONTAINERS grid → 'l' handoff
+// (docs/design README.md §5a): moving the selection with ↓/j before pressing
+// 'l' must open logs on that container, not always index 0.
+func TestOpenLogsUsesSelectedContainer(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {multiContainerPod("api-0", "default", "node-a")},
+	}}
+	var openedContainer string
+	openLogs := func(_ kube.Pod, container string, _, _ int) (tea.Model, tea.Cmd) {
+		openedContainer = container
+		return sentinelTask{}, nil
+	}
+	m := New(Config{Session: newSession(), Lister: lister, OpenLogs: openLogs, Namespace: "default", Name: "api-0"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "down"})
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "l"})
+	if _, ok := updated.(sentinelTask); !ok {
+		t.Fatalf("expected 'l' to hand off to the logs task, got %T", updated)
+	}
+	if openedContainer != "sidecar" {
+		t.Fatalf("openLogs called with container %q, want sidecar", openedContainer)
 	}
 }
 

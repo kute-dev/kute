@@ -96,7 +96,7 @@ func TestOpenLogsHandoff(t *testing.T) {
 		kube.KindPod:  {schedPod("default", "big", "node-a", "1Gi")},
 	}}
 	var openedPod kube.Pod
-	openLogs := func(pod kube.Pod, _, _ int) (tea.Model, tea.Cmd) {
+	openLogs := func(pod kube.Pod, _ string, _, _ int) (tea.Model, tea.Cmd) {
 		openedPod = pod
 		return sentinelTask{}, nil
 	}

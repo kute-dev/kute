@@ -12,13 +12,13 @@ NODE         IP            QOS          CONTROLLER     …  │ node.kubernetes.
 worker-01    10.1.34.19    Burstable    Deployment/nva-…  │                     
                                                           │                     
 CONTAINERS                                                │                     
+────────────────────────────────────────────────────────  │                     
      NAME        IMAGE         STATE                 RE…  │                     
-  ▲  worker      nva/worker:…  Waiting · CrashLoop…    …  │                     
+────────────────────────────────────────────────────────  │                     
+▎ ▲  worker      nva/worker:…  Waiting · CrashLoop…    …  │                     
   ●  metrics-s…  nva/sidecar…  Running                 …  │                     
-CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m                            │                     
-MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                        │                     
-                                                          │                     
-EVENTS · newest first                                     │                     
-Warning   BackOff           1m      Back-off restar…      │                     
+────────────────────────────────────────────────────────  │                     
+CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 2…  │                     
+────────────────────────────────────────────────────────  │                     
 ────────────────────────────────────────────────────────────────────────────────
-   POD  esc back │ [/] next/prev │ l logs  x exec  alt+o/i related  tab cycle...
+   POD  l logs  x exec  o/i related │ ctrl-d delete │ [/] next/prev     ? help  
