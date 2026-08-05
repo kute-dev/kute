@@ -181,6 +181,12 @@ func statusColor(theme tui.Theme, class string) color.Color {
 		return theme.Warn
 	case "fail":
 		return theme.Bad
+	// "neutral" (statusClass's Completed pod) is the same "parked, benign,
+	// nothing to see" hue the browse list's StatusNeutral already renders
+	// (docs/design README.md; resources.go's own doc comment) — Info blue,
+	// not the TextDim the unhandled default used to fall through to.
+	case "neutral":
+		return theme.Info
 	default:
 		return theme.TextDim
 	}
@@ -308,8 +314,18 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 				stateText = "Waiting · " + c.Reason
 			}
 		case "Terminated":
-			glyph, glyphStyle = "○", lipgloss.NewStyle().Foreground(theme.Warn)
-			stateStyle = lipgloss.NewStyle().Foreground(theme.Warn)
+			// A clean exit (Reason "Completed", the kubelet's own label for
+			// ExitCode 0) isn't a warning — e.g. a Job container that ran to
+			// completion — so it renders the app's neutral blue (theme.Info),
+			// the same "parked, benign, nothing to see" hue statusColor's
+			// "neutral" class and the browse list's StatusNeutral already use
+			// for a Completed pod, not yellow.
+			termColor := theme.Warn
+			if c.Reason == "Completed" {
+				termColor = theme.Info
+			}
+			glyph, glyphStyle = "○", lipgloss.NewStyle().Foreground(termColor)
+			stateStyle = lipgloss.NewStyle().Foreground(termColor)
 			if c.Reason != "" {
 				stateText = "Terminated · " + c.Reason
 			}

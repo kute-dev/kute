@@ -99,6 +99,72 @@ func TestPodFromObjectDetectsLastTermination(t *testing.T) {
 	}
 }
 
+// TestPodFromObjectExitCodeZeroIsNotALastTermination pins the fix for a
+// completed Job pod rendering a false "Exit code 0" error banner: a clean
+// exit was never "why is it broken," so it must not populate
+// LastTermination at all.
+func TestPodFromObjectExitCodeZeroIsNotALastTermination(t *testing.T) {
+	t.Parallel()
+	finished := metav1.NewTime(time.Now().Add(-time.Minute))
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "batch-1-x7f2k"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "app",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 0, Reason: "Completed", FinishedAt: finished},
+					},
+				},
+			},
+		},
+	}
+
+	got := PodFromObject(pod)
+	if got.LastTermination != nil {
+		t.Fatalf("LastTermination = %+v, want nil for a clean exit 0", got.LastTermination)
+	}
+}
+
+// TestPodFromObjectExitCodeZeroDoesNotMaskRealCrash guards against the exit-0
+// exclusion in findLastTermination hiding a genuine crash in another
+// container just because it happens to be more recent.
+func TestPodFromObjectExitCodeZeroDoesNotMaskRealCrash(t *testing.T) {
+	t.Parallel()
+	older := metav1.NewTime(time.Now().Add(-time.Hour))
+	newer := metav1.NewTime(time.Now().Add(-time.Minute))
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "mixed"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}, {Name: "sidecar"}}},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "app",
+					LastTerminationState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, Reason: "OOMKilled", FinishedAt: older},
+					},
+				},
+				{
+					Name: "sidecar",
+					LastTerminationState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 0, Reason: "Completed", FinishedAt: newer},
+					},
+				},
+			},
+		},
+	}
+
+	got := PodFromObject(pod)
+	if got.LastTermination == nil {
+		t.Fatalf("expected the OOMKilled termination to still surface")
+	}
+	if got.LastTermination.Container != "app" || got.LastTermination.ExitCode != 137 {
+		t.Errorf("LastTermination = %+v, want app's exit 137 OOMKilled, not sidecar's clean exit 0", got.LastTermination)
+	}
+}
+
 func TestPodFromObjectContainerWithoutStatusYet(t *testing.T) {
 	t.Parallel()
 	pod := &corev1.Pod{

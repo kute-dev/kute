@@ -3,6 +3,7 @@ package poddetail
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +173,176 @@ func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, 
 
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
+}
+
+// completedJobPod mirrors a completed Job's pod: Succeeded phase, one
+// container whose current State.Terminated exited cleanly (ExitCode 0,
+// Reason "Completed") — findLastTermination (kube/pods.go) excludes this
+// from LastTermination, so the 5a banner must not render for it.
+func completedJobPod(name, ns, node string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns,
+			OwnerReferences:   []metav1.OwnerReference{{Kind: "Job", Name: "batch-1"}},
+			CreationTimestamp: metav1.Now(),
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   node,
+			Containers: []corev1.Container{{Name: "app", Image: "example.com/batch:v1"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "app",
+				Ready:        false,
+				RestartCount: 0,
+				State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+					ExitCode: 0, Reason: "Completed", FinishedAt: metav1.Now(),
+				}},
+			}},
+		},
+	}
+}
+
+// erroredContainerPod is completedJobPod's negative twin: the container is
+// currently Terminated but with a real failure (ExitCode 1, Reason
+// "Error"), not a clean completion — used to prove the CONTAINERS grid's
+// new green-for-Completed carve-out doesn't also turn a genuine failure
+// green.
+func erroredContainerPod(name, ns, node string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: metav1.Now()},
+		Spec: corev1.PodSpec{
+			NodeName:   node,
+			Containers: []corev1.Container{{Name: "app", Image: "example.com/batch:v1"}},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodFailed,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "app",
+				Ready:        false,
+				RestartCount: 0,
+				State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+					ExitCode: 1, Reason: "Error", FinishedAt: metav1.Now(),
+				}},
+			}},
+		},
+	}
+}
+
+// TestTerminatedContainerColorMatchesCleanVsRealExit pins 5a's CONTAINERS
+// grid: a clean completion (Reason "Completed", ExitCode 0) renders the same
+// neutral blue (theme.Info) the pods list and this screen's own title line
+// already use for a Completed pod, while a real failure (Reason "Error")
+// keeps the yellow warning color it always had.
+func TestTerminatedContainerColorMatchesCleanVsRealExit(t *testing.T) {
+	neutral := "38;2;106;168;239" // theme.Info (#6aa8ef)
+	warn := "38;2;232;199;74"     // theme.Warn (#e8c74a)
+
+	t.Run("clean completion renders neutral blue", func(t *testing.T) {
+		lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindPod: {completedJobPod("batch-1-x7f2k", "default", "node-a")},
+		}}
+		m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "batch-1-x7f2k"})
+		m.SetSize(120, 40)
+		m = step(t, m, m.Init()())
+
+		// The State column is narrow enough to truncate "Terminated ·
+		// Completed" to "Terminated · Comple…", so match on the stable
+		// "Terminated ·" prefix rather than the full reason text.
+		line := findLine(t, m.Render(), "Terminated · Comple")
+		code := statusTextColorCode(t, line, "Terminated")
+		if !strings.Contains(code, neutral) {
+			t.Errorf("Terminated · Completed color = %q, want to contain theme.Info %q", code, neutral)
+		}
+	})
+
+	t.Run("real failure stays yellow", func(t *testing.T) {
+		lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindPod: {erroredContainerPod("batch-1-x9k2m", "default", "node-a")},
+		}}
+		m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "batch-1-x9k2m"})
+		m.SetSize(120, 40)
+		m = step(t, m, m.Init()())
+
+		line := findLine(t, m.Render(), "Terminated · Error")
+		code := statusTextColorCode(t, line, "Terminated")
+		if !strings.Contains(code, warn) {
+			t.Errorf("Terminated · Error color = %q, want to contain theme.Warn %q", code, warn)
+		}
+	})
+}
+
+// TestCompletedPodTitleStatusRendersNeutralBlue pins statusColor's "neutral"
+// class (statusClass's Completed pod) to theme.Info — the same hue the
+// browse list's StatusNeutral already renders for a Completed pod — rather
+// than silently falling through to theme.TextDim via the unhandled default
+// case.
+func TestCompletedPodTitleStatusRendersNeutralBlue(t *testing.T) {
+	neutral := "38;2;106;168;239" // theme.Info (#6aa8ef)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {completedJobPod("batch-1-x7f2k", "default", "node-a")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "batch-1-x7f2k"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	line := findLine(t, m.Render(), "Completed")
+	code := statusTextColorCode(t, line, "○")
+	if !strings.Contains(code, neutral) {
+		t.Errorf("title status color = %q, want to contain theme.Info %q", code, neutral)
+	}
+}
+
+// findLine returns the first line of view containing substr.
+func findLine(t *testing.T, view, substr string) string {
+	t.Helper()
+	for l := range strings.SplitSeq(view, "\n") {
+		if strings.Contains(l, substr) {
+			return l
+		}
+	}
+	t.Fatalf("no line containing %q in view:\n%s", substr, plain(view))
+	return ""
+}
+
+// statusTextColorCode extracts the ANSI color code immediately preceding
+// word's own text run in line (an ANSI-styled Render() output), where
+// Render wraps each span as "\x1b[<code>m<text>\x1b[0m" with no
+// intervening escape between the code and the text it colors.
+func statusTextColorCode(t *testing.T, line, word string) string {
+	t.Helper()
+	re := regexp.MustCompile("\x1b\\[([0-9;]+)m" + regexp.QuoteMeta(word))
+	m := re.FindStringSubmatch(line)
+	if m == nil {
+		t.Fatalf("could not find a styled %q run in line:\n%q", word, line)
+	}
+	return m[1]
+}
+
+// TestCompletedJobPodHasNoTerminationBanner pins the fix for a completed
+// Job's pod rendering a false "Exit code 0" error banner: a clean
+// completion is never "why is it broken," so the banner must be absent and
+// only the neutral Completed status line shown.
+func TestCompletedJobPodHasNoTerminationBanner(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {completedJobPod("batch-1-x7f2k", "default", "node-a")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "batch-1-x7f2k"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if m.pod.LastTermination != nil {
+		t.Fatalf("expected LastTermination nil for a clean exit 0, got %+v", m.pod.LastTermination)
+	}
+
+	view := plain(m.Render())
+	if strings.Contains(view, "Last termination") {
+		t.Fatalf("expected no termination banner for a clean exit 0 completion:\n%s", view)
+	}
+	if !strings.Contains(view, "Completed") {
+		t.Fatalf("expected the neutral Completed status line:\n%s", view)
+	}
 }
 
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {

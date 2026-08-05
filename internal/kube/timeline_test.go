@@ -41,6 +41,20 @@ func TestTimelineFromRestartsSkipsPodsWithoutTermination(t *testing.T) {
 	}
 }
 
+// TestTimelineFromRestartsSkipsCleanJobCompletion pins that a completed Job
+// pod's clean exit 0 (findLastTermination in pods.go leaves LastTermination
+// nil for these) never surfaces as a mislabeled "Restarted ... exit 0"
+// timeline entry.
+func TestTimelineFromRestartsSkipsCleanJobCompletion(t *testing.T) {
+	pods := []Pod{
+		{Name: "batch-1-x7f2k", Namespace: "default"}, // LastTermination nil, mirrors a completed Job pod
+	}
+	entries := TimelineFromRestarts(pods)
+	if len(entries) != 0 {
+		t.Fatalf("entries = %+v, want none for a cleanly completed pod", entries)
+	}
+}
+
 func newReplicaSet(name, deployment string, revision string, image string, created time.Time) *appsv1.ReplicaSet {
 	rs := &appsv1.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{

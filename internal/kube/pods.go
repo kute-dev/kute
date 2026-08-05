@@ -46,7 +46,7 @@ type Pod struct {
 	Labels          map[string]string
 	Tolerations     []string // formatted "key=value:Effect" / "key (exists):Effect"
 	ContainerInfos  []ContainerInfo
-	LastTermination *LastTermination // nil when no container has ever terminated
+	LastTermination *LastTermination // nil when no container has ever terminated abnormally (see findLastTermination)
 	// GracePeriodSeconds is Spec.TerminationGracePeriodSeconds, or the
 	// cluster default (30) when unset — 8b's delete confirm shows this
 	// concrete figure instead of a generic "default grace period applies"
@@ -71,8 +71,10 @@ type ContainerInfo struct {
 }
 
 // LastTermination is the 5a last-termination banner: the most recent
-// container termination across the pod, promoted to the top of detail so
-// "why is it broken?" is answered first.
+// *abnormal* container termination across the pod, promoted to the top of
+// detail so "why is it broken?" is answered first. A clean ExitCode 0 never
+// populates this (see findLastTermination) — e.g. a Job's pod that ran to
+// completion was never "why is it broken."
 type LastTermination struct {
 	Container  string
 	ExitCode   int32
@@ -241,15 +243,17 @@ func applyContainerStatus(info *ContainerInfo, s corev1.ContainerStatus) {
 }
 
 // findLastTermination scans both current and last-known termination states
-// across every container and returns the most recent one (by FinishedAt),
-// for the 5a last-termination banner. Returns nil when no container has
-// ever terminated.
+// across every container and returns the most recent abnormal one (by
+// FinishedAt), for the 5a last-termination banner. Returns nil when no
+// container has ever terminated abnormally — a clean ExitCode 0 (e.g. a
+// completed Job's pod) never wins here, since it was never "why is it
+// broken."
 func findLastTermination(statuses []corev1.ContainerStatus) *LastTermination {
 	var best *corev1.ContainerStateTerminated
 	var bestName string
 	var bestRestarts int32
 	consider := func(name string, t *corev1.ContainerStateTerminated, restarts int32) {
-		if t == nil {
+		if t == nil || t.ExitCode == 0 {
 			return
 		}
 		if best == nil || t.FinishedAt.After(best.FinishedAt.Time) {
