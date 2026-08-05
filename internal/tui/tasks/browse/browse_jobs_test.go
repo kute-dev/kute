@@ -269,6 +269,37 @@ func TestJobRetryStaysInlineEvenInProd(t *testing.T) {
 	}
 }
 
+// TestJobSuspendEscalatesToModalConfirmInProd pins the fix for
+// beginJobSuspend's own broken PROD escalation (the same bug class
+// TestCtrlRProdOpensTypeNameModal pins for rollout-restart): unlike Retry,
+// JobSuspend has a real destructive side effect (tears down the Job's active
+// pods immediately), so a prod-tagged context must escalate 's' from
+// TierInline to TierModal — landing on the plain ConfirmCard (Drain's/
+// Rollback's treatment), not the typed-name modal, since job-suspend isn't
+// in requiresTypeNameConfirm/requiresTypedName.
+func TestJobSuspendEscalatesToModalConfirmInProd(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {suspendedJobObj("default", "batch-1", false)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindJob
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
+		t.Fatalf("expected 's' in a prod context to escalate to TierModal, tier=%v", m.actions.Tier())
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.jobSuspends) != 1 || mut.jobSuspends[0] != "default/batch-1=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.jobSuspends)
+	}
+}
+
 // TestSKeyTogglesJobSuspendAndResumeLabel mirrors
 // TestFluxSuspendVerbFlipsDirectionWithTheRow, adjusted for TierInline
 // (Job's own suspend needs 'y' after 's', unlike Flux's TierNone).

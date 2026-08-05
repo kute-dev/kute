@@ -84,16 +84,24 @@ func jobRetryWillRunLine(scope tui.TaskScope) string {
 
 // beginJobSuspend starts verbs.JobSuspend ('s'): one verb, two directions,
 // exactly beginFluxSuspend's (flux.go) shape — Scope.Verb flips between
-// "job-suspend"/"job-resume" based on row.Suspended. Always TierInline, same
-// no-TierFor reasoning as beginJobRetry above: neither "job-suspend" nor
-// "job-resume" is in requiresTypedName, so a PROD-escalated TierModal would
-// render identically to TierInline anyway.
+// "job-suspend"/"job-resume" based on row.Suspended. Unlike beginJobRetry's
+// deliberate skip of TierFor, this one is routed through it: JobSuspend's own
+// verbs.go doc comment is explicit that suspending a Job tears down its
+// active pods immediately, a real destructive side effect Retry's clone-only
+// semantics don't have, so PROD escalating TierInline to TierModal is not a
+// no-op here — TierModal replaces the table with confirmBody's full
+// ConfirmCard overlay, TierInline stays an inline keybar y/N row with the
+// table still visible. Neither "job-suspend" nor "job-resume" is in
+// requiresTypeNameConfirm/requiresTypedName, so the escalated PROD confirm
+// still renders the plain ConfirmCard, not the typed-name modal — the same
+// treatment Drain and Rollback already get.
 func (m *Model) beginJobSuspend(row resources.Row) tea.Cmd {
 	verb, label := "job-suspend", fmt.Sprintf("Suspend %s?", row.Name)
 	if row.Suspended {
 		verb, label = "job-resume", fmt.Sprintf("Resume %s?", row.Name)
 	}
-	return m.actions.Begin(verbs.JobSuspend.Tier, tui.TaskAction{
+	tier := verbs.TierFor(verbs.JobSuspend, m.isProd())
+	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    verb + "-" + row.Name,
 		Label: label,
 		Scope: tui.TaskScope{
