@@ -275,6 +275,59 @@ func TestProjectPodFailedShowsPodReasonOverContainerReason(t *testing.T) {
 	}
 }
 
+// TestProjectJobSuspendedIsNeutral pins the fix for a deliberately-paused
+// Job (browse's 's' verb) rendering as a stuck yellow warning: suspended
+// sets Row.Suspended (the same field §30a's Flux rows use — needed at
+// keypress time to pick suspend vs. resume) and StatusNeutral, matching the
+// app's "parked, benign, nothing to see" hue for a Completed pod.
+func TestProjectJobSuspendedIsNeutral(t *testing.T) {
+	suspend := true
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"},
+		Spec:       batchv1.JobSpec{Completions: ptr32(3), Suspend: &suspend},
+		Status:     batchv1.JobStatus{Succeeded: 1}, // incomplete — would be StatusWarn if not suspended
+	}
+	row := projectJob(job)
+	if !row.Suspended {
+		t.Fatalf("expected Row.Suspended = true, got false")
+	}
+	if row.Status != StatusNeutral {
+		t.Fatalf("expected StatusNeutral for a suspended, incomplete Job, got %s", row.Status)
+	}
+}
+
+// TestProjectJobFailedOverridesSuspended guards against Suspended's neutral
+// status masking a real, already-recorded failure.
+func TestProjectJobFailedOverridesSuspended(t *testing.T) {
+	suspend := true
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"},
+		Spec:       batchv1.JobSpec{Completions: ptr32(3), Suspend: &suspend},
+		Status:     batchv1.JobStatus{Succeeded: 1, Failed: 1},
+	}
+	row := projectJob(job)
+	if row.Status != StatusFail {
+		t.Fatalf("expected StatusFail to win over Suspended's neutral, got %s", row.Status)
+	}
+}
+
+// TestProjectJobNotSuspendedLeavesRowUnset guards against Suspended
+// defaulting true on a nil Spec.Suspend.
+func TestProjectJobNotSuspendedLeavesRowUnset(t *testing.T) {
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"},
+		Spec:       batchv1.JobSpec{Completions: ptr32(1)},
+		Status:     batchv1.JobStatus{Succeeded: 1},
+	}
+	row := projectJob(job)
+	if row.Suspended {
+		t.Fatalf("expected Row.Suspended = false for a nil Spec.Suspend")
+	}
+	if row.Status != StatusOK {
+		t.Fatalf("expected StatusOK for a completed, non-suspended Job, got %s", row.Status)
+	}
+}
+
 func TestProjectIngressBackends(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	ing := &networkingv1.Ingress{

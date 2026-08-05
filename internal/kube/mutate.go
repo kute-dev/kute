@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -102,6 +104,19 @@ type Mutator interface {
 	// workload. Non-destructive: it asks for the reconciliation that would
 	// have happened on the next interval anyway.
 	RequestFluxReconcile(ctx context.Context, kind ResourceKind, namespace, name string) error
+	// RetryJob clones name's spec into a new Job called newName — get, strip
+	// the fields the API server must regenerate (selector, controller-uid/
+	// job-name template labels), create. The original Job (its Status,
+	// events, history) is never touched — this isn't a delete+recreate, it's
+	// what `kubectl create job newName --from=job/name` does.
+	RetryJob(ctx context.Context, namespace, name, newName string) error
+	// SetJobSuspend patches spec.suspend on a Job — same JSON body
+	// SetFluxSuspend uses, but through the typed clientset (KindJob has one;
+	// Flux's discovered CRDs don't), matching deleteResource/PatchMeta's
+	// existing KindJob branches. Setting suspend=true tears down the Job's
+	// currently-active pods immediately; suspend=false lets it resume
+	// creating pods toward its completion target.
+	SetJobSuspend(ctx context.Context, namespace, name string, suspend bool) error
 }
 
 // ConfigMapConsumerRef is one workload that references a ConfigMap from its
@@ -236,6 +251,77 @@ func (c *Cluster) RolloutRestart(ctx context.Context, kind ResourceKind, namespa
 	return err
 }
 
+// jobTemplateGeneratedLabels are the labels the Job controller injects onto
+// spec.template.metadata.labels (and mirrors into spec.selector.matchLabels)
+// when they're unset at creation time — a clone must strip these so the API
+// server regenerates fresh ones instead of colliding with the still-existing
+// source Job's selector.
+var jobTemplateGeneratedLabels = []string{
+	"controller-uid", "batch.kubernetes.io/controller-uid",
+	"job-name", "batch.kubernetes.io/job-name",
+}
+
+// CloneJobSpec builds a new JobSpec from src suitable for a from-scratch
+// Create: the selector and its generated template labels are cleared so the
+// API server assigns fresh ones (reusing the source Job's own would collide
+// with it, since that Job still exists), and Suspend is forced to false
+// regardless of src's own state — a retry should actually run. Exported so
+// fake.Cluster's own RetryJob can share it rather than drifting on which
+// fields get stripped.
+func CloneJobSpec(src *batchv1.JobSpec) *batchv1.JobSpec {
+	spec := src.DeepCopy()
+	spec.Selector = nil
+	spec.ManualSelector = nil
+	suspend := false
+	spec.Suspend = &suspend
+	for _, key := range jobTemplateGeneratedLabels {
+		delete(spec.Template.Labels, key)
+	}
+	return spec
+}
+
+// RetryJob clones name's spec into a new Job called newName — get, strip
+// the fields the API server must regenerate, create. The source Job (its
+// Status, events, history) is never touched: this is what
+// `kubectl create job newName --from=job/name` does, not a delete+recreate.
+// The clone is deliberately detached from any parent (no OwnerReferences),
+// so a manual retry of a CronJob-spawned Job becomes a standalone object
+// rather than something the CronJob's own history limit can silently GC.
+func (c *Cluster) RetryJob(ctx context.Context, namespace, name, newName string) error {
+	if name == "" || newName == "" {
+		return fmt.Errorf("cannot retry job: empty name")
+	}
+	old, err := c.clientset.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	clone := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        newName,
+			Namespace:   namespace,
+			Labels:      maps.Clone(old.Labels),
+			Annotations: maps.Clone(old.Annotations),
+		},
+		Spec: *CloneJobSpec(&old.Spec),
+	}
+	delete(clone.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, clone, metav1.CreateOptions{})
+	return err
+}
+
+// SetJobSuspend patches spec.suspend on a Job — the same JSON body
+// SetFluxSuspend uses, but through the typed clientset (KindJob has one;
+// Flux's discovered CRDs don't), matching deleteResource/PatchMeta's
+// existing KindJob branches.
+func (c *Cluster) SetJobSuspend(ctx context.Context, namespace, name string, suspend bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot suspend job: empty name")
+	}
+	patch := fmt.Appendf(nil, `{"spec":{"suspend":%t}}`, suspend)
+	_, err := c.clientset.BatchV1().Jobs(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
 // Cordon sets (cordon=true) or clears spec.unschedulable on node via a
 // strategic-merge patch.
 func (c *Cluster) Cordon(ctx context.Context, node string, cordon bool) error {
@@ -321,6 +407,22 @@ func FluxSuspendCommandString(kind ResourceKind, namespace, name string, suspend
 		cmd += " -n " + namespace
 	}
 	return cmd
+}
+
+// JobRetryCommandString renders the kubectl equivalent of RetryJob — the
+// real `kubectl create job` idiom for cloning an existing Job, even though
+// kute's own implementation is a get+strip+create rather than a single CLI
+// invocation. newName is precomputed by the caller so this line and the
+// actual Create call always agree.
+func JobRetryCommandString(namespace, name, newName string) string {
+	return fmt.Sprintf("kubectl create job %s --from=job/%s -n %s", newName, name, namespace)
+}
+
+// JobSuspendCommandString renders the kubectl patch kute actually issues for
+// SetJobSuspend — same JSON body as FluxSuspendCommandString, just on a Job
+// rather than a Flux kind.
+func JobSuspendCommandString(namespace, name string, suspend bool) string {
+	return fmt.Sprintf(`kubectl patch job/%s --type merge -p '{"spec":{"suspend":%t}}' -n %s`, name, suspend, namespace)
 }
 
 // FluxReconcileCommandString renders the kubectl annotate kute issues for

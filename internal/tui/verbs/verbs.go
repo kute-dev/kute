@@ -170,6 +170,19 @@ var (
 		ID: "rollout-restart", Key: "ctrl-r", Label: "restart",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
+	// JobRetry clones a Job's spec into a brand-new Job — not a delete+
+	// recreate of the same object, so nothing about the source Job is
+	// destroyed, but it does start a fresh run of the Job's business logic
+	// (which can carry real side effects: emails, charges, writes). Same
+	// physical key as RolloutRestart above (never both applicable to one
+	// row — Kinds is disjoint) and the same TierInline reasoning: a bare
+	// unmodified key firing an unconfirmed run of arbitrary workload code
+	// would repeat the exact mistake RolloutRestart's own doc comment
+	// describes moving off of.
+	JobRetry = Verb{
+		ID: "job-retry", Key: "ctrl-r", Label: "retry",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
+	}
 	// FluxReconcile is §30a's 'r' on a Flux row: a fresh
 	// reconcile.fluxcd.io/requestedAt timestamp — the same
 	// annotate-to-trigger mechanism RolloutRestart uses, on a different
@@ -201,6 +214,20 @@ var (
 	FluxSuspend = Verb{
 		ID: "flux-suspend", Key: "s", Label: "suspend",
 		Tier: actions.TierNone, Mutating: true,
+	}
+	// JobSuspend is a Job's own 's': one verb, two directions, same shape as
+	// FluxSuspend above — Scope.Verb is "job-suspend" or "job-resume"
+	// depending on the row's own Suspended state. Unlike FluxSuspend this is
+	// TierInline, not TierNone: setting spec.suspend:true on a Job tears
+	// down its currently-active pods immediately, a real visible side
+	// effect Flux's own suspend (which only pauses future reconciliation,
+	// touching nothing already applied) doesn't have. Resume shares the
+	// same Tier for the toggle's symmetry rather than an asymmetric-tier
+	// special case. Never contends with NodeShell's own 's' (Node-only) or
+	// FluxSuspend's (gated on Descriptor.Flux, never true for a Job row).
+	JobSuspend = Verb{
+		ID: "job-suspend", Key: "s", Label: "suspend",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
 	}
 	// FluxSource is §30a's 'o': jump to the object this one reconciles
 	// from. Read-only navigation, so no tier and not mutating.

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -243,6 +245,52 @@ func (c *Cluster) RolloutRestart(_ context.Context, kind kube.ResourceKind, name
 		return nil
 	}
 	return fmt.Errorf("%s %q not found", kind, name)
+}
+
+// RetryJob is RolloutRestart's shape applied to kube.Cluster's own RetryJob:
+// find the source Job, clone it via the same kube.CloneJobSpec field-
+// stripping the real implementation uses (so the two never drift), and
+// append the clone rather than mutating anything — the source Job is left
+// untouched.
+func (c *Cluster) RetryJob(_ context.Context, namespace, name, newName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindJob] {
+		job, ok := obj.(*batchv1.Job)
+		if !ok || job.Name != name || job.Namespace != namespace {
+			continue
+		}
+		clone := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        newName,
+				Namespace:   namespace,
+				Labels:      maps.Clone(job.Labels),
+				Annotations: maps.Clone(job.Annotations),
+			},
+			Spec: *kube.CloneJobSpec(&job.Spec),
+		}
+		c.objects[kube.KindJob] = append(c.objects[kube.KindJob], clone)
+		c.notify(kube.KindJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindJob, name)
+}
+
+// SetJobSuspend patches spec.suspend on a Job in place.
+func (c *Cluster) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindJob] {
+		job, ok := obj.(*batchv1.Job)
+		if !ok || job.Name != name || job.Namespace != namespace {
+			continue
+		}
+		s := suspend
+		job.Spec.Suspend = &s
+		c.notify(kube.KindJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindJob, name)
 }
 
 func (c *Cluster) Cordon(_ context.Context, node string, cordon bool) error {

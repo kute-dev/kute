@@ -57,8 +57,9 @@ type Row struct {
 	// keypress time — see kube.NodeShellUnavailable.
 	NodeShellUnavailable string
 
-	// Suspended marks a Flux row whose spec.suspend is set (§30a). It rides
-	// outside Cells for the same reason Cordoned does: §30a's 's' verb
+	// Suspended marks a Flux row whose spec.suspend is set (§30a), or a Job
+	// row whose own spec.suspend is set (projectJob — Job's own 's' verb).
+	// It rides outside Cells for the same reason Cordoned does: the 's' verb
 	// toggles this state, so browse needs to know which direction to mutate
 	// at keypress time, and the health strip counts it.
 	Suspended bool

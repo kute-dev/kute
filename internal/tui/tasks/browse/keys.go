@@ -174,6 +174,16 @@ func (m Model) Keybar() tui.Keybar {
 					// 9a: the exact "will run: kubectl rollout restart ..." line,
 					// same idiom as set-image/set-resources above.
 					note = rolloutRestartWillRunLine(pending.Scope)
+				case "job-retry":
+					// the exact "will run: kubectl create job ... --from=job/..."
+					// line, same idiom as rollout-restart above.
+					note = jobRetryWillRunLine(pending.Scope)
+				case "job-suspend", "job-resume":
+					// the exact "will run: kubectl patch job/... --type merge
+					// ..." line, same idiom as flux-suspend/flux-resume's own
+					// (unconfirmed, TierNone) execFeedback line, just rendered
+					// through the confirm note since this one is TierInline.
+					note = jobSuspendWillRunLine(pending.Scope)
 				case "set-meta":
 					// 26a: the panel itself stays open under this confirm
 					// (meta.go's own doc comment) and already renders the full
@@ -370,6 +380,9 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.fluxVerbsApply() {
 		groups = append(groups, m.fluxKeybarGroup())
+	}
+	if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
+		groups = append(groups, m.jobKeybarGroup())
 	}
 	if m.kind == kube.KindCustomResourceDefinition {
 		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})

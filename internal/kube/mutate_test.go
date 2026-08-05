@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,6 +81,123 @@ func TestRolloutRestartRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
 	if err := c.RolloutRestart(context.Background(), KindDeployment, "default", ""); err == nil {
+		t.Fatalf("expected an error for an empty name")
+	}
+}
+
+// TestRetryJobClonesSpecIntoNewJob pins RetryJob's non-destructive contract
+// (confirmed with the user over the delete+recreate alternative): the
+// source Job is never touched, and the clone has the fields the API server
+// must regenerate stripped so it doesn't collide with the still-existing
+// source Job's own selector.
+func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
+	t.Parallel()
+	suspend := true
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "batch-1", Namespace: "default",
+			Labels:          map[string]string{"app": "batch"},
+			Annotations:     map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "nightly"}},
+		},
+		Spec: batchv1.JobSpec{
+			Suspend: &suspend,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"controller-uid": "abc-123"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "batch", "controller-uid": "abc-123",
+						"batch.kubernetes.io/controller-uid": "abc-123",
+						"job-name":                           "batch-1",
+						"batch.kubernetes.io/job-name":        "batch-1",
+					},
+				},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
+			},
+		},
+		Status: batchv1.JobStatus{Succeeded: 1},
+	}
+	c, cs := newTestCluster(job)
+
+	if err := c.RetryJob(context.Background(), "default", "batch-1", "batch-1-retry-123"); err != nil {
+		t.Fatalf("RetryJob: %v", err)
+	}
+
+	// The source Job is untouched.
+	src, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get source: %v", err)
+	}
+	if src.Status.Succeeded != 1 {
+		t.Errorf("source Job's Status was touched: %+v", src.Status)
+	}
+
+	clone, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1-retry-123", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get clone: %v", err)
+	}
+	if len(clone.OwnerReferences) != 0 {
+		t.Errorf("expected the clone detached (no OwnerReferences), got %+v", clone.OwnerReferences)
+	}
+	if clone.Spec.Selector != nil {
+		t.Errorf("expected Selector cleared for the API server to regenerate, got %+v", clone.Spec.Selector)
+	}
+	if clone.Spec.Suspend == nil || *clone.Spec.Suspend {
+		t.Errorf("expected the clone to start unsuspended regardless of the source's state, got %+v", clone.Spec.Suspend)
+	}
+	for _, key := range []string{"controller-uid", "batch.kubernetes.io/controller-uid", "job-name", "batch.kubernetes.io/job-name"} {
+		if _, ok := clone.Spec.Template.Labels[key]; ok {
+			t.Errorf("expected %q stripped from the cloned template labels, got %+v", key, clone.Spec.Template.Labels)
+		}
+	}
+	if clone.Spec.Template.Labels["app"] != "batch" {
+		t.Errorf("expected non-generated template labels preserved, got %+v", clone.Spec.Template.Labels)
+	}
+	if clone.Labels["app"] != "batch" {
+		t.Errorf("expected the clone's own Labels copied, got %+v", clone.Labels)
+	}
+	if _, ok := clone.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		t.Errorf("expected the stale last-applied-configuration annotation dropped, got %+v", clone.Annotations)
+	}
+}
+
+func TestRetryJobRejectsEmptyNames(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
+	if err := c.RetryJob(context.Background(), "default", "", "batch-1-retry-123"); err == nil {
+		t.Fatalf("expected an error for an empty source name")
+	}
+	if err := c.RetryJob(context.Background(), "default", "batch-1", ""); err == nil {
+		t.Fatalf("expected an error for an empty target name")
+	}
+}
+
+// TestSetJobSuspendPatchesSpecSuspend mirrors
+// TestSetFluxSuspendPatchesSpecSuspend, but through the typed clientset a
+// Job (unlike a Flux CRD) already has.
+func TestSetJobSuspendPatchesSpecSuspend(t *testing.T) {
+	t.Parallel()
+	for _, suspend := range []bool{true, false} {
+		c, cs := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
+		if err := c.SetJobSuspend(context.Background(), "default", "batch-1", suspend); err != nil {
+			t.Fatalf("SetJobSuspend(%t): %v", suspend, err)
+		}
+		got, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.Spec.Suspend == nil || *got.Spec.Suspend != suspend {
+			t.Errorf("Spec.Suspend = %v, want %t", got.Spec.Suspend, suspend)
+		}
+	}
+}
+
+func TestSetJobSuspendRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.SetJobSuspend(context.Background(), "default", "", true); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }

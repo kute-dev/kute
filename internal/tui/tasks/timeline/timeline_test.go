@@ -620,6 +620,12 @@ func (f *fakeRolloutMutator) SetFluxSuspend(_ context.Context, kind kube.Resourc
 func (f *fakeRolloutMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
+func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
+	return nil
+}
+func (f *fakeRolloutMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
 
 // railFixture builds an object-scoped Pod owned (via its ReplicaSet) by
 // Deployment "nva-worker" with two rollout revisions (5 current, 4 prior) —

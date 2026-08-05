@@ -394,14 +394,24 @@ func projectJob(obj runtime.Object) Row {
 	ns, name, age := metaOf(obj)
 	want := int32ptr(j.Spec.Completions)
 	completions := fmt.Sprintf("%d/%d", j.Status.Succeeded, want)
+	suspended := j.Spec.Suspend != nil && *j.Spec.Suspend
 	status := StatusWarn
 	if want > 0 && j.Status.Succeeded >= want {
 		status = StatusOK
 	}
+	// A deliberately-paused Job (browse's 's' verb, or set directly) isn't
+	// warning-worthy — same "parked, benign, nothing to see" neutral the
+	// pod detail screen's own Completed status uses. The Failed check below
+	// still runs last and wins even over Neutral, so a suspended Job that
+	// already recorded a real failure before being paused keeps reading as
+	// a genuine problem, not a parked one.
+	if suspended {
+		status = StatusNeutral
+	}
 	if j.Status.Failed > 0 {
 		status = StatusFail
 	}
-	return Row{Namespace: ns, Name: name, Cells: []string{name, completions, strconv.Itoa(int(j.Status.Active)), shortAge(age)}, Status: status}
+	return Row{Namespace: ns, Name: name, Suspended: suspended, Cells: []string{name, completions, strconv.Itoa(int(j.Status.Active)), shortAge(age)}, Status: status}
 }
 
 func projectCronJob(obj runtime.Object) Row {

@@ -98,6 +98,10 @@ func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, 
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName string) error { return nil }
+func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
 
 func newSession() *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "test-cluster"}}

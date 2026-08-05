@@ -252,6 +252,10 @@ func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, 
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName string) error { return nil }
+func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
 
 // TestKeybarGoesOfflineAndHidesDelete pins the cross-cutting 4a fix
 // (docs/design README.md §52, §301): objectdetail must show the OFFLINE

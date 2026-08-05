@@ -114,6 +114,12 @@ type TaskScope struct {
 	FluxSourceKind      string
 	FluxSourceName      string
 	FluxSourceNamespace string
+	// NewName is the target name for a create/clone verb ("job-retry"'s
+	// cloned Job) — precomputed by the begin method so the will-run line and
+	// the executed Create call agree, the same reason FluxSourceKind/Name/
+	// Namespace above are resolved once rather than re-derived at execute
+	// time. Empty for every other verb.
+	NewName string
 }
 
 // TaskAction describes an operation available from a task screen.

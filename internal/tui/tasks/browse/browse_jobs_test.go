@@ -9,7 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui/actions"
 )
 
 func ptr32(v int32) *int32 { return &v }
@@ -20,6 +22,12 @@ func jobObj(ns, name string) *batchv1.Job {
 		Spec:       batchv1.JobSpec{Completions: ptr32(1)},
 		Status:     batchv1.JobStatus{Succeeded: 1},
 	}
+}
+
+func suspendedJobObj(ns, name string, suspend bool) *batchv1.Job {
+	j := jobObj(ns, name)
+	j.Spec.Suspend = &suspend
+	return j
 }
 
 func cronJobObj(ns, name string) *batchv1.CronJob {
@@ -195,5 +203,114 @@ func TestEscFromCronJobPodsReturnsToCronJobAndSelectsRow(t *testing.T) {
 	selected, ok := m.selectedRow()
 	if !ok || selected.Name != "nightly" {
 		t.Fatalf("expected nightly re-selected on CronJobs, got %+v (ok=%v)", selected, ok)
+	}
+}
+
+// TestCtrlRShowsConfirmThenRetriesJobOnY mirrors
+// TestCtrlRShowsConfirmThenRestartsRolloutOnY's shape for Job's own retry.
+func TestCtrlRShowsConfirmThenRetriesJobOnY(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {jobObj("default", "batch-1")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
+	}
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "kubectl create job") || !strings.Contains(kb.RightNote, "--from=job/batch-1") {
+		t.Fatalf("expected the will-run line in the confirm, got %q", kb.RightNote)
+	}
+	if len(mut.retriedJobs) != 0 {
+		t.Fatalf("expected no retry before 'y', got %v", mut.retriedJobs)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.retriedJobs) != 1 {
+		t.Fatalf("retriedJobs = %v, want one entry", mut.retriedJobs)
+	}
+	if !strings.HasPrefix(mut.retriedJobs[0], "default/batch-1->batch-1-retry-") {
+		t.Fatalf("retriedJobs[0] = %q, want a default/batch-1->batch-1-retry-<ts> entry", mut.retriedJobs[0])
+	}
+}
+
+// TestJobRetryStaysInlineEvenInProd pins the deliberate choice not to
+// escalate Retry to the type-the-name modal in PROD (browse/jobs.go's
+// beginJobRetry doc comment): components.TypeNameModal is reserved for
+// destructive confirms, and Retry is explicitly non-destructive (a clone,
+// not a delete+recreate) — so a PROD context still gets the same plain
+// inline y/N, just like a non-PROD one.
+func TestJobRetryStaysInlineEvenInProd(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {jobObj("default", "batch-1")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindJob
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected ctrl+r to stay TierInline even in a prod context, tier=%v", m.actions.Tier())
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.retriedJobs) != 1 {
+		t.Fatalf("expected a plain 'y' to retry immediately, got %v", mut.retriedJobs)
+	}
+}
+
+// TestSKeyTogglesJobSuspendAndResumeLabel mirrors
+// TestFluxSuspendVerbFlipsDirectionWithTheRow, adjusted for TierInline
+// (Job's own suspend needs 'y' after 's', unlike Flux's TierNone).
+func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {suspendedJobObj("default", "batch-1", false)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if !strings.Contains(plain(m.Render()), "suspend") {
+		t.Errorf("keybar should read 'suspend' on an active row:\n%s", plain(m.Render()))
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected 's' to open the inline prompt, tier=%v", m.actions.Tier())
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.jobSuspends) != 1 || mut.jobSuspends[0] != "default/batch-1=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.jobSuspends)
+	}
+
+	mut2 := &fakeMutator{}
+	lister2 := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {suspendedJobObj("default", "batch-1", true)},
+	}}
+	session2 := newSession()
+	session2.Location.Kind = kube.KindJob
+	m2 := New(Config{Session: session2, Lister: lister2, Mutator: mut2})
+	m2.SetSize(120, 36)
+	m2 = step(t, m2, m2.Init()())
+
+	if !strings.Contains(plain(m2.Render()), "resume") {
+		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
+	}
+	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
+	m2 = step(t, m2, tea.KeyPressMsg{Text: "y"})
+	if len(mut2.jobSuspends) != 1 || mut2.jobSuspends[0] != "default/batch-1=false" {
+		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.jobSuspends)
 	}
 }

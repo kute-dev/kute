@@ -160,7 +160,11 @@ func (c *Controller) Confirm() tea.Cmd {
 // typed-name match — the delete family, plus 16b's rollout-undo (docs/design
 // README.md §16b: "type-the-deployment-name modal in PROD"). Drain's
 // TierModal confirm, and 18a's Helm rollback (a different Scope.Verb,
-// "rollback"), both stay the simple y/N ConfirmCard.
+// "rollback"), both stay the simple y/N ConfirmCard. Job's own "job-retry"
+// deliberately never reaches TierModal at all (browse/jobs.go's
+// beginJobRetry) — components.TypeNameModal this gates is reserved for
+// destructive confirms, and Retry (a clone, not a delete+recreate) isn't
+// one.
 func requiresTypedName(verb string) bool {
 	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo"
 }
@@ -300,6 +304,12 @@ func (c *Controller) execute() tea.Cmd {
 			err = mutator.SetFluxSuspend(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
 				action.Scope.ResourceName, action.Scope.Verb == "flux-suspend")
+		case "job-retry":
+			err = mutator.RetryJob(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.NewName)
+		case "job-suspend", "job-resume":
+			err = mutator.SetJobSuspend(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Verb == "job-suspend")
 		case "flux-reconcile":
 			// §30b's with-source reconcile stamps the source first: asking a
 			// reconciler to sync against an artifact that is still stale

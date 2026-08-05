@@ -502,6 +502,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.beginRolloutRestart(row)
 			}
 		}
+		if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginJobRetry(row)
+			}
+		}
 	case "r":
 		switch {
 		case m.fluxVerbsApply():
@@ -585,6 +590,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// so the two never contend on the same row.
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginFluxSuspend(row)
+			}
+		}
+		if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
+			// A Job's own suspend/resume. Never contends with the Flux block
+			// above (a row can't be both) or NodeShell's own 's' below
+			// (Node-only).
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginJobSuspend(row)
 			}
 		}
 		// Same gate as 'x' above, and a stronger reason for it: kubectl debug

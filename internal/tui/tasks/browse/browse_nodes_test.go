@@ -51,6 +51,8 @@ type fakeMutator struct {
 	setResources         []string // "namespace/name container" of every SetResources call
 	fluxSuspends         []string // "namespace/name=true|false" of every SetFluxSuspend call
 	fluxReconciles       []string // "namespace/name" of every RequestFluxReconcile call
+	retriedJobs          []string // "namespace/name->newName" of every RetryJob call
+	jobSuspends          []string // "namespace/name=true|false" of every SetJobSuspend call
 	dryRun               bool     // true if the most recent SetResources call was a dry-run
 	metaPatches          []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
 	secretDataPatches    []string // "namespace/name key=value" or "...key-" for a removal
@@ -204,6 +206,22 @@ func (f *fakeMutator) RequestFluxReconcile(_ context.Context, _ kube.ResourceKin
 		return f.err
 	}
 	f.fluxReconciles = append(f.fluxReconciles, namespace+"/"+name)
+	return nil
+}
+
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.retriedJobs = append(f.retriedJobs, namespace+"/"+name+"->"+newName)
+	return nil
+}
+
+func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.jobSuspends = append(f.jobSuspends, fmt.Sprintf("%s/%s=%t", namespace, name, suspend))
 	return nil
 }
 
