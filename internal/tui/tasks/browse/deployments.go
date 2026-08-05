@@ -87,9 +87,9 @@ func (m *Model) openDaemonSetPods(row resources.Row) tea.Cmd {
 }
 
 // backToOrigin reverses openDeploymentPods/openStatefulSetPods/
-// openDaemonSetPods/openReleaseObjects: switches back to the origin kind and
-// selects the row esc came from, via the same pendingSelect mechanism
-// goToResource uses for a cross-kind jump.
+// openDaemonSetPods/openReleaseObjects/openJobPods/openCronJobPods (jobs.go):
+// switches back to the origin kind and selects the row esc came from, via
+// the same pendingSelect mechanism goToResource uses for a cross-kind jump.
 func (m *Model) backToOrigin() tea.Cmd {
 	m.pendingSelect = m.originName
 	return m.switchKind(m.originKind)
