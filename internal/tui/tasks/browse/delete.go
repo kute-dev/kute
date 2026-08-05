@@ -20,19 +20,33 @@ import (
 )
 
 // isDeleteVerb reports whether verb is the delete family 8b's type-the-name
-// modal handles — everything else that reaches TierModal (i.e. Drain) keeps
-// rendering through the existing minimal ConfirmCard.
+// modal handles — the narrower set typeNameConfirmModal needs to tell apart
+// from 9a's rollout-restart, since only the delete family carries an owner/
+// grace-period detail.
 func isDeleteVerb(verb string) bool {
 	return verb == "delete" || verb == "force-delete"
 }
 
-// typingDeleteName reports whether the type-the-name modal is the active
+// requiresTypeNameConfirm reports whether verb's TierModal confirmation
+// needs the full type-the-name modal (components.TypeNameModal) rather than
+// the plain y/N ConfirmCard — the delete family plus 9a's rollout-restart
+// (docs/design README.md §9a/§419: "delete and rollout restart are both
+// tiered — inline y/N in non-prod, type-the-name modal in PROD contexts").
+// Everything else that reaches TierModal (Drain) keeps rendering through
+// the existing minimal ConfirmCard. Mirrors actions.requiresTypedName's verb
+// set for the subset of verbs browse itself renders — rollout-undo is
+// timeline's screen, not browse's, so it never reaches this gate.
+func requiresTypeNameConfirm(verb string) bool {
+	return isDeleteVerb(verb) || verb == "rollout-restart"
+}
+
+// typingConfirmName reports whether the type-the-name modal is the active
 // confirm surface — i.e. whether there's a text buffer on screen at all.
 // updateConfirmKey routes keys by it and pasteTarget routes pastes by it, so
 // the two can't disagree about where typed input is going.
-func (m Model) typingDeleteName() bool {
+func (m Model) typingConfirmName() bool {
 	pending := m.actions.Pending()
-	return m.actions.Tier() == actions.TierModal && pending != nil && isDeleteVerb(pending.Scope.Verb)
+	return m.actions.Tier() == actions.TierModal && pending != nil && requiresTypeNameConfirm(pending.Scope.Verb)
 }
 
 // isProd reports whether the active session's current context is tagged
@@ -99,36 +113,46 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 	})
 }
 
-// deleteConfirmModal renders 8b's type-the-name modal for a pending
-// delete/force-delete — the only two verbs isDeleteVerb routes here (every
-// other TierModal verb, i.e. Drain, keeps rendering through nodes.go's
-// existing confirmBody/ConfirmCard, untouched by this file).
-func (m Model) deleteConfirmModal(width, height int) string {
+// typeNameConfirmModal renders the type-the-name modal for a pending
+// delete/force-delete or rollout-restart — the verbs requiresTypeNameConfirm
+// routes here (every other TierModal verb, i.e. Drain, keeps rendering
+// through nodes.go's existing confirmBody/ConfirmCard, untouched by this
+// file). The delete family gets 8b's owner/grace-period detail and its ctrl-k
+// force-delete hint; rollout-restart (9a) has neither concept, so it gets the
+// same "will run: kubectl rollout restart …" line the non-prod inline
+// confirm's keybar already shows.
+func (m Model) typeNameConfirmModal(width, height int) string {
 	theme := m.Theme()
 	title := "Confirm"
 	target := ""
 	detail := ""
+	actionVerb := "delete"
 	var ownerLine string
 	if pending := m.actions.Pending(); pending != nil {
 		title = "✕ " + pending.Label
 		target = pending.Scope.ResourceName
-		if pending.Owner != "" {
-			ownerLine = pending.Owner + " — will be recreated"
-		}
-		if pending.Scope.Verb == "force-delete" {
-			detail = "grace period 0 — force delete, immediate"
+		if pending.Scope.Verb == "rollout-restart" {
+			actionVerb = "restart"
+			detail = rolloutRestartWillRunLine(pending.Scope)
 		} else {
-			// docs/design README.md §8b: the concrete figure (e.g. "30s"),
-			// not a generic "default grace period applies" — falls back to
-			// the generic text when the caller didn't resolve one (every
-			// non-Pod kind).
-			if pending.GracePeriodSeconds != nil {
-				detail = fmt.Sprintf("grace period %ds applies", *pending.GracePeriodSeconds)
-			} else {
-				detail = "default grace period applies"
+			if pending.Owner != "" {
+				ownerLine = pending.Owner + " — will be recreated"
 			}
-			if pending.Scope.ResourceKind == string(kube.KindPod) {
-				detail += " · ctrl-k force delete (immediate)"
+			if pending.Scope.Verb == "force-delete" {
+				detail = "grace period 0 — force delete, immediate"
+			} else {
+				// docs/design README.md §8b: the concrete figure (e.g. "30s"),
+				// not a generic "default grace period applies" — falls back to
+				// the generic text when the caller didn't resolve one (every
+				// non-Pod kind).
+				if pending.GracePeriodSeconds != nil {
+					detail = fmt.Sprintf("grace period %ds applies", *pending.GracePeriodSeconds)
+				} else {
+					detail = "default grace period applies"
+				}
+				if pending.Scope.ResourceKind == string(kube.KindPod) {
+					detail += " · ctrl-k force delete (immediate)"
+				}
 			}
 		}
 	}
@@ -145,5 +169,5 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), "delete", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), actionVerb, m.isProd(), styles, width, height)
 }

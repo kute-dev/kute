@@ -24,7 +24,8 @@ import (
 // confirming state (inline y/N non-prod, escalated to the type-the-name
 // modal in PROD via TierFor) rather than executing immediately.
 func (m *Model) beginRolloutRestart(row resources.Row) tea.Cmd {
-	return m.actions.Begin(verbs.RolloutRestart.Tier, tui.TaskAction{
+	tier := verbs.TierFor(verbs.RolloutRestart, m.isProd())
+	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    "rollout-restart-" + row.Namespace + "/" + row.Name,
 		Label: fmt.Sprintf("Restart rollout for %s?", row.Name),
 		Scope: tui.TaskScope{

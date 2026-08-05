@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
@@ -114,6 +115,45 @@ func TestCtrlRShowsConfirmThenRestartsRolloutOnY(t *testing.T) {
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.restarted) != 1 || mut.restarted[0] != "api" {
+		t.Fatalf("restarted = %v, want [api]", mut.restarted)
+	}
+}
+
+// TestCtrlRProdOpensTypeNameModal pins 9a/§419's PROD escalation for
+// rollout-restart, mirroring browse_delete_test.go's
+// TestCtrlDProdOpensTypeNameModal: a prod-tagged context must upgrade ctrl-r
+// from the inline y/N prompt to the type-the-name modal, not fire on a bare
+// 'y' and not restart before the deployment's name is typed.
+func TestCtrlRProdOpensTypeNameModal(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
+		t.Fatalf("expected ctrl+r in a prod context to open the type-the-name modal, tier=%v", m.actions.Tier())
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "PROD CONTEXT") {
+		t.Fatalf("expected the PROD CONTEXT tag in the modal:\n%s", view)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.restarted) != 0 {
+		t.Fatalf("expected enter to no-op before the name matches: %v", mut.restarted)
+	}
+	for _, r := range "api" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 	if len(mut.restarted) != 1 || mut.restarted[0] != "api" {
 		t.Fatalf("restarted = %v, want [api]", mut.restarted)
 	}

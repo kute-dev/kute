@@ -23,7 +23,7 @@ import (
 func (m *Model) pasteTarget() tui.PasteTarget {
 	switch {
 	case m.actions.Active():
-		if !m.typingDeleteName() {
+		if !m.typingConfirmName() {
 			return nil // inline y/N confirm: nothing to paste into
 		}
 		return m.actions.PasteTarget()
@@ -716,19 +716,20 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 }
 
 // updateConfirmKey routes keys while a mutating action's confirmation is
-// showing: a delete/force-delete at TierModal (8b's type-the-name PROD
-// modal) gets its own key handling; every other confirming case — TierNone/
-// TierInline, and Drain's TierModal (nodes.go's beginDrain, still Phase 9's
-// plain ConfirmCard, deliberately not upgraded — see mvp-tasks.md's Phase
-// 5/8b exit notes) — stays the simple y/n/esc prompt, plus ctrl-k on a
-// pending inline Pod delete: rather than jumping to the PROD type-the-name
-// modal, ctrl-k stages force-delete right inside this same inline confirm
+// showing: a verb requiresTypeNameConfirm at TierModal — delete/force-delete
+// or 9a's rollout-restart (8b/9a's type-the-name PROD modal) — gets its own
+// key handling; every other confirming case — TierNone/TierInline, and
+// Drain's TierModal (nodes.go's beginDrain, still Phase 9's plain
+// ConfirmCard, deliberately not upgraded — see mvp-tasks.md's Phase 5/8b
+// exit notes) — stays the simple y/n/esc prompt, plus ctrl-k on a pending
+// inline Pod delete: rather than jumping to the PROD type-the-name modal,
+// ctrl-k stages force-delete right inside this same inline confirm
 // (ArmForceDelete) — "y" then runs DeleteResourceForced, "n" backs out of
 // just the force sub-state (DisarmForceDelete) instead of cancelling
 // outright, and "esc" still cancels the whole confirm either way. Everything
 // else is swallowed so movement/filter can't act underneath.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.typingDeleteName() {
+	if m.typingConfirmName() {
 		return m.updateModalConfirmKey(msg)
 	}
 	switch msg.String() {

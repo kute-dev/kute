@@ -429,7 +429,9 @@ func ByID(id string) (Verb, bool) {
 // TierInline to TierModal when isProd (mvp-plan.md §8b, docs/design
 // README.md §8b: "PROD contexts... = centered modal with type-the-name
 // confirmation"). Non-Inline tiers are untouched — Drain/ForceDelete are
-// always modal, Cordon/RolloutRestart never confirm, regardless of prod.
+// always modal regardless of prod; Cordon is TierNone and never confirms at
+// all. RolloutRestart is TierInline like Delete, so it escalates the same
+// way: inline y/N in non-prod, type-the-name modal in PROD (§9a/§419).
 //
 // This lives here rather than on actions.Controller because verbs already
 // imports actions (for the Tier type on Verb.Tier); actions importing verbs

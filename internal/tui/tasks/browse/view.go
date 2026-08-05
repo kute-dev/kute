@@ -550,8 +550,8 @@ func (m Model) Body(width, height int) string {
 		return m.bulkDeleteConfirmModal(width, height)
 	}
 	if m.actions.Active() && m.actions.Tier() == actions.TierModal {
-		if pending := m.actions.Pending(); pending != nil && isDeleteVerb(pending.Scope.Verb) {
-			return m.deleteConfirmModal(width, height)
+		if pending := m.actions.Pending(); pending != nil && requiresTypeNameConfirm(pending.Scope.Verb) {
+			return m.typeNameConfirmModal(width, height)
 		}
 		return m.confirmBody(width, height)
 	}

@@ -157,8 +157,10 @@ func (c *Controller) Confirm() tea.Cmd {
 }
 
 // requiresTypedName reports whether verb's TierModal confirmation needs the
-// typed-name match — the delete family, plus 16b's rollout-undo (docs/design
-// README.md §16b: "type-the-deployment-name modal in PROD"). Drain's
+// typed-name match — the delete family, 16b's rollout-undo (docs/design
+// README.md §16b: "type-the-deployment-name modal in PROD"), and 9a's
+// rollout-restart (§9a/§419: "delete and rollout restart are both tiered —
+// inline y/N in non-prod, type-the-name modal in PROD contexts"). Drain's
 // TierModal confirm, and 18a's Helm rollback (a different Scope.Verb,
 // "rollback"), both stay the simple y/N ConfirmCard. Job's own "job-retry"
 // deliberately never reaches TierModal at all (browse/jobs.go's
@@ -166,7 +168,7 @@ func (c *Controller) Confirm() tea.Cmd {
 // destructive confirms, and Retry (a clone, not a delete+recreate) isn't
 // one.
 func requiresTypedName(verb string) bool {
-	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo"
+	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo" || verb == "rollout-restart"
 }
 
 // Cancel abandons the pending confirmation.
