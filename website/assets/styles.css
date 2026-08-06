@@ -270,7 +270,14 @@ p { margin: 0; }
 
 .btn-primary {
   background: var(--accent);
-  color: #0b0b10;
+  /* var(--bg), not a fixed literal: the same color-on-accent pattern
+     .skip-link already uses. --bg already flips to the correct contrast
+     partner per theme (near-black in dark mode, near-white in light mode) —
+     a hardcoded #0b0b10 here previously read fine in dark mode but only
+     cleared ~3.3:1 against light mode's --accent, under the 4.5:1 bar this
+     file holds itself to elsewhere. var(--bg) clears ~5.6:1 light / ~7.2:1
+     dark, in both the resting and :hover state below. */
+  color: var(--bg);
   box-shadow: var(--shadow-glow);
 }
 .btn-primary:hover { background: var(--accent-hi); box-shadow: 0 0 0 1px rgba(167,139,250,.4), 0 10px 34px rgba(167,139,250,.22); }
@@ -321,6 +328,16 @@ p { margin: 0; }
 
 .nav-cta { display: flex; align-items: center; gap: 12px; }
 .nav-star {
+  /* appearance/background reset: the Star link (an <a>) never needed this,
+     but the theme-toggle button is a real <button>, and without resetting
+     its native appearance Chrome fills it with an opaque ~#efefef
+     buttonface background — invisible-on-invisible once :hover's color
+     shifts to the near-white --text token on top of that same near-white
+     native fill. */
+  appearance: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: var(--radius-pill);
@@ -328,6 +345,23 @@ p { margin: 0; }
 }
 .nav-star:hover { color: var(--text); border-color: var(--accent); }
 .nav-star svg { width: 14px; height: 14px; }
+
+/* The theme toggle answers its own question in its icon: a small rotation
+   on hover/focus, plus the site's existing .btn:active press-down nudge, so
+   this control eases and reacts like every other interactive element
+   instead of snapping (it previously had no transition at all). */
+.nav-star[data-theme-toggle] {
+  transition: color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.nav-star[data-theme-toggle] svg { transition: transform .2s ease; }
+.nav-star[data-theme-toggle]:hover svg,
+.nav-star[data-theme-toggle]:focus-visible svg { transform: rotate(24deg); }
+.nav-star[data-theme-toggle]:active { transform: translateY(1px); }
+@media (prefers-reduced-motion: reduce) {
+  .nav-star[data-theme-toggle] svg { transition: none; }
+  .nav-star[data-theme-toggle]:hover svg,
+  .nav-star[data-theme-toggle]:focus-visible svg { transform: none; }
+}
 
 .nav-toggle { display: none; }
 .nav-toggle svg { width: 22px; height: 22px; }
@@ -389,13 +423,42 @@ p { margin: 0; }
 
 .hero-ctas { margin-top: 36px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
 
+/* The hero's own primary CTA carries its glow at rest instead of only on
+   hover, and its ghost sibling picks up an accent tint — the row reads as
+   "already on" the moment the page loads rather than waiting for a hover
+   to prove it matters. Scoped to the hero; the rest of the site's buttons
+   keep the plain resting state defined above. */
+.hero-ctas .btn-primary {
+  box-shadow: 0 0 0 1px rgba(167,139,250,.48), 0 8px 31px rgba(167,139,250,.21);
+}
+.hero-ctas .btn-ghost {
+  border-color: rgba(167,139,250,.4);
+  color: var(--accent-hi);
+}
+/* The base .btn-ghost:hover rule only changes border-color and color to
+   var(--accent)/var(--accent-hi) — both already true at rest here, so
+   hovering this specific button used to do nothing visible at all. A
+   background wash (the same 10%-accent idiom the eyebrow/tag chips already
+   use) gives it real feedback without fighting the "already on" resting
+   look the rest of this scope commits to. */
+.hero-ctas .btn-ghost:hover {
+  background: rgba(167,139,250,.10);
+  border-color: var(--accent);
+}
+
 .hero-note {
   margin-top: 18px;
   font-size: 13px;
   color: var(--text-faint);
   font-family: var(--font-mono);
 }
-.hero-note .key { color: var(--accent-hi); font-weight: 600; }
+
+/* Unscoped: a keyboard-key reference reads the same wherever it appears in
+   prose, not only inside .hero-note or .term-keybar (the two containers that
+   used to carry this rule separately — a bare .key anywhere else, like a
+   footnote under the Flux deep-dive, rendered with no visual distinction at
+   all, which is what a single "r" or "s" needs most). */
+.key { color: var(--accent-hi); font-weight: 600; }
 
 .hero-shot { margin-top: 64px; width: 100%; max-width: 980px; position: relative; z-index: 1; }
 
@@ -509,7 +572,6 @@ p { margin: 0; }
   flex-wrap: wrap;
   gap: 10px;
 }
-.term-keybar .key { color: var(--accent-hi); font-weight: 600; }
 .term-keybar .pill {
   background: var(--sel-bg);
   color: var(--accent-hi);
@@ -735,7 +797,10 @@ p { margin: 0; }
 .friction-list { display: flex; flex-direction: column; gap: 16px; margin-top: 28px; }
 .friction-item { display: flex; gap: 16px; align-items: center; font-size: 14.5px; color: var(--text-secondary); }
 .friction-item .tier {
-  flex-shrink: 0; width: 132px; text-align: center;
+  /* 150px, not 132px: at the old width "delete, restart, rollback" (the
+     longest of the three tier labels) wrapped to three lines, ballooning
+     one pill into a tall block next to its single-line sibling above it. */
+  flex-shrink: 0; width: 150px; text-align: center;
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
   padding: 4px 10px; border-radius: var(--radius-pill);
 }

@@ -72,7 +72,7 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
-    textColor: "#0b0b10"
+    textColor: "{colors.bg}"
     rounded: "{rounded.pill}"
     padding: "12px 24px"
   button-primary-hover:
@@ -203,7 +203,7 @@ Two radius families cover almost everything: a **pill** (`9999px`) for every but
 
 ### Buttons
 - **Shape:** full pill (`border-radius: 9999px`).
-- **Primary:** solid Signal Violet background, fixed near-black text (`#0b0b10`, not a token — deliberately constant across both themes so the button's text stays legible whether the violet is the light "dark-mode" tint or the deep "light-mode" tint), wrapped in the accent glow shadow. Hover swaps to `accent-hi` and intensifies the glow.
+- **Primary:** solid Signal Violet background, text in `colors.bg` — the same color-on-accent pattern `.skip-link` already uses. `bg` flips to the correct contrast partner per theme (near-black in dark mode, near-white in light mode), which is what makes this the *right* token here rather than a fixed literal: a hardcoded near-black read fine in dark mode but only cleared ~3.3:1 against light mode's accent, under this system's own 4.5:1 bar. `var(--bg)` clears ~5.6:1 light / ~7.2:1 dark. Wrapped in the accent glow shadow. Hover swaps to `accent-hi` and intensifies the glow.
 - **Ghost:** transparent fill, `border` token outline, `text` colored label. Hover shifts both border and text to `accent-hi` — no fill change, so it reads as secondary at every state.
 - **Small variant (`btn-sm`):** tighter padding (`8px 18px`) and 13px label, used in the nav and wherever a button sits beside denser content.
 - **Press feedback:** every button nudges `1px` down on `:active` — the only motion a button gets besides its hover transition.

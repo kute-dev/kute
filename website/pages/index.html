@@ -170,7 +170,7 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>Suspended stays in front of you.</strong> A paused Kustomization is the one quietly drifting from git, so it sorts above the healthy rows in amber instead of sinking in with them.</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><strong>The commit behind the change.</strong> In the incident timeline, a revision lands as its own row — the SHA, and the commit message when the cluster still knows it.</li>
         </ul>
-        <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);"><code>r</code> reconciles, <code>s</code> suspends or resumes — plain API calls, so the <code>flux</code> binary is never required. kute never installs or bootstraps Flux, and never writes to your Git repository: that is CI's job.</p>
+        <p style="margin-top:20px;font-size:13.5px;color:var(--text-faint);"><span class="key">r</span> reconciles, <span class="key">s</span> suspends or resumes — plain API calls, so the <code>flux</code> binary is never required. kute never installs or bootstraps Flux, and never writes to your Git repository: that is CI's job.</p>
       </div>
       <div class="reveal">
         <div class="term" role="img" aria-label="kute's Flux tree: a GitRepository with its Kustomizations nested under it — one failing a health check with the reason printed under the row, one suspended and behind its source, one mid-reconcile — plus a chart repository with its HelmRelease, and a healthy chain folded away">
@@ -222,7 +222,7 @@
               </div>
               <div class="term-modal-body">
                 <div>Owner: <span class="owner">Deployment/nebula-qa — will be recreated</span></div>
-                <div>Grace period: <span style="color:var(--text)">30s</span> &nbsp; <span style="color:var(--text-faint)">force delete: <span class="key" style="color:var(--accent-hi)">ctrl-k</span> (grace 0)</span></div>
+                <div>Grace period: <span style="color:var(--text)">30s</span> &nbsp; <span style="color:var(--text-faint)">force delete: <span class="key">ctrl-k</span> (grace 0)</span></div>
                 <div class="type-row">type the pod name to confirm: nebula-qa-9k2<span class="cursor">▎</span></div>
                 <div class="progress">14/16</div>
               </div>
