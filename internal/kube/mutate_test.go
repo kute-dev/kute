@@ -111,7 +111,7 @@ func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
 						"app": "batch", "controller-uid": "abc-123",
 						"batch.kubernetes.io/controller-uid": "abc-123",
 						"job-name":                           "batch-1",
-						"batch.kubernetes.io/job-name":        "batch-1",
+						"batch.kubernetes.io/job-name":       "batch-1",
 					},
 				},
 				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
