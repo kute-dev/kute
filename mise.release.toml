@@ -1,0 +1,11 @@
+[tools]
+# The release's signing/SBOM half. goreleaser shells out to both from
+# $PATH, and mise-action puts them there before the goreleaser step — same
+# mechanism git-cliff reaches scripts/release-notes.sh through. Split out of
+# mise.toml so a plain `mise install` doesn't make every developer pull
+# these down for a step only CI's release job (and the goreleaser-check
+# snapshot build) runs — mise only loads this file when MISE_ENV=release,
+# which those two jobs set before `Setup mise`. Dependabot doesn't see this
+# file either; bump these by hand.
+cosign = "3.1.2"
+syft = "1.50.0"

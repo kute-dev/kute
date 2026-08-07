@@ -10,10 +10,6 @@ git-cliff = "2.13.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 "github:joshka/betamax" = "betamax-v0.1.15"
 kind = "0.32.0"
-# The release's signing half. goreleaser shells out to both from $PATH, and
-# mise-action puts them there before the goreleaser step — same mechanism
-# git-cliff reaches scripts/release-notes.sh through. Dependabot doesn't see
-# this file; bump these by hand.
-cosign = "3.1.2"
-syft = "1.50.0"
 # kwokctl = "0.8.0"
+# cosign/syft (the release's signing/SBOM half) live in mise.release.toml,
+# not here — see that file for why.

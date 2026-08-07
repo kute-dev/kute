@@ -43,7 +43,8 @@ to retrofit after 1.0 because users' verification habits form at install time.
   (not just the manifest) is what makes verification one command against the file the user
   actually downloaded.
 - ✅ `sboms:` (syft) in `.goreleaser.yaml`, one `.sbom.json` per archive. Both tools are
-  pinned in `mise.toml`, which is how they reach the release job's `PATH`.
+  pinned in `mise.release.toml` (loaded via `MISE_ENV=release`, not a plain `mise install`),
+  which is how they reach the release job's `PATH`.
 - ✅ `actions/attest-build-provenance` in `release.yml`, over `dist/checksums.txt` so one
   attestation covers every artifact. Needed `id-token: write` (also what makes cosign
   keyless) and `attestations: write`.

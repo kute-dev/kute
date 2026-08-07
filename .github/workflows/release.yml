@@ -25,8 +25,12 @@ jobs:
           persist-credentials: false
       # cosign and syft come from here: .goreleaser.yaml's signs/sboms shell
       # out to both by name, and mise puts them on PATH for later steps.
+      # MISE_ENV=release is what pulls mise.release.toml's tools in on top
+      # of mise.toml's — see that file for why they're split out.
       - name: Setup mise
         uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        env:
+          MISE_ENV: release
       - name: Generate changelog.json
         run: scripts/release-notes.sh "${{ github.ref_name }}"
       - name: Run GoReleaser
