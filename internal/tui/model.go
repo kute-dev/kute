@@ -115,11 +115,19 @@ type TaskScope struct {
 	FluxSourceName      string
 	FluxSourceNamespace string
 	// NewName is the target name for a create/clone verb ("job-retry"'s
-	// cloned Job) — precomputed by the begin method so the will-run line and
-	// the executed Create call agree, the same reason FluxSourceKind/Name/
-	// Namespace above are resolved once rather than re-derived at execute
-	// time. Empty for every other verb.
+	// cloned Job, "cronjob-run-now"'s triggered Job) — precomputed by the
+	// begin method so the will-run line and the executed Create call agree,
+	// the same reason FluxSourceKind/Name/Namespace above are resolved once
+	// rather than re-derived at execute time. Empty for every other verb.
 	NewName string
+	// Schedule is the target cron schedule string for a
+	// "cronjob-set-schedule" verb — validated client-side via robfig/cron/v3's
+	// ParseStandard before Begin is ever called
+	// (cronjobschedule.go's commitCronSchedule), the same "the panel does its
+	// own gathering, Scope just carries the resolved value" shape
+	// Replicas/Image/Resources use for Scale/SetImage/SetResources. Empty for
+	// every other verb.
+	Schedule string
 }
 
 // TaskAction describes an operation available from a task screen.

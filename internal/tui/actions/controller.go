@@ -312,6 +312,15 @@ func (c *Controller) execute() tea.Cmd {
 		case "job-suspend", "job-resume":
 			err = mutator.SetJobSuspend(context.Background(),
 				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Verb == "job-suspend")
+		case "cronjob-run-now":
+			err = mutator.TriggerCronJob(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.NewName)
+		case "cronjob-suspend", "cronjob-resume":
+			err = mutator.SetCronJobSuspend(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Verb == "cronjob-suspend")
+		case "cronjob-set-schedule":
+			err = mutator.SetCronJobSchedule(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Schedule)
 		case "flux-reconcile":
 			// §30b's with-source reconcile stamps the source first: asking a
 			// reconciler to sync against an artifact that is still stale
