@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/mattn/go-runewidth v0.0.27
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/sahilm/fuzzy v0.1.3
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.3
