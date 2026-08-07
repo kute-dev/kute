@@ -19,17 +19,17 @@
 
 <section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
   <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
-    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">24</span>
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">35</span>
     <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">cert-manager — the issuance chain</h1>
   </div>
   <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 900px; line-height: 1.7;">Issuers, ClusterIssuers, CertificateRequests: generic registry kinds (spec 14a), no new screens. What earns chrome: the Certificate ↵ resolves the request → order → challenge chain and promotes the deepest failure — plus an expiry column and one renew verb, all registry data.</p>
 
   <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
 
-    <!-- ══════════════════ OPTION 24A ══════════════════ -->
-    <div id="24a" data-screen-label="24a Certificate issuance chain" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 35A ══════════════════ -->
+    <div id="35a" data-screen-label="35a Certificate issuance chain" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24a</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">35a</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Certificate ↵ — chain resolved, deepest failure on top</span>
         <span style="font-size: 12px; color: #676780;">same promotion as pod detail's last-termination · orders &amp; challenges never need their own screens</span>
       </div>
@@ -40,7 +40,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">nva-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #9a9ab2;">certificate/web-tls</span>
           <span style="color: #44445c;">›</span>
@@ -56,10 +56,10 @@
         <div style="margin: 10px 14px; border: 1px solid #4a2430; border-radius: 6px; background: #170e13; padding: 8px 12px;">
           <div style="display: flex; align-items: baseline; gap: 10px;">
             <span style="color: #ef6a6a; font-weight: 700;">✕ challenge failed</span>
-            <span style="color: #9a9ab2;">dns-01 · app.nva.dev</span>
+            <span style="color: #9a9ab2;">dns-01 · app.aim.dev</span>
             <span style="margin-left: auto; color: #676780;">8m ago · order/web-tls-1-2847563921</span>
           </div>
-          <div style="color: #f0b7b7; margin-top: 2px;">propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.nva.dev</div>
+          <div style="color: #f0b7b7; margin-top: 2px;">propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.aim.dev</div>
           <div style="color: #676780; font-size: 11px; margin-top: 2px;">message verbatim from challenge status · deepest failure in the chain, found for you</div>
         </div>
 
@@ -121,10 +121,10 @@
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 24B ══════════════════ -->
-    <div id="24b" data-screen-label="24b Certificates list with expiry" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 35B ══════════════════ -->
+    <div id="35b" data-screen-label="35b Certificates list with expiry" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24b</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">35b</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Certificates list — expiry as a first-class column</span>
         <span style="font-size: 12px; color: #676780;">registry data over spec 14a · same expiry semantics as the ingress TLS column (spec 23a)</span>
       </div>
@@ -135,7 +135,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">nva-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Certificates</span>
           <span style="color: #44445c; font-size: 11px;">cert-manager.io/v1</span>
@@ -223,16 +223,16 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>Pure registry data over the generic CRD list (spec 14a): <span style="color: #e9e2ff;">EXPIRES from status.notAfter, RENEWAL from status.renewalTime</span> — yellow &lt;30d, red expired, exactly the ingress TLS column semantics (spec 23a). No new machinery.</li>
           <li>Sort is the standard unhealthy-first with one addition: among ready certs, <span style="color: #e9e2ff;">soonest expiry floats up</span>. The ◷ &lt;30d count joins the strip — and feeds cluster triage / TROUBLE (spec 19a), where `certificate/web-tls · Issuing` already appears.</li>
-          <li>`↵` opens the chain (<a href="#24a">24a</a>). Everything else — y/e/ctrl-d, marks, filter — is the stock list kit.</li>
+          <li>`↵` opens the chain (<a href="#35a">35a</a>). Everything else — y/e/ctrl-d, marks, filter — is the stock list kit.</li>
           <li>Issuers and ClusterIssuers stay generic lists: NAME · READY · certs count (a reverse-ref column, same join kit as Gateway ⇄ HTTPRoute) · AGE. `↵` on an issuer filters Certificates to it — a filtered table, not a screen.</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 24C ══════════════════ -->
-    <div id="24c" data-screen-label="24c Force-renew will-run line" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 35C ══════════════════ -->
+    <div id="35c" data-screen-label="35c Force-renew will-run line" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">24c</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">35c</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">r — force renew, with its will-run line</span>
         <span style="font-size: 12px; color: #676780;">reversible tier · executes on ↵ · no modal</span>
       </div>
@@ -249,7 +249,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8;">cmctl renew admin-tls -n nva-stage</span>
+          <span style="color: #d8d8e8;">cmctl renew admin-tls -n vna-stage</span>
           <span style="margin-left: auto; color: #676780;"><span style="color: #a78bfa;">↵</span> renew · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
         </div>
         <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
@@ -283,8 +283,8 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>Renew is <span style="color: #e9e2ff;">reversible tier</span> — cert-manager reissues into a new secret and keeps serving the old one until it's ready — so it gets the inline will-run line, not a modal. Friction scales with risk.</li>
           <li>The honest line is <span style="color: #e9e2ff;">cmctl, not kubectl</span>: renewal is an Issuing condition patch on the status subresource, which plain kubectl can't express cleanly. Kute performs the same patch itself — cmctl need not be installed; the line is copyable documentation, same contract as everywhere.</li>
-          <li>After `↵` the row flips to issuing in place and the keybar confirms — <span style="color: #e9e2ff;">no toast, no navigation</span>. `↵` again opens the chain (<a href="#24a">24a</a>) to watch it land.</li>
-          <li>Works identically from the list (<a href="#24b">24b</a>) and the chain view. On a PROD context, renew stays reversible tier — it's delete that escalates, not reissue.</li>
+          <li>After `↵` the row flips to issuing in place and the keybar confirms — <span style="color: #e9e2ff;">no toast, no navigation</span>. `↵` again opens the chain (<a href="#35a">35a</a>) to watch it land.</li>
+          <li>Works identically from the list (<a href="#35b">35b</a>) and the chain view. On a PROD context, renew stays reversible tier — it's delete that escalates, not reissue.</li>
         </ul>
       </sc-if>
     </div>

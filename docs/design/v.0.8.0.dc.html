@@ -19,17 +19,17 @@
 
 <section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
   <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
-    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">25</span>
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">36</span>
     <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">CronJobs — the schedule is the thing you operate</h1>
   </div>
   <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 980px; line-height: 1.7;">A CronJob's three questions are: did the last run pass, when is the next one, and is it even enabled. Kute answers all three in the list. Three verbs earn keys — <span style="color: #9a9ab2;">ctrl-r</span> run now, <span style="color: #9a9ab2;">s</span> suspend/resume, <span style="color: #9a9ab2;">S</span> edit schedule — and nothing else gets chrome. Jobs and Pods stay generic lists reached by ↵.</p>
 
   <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
 
-    <!-- ══════════════════ OPTION 25A ══════════════════ -->
-    <div id="25a" data-screen-label="25a CronJobs list + last-run history" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 36A ══════════════════ -->
+    <div id="36a" data-screen-label="36a CronJobs list + last-run history" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25a</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">36a</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">CronJobs list — schedule, next run, and the last outcome</span>
         <span style="font-size: 12px; color: #676780;">name order, always · suspended rows dim but never sort away</span>
       </div>
@@ -40,7 +40,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">CronJobs</span>
           <span style="color: #44445c; font-size: 11px;">batch/v1</span>
@@ -174,7 +174,7 @@
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
           <li><span style="color: #e9e2ff;">NEXT is computed, not stored</span> — Kute parses the cron expression against spec.timeZone and counts down live off the same clock as the age column. kubectl can't show it; it's the single most-asked question about a cronjob.</li>
-          <li>LAST RUN carries its outcome inline (<span style="color: #34d17b;">✓</span>/<span style="color: #ef6a6a;">✕</span>) from the newest owned Job — so the list answers "is this thing healthy" without a detail hop. The failure card in the panel promotes the deepest message verbatim, same move as pod detail (spec 5a) and the cert chain (<a href="#24a">24a</a>).</li>
+          <li>LAST RUN carries its outcome inline (<span style="color: #34d17b;">✓</span>/<span style="color: #ef6a6a;">✕</span>) from the newest owned Job — so the list answers "is this thing healthy" without a detail hop. The failure card in the panel promotes the deepest message verbatim, same move as pod detail (spec 5a) and the cert chain (<a href="#35a">35a</a>).</li>
           <li><span style="color: #e9e2ff;">Suspended rows stay in name order</span> — struck-through, dimmed, amber `yes` in SUSP, NEXT reads `—`. They don't sink to the bottom: a suspended cronjob is usually suspended <em>by you, this morning</em>, and you need to find it where you left it.</li>
           <li>The right panel is the marked row's last 5 runs — history from ownerRefs over the Jobs watch, no extra request. Below it the metadata that changes behaviour: concurrency policy, deadline, history limits, timezone, backoff. Nothing decorative.</li>
           <li>`↵` opens the generic Jobs list filtered to this cronjob; `l` tails logs of the newest run's pod (spec 3a plumbing). <span style="color: #e9e2ff;">No CronJob detail screen</span> — Jobs and Pods already have theirs.</li>
@@ -182,10 +182,10 @@
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 25B ══════════════════ -->
-    <div id="25b" data-screen-label="25b ctrl-r run now" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 36B ══════════════════ -->
+    <div id="36b" data-screen-label="36b ctrl-r run now" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25b</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">36b</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">ctrl-r — run now, with the concurrency conflict up front</span>
         <span style="font-size: 12px; color: #676780;">reversible tier · inline will-run line, no modal</span>
       </div>
@@ -212,7 +212,7 @@
 
         <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8;">kubectl create job sync-inventory-manual-1402 --from=cronjob/sync-inventory -n aim-stage</span>
+          <span style="color: #d8d8e8;">kubectl create job sync-inventory-manual-1402 --from=cronjob/sync-inventory -n vna-stage</span>
           <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> run · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
         </div>
         <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
@@ -250,15 +250,15 @@
           <li>The whole reason run-now needs a confirm step isn't danger, it's <span style="color: #e9e2ff;">the overlap nobody expects</span>: `--from=cronjob` ignores concurrencyPolicy entirely. Kute says so, names the running job, and lets you proceed. Warning card only appears when there's an actual conflict — otherwise it's just the will-run line.</li>
           <li><span style="color: #e9e2ff;">ctrl-r, not r</span>, because `r` is restart/renew everywhere else in kute and creating a job is not a restart. The modifier marks it as a create, matching ctrl-d for delete.</li>
           <li>The generated name is <span style="color: #e9e2ff;">deterministic and readable</span> — `-manual-HHMM` — so it's obvious in history, in logs, and to whoever finds it tomorrow. Manual runs carry a `manual · you` tag in the history panel, sourced from the creating annotation.</li>
-          <li>Reversible tier: it doesn't touch the schedule, and the job is deletable. So — inline line, no modal, no `y` to confirm. Friction scales with risk; compare <a href="#25c">25c</a>.</li>
+          <li>Reversible tier: it doesn't touch the schedule, and the job is deletable. So — inline line, no modal, no `y` to confirm. Friction scales with risk; compare <a href="#36c">36c</a>.</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 25C ══════════════════ -->
-    <div id="25c" data-screen-label="25c s suspend and resume" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 36C ══════════════════ -->
+    <div id="36c" data-screen-label="36c s suspend and resume" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25c</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">36c</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">s — suspend and resume, one key both directions</span>
         <span style="font-size: 12px; color: #676780;">suspend is danger tier (`y` to confirm) · resume is reversible</span>
       </div>
@@ -286,7 +286,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
               <span style="color: #55556e;">will run</span>
-              <span style="color: #d8d8e8;">kubectl patch cronjob/backup-postgres -n aim-stage -p '{"spec":{"suspend":true}}'</span>
+              <span style="color: #d8d8e8;">kubectl patch cronjob/backup-postgres -n vna-stage -p '{"spec":{"suspend":true}}'</span>
               <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #ef6a6a; font-weight: 700;">y</span> suspend · <span style="color: #a78bfa;">esc</span> cancel</span>
             </div>
             <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #170e13; border-top: 1px solid #4a2430; font-size: 12px;">
@@ -311,7 +311,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
               <span style="color: #55556e;">will run</span>
-              <span style="color: #d8d8e8;">kubectl patch cronjob/warm-cache -n aim-stage -p '{"spec":{"suspend":false}}'</span>
+              <span style="color: #d8d8e8;">kubectl patch cronjob/warm-cache -n vna-stage -p '{"spec":{"suspend":false}}'</span>
               <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> resume · <span style="color: #a78bfa;">esc</span> cancel</span>
             </div>
             <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
@@ -327,17 +327,17 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
           <li>One key, both directions — <span style="color: #e9e2ff;">the row already tells you which way it goes</span> (SUSP column, strike-through), so a second key would be redundant state to remember. The keybar label flips to `resume` when the marked row is suspended.</li>
           <li><span style="color: #e9e2ff;">Asymmetric friction, deliberately.</span> Suspend is the dangerous half: it fails silently and forever, and nobody gets paged for a backup that didn't start. So it's danger tier — `y`, plus name-typing on a PROD context (spec 20a's escalation). Resume can only cause work to happen, so it's `↵`.</li>
-          <li>Both directions state <span style="color: #e9e2ff;">the backfill truth</span>: Kubernetes does not catch up missed runs. Resume shows how many were skipped — computed from the cron expression across the suspension window — because that number is what tells you whether to also fire a manual run (<a href="#25b">25b</a>).</li>
+          <li>Both directions state <span style="color: #e9e2ff;">the backfill truth</span>: Kubernetes does not catch up missed runs. Resume shows how many were skipped — computed from the cron expression across the suspension window — because that number is what tells you whether to also fire a manual run (<a href="#36b">36b</a>).</li>
           <li>Suspend doesn't kill in-flight jobs; the card says so, and names them when there are any. Kute never implies a stronger effect than the patch actually has.</li>
           <li>Works on a marked set too — `s` over 4 marked cronjobs suspends all four behind one confirm, listing the names (spec 20a bulk kit).</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 25D ══════════════════ -->
-    <div id="25d" data-screen-label="25d S edit schedule" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 36D ══════════════════ -->
+    <div id="36d" data-screen-label="36d S edit schedule" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25d</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">36d</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">S — edit schedule, with the next five runs as the proof</span>
         <span style="font-size: 12px; color: #676780;">one field, decoded live · not a YAML round-trip</span>
       </div>
@@ -348,7 +348,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #9a9ab2;">cronjob/report-nightly</span>
           <span style="color: #44445c;">›</span>
@@ -401,7 +401,7 @@
 
         <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8;">kubectl patch cronjob/report-nightly -n aim-stage -p '{"spec":{"schedule":"30 1 * * 1-5"}}'</span>
+          <span style="color: #d8d8e8;">kubectl patch cronjob/report-nightly -n vna-stage -p '{"spec":{"schedule":"30 1 * * 1-5"}}'</span>
           <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> apply · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
         </div>
 

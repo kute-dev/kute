@@ -19,17 +19,17 @@
 
 <section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
   <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
-    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">26</span>
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">37</span>
     <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">Jobs — attempts, not status</h1>
   </div>
-  <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 980px; line-height: 1.7;">A Job that failed already told you everything, in five pods that no longer exist. Kute's job view is <span style="color: #9a9ab2;">an attempt ledger</span> — every pod the job ever made, its exit code, and its logs, kept reachable after the pod is gone. Two verbs earn keys: <span style="color: #9a9ab2;">ctrl-r</span> rerun (honest about Job immutability) and <span style="color: #9a9ab2;">s</span> suspend, shared with CronJobs (<a href="#25c">25c</a>). Indexed jobs get one extra widget and no extra screen.</p>
+  <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 980px; line-height: 1.7;">A Job that failed already told you everything, in five pods that no longer exist. Kute's job view is <span style="color: #9a9ab2;">an attempt ledger</span> — every pod the job ever made, its exit code, and its logs, kept reachable after the pod is gone. Two verbs earn keys: <span style="color: #9a9ab2;">ctrl-r</span> rerun (honest about Job immutability) and <span style="color: #9a9ab2;">s</span> suspend, shared with CronJobs (<a href="#36c">36c</a>). Indexed jobs get one extra widget and no extra screen.</p>
 
   <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
 
-    <!-- ══════════════════ OPTION 26A ══════════════════ -->
-    <div id="26a" data-screen-label="26a Jobs list" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 37A ══════════════════ -->
+    <div id="37a" data-screen-label="37a Jobs list" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">26a</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">37a</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Jobs list — completions, duration, and where it came from</span>
         <span style="font-size: 12px; color: #676780;">unhealthy first, then newest · SOURCE is the column kubectl never had</span>
       </div>
@@ -40,7 +40,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Jobs</span>
           <span style="color: #44445c; font-size: 11px;">batch/v1</span>
@@ -127,7 +127,7 @@
           <span style="color: #9a9ab2;">1/1</span>
           <span style="color: #676780;">12s</span>
           <span style="color: #676780;">0</span>
-          <span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">helm/aim-stage post-install</span>
+          <span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">helm/vna-stage post-install</span>
           <span style="color: #676780; text-align: right;">23d</span>
         </div>
 
@@ -145,19 +145,19 @@
 
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
-          <li><span style="color: #e9e2ff;">SOURCE is the column that makes the list usable.</span> A namespace's Jobs list is mostly hash-suffixed cronjob spawn you don't care about, mixed with the one standalone migration you do. Resolved from ownerRefs + helm hook annotations + kute's own manual tag (<a href="#25b">25b</a>) — `o` groups by it, `/` filters to `standalone` in one keystroke.</li>
+          <li><span style="color: #e9e2ff;">SOURCE is the column that makes the list usable.</span> A namespace's Jobs list is mostly hash-suffixed cronjob spawn you don't care about, mixed with the one standalone migration you do. Resolved from ownerRefs + helm hook annotations + kute's own manual tag (<a href="#36b">36b</a>) — `o` groups by it, `/` filters to `standalone` in one keystroke.</li>
           <li>FAILED counts pod attempts, not jobs — a job at `0/1` with `3` failed has burned its backoffLimit; a running job with `1` failed is retrying and probably fine. <span style="color: #e9e2ff;">Two numbers that mean different things get two columns</span>, never one "status" string.</li>
           <li>DURATION runs live for active jobs and freezes at completion — and turns red when it hits activeDeadlineSeconds, which is how `migrate-schema-v42`'s exact `10m00s` reads as a deadline kill rather than a coincidence.</li>
-          <li>Suspended jobs (spec.suspend, 1.24+) use the same struck-through treatment as suspended cronjobs and stay in sort order. `s` toggles, same key, same asymmetric confirm as <a href="#25c">25c</a>.</li>
-          <li>`↵` opens the attempt ledger (<a href="#26b">26b</a>), not a describe page. `l` tails the newest attempt's pod directly from the list — the common case is "show me why it failed", and that shouldn't cost two hops.</li>
+          <li>Suspended jobs (spec.suspend, 1.24+) use the same struck-through treatment as suspended cronjobs and stay in sort order. `s` toggles, same key, same asymmetric confirm as <a href="#36c">36c</a>.</li>
+          <li>`↵` opens the attempt ledger (<a href="#37b">37b</a>), not a describe page. `l` tails the newest attempt's pod directly from the list — the common case is "show me why it failed", and that shouldn't cost two hops.</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 26B ══════════════════ -->
-    <div id="26b" data-screen-label="26b Job attempt ledger" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 37B ══════════════════ -->
+    <div id="37b" data-screen-label="37b Job attempt ledger" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">26b</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">37b</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Job ↵ — the attempt ledger, including pods that are gone</span>
         <span style="font-size: 12px; color: #676780;">the one thing kubectl genuinely cannot give you back</span>
       </div>
@@ -168,7 +168,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #9a9ab2;">job/report-nightly-29310450</span>
           <span style="color: #44445c;">›</span>
@@ -253,17 +253,17 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
           <li><span style="color: #e9e2ff;">`(collected)` is the whole idea.</span> By the time you look, the failed pods are garbage-collected and `kubectl logs` returns nothing. Kute watches Jobs continuously, so it captured each attempt's terminal state and tail as it happened — the ledger survives the pods. `↵` on a collected attempt opens the retained tail, clearly labelled as retained, never presented as live.</li>
           <li>"<span style="color: #e9e2ff;">Same failure all three times</span>" is the read you actually want: if attempt 3 differs from attempt 1 it's flaky infra, if they're identical it's your code. Kute compares the retained tails and says which — `d` shows the diff when they differ.</li>
-          <li>The failure card promotes the deepest real message, same recipe as pod detail (spec 5a) and the cert chain (<a href="#24a">24a</a>): not `BackoffLimitExceeded`, which tells you nothing, but the log line that preceded the exit.</li>
+          <li>The failure card promotes the deepest real message, same recipe as pod detail (spec 5a) and the cert chain (<a href="#35a">35a</a>): not `BackoffLimitExceeded`, which tells you nothing, but the log line that preceded the exit.</li>
           <li><span style="color: #e9e2ff;">ttlAfterFinished gets a countdown</span> when it's set, in amber. "This evidence disappears in 12h" is operationally urgent and invisible everywhere else.</li>
           <li>Attempts are Pods — `↵` into logs, exec, everything from spec 5a still applies for ones that still exist. No new pod machinery, just an index over them that outlives them.</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 26C ══════════════════ -->
-    <div id="26c" data-screen-label="26c ctrl-r rerun" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 37C ══════════════════ -->
+    <div id="37c" data-screen-label="37c ctrl-r rerun" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">26c</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">37c</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">ctrl-r — rerun, honest that Jobs can't be rerun</span>
         <span style="font-size: 12px; color: #676780;">it's a copy with a new name · kute says so instead of pretending</span>
       </div>
@@ -301,7 +301,7 @@
 
         <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8;">kubectl create job migrate-schema-v42-rerun-1 --from=job/migrate-schema-v42 -n aim-stage</span>
+          <span style="color: #d8d8e8;">kubectl create job migrate-schema-v42-rerun-1 --from=job/migrate-schema-v42 -n vna-stage</span>
           <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> create · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
         </div>
         <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
@@ -313,19 +313,19 @@
 
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
-          <li>Every other tool calls this "rerun" and quietly deletes your Job. Kute <span style="color: #e9e2ff;">names the two real options and defaults to the non-destructive one</span> — a suffixed copy, so the failed job and its attempt ledger (<a href="#26b">26b</a>) survive for comparison. Replace exists because sometimes the name matters; it's the second choice, not the hidden behaviour.</li>
+          <li>Every other tool calls this "rerun" and quietly deletes your Job. Kute <span style="color: #e9e2ff;">names the two real options and defaults to the non-destructive one</span> — a suffixed copy, so the failed job and its attempt ledger (<a href="#37b">37b</a>) survive for comparison. Replace exists because sometimes the name matters; it's the second choice, not the hidden behaviour.</li>
           <li><span style="color: #e9e2ff;">The amber strip is diagnosis, not decoration.</span> When the previous failure was a deadline kill or an image pull error, rerunning identical config is futile — kute says so and offers `ctrl-y` to edit the template on the way through. It only appears when the prior failure is one kute can classify.</li>
-          <li>Same `ctrl-r` as the CronJob run-now verb (<a href="#25b">25b</a>) — both create a Job from a template, and the modifier consistently marks "this creates something".</li>
+          <li>Same `ctrl-r` as the CronJob run-now verb (<a href="#36b">36b</a>) — both create a Job from a template, and the modifier consistently marks "this creates something".</li>
           <li>Rerun on a cronjob-owned Job creates a standalone copy, not a new cronjob run, and the confirm says so: the copy won't count toward history limits and won't be garbage-collected with the schedule's set.</li>
           <li>Reversible tier throughout — `↵`, no `y`. Replace escalates to danger tier (`y` + name on PROD) because it does delete.</li>
         </ul>
       </sc-if>
     </div>
 
-    <!-- ══════════════════ OPTION 26D ══════════════════ -->
-    <div id="26d" data-screen-label="26d Indexed / parallel job map" style="display: flex; flex-direction: column; gap: 12px;">
+    <!-- ══════════════════ OPTION 37D ══════════════════ -->
+    <div id="37d" data-screen-label="37d Indexed / parallel job map" style="display: flex; flex-direction: column; gap: 12px;">
       <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">26d</span>
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">37d</span>
         <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Parallel &amp; indexed jobs — the completion map</span>
         <span style="font-size: 12px; color: #676780;">one widget inside the ledger · no separate screen</span>
       </div>
@@ -336,7 +336,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #a78bfa;">vna-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #9a9ab2;">job/reindex-search</span>
           <span style="color: #44445c;">›</span>
@@ -393,7 +393,7 @@
           <span><span style="color: #a78bfa;">l</span> <span style="color: #676780;">logs of index 3</span></span>
           <span><span style="color: #a78bfa;">f</span> <span style="color: #676780;">failed only</span></span>
           <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">back</span></span>
-          <span style="margin-left: auto; color: #44445c;">non-indexed jobs show attempts as a flat list instead — <a href="#26b">26b</a></span>
+          <span style="margin-left: auto; color: #44445c;">non-indexed jobs show attempts as a flat list instead — <a href="#37b">37b</a></span>
         </div>
       </div>
 
@@ -401,7 +401,7 @@
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
           <li>`completedIndexes: 0-2,4-7` is a real API field and a genuinely hostile one to read. <span style="color: #e9e2ff;">The map is that string, rendered</span> — and the gap in it is the answer: index 3 is broken, the other eleven are fine.</li>
           <li>Per-index duration turns the map into a <span style="color: #e9e2ff;">skew detector</span>. Uniform times mean good sharding; one index at 4× the mean means your partition function is wrong. Free, from data already on the pods.</li>
-          <li>Same screen as <a href="#26b">26b</a> — the map replaces the flat attempt list when `completionMode: Indexed`, everything below it is identical. <span style="color: #e9e2ff;">One screen, two renderings</span>, not two destinations.</li>
+          <li>Same screen as <a href="#37b">37b</a> — the map replaces the flat attempt list when `completionMode: Indexed`, everything below it is identical. <span style="color: #e9e2ff;">One screen, two renderings</span>, not two destinations.</li>
           <li>Kute reads podFailurePolicy and says whether a failure counted — "no rule matches 137 · counts against backoffLimit 6" is the difference between a job that will recover and one that won't, and it is otherwise buried in spec.</li>
           <li>ETA is honest arithmetic from observed index durations and parallelism, shown only once enough indexes have finished to mean anything. No progress bar; a fraction and a number.</li>
         </ul>

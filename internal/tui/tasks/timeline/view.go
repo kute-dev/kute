@@ -902,7 +902,7 @@ func (m Model) previousRollout(e kube.TimelineEntry) (kube.TimelineEntry, bool) 
 
 // shortImage drops the registry/path prefix from a container image
 // reference, keeping just the trailing "name:tag" component —
-// "registry.example.com/aim/nva.bp.app:5.31.0.58108" renders as
+// "registry.example.com/vna/nva.bp.app:5.31.0.58108" renders as
 // "nva.bp.app:5.31.0.58108". Nobody needs the internal registry host in a
 // narrow rail card or a truncated feed row.
 func shortImage(image string) string {
