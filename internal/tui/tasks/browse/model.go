@@ -286,6 +286,12 @@ type Model struct {
 	// pendingSetResources, since there's a per-row value buffer (or, while
 	// adding, a key+value pair) to gather before there's an action to Begin.
 	pendingMeta *metaTarget
+	// pendingCronSchedule is non-nil while §33a's 'S' inline edit-schedule
+	// panel is showing (cronjobschedule.go) — a bespoke gate like
+	// pendingMeta, since there's a typed schedule buffer (plus client-side
+	// cron.ParseStandard validation) to gather before there's an action to
+	// Begin.
+	pendingCronSchedule *cronScheduleTarget
 	// marks is 20a's marked set (bulk.go), keyed by markKey(namespace, name)
 	// so 6b's cross-namespace grouped view can't collide two same-named rows
 	// in different namespaces. nil/empty means no marks — every marks-aware

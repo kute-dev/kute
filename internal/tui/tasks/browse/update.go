@@ -37,6 +37,8 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 		return m.setResourcesPasteTarget()
 	case m.pendingMeta != nil:
 		return m.metaPasteTarget()
+	case m.pendingCronSchedule != nil:
+		return m.cronSchedulePasteTarget()
 	case m.pendingBulkDelete != nil:
 		if m.pendingBulkDelete.tier != actions.TierModal {
 			return nil // non-prod bulk delete is a plain y/N, no buffer
@@ -220,6 +222,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
+		if isCronScheduleActionID(msg.ActionID) && m.pendingCronSchedule != nil {
+			// §33a follows the same keep-open contract as 26a (see
+			// handleCronScheduleResult's own doc comment) — a schedule commit
+			// never closes the panel, success or failure, so m.load() refreshes
+			// the row's Schedule/Next Run cells behind it rather than the panel
+			// itself needing to re-render them.
+			cmd := m.handleCronScheduleResult(msg)
+			if msg.Err == nil {
+				return m, tea.Batch(cmd, m.load())
+			}
+			return m, cmd
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
@@ -383,6 +397,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingMeta != nil {
 		return m.updateMetaKey(msg)
 	}
+	if m.pendingCronSchedule != nil {
+		return m.updateCronScheduleKey(msg)
+	}
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
@@ -464,6 +481,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.beginDrain(row)
 			}
 		}
+	case "S":
+		m.beginCronJobSetSchedule()
 	case "+":
 		m.beginScale(1)
 	case "-":
@@ -505,6 +524,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginJobRetry(row)
+			}
+		}
+		if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginCronJobRunNow(row)
 			}
 		}
 	case "r":
@@ -598,6 +622,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// (Node-only).
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginJobSuspend(row)
+			}
+		}
+		if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
+			// A CronJob's own suspend/resume. Never contends with Job's own
+			// 's' above (disjoint Kinds) or NodeShell's below (Node-only).
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginCronJobSuspend(row)
 			}
 		}
 		// Same gate as 'x' above, and a stronger reason for it: kubectl debug

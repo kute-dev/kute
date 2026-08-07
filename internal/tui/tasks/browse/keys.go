@@ -113,6 +113,38 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}
 	}
+	if m.pendingCronSchedule != nil && !m.actions.Active() {
+		// Same !m.actions.Active() guard pendingMeta's block uses above, for
+		// the same reason: while a PROD-escalated "cronjob-set-schedule"
+		// confirm is showing, the generic m.actions.Active() branch further
+		// down takes over rendering the y/N — the panel stays open underneath
+		// either way.
+		t := m.pendingCronSchedule
+		kb := tui.Keybar{
+			Pill: tui.ModeBrowse, PillText: "EDIT SCHEDULE",
+			// The typed buffer is shown as a KeyHint, same idiom scale.go's own
+			// keybar uses for pendingScale (browse's only other single-field
+			// embedded panel with no dedicated Body() override, view.go:539-548
+			// — pendingSetImage/pendingSetResources/pendingMeta each get one,
+			// pendingScale/pendingCronSchedule stay on the table and rely on the
+			// keybar alone to show what's being typed).
+			Groups: [][]tui.KeyHint{{
+				{Key: t.input.Value() + tui.GlyphSelBar, Label: "schedule"},
+				{Key: "↵", Label: "apply"}, {Key: "esc", Label: "cancel"},
+			}},
+		}
+		switch {
+		case t.parseErr != nil:
+			kb.RightWarnNote = "invalid schedule: " + t.parseErr.Error()
+		case t.resultErr != "":
+			kb.RightWarnNote = "failed: " + t.resultErr
+		case t.resultNote != "":
+			kb.RightNote = t.resultNote
+		default:
+			kb.RightNote = m.cronScheduleWillRunLine()
+		}
+		return kb
+	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {
 			return tui.Keybar{
@@ -184,6 +216,16 @@ func (m Model) Keybar() tui.Keybar {
 					// (unconfirmed, TierNone) execFeedback line, just rendered
 					// through the confirm note since this one is TierInline.
 					note = jobSuspendWillRunLine(pending.Scope)
+				case "cronjob-run-now":
+					// the exact "will run: kubectl create job ...
+					// --from=cronjob/..." line, same idiom as job-retry above.
+					note = cronJobRunNowWillRunLine(pending.Scope)
+				case "cronjob-set-schedule":
+					// only reached when TierForCronJobSetSchedule escalates to
+					// TierInline in PROD — cronjob-suspend/cronjob-resume never
+					// appear here, fixed TierNone, never escalates, exactly like
+					// cordon/flux-suspend are also absent from this switch.
+					note = cronJobSetScheduleWillRunLine(pending.Scope)
 				case "set-meta":
 					// 26a: the panel itself stays open under this confirm
 					// (meta.go's own doc comment) and already renders the full
@@ -384,6 +426,9 @@ func (m Model) Keybar() tui.Keybar {
 	if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
 		groups = append(groups, m.jobKeybarGroup())
 	}
+	if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
+		groups = append(groups, m.cronJobKeybarGroup())
+	}
 	if m.kind == kube.KindCustomResourceDefinition {
 		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
 	}
@@ -450,5 +495,5 @@ func singularDisplay(plural string) string {
 func (m Model) CapturingInput() bool {
 	return (m.filterActive && !m.filterListFocused) || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
 		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
-		m.pendingBulkDelete != nil
+		m.pendingCronSchedule != nil || m.pendingBulkDelete != nil
 }
