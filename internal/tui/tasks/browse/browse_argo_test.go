@@ -196,7 +196,7 @@ func TestArgoSyncRevisionFallsBackToHEAD(t *testing.T) {
 	mut := &fakeMutator{}
 	m := argoModelWithMutator(t, mut, application("web", "", "", "Unknown", "Unknown"))
 	m = step(t, m, tea.KeyPressMsg{Text: "S"})
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.argoSyncs) != 1 || mut.argoSyncs[0] != "argocd/web@HEAD" {
 		t.Fatalf("argoSyncs = %v, want [argocd/web@HEAD]", mut.argoSyncs)
 	}
