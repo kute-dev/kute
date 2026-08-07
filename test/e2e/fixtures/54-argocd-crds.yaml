@@ -1,0 +1,67 @@
+# Argo CD's own CRDs, trimmed to what §33a reads. Installed without any Argo
+# controller — same reasoning as 52-flux-crds.yaml: nothing reconciles these,
+# so the hand-written sync/health status in 55-argocd-objects.yaml is
+# permanent rather than being rewritten by the application-controller into a
+# single Missing/Unknown state (no real Git repo exists to sync from).
+#
+# The printer columns are the ones real Argo CRDs declare: Sync Status and
+# Health Status off .status.sync.status/.status.health.status, and nothing
+# else — no Ready-style condition exists anywhere in Argo's status, so the
+# generic CRD health glyph would fall back to neutral "·" without §33a's
+# curated descriptor, which is exactly the regression this fixture exists to
+# catch.
+#
+# No status subresource on purpose — the objects in 55-argocd-objects.yaml
+# set status through a plain apply, which a status subresource would drop.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applications.argoproj.io
+spec:
+  group: argoproj.io
+  scope: Namespaced
+  names:
+    plural: applications
+    singular: application
+    kind: Application
+    listKind: ApplicationList
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Sync Status
+          type: string
+          jsonPath: .status.sync.status
+        - name: Health Status
+          type: string
+          jsonPath: .status.health.status
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+# The project scope Applications hang off. §33a never reads it — it shares
+# argoproj.io with Application but carries no sync/health status, and stays
+# on the generic 14a custom-resource path (internal/resources/crd.go's
+# recognition switch keys on group *and* Kind together, never bare Kind).
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: appprojects.argoproj.io
+spec:
+  group: argoproj.io
+  scope: Namespaced
+  names:
+    plural: appprojects
+    singular: appproject
+    kind: AppProject
+    listKind: AppProjectList
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

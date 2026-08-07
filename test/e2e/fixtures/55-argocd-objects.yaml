@@ -1,0 +1,262 @@
+# Argo Application objects with hand-written status. No controller runs, so
+# every state below is permanent — which is the point: §33a's sync×health
+# matrix needs a Degraded app, an OutOfSync one, a Syncing one and a pile of
+# Synced/Healthy ones all on screen at once, and a real application-controller
+# would reconcile them against a Git repo nothing here provides.
+#
+# Everything lives in kute-e2e, same as the Flux fixtures (53-flux-objects.yaml)
+# — no separate argocd namespace, since §33a has no ↵ carve-out that would
+# need one to jump across.
+#
+# The health message lives where a real controller writes it: on the sickest
+# resource's own status.resources[].health.message, naming the real worker
+# Deployment from 10-workloads.yaml (which genuinely CrashLoopBackOffs) so
+# §33a's sub-line reads a message describing an object that actually exists.
+---
+# The dashboard URL §33a's `u` verb reads.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: kute-e2e
+data:
+  url: https://argocd.e2e.test
+---
+# argoproj.io also serves AppProject, which carries no sync/health status —
+# internal/resources/crd.go recognises Application by group *and* Kind, so
+# this has to stay on the generic 14a custom-resource path untouched.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: kute-e2e
+spec:
+  sourceRepos:
+    - https://github.com/kute-dev/e2e-config
+  destinations:
+    - namespace: kute-e2e
+      server: https://kubernetes.default.svc
+---
+# Synced but Degraded — git is right, the workload is sick. The sub-line
+# comes from status.resources[].health.message, naming the real worker
+# Deployment, which genuinely CrashLoopBackOffs on this cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kute-billing
+  namespace: kute-e2e
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kute-dev/e2e-config
+    path: clusters/e2e/billing
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kute-e2e
+status:
+  # status.sync.revision is a bare SHA — argoRevisionCell composes the
+  # "<targetRevision>@<short-sha>" cell itself from this plus spec.source.
+  # targetRevision, so this must never carry a "ref@" prefix of its own.
+  sync:
+    status: Synced
+    revision: e41b90cdeadbeef0123456789abcdef012345678
+  health:
+    status: Degraded
+  # The last sync that finished is what a real argocd app sync would set;
+  # argoSyncedCell reads status.operationState.finishedAt off it.
+  operationState:
+    phase: Succeeded
+    startedAt: "2026-08-02T09:36:00Z"
+    finishedAt: "2026-08-02T09:36:31Z"
+    message: "successfully synced (all tasks run)"
+    syncResult:
+      revision: e41b90cdeadbeef0123456789abcdef012345678
+      phase: Succeeded
+    operation:
+      sync:
+        revision: main
+    initiatedBy:
+      username: ci-bot
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: kute-e2e
+      name: worker
+      health:
+        status: Degraded
+        # argoSubLine prepends "Kind/name: " itself from this entry's own
+        # kind/name fields — the message here must not repeat it.
+        message: 'container "worker" is in CrashLoopBackOff — exit 1'
+      sync:
+        status: Synced
+    - group: ""
+      version: v1
+      kind: Service
+      namespace: kute-e2e
+      name: worker
+      health:
+        status: Healthy
+      sync:
+        status: Synced
+---
+# kute-billing's own sync-finished event. objectdetail (14d) redirects
+# straight to yamlview when an object has neither status.conditions (Argo
+# apps never carry one — see resources/argo.go) nor any Event — "an empty
+# detail screen is worse than the manifest" — so this is what keeps ↵ on
+# kute-billing landing on the ordinary meta-grid/EVENTS render instead.
+apiVersion: v1
+kind: Event
+metadata:
+  name: kute-billing.18a5f9c2eaf4b1d8
+  namespace: kute-e2e
+involvedObject:
+  apiVersion: argoproj.io/v1alpha1
+  kind: Application
+  name: kute-billing
+  namespace: kute-e2e
+reason: OperationCompleted
+type: Normal
+message: "application synced successfully"
+count: 1
+firstTimestamp: "2026-08-02T09:36:31Z"
+lastTimestamp: "2026-08-02T09:36:31Z"
+---
+# OutOfSync but Healthy — drift, nothing broken.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kute-frontend
+  namespace: kute-e2e
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kute-dev/e2e-config
+    path: clusters/e2e/frontend
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kute-e2e
+status:
+  sync:
+    status: OutOfSync
+    revision: e41b90cdeadbeef0123456789abcdef012345678
+  health:
+    status: Healthy
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: kute-e2e
+      name: api
+      health:
+        status: Healthy
+      sync:
+        status: OutOfSync
+---
+# Syncing/Progressing — a sync in flight. status.operationState carries the
+# initiator.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kute-search
+  namespace: kute-e2e
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kute-dev/e2e-config
+    path: clusters/e2e/search
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kute-e2e
+status:
+  sync:
+    status: Syncing
+    revision: f77d215deadbeef0123456789abcdef012345678
+  health:
+    status: Progressing
+  operationState:
+    phase: Running
+    startedAt: "2026-08-02T10:41:00Z"
+    message: "running kubectl apply"
+    operation:
+      sync:
+        revision: main
+    initiatedBy:
+      username: admin
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: kute-e2e
+      name: api
+      health:
+        status: Progressing
+      sync:
+        status: Syncing
+---
+# Synced + Healthy — the folded tail.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kute-api
+  namespace: kute-e2e
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kute-dev/e2e-config
+    path: clusters/e2e/api
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kute-e2e
+status:
+  sync:
+    status: Synced
+    revision: f77d215deadbeef0123456789abcdef012345678
+  health:
+    status: Healthy
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: kute-e2e
+      name: api
+      health:
+        status: Healthy
+      sync:
+        status: Synced
+---
+# Synced + Healthy — the folded tail.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kute-web
+  namespace: kute-e2e
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kute-dev/e2e-config
+    path: clusters/e2e/web
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kute-e2e
+status:
+  sync:
+    status: Synced
+    revision: f77d215deadbeef0123456789abcdef012345678
+  health:
+    status: Healthy
+  resources:
+    - group: apps
+      version: v1
+      kind: Deployment
+      namespace: kute-e2e
+      name: worker
+      health:
+        status: Healthy
+      sync:
+        status: Synced

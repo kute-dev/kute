@@ -70,7 +70,7 @@ apply_fixtures() {
   # sweep.
   for f in "${FIXTURE_DIR}"/*.yaml; do
     case "$(basename "$f")" in
-      51-widgets.yaml|53-flux-objects.yaml) continue ;;
+      51-widgets.yaml|53-flux-objects.yaml|55-argocd-objects.yaml) continue ;;
     esac
     kc apply -f "$f" >/dev/null
   done
@@ -86,6 +86,14 @@ apply_fixtures() {
     kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
   done
   kc apply -f "${FIXTURE_DIR}/53-flux-objects.yaml" >/dev/null
+
+  # Argo CD's CRDs, same reasoning: no application-controller runs against
+  # this cluster, so the hand-written sync/health status in
+  # 55-argocd-objects.yaml stays put.
+  for crd in applications.argoproj.io appprojects.argoproj.io; do
+    kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
+  done
+  kc apply -f "${FIXTURE_DIR}/55-argocd-objects.yaml" >/dev/null
 
   log "waiting for the api rollout"
   kc -n "$NAMESPACE" rollout status deployment/api --timeout=180s >/dev/null
