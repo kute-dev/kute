@@ -14,6 +14,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -101,6 +102,16 @@ func NewDemo() *Cluster {
 	)
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
+
+	// §33a: two CronJobs so --demo mode can exercise run-now/suspend/resume/
+	// edit-schedule live. "hourly-report" starts suspended, so 's' exercises
+	// resume first rather than every CronJob needing an extra keypress to
+	// reach that state; the two different schedules give the NEXT RUN column
+	// something real to differ on.
+	c.Seed(kube.KindCronJob,
+		demoCronJob("nightly-backup", "default", "0 2 * * *", false, age(60*24*time.Hour)),
+		demoCronJob("hourly-report", "default", "0 * * * *", true, age(20*24*time.Hour)),
+	)
 
 	// A production-like cluster has many namespaces beyond the one an
 	// operator is actively working in: system/platform namespaces
@@ -830,6 +841,21 @@ func demoWorkerStatefulSet(name, ns string, created metav1.Time) *appsv1.Statefu
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: name, Image: "worker:1.0.0"}}},
 	}
 	return s
+}
+
+// demoCronJob is CronJobs' own exemplar builder (§33a) — schedule/suspend
+// are the two fields projectCronJob's NEXT RUN/SUSPEND columns actually
+// read, so --demo mode exercises the real column derivation rather than a
+// zero-value stub.
+func demoCronJob(name, ns, schedule string, suspend bool, created metav1.Time) *batchv1.CronJob {
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
+		Spec:       batchv1.CronJobSpec{Schedule: schedule},
+	}
+	if suspend {
+		cj.Spec.Suspend = &suspend
+	}
+	return cj
 }
 
 // demoControllerRevision is a StatefulSet/DaemonSet ControllerRevision
