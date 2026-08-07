@@ -28,6 +28,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -65,6 +66,27 @@ type setImageTarget struct {
 	fullRef    bool
 	history    []imageHistoryEntry
 	historyIdx int // -1 = nothing picked/matched
+
+	// pendingCommit is set the instant a commit starts (TierNone's
+	// synchronous apply, or a TierInline confirm) and cleared once
+	// handleSetImageResult applies its outcome — mirrors metaTarget's own
+	// field of the same name/purpose.
+	pendingCommit *setImagePendingCommit
+	// message/lastError are the panel's own transient inline result line —
+	// "set image: worker=..." on success, the raw server error on failure —
+	// cleared the next time a commit starts or the user does anything else
+	// (updateSetImageKey).
+	message   string
+	lastError string
+}
+
+// setImagePendingCommit remembers what a TierNone or confirmed-TierInline
+// commit is currently trying to write, so handleSetImageResult can build the
+// right inline success message and know which container to re-select after a
+// refresh — mirrors metaPendingCommit.
+type setImagePendingCommit struct {
+	container string
+	image     string
 }
 
 // setBuffer replaces t.input's value wholesale and parks the cursor at its
@@ -114,13 +136,31 @@ func (m *Model) beginSetImage() bool {
 	if !ok {
 		return false
 	}
-	obj, ok := workloadObject(m.lister, m.kind, row.Namespace, row.Name)
+	t, ok := m.buildSetImageTarget(m.kind, row.Namespace, row.Name, currentReplicas(row))
 	if !ok {
 		return false
 	}
+	m.pendingSetImage = t
+	m.selectSetImageContainer(0)
+	return true
+}
+
+// buildSetImageTarget fetches kind/namespace/name fresh from the lister and
+// builds a setImageTarget shell (no container selected yet — the caller must
+// call selectSetImageContainer) — the fetch-and-construct half of
+// beginSetImage, factored out so handleSetImageResult's own post-commit
+// refresh always reflects the authoritative server state rather than an
+// optimistic local patch, exactly like buildMetaTarget. desiredCount is
+// passed in rather than re-derived from a row, since a set-image commit never
+// changes replica count and the row backing it may not have reloaded yet.
+func (m *Model) buildSetImageTarget(kind kube.ResourceKind, namespace, name string, desiredCount int32) (*setImageTarget, bool) {
+	obj, ok := workloadObject(m.lister, kind, namespace, name)
+	if !ok {
+		return nil, false
+	}
 	containers := workloadContainerInfos(obj)
 	if len(containers) == 0 {
-		return false
+		return nil, false
 	}
 	acc, err := apimeta.Accessor(obj)
 	created := time.Time{}
@@ -134,14 +174,11 @@ func (m *Model) beginSetImage() bool {
 	styles.Blurred.Text = styles.Blurred.Text.Bold(true)
 	input.SetStyles(styles)
 	input.Focus()
-	t := &setImageTarget{
-		kind: m.kind, namespace: row.Namespace, name: row.Name,
-		created: created, desiredCount: currentReplicas(row),
+	return &setImageTarget{
+		kind: kind, namespace: namespace, name: name,
+		created: created, desiredCount: desiredCount,
 		containers: containers, input: input,
-	}
-	m.pendingSetImage = t
-	m.selectSetImageContainer(0)
-	return true
+	}, true
 }
 
 // selectSetImageContainer switches the panel's active container tab
@@ -150,12 +187,22 @@ func (m *Model) beginSetImage() bool {
 func (m *Model) selectSetImageContainer(idx int) {
 	t := m.pendingSetImage
 	t.containerIdx = idx
+	resetSetImageBuffer(t)
+	t.history = imageHistory(m.lister, t.kind, t.namespace, t.name, t.activeContainer().Name, t.activeContainer().Image, t.created)
+	t.historyIdx = matchHistoryIndex(t)
+}
+
+// resetSetImageBuffer parks t's buffer back on the active container's real
+// current image — the tag-only, non-fullRef prefill selectSetImageContainer
+// uses for a fresh container tab, and also what cancelling a PROD confirm
+// (update.go's cancelInlineConfirm) reverts to, discarding whatever was typed
+// — the same "esc backs out without keeping the typed change" contract
+// meta.go's own cancel path has for a joined-label edit.
+func resetSetImageBuffer(t *setImageTarget) {
 	c := t.activeContainer()
 	t.repo = imageRepo(c.Image)
 	t.setBuffer(tagOf(c.Image))
 	t.fullRef = false
-	t.history = imageHistory(m.lister, t.kind, t.namespace, t.name, c.Name, c.Image, t.created)
-	t.historyIdx = matchHistoryIndex(t)
 }
 
 // setImagePasteTarget is the image/tag buffer — the field most likely to be
@@ -177,6 +224,13 @@ func (m *Model) setImagePasteTarget() tui.PasteTarget {
 // updateSetImageKey routes keys while pendingSetImage's panel is showing.
 func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	t := m.pendingSetImage
+	if msg.String() != "esc" {
+		// A leftover "set image: worker=..."/error banner from the last
+		// commit only ever answers "what just happened" — the moment the
+		// user does anything else, it's stale (mirrors updateMetaKey's own
+		// navigation-mode clearing).
+		t.message, t.lastError = "", ""
+	}
 	switch msg.String() {
 	case "esc":
 		m.pendingSetImage = nil
@@ -184,7 +238,6 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if t.unchanged() {
 			return m, nil
 		}
-		m.pendingSetImage = nil
 		return m, m.commitSetImage(*t)
 	case "tab":
 		if len(t.containers) > 1 {
@@ -260,10 +313,15 @@ func matchHistoryIndex(t *setImageTarget) int {
 // commitSetImage executes t through actions.Controller — verbs.TierForSetImage
 // resolves TierNone outside PROD (Begin runs it immediately, mirroring
 // commitScale) or TierInline in PROD (Controller's ordinary inline y/N, the
-// same path rollback/delete already take).
+// same path rollback/delete already take). Arms pendingCommit first so
+// handleSetImageResult knows what was attempted once the result comes back —
+// the panel itself stays open the whole time (docs/design README.md §26a's
+// "confirm → execute → refresh → show result → remain on screen" contract,
+// 24a's own retrofit onto it).
 func (m *Model) commitSetImage(t setImageTarget) tea.Cmd {
 	c := t.activeContainer()
 	image := t.composedImage()
+	m.armSetImageCommit(&setImagePendingCommit{container: c.Name, image: image})
 	return m.actions.Begin(verbs.TierForSetImage(m.isProd()), tui.TaskAction{
 		ID:    "set-image-" + t.namespace + "/" + t.name,
 		Label: fmt.Sprintf("Set image for %s?", t.name),
@@ -277,6 +335,75 @@ func (m *Model) commitSetImage(t setImageTarget) tea.Cmd {
 			Image:        image,
 		},
 	})
+}
+
+// armSetImageCommit records what a commit about to start (via actions.Begin)
+// is attempting, on the live panel — a no-op if the panel somehow isn't open
+// (defensive only; commitSetImage is itself pendingSetImage-gated). Clears
+// any stale message/error from a previous commit — mirrors armMetaCommit.
+func (m *Model) armSetImageCommit(pc *setImagePendingCommit) {
+	if m.pendingSetImage == nil {
+		return
+	}
+	m.pendingSetImage.pendingCommit = pc
+	m.pendingSetImage.message = ""
+	m.pendingSetImage.lastError = ""
+}
+
+// handleSetImageResult applies a set-image action's outcome to the still-open
+// panel — update.go's actions.ResultMsg case calls this instead of ever
+// nulling m.pendingSetImage itself, mirroring handleMetaResult's own doc
+// comment and docs/design README.md §26a's contract: "confirm → execute →
+// refresh → show result → remain on screen."
+//
+// On success, the object is re-fetched and the panel rebuilt from the real,
+// current cluster state (buildSetImageTarget — never an optimistic local
+// patch), re-selecting the container that was just edited (by name, falling
+// back to index 0) so its now-current tag/history are what's showing.
+//
+// On failure, nothing is refetched: the buffer still holds the attempted
+// value (updateSetImageKey never cleared it), and the server's error is
+// surfaced via t.lastError (setimage_view.go's will-run strip).
+//
+// Only esc ever closes the panel from here — a failed or successful commit
+// never does (except the object having vanished entirely, matching
+// handleMetaResult's own fallback).
+func (m *Model) handleSetImageResult(msg actions.ResultMsg) tea.Cmd {
+	t := m.pendingSetImage
+	pc := t.pendingCommit
+	t.pendingCommit = nil
+
+	if msg.Err != nil {
+		t.lastError = msg.Err.Error()
+		t.message = ""
+		return nil
+	}
+
+	message := "applied"
+	if pc != nil {
+		message = fmt.Sprintf("set image: %s=%s", pc.container, pc.image)
+	}
+	fresh, ok := m.buildSetImageTarget(t.kind, t.namespace, t.name, t.desiredCount)
+	if !ok {
+		// The object vanished from the lister (deleted concurrently, most
+		// likely) — nothing left to refresh into, so the panel closes rather
+		// than sit open on a stale/empty shell.
+		m.pendingSetImage = nil
+		return nil
+	}
+	m.pendingSetImage = fresh
+	idx := 0
+	if pc != nil {
+		for i, c := range fresh.containers {
+			if c.Name == pc.container {
+				idx = i
+				break
+			}
+		}
+	}
+	m.selectSetImageContainer(idx)
+	m.pendingSetImage.message = message
+	return nil
 }
 
 // setImageWillRunLine renders the exact "will run: kubectl set image ..."

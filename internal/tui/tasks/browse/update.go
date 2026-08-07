@@ -234,6 +234,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
+		if isSetImageActionID(msg.ActionID) && m.pendingSetImage != nil {
+			// 24a's retrofit onto 26a's own keep-open contract — see
+			// handleSetImageResult's doc comment. m.load() refreshes the
+			// table's ROLLOUT/IMAGE columns behind the still-open panel on
+			// success, same as the meta/cron-schedule branches above.
+			cmd := m.handleSetImageResult(msg)
+			if msg.Err == nil {
+				return m, tea.Batch(cmd, m.load())
+			}
+			return m, cmd
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
@@ -816,6 +827,15 @@ func (m *Model) cancelInlineConfirm() {
 			r.setBuffer(r.current)
 		}
 	}
+	if m.pendingSetImage != nil {
+		// 24a's own version of the same revert: the buffer already holds the
+		// attempted tag/ref (commitSetImage no longer clears it), so cancelling
+		// the PROD confirm must discard it back to the active container's real
+		// current image — the same "esc backs out without keeping the typed
+		// change" contract.
+		resetSetImageBuffer(m.pendingSetImage)
+		m.pendingSetImage.historyIdx = matchHistoryIndex(m.pendingSetImage)
+	}
 	m.actions.Cancel()
 }
 
@@ -825,6 +845,14 @@ func (m *Model) cancelInlineConfirm() {
 // through execFeedback.
 func isMetaActionID(id string) bool {
 	return strings.HasPrefix(id, "set-meta-") || strings.HasPrefix(id, "remove-meta-")
+}
+
+// isSetImageActionID reports whether id names a 24a set-image action
+// (setimage.go's commitSetImage ID scheme) — used by the actions.ResultMsg
+// handler above to route the result through handleSetImageResult instead of
+// the generic m.load()-only path.
+func isSetImageActionID(id string) bool {
+	return strings.HasPrefix(id, "set-image-")
 }
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes

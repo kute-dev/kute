@@ -244,9 +244,13 @@ func historyRowColumns(tag, seen, from string, width int) string {
 }
 
 // setImageWillRunStrip is the panel's own "will run" line, styled like the
-// mockup's #0c0c12 strip: a BorderSubtle top rule, then BgStrip-filled
-// left "will run: kubectl set image ..." (or the no-op message) and a
-// right-aligned "applying rolls out N pods" note.
+// mockup's #0c0c12 strip: a BorderSubtle top rule, then BgStrip-filled left
+// "will run: kubectl set image ..." (or the no-op message) and a
+// right-aligned "applying rolls out N pods" note — or, once there's a result
+// to report, t.lastError/t.message take over the strip entirely (same
+// error-then-message precedence as metaWillRunStrip), and while a PROD
+// confirm is deciding the pending apply, the right note becomes "confirm to
+// apply · y/N" instead (mirrors metaNoteText's own pendingConfirm case).
 func (m Model) setImageWillRunStrip(theme tui.Theme, width int) string {
 	t := m.pendingSetImage
 	fill := lipgloss.NewStyle().Background(theme.BgStrip)
@@ -254,15 +258,21 @@ func (m Model) setImageWillRunStrip(theme tui.Theme, width int) string {
 	cmd := fill.Foreground(theme.TextSecondary)
 	warn := fill.Foreground(theme.Warn)
 
-	left := label.Render("will run") + fill.Render(" ")
-	if t.unchanged() {
-		left += cmd.Render("same image — apply is a no-op; use rollout restart")
-	} else {
-		left += cmd.Render(kube.SetImageCommandString(t.kind, t.namespace, t.name, t.activeContainer().Name, t.composedImage()))
-	}
-	right := ""
-	if !t.unchanged() {
-		right = warn.Render(fmt.Sprintf("applying rolls out %d pods", t.desiredCount))
+	var left, right string
+	switch {
+	case t.lastError != "":
+		left = label.Render("error") + fill.Render(" ") + fill.Foreground(theme.Bad).Render(t.lastError)
+	case t.message != "":
+		left = fill.Foreground(theme.Good).Render(t.message)
+	case t.unchanged():
+		left = label.Render("will run") + fill.Render(" ") + cmd.Render("same image — apply is a no-op; use rollout restart")
+	default:
+		left = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.SetImageCommandString(t.kind, t.namespace, t.name, t.activeContainer().Name, t.composedImage()))
+		if m.actions.Active() {
+			right = warn.Render("confirm to apply · y/N")
+		} else {
+			right = warn.Render(fmt.Sprintf("applying rolls out %d pods", t.desiredCount))
+		}
 	}
 
 	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))

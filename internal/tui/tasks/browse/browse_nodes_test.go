@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -69,7 +70,14 @@ type fakeMutator struct {
 	// sees the real change instead of re-reading stale, unpatched data. Left
 	// nil everywhere else, where PatchMeta stays a pure recorder.
 	metaObjs map[kube.ResourceKind][]runtime.Object
-	err      error
+	// setImageObjs is SetImage's own version of metaObjs — wired by
+	// browse_setimage_test.go's newSetImageModel to the same store the
+	// model's fakeLister reads from, so 24a's post-apply refresh
+	// (handleSetImageResult) observes the real new image instead of
+	// re-reading a stale container spec. Left nil everywhere else, where
+	// SetImage stays a pure recorder.
+	setImageObjs map[kube.ResourceKind][]runtime.Object
+	err          error
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, _ kube.ResourceKind, _ string, name string) error {
@@ -119,12 +127,49 @@ func (f *fakeMutator) Scale(_ context.Context, _ kube.ResourceKind, _, _ string,
 	f.scaled = append(f.scaled, replicas)
 	return nil
 }
-func (f *fakeMutator) SetImage(_ context.Context, _ kube.ResourceKind, namespace, name, container, image string) error {
+func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string) error {
 	if f.err != nil {
 		return f.err
 	}
 	f.setImages = append(f.setImages, namespace+"/"+name+" "+container+"="+image)
+	for _, obj := range f.setImageObjs[kind] {
+		acc, err := apimeta.Accessor(obj)
+		if err != nil || acc.GetNamespace() != namespace || acc.GetName() != name {
+			continue
+		}
+		setContainerImage(obj, container, image)
+		break
+	}
 	return nil
+}
+
+// setContainerImage mutates obj's pod-template container (regular or native
+// sidecar) named container to image in place — setImageObjs's own version of
+// PatchMeta's local-object mutation, covering the three kinds 24a supports.
+func setContainerImage(obj runtime.Object, container, image string) {
+	var containers, initContainers *[]corev1.Container
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		containers, initContainers = &o.Spec.Template.Spec.Containers, &o.Spec.Template.Spec.InitContainers
+	case *appsv1.StatefulSet:
+		containers, initContainers = &o.Spec.Template.Spec.Containers, &o.Spec.Template.Spec.InitContainers
+	case *appsv1.DaemonSet:
+		containers, initContainers = &o.Spec.Template.Spec.Containers, &o.Spec.Template.Spec.InitContainers
+	default:
+		return
+	}
+	for i := range *containers {
+		if (*containers)[i].Name == container {
+			(*containers)[i].Image = image
+			return
+		}
+	}
+	for i := range *initContainers {
+		if (*initContainers)[i].Name == container {
+			(*initContainers)[i].Image = image
+			return
+		}
+	}
 }
 func (f *fakeMutator) SetResources(_ context.Context, _ kube.ResourceKind, namespace, name, container string, _ kube.ResourceEdits, dryRun bool) error {
 	if f.err != nil {

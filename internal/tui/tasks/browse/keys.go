@@ -54,7 +54,13 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		return kb
 	}
-	if m.pendingSetImage != nil {
+	if m.pendingSetImage != nil && !m.actions.Active() {
+		// While a PROD confirm is showing, the generic m.actions.Active()
+		// branch further down takes over (its own "set-image" case renders
+		// setImageWillRunLine) — same !m.actions.Active() guard pendingMeta/
+		// pendingCronSchedule use, for the same reason: the panel stays open
+		// underneath either way (setimage_view.go's will-run strip shows the
+		// confirm-pending state).
 		t := m.pendingSetImage
 		hints := []tui.KeyHint{{Key: "↵", Label: "apply"}, {Key: "↑↓", Label: "pick from history"}}
 		if len(t.containers) > 1 {

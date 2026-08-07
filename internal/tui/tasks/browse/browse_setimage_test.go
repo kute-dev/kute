@@ -2,6 +2,7 @@ package browse
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -76,6 +77,7 @@ func controllerRevisionFixture(ns, name, ownerKind, owner, container, image stri
 func newSetImageModel(t *testing.T, mut *fakeMutator, objs map[kube.ResourceKind][]runtime.Object, prod bool) Model {
 	t.Helper()
 	lister := fakeLister{objs: objs}
+	mut.setImageObjs = objs
 	session := newSession()
 	if prod {
 		session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
@@ -235,15 +237,26 @@ func TestEnterCommitsSetImageThroughMutatorNonProd(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
-	if m.pendingSetImage != nil {
-		t.Fatal("expected pendingSetImage cleared after enter")
-	}
 	if m.actions.Active() {
 		t.Fatal("non-PROD set-image is TierNone and should execute immediately, not show a confirm")
 	}
 	want := "default/nva-worker worker=registry.nva.dev/nva-worker:3.4.12"
 	if len(mut.setImages) != 1 || mut.setImages[0] != want {
 		t.Fatalf("setImages = %v, want [%q]", mut.setImages, want)
+	}
+	// docs/design README.md §26a's contract, retrofitted onto 24a: "confirm
+	// → execute → refresh → show result → remain on screen" — the panel
+	// stays open, refreshed from the real object (now reading unchanged
+	// since the applied tag is the new current one), with an inline success
+	// message.
+	if m.pendingSetImage == nil {
+		t.Fatal("the panel should stay open after a successful apply")
+	}
+	if !m.pendingSetImage.unchanged() {
+		t.Error("the refreshed buffer should read as unchanged (matches the just-applied image)")
+	}
+	if wantMsg := "set image: worker=registry.nva.dev/nva-worker:3.4.12"; m.pendingSetImage.message != wantMsg {
+		t.Errorf("message = %q, want %q", m.pendingSetImage.message, wantMsg)
 	}
 }
 
@@ -256,8 +269,8 @@ func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
-	if m.pendingSetImage != nil {
-		t.Fatal("expected pendingSetImage cleared once commitSetImage hands off to actions.Controller")
+	if m.pendingSetImage == nil {
+		t.Fatal("the panel should stay open under the inline confirm, not close to the generic table+confirm view")
 	}
 	if !m.actions.Active() {
 		t.Fatal("expected a PROD set-image apply to land in actions.Controller's inline y/N confirm")
@@ -271,10 +284,74 @@ func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 	if !strings.Contains(kb.RightNote, want) {
 		t.Fatalf("RightNote = %q, want it to contain %q", kb.RightNote, want)
 	}
+	if kb.PillText != "CONFIRM" {
+		t.Errorf("PillText = %q, want CONFIRM while the y/N is showing", kb.PillText)
+	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.setImages) != 1 {
 		t.Fatalf("expected the confirm's 'y' to execute SetImage, got %v", mut.setImages)
+	}
+	if m.pendingSetImage == nil {
+		t.Fatal("the panel should stay open after the confirmed apply")
+	}
+	if wantMsg := "set image: worker=registry.nva.dev/nva-worker:3.4.12"; m.pendingSetImage.message != wantMsg {
+		t.Errorf("message = %q, want %q", m.pendingSetImage.message, wantMsg)
+	}
+}
+
+// TestFailedNonProdApplyKeepsPanelOpenWithError covers handleSetImageResult's
+// failure path: the buffer keeps the attempted value, nothing is refetched,
+// and the server error surfaces via the will-run strip instead of vanishing
+// silently.
+func TestFailedNonProdApplyKeepsPanelOpenWithError(t *testing.T) {
+	mut := &fakeMutator{err: errors.New("admission webhook denied the request")}
+	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
+	}, false)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+
+	if m.pendingSetImage == nil {
+		t.Fatal("the panel should stay open after a failed apply")
+	}
+	if m.pendingSetImage.input.Value() != "3.4.12" {
+		t.Errorf("buffer = %q, want the attempted value 3.4.12 to survive", m.pendingSetImage.input.Value())
+	}
+	if m.pendingSetImage.lastError == "" {
+		t.Error("expected lastError to carry the server's error")
+	}
+	if m.pendingSetImage.message != "" {
+		t.Error("expected no success message on failure")
+	}
+}
+
+// TestCancellingProdConfirmRevertsBufferAndKeepsPanelOpen covers 'n' during
+// the PROD y/N: no mutator call, the panel stays open, and the buffer reverts
+// to the real current tag rather than leaving the attempted edit sitting
+// there unconfirmed.
+func TestCancellingProdConfirmRevertsBufferAndKeepsPanelOpen(t *testing.T) {
+	mut := &fakeMutator{}
+	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
+	}, true)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	m = step(t, m, tea.KeyPressMsg{Text: "n"})
+
+	if m.actions.Active() {
+		t.Error("cancel should end the confirm")
+	}
+	if m.pendingSetImage == nil {
+		t.Fatal("cancelling the confirm should leave the panel open")
+	}
+	if m.pendingSetImage.input.Value() != "3.4.1" {
+		t.Errorf("buffer after cancel = %q, want reverted to the real current tag 3.4.1", m.pendingSetImage.input.Value())
+	}
+	if len(mut.setImages) != 0 {
+		t.Errorf("setImages = %v, want none", mut.setImages)
 	}
 }
 
