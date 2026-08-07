@@ -62,6 +62,30 @@ func rowHealthRank(r resources.Row) int {
 	return healthRank(r.Status)
 }
 
+// argoRank orders an Argo CD Application row per docs/design README.md
+// §33a: Degraded/Missing → OutOfSync → Progressing → Healthy. Reads the
+// row's own rendered Sync/Health cells directly (Cells[1]/Cells[2] —
+// argoColumns' layout) rather than StatusClass: Sync and Health are two
+// independent signals collapsed into one glyph/class for color and
+// fold-visibility (resources.argoStatus), and that collapse alone can't
+// express a four-way order — Progressing is StatusNeutral and Healthy is
+// StatusOK, and rowHealthRank sorts every OK row ahead of every Neutral
+// one, backwards from §33a's stated order. Same "read the cell instead of
+// the class" idiom crdGroupCell already uses for 14b's own bespoke sort.
+func argoRank(r resources.Row) int {
+	sync, health := cellAt(r, 1), cellAt(r, 2)
+	switch {
+	case health == "Degraded" || health == "Missing":
+		return 0
+	case sync == "OutOfSync":
+		return 1
+	case health == "Progressing":
+		return 2
+	default:
+		return 3
+	}
+}
+
 // sortForDisplay reorders rows in place for workload kinds; it's a no-op
 // (preserving resources.List's namespace/name order) for every other kind.
 // namespace == "" (6b's all-namespaces triage, docs/design README.md §6b)
@@ -72,11 +96,14 @@ func rowHealthRank(r resources.Row) int {
 // alphabetical within each of those two partitions — then unhealthy-first
 // *within* each namespace — a single namespace's rows sort exactly as 2a's
 // plain unhealthy-first.
-// unhealthyFirst adds the §30a Flux kinds to the workload set: their whole
-// point is triage ("unhealthy first · suspended is a state, not a
-// footnote"), and a Kustomization that failed to reconcile has to be at the
-// top for the same reason a crashlooping pod does.
-func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst bool) {
+// unhealthyFirst adds the §30a Flux and §33a Argo kinds to the workload
+// set: their whole point is triage ("unhealthy first · suspended is a
+// state, not a footnote"), and a Kustomization that failed to reconcile or
+// a Degraded Application has to be at the top for the same reason a
+// crashlooping pod does. argoRanked picks argoRank over the generic
+// rowHealthRank for the within-namespace comparator — see argoRank's own
+// doc comment for why the two curated kinds can't share one.
+func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst, argoRanked bool) {
 	if kind == kube.KindCustomResourceDefinition {
 		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
 		// own Cells[1] is the CRD's API group; Name breaks ties within a
@@ -93,6 +120,10 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 	if !workloadKinds[kind] && !unhealthyFirst {
 		return
 	}
+	rank := rowHealthRank
+	if argoRanked {
+		rank = argoRank
+	}
 	grouped := namespace == ""
 	nsTrouble := namespaceTrouble(rows, grouped)
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -103,7 +134,7 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 			}
 			return rows[i].Namespace < rows[j].Namespace
 		}
-		ri, rj := rowHealthRank(rows[i]), rowHealthRank(rows[j])
+		ri, rj := rank(rows[i]), rank(rows[j])
 		if ri != rj {
 			return ri < rj
 		}
@@ -149,7 +180,7 @@ func (m *Model) applySort() {
 		m.applyUserSort(m.rows)
 		return
 	}
-	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux)
+	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux || m.desc.Argo, m.desc.Argo)
 }
 
 // applyUserSort stable-sorts rows by m.sortColumn/m.sortAsc — a no-op if

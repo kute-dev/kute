@@ -397,6 +397,7 @@
       <p><code>g</code> then <code>flux</code> opens the <strong>tree</strong>: every repository with the Kustomizations and HelmReleases it drives nested under it, which is the join you would otherwise assemble from two <code>kubectl</code> lists and each object's <code>sourceRef</code>. A reconciler whose applied revision is behind what its source now offers is marked <code>source ahead</code> — a fact, not a guess: kute reads no Git remote, so it never claims to know <em>how far</em> behind. On a reconciler row <code>r</code> reconciles <em>with source</em>, stamping the repository first and then the reconciler, because syncing against a stale artifact only re-applies what is already there. Both commands appear in the will-run line before either runs. The tree only appears in the palette on a cluster that actually serves Flux CRDs.</p>
       <p><code>↵</code> on a Kustomization opens its own screen: the reconcile failure at the top with the condition message verbatim, the retry countdown, and — the part that usually costs you five minutes — the object the health check is actually waiting on, resolved for you and openable with another <code>↵</code>. Under that, whether what is applied matches what the source offers, which separates <em>in sync but failing health checks</em> from <em>genuinely behind</em>; then the inventory of everything the Kustomization manages, unhealthy first.</p>
       <p>In the timeline (<code>t</code>), an applied revision is its own row — the short SHA, and the commit subject when the cluster still knows it. Flux only mentions a commit message once, in a source-controller event that expires within the hour, so kute keeps whichever ones it has seen for as long as it is running and shows the bare SHA otherwise. It never fetches your Git remote and never wants a token.</p>
+      <p>Argo CD gets a shallower treatment, on purpose: it already has a good dashboard, so kute doesn't rebuild it. Applications get their own curated list — recognised by API group, same as Flux, so Argo's <code>Application</code> never collides with anything else on screen — with sync and health as two honest, independent columns: <em>Synced</em> and <em>Degraded</em> is git being right while the workload is sick, <em>OutOfSync</em> and <em>Healthy</em> is drift with nothing actually broken, and they read differently because they are different incidents. A degraded row prints the sickest managed resource's own message underneath it, verbatim. <code>r</code> refreshes — asks argocd-application-controller to re-diff now, the same thing it would do on its own poll interval — and <code>S</code> syncs, both plain API calls with a will-run line, never the <code>argocd</code> binary. <code>u</code> copies the one concession to the dashboard: the deep link into the Argo CD UI itself, for sync waves and diffs kute doesn't try to imitate.</p>
 
 
       <div class="term reveal" role="img" aria-label="kute's Flux reconciler detail: a reconcile failure with the condition message verbatim, the retry countdown, the workload the health check is waiting on, the applied-versus-source revision comparison, and the inventory of managed objects">
@@ -617,6 +618,15 @@
           <tr><td><kbd>r</kbd></td><td>reconcile — with source, on a reconciler row in the tree</td></tr>
           <tr><td><kbd>s</kbd></td><td>suspend / resume</td></tr>
           <tr><td><kbd>o</kbd></td><td>source — the repository it syncs from</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Argo CD Applications</h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>r</kbd></td><td>refresh — re-diff live state against git now</td></tr>
+          <tr><td><kbd>S</kbd></td><td>sync — apply what git already says to run</td></tr>
+          <tr><td><kbd>u</kbd></td><td>dashboard url — copy the deep link into the Argo CD UI</td></tr>
         </tbody>
       </table>
 

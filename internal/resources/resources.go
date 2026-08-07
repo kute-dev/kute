@@ -220,6 +220,12 @@ type Descriptor struct {
 	// keys off — never a kind-name check, since the Flux kind set is
 	// discovered at connect rather than compiled in.
 	Flux bool
+	// Argo marks the discovered Argo CD Application kind (§33a): it carries
+	// status.sync/status.health and honours argocd.argoproj.io/refresh, so
+	// §33a's refresh/sync/dashboard-url verbs apply. The one flag browse
+	// keys off, same reasoning as Flux — recognition happens once in
+	// BuildDiscoveredRegistry, never a kind-name check downstream.
+	Argo bool
 }
 
 // InstanceCounter reads a live instance count for a discovered kind — the

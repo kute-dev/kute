@@ -330,7 +330,7 @@ func TestProjectJobNotSuspendedLeavesRowUnset(t *testing.T) {
 
 // TestProjectCronJobSuspendedSetsRowSuspended pins the fix to a pre-existing
 // gap: projectCronJob used to only stringify Spec.Suspend into Cells, never
-// setting Row.Suspended itself — the field §33a's suspend/resume keybar
+// setting Row.Suspended itself — the field §36a's suspend/resume keybar
 // toggle (jobKeybarGroup's own row.Suspended-flipping shape) depends on.
 func TestProjectCronJobSuspendedSetsRowSuspended(t *testing.T) {
 	suspend := true

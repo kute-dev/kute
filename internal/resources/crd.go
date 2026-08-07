@@ -369,7 +369,7 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 		deployDesc.Project = projectDeployment(reader)
 		registry.Register(deployDesc)
 	}
-	var fluxKinds, customKinds []kube.ResourceKind
+	var fluxKinds, argoKinds, customKinds []kube.ResourceKind
 	for _, dk := range discovered {
 		switch {
 		case kube.IsFluxGroup(dk.Group):
@@ -378,6 +378,13 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 			// exists to prevent (see kube.IsFluxGroup).
 			registry.Register(fluxDescriptor(dk))
 			fluxKinds = append(fluxKinds, dk.RegistryKind())
+		case kube.IsArgoGroup(dk.Group) && dk.Kind == "Application":
+			// Group *and* Kind — argoproj.io also serves AppProject, which
+			// has no sync/health status and stays on the generic
+			// CustomDescriptor path below (see resources/argo.go's package
+			// doc comment).
+			registry.Register(argoDescriptor(dk))
+			argoKinds = append(argoKinds, dk.RegistryKind())
 		case dk.Kind == string(kube.KindHTTPRoute):
 			registry.Register(httpRouteDescriptor(dk))
 			customKinds = append(customKinds, dk.RegistryKind())
@@ -391,8 +398,11 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 	if len(fluxKinds) > 0 {
 		groups = append(groups, Group{ID: GroupFlux, Icon: "⇅", Kinds: fluxKinds})
 	}
+	if len(argoKinds) > 0 {
+		groups = append(groups, Group{ID: GroupArgo, Icon: "◎", Kinds: argoKinds})
+	}
 	// Gated on customKinds rather than on discovered, so a cluster running
-	// Flux and nothing else doesn't get an empty Custom Resources group.
+	// Flux/Argo and nothing else doesn't get an empty Custom Resources group.
 	if len(customKinds) > 0 {
 		groups = append(groups, Group{ID: GroupCustomResources, Icon: "◆", Kinds: customKinds})
 	}

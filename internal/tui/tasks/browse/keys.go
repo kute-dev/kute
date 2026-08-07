@@ -206,6 +206,14 @@ func (m Model) Keybar() tui.Keybar {
 					// 9a: the exact "will run: kubectl rollout restart ..." line,
 					// same idiom as set-image/set-resources above.
 					note = rolloutRestartWillRunLine(pending.Scope)
+				case "argo-sync":
+					// 33a: the exact "will run: kubectl patch application/... ..."
+					// line, same idiom as rollout-restart above. ArgoSync is
+					// TierInline outright (a real, visible change to what's
+					// deployed), not a nominal-TierNone verb that only reaches
+					// here in PROD — argo-refresh never appears here, fixed
+					// TierNone, same as flux-reconcile's own absence.
+					note = argoSyncWillRunLine(pending.Scope)
 				case "job-retry":
 					// the exact "will run: kubectl create job ... --from=job/..."
 					// line, same idiom as rollout-restart above.
@@ -268,6 +276,12 @@ func (m Model) Keybar() tui.Keybar {
 		// docs/design README.md §14b: "Keybar pill CRDS" — the built-in CRD
 		// list's own short form, not the full "CUSTOMRESOURCEDEFINITIONS".
 		pillText = "CRDS"
+	}
+	if m.desc.Argo {
+		// docs/design README.md §33a: "Keybar pill ARGOAPP" — gated on the
+		// descriptor flag rather than a kind-name case above, since
+		// Application is discovered, not a compile-time kube.KindX constant.
+		pillText = "ARGOAPP"
 	}
 	pill := tui.ModeBrowse
 	if m.grouped() {
@@ -422,6 +436,9 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.fluxVerbsApply() {
 		groups = append(groups, m.fluxKeybarGroup())
+	}
+	if m.argoVerbsApply() {
+		groups = append(groups, m.argoKeybarGroup())
 	}
 	if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
 		groups = append(groups, m.jobKeybarGroup())

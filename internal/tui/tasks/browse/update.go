@@ -223,7 +223,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if isCronScheduleActionID(msg.ActionID) && m.pendingCronSchedule != nil {
-			// §33a follows the same keep-open contract as 26a (see
+			// §36a follows the same keep-open contract as 26a (see
 			// handleCronScheduleResult's own doc comment) — a schedule commit
 			// never closes the panel, success or failure, so m.load() refreshes
 			// the row's Schedule/Next Run cells behind it rather than the panel
@@ -482,6 +482,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "S":
+		if m.argoVerbsApply() {
+			// §33a's sync. Disjoint from CronJobSetSchedule below (Kinds
+			// never overlap — a row is never both an Application and a
+			// CronJob).
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginArgoSync(row)
+			}
+		}
 		m.beginCronJobSetSchedule()
 	case "+":
 		m.beginScale(1)
@@ -504,9 +512,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "tab":
-		// Grouped mode expands a namespace group; a §30a Flux list expands
-		// its single healthy-tail fold, which exists ungrouped too.
-		if m.grouped() || m.desc.Flux {
+		// Grouped mode expands a namespace group; a §30a Flux or §33a Argo
+		// list expands its single healthy-tail fold, which exists ungrouped
+		// too.
+		if m.grouped() || m.desc.Flux || m.desc.Argo {
 			m.toggleGroup()
 		}
 	case "o":
@@ -540,6 +549,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginFluxReconcile(row)
 			}
+		case m.argoVerbsApply():
+			// §33a's refresh. Same reasoning as the Flux case above — an
+			// Argo list in TaskStateReady is by definition not offline/
+			// error, and the two never contend on the same row.
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginArgoRefresh(row)
+			}
 		case m.kind == kube.KindForward && m.state == tui.TaskStateReady:
 			return m, m.restartSelectedForward()
 		case m.offline() && m.retrier != nil:
@@ -566,6 +582,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if task, cmd, ok := m.openSelectedYAML(); ok {
 				return task, cmd
 			}
+		}
+	case "u":
+		if m.argoVerbsApply() {
+			return m, m.copySelectedArgoDashboardURL()
 		}
 	case "e":
 		if task, cmd, ok := m.openSelectedEvents(); ok {

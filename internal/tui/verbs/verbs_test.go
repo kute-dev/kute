@@ -120,7 +120,7 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// the one property that lets it keep a bare letter (see
 		// FluxReconcile's own comment for why that doesn't generalize).
 		"flux-suspend": true, "flux-reconcile": true,
-		// §33a. CronJobSuspend is FluxSuspend's exact shape: it only pauses
+		// §36a. CronJobSuspend is FluxSuspend's exact shape: it only pauses
 		// future scheduling, touches nothing already running, and resume
 		// restores the prior state exactly (see CronJobSuspend's own doc
 		// comment, contrasting it with JobSuspend's TierInline). CronJobSetSchedule
@@ -128,6 +128,12 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// the confirmation step, TierNone here is nominal — the real
 		// PROD-sensitive tier comes from TierForCronJobSetSchedule.
 		"cronjob-suspend": true, "cronjob-set-schedule": true,
+		// §33a. ArgoRefresh is FluxReconcile's exact shape: it asks
+		// argocd-application-controller to re-diff early, the same re-diff
+		// it already does on its own poll interval. ArgoSync is not
+		// listed here — it's TierInline, a real change to what's deployed
+		// (see ArgoSync's own doc comment).
+		"argo-refresh": true,
 	}
 	for _, v := range All {
 		if v.Mutating && v.Tier == actions.TierNone && !untiered[v.ID] {

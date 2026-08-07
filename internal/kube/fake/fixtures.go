@@ -103,7 +103,7 @@ func NewDemo() *Cluster {
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
 
-	// §33a: two CronJobs so --demo mode can exercise run-now/suspend/resume/
+	// §36a: two CronJobs so --demo mode can exercise run-now/suspend/resume/
 	// edit-schedule live. "hourly-report" starts suspended, so 's' exercises
 	// resume first rather than every CronJob needing an extra keypress to
 	// reach that state; the two different schedules give the NEXT RUN column
@@ -439,11 +439,13 @@ func demoPrometheusFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 }
 
 // demoArgoCDFixtures seeds the argoproj.io CRD family: Application
-// (namespaced, real cluster's own printer columns — SYNC STATUS/HEALTH
-// STATUS off .status.sync.status/.status.health.status, no Ready-style
-// condition at all, so kute's generic health glyph correctly falls back to
-// neutral "·" while the meaningful signal still shows up as printer-column
-// text) and AppProject, plus the argocd operator's own workloads.
+// (namespaced, curated onto §33a's descriptor by kube.IsArgoGroup — Sync/
+// Health read directly off status.sync.status/status.health.status, no
+// Ready-style condition at all) and AppProject (which carries neither field
+// and stays on the generic 14a custom-resource path, per §33a's own
+// group-plus-Kind recognition), plus the argocd operator's own workloads.
+// One row per §33a sort tier — Degraded, OutOfSync, Progressing, Healthy —
+// so --demo mode exercises the whole precedence live.
 func demoArgoCDFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	crdAge := age(45 * 24 * time.Hour)
 	group := "argoproj.io"
@@ -460,14 +462,37 @@ func demoArgoCDFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.SeedDiscovered(demoDiscoveredKind("Application", "applications", group, "v1alpha1", "applications.argoproj.io", false, appCols))
 	c.SeedDiscovered(demoDiscoveredKind("AppProject", "appprojects", group, "v1alpha1", "appprojects.argoproj.io", false, nil))
 
+	// billing: Synced + Degraded — git is right, the workload is sick.
+	// Carries a real managed-resource health message so §33a's sub-line
+	// (argoSubLine) has something to render.
+	billing := demoArgoApplication("billing", "argocd", "default", age(90*24*time.Hour),
+		"main", "e41b90c1f2a3b4c5d6e7f8091a2b3c4d5e6f7081", "Synced", "Degraded", age(11*time.Minute))
+	setArgoResourceHealth(billing, "Deployment", "billing-api", "argocd", "Degraded",
+		`container "api" is in CrashLoopBackOff — exit 1, 2m ago`)
+
 	c.Seed(kube.ResourceKind("Application"),
-		demoArgoApplication("api", "argocd", "default", age(20*24*time.Hour), "Synced", "Healthy"),
-		demoArgoApplication("worker", "argocd", "default", age(20*24*time.Hour), "OutOfSync", "Degraded"),
-		demoArgoApplication("web", "argocd", "default", age(10*24*time.Hour), "Synced", "Progressing"),
+		billing,
+		// worker: OutOfSync + Healthy — drift, nothing actually broken.
+		demoArgoApplication("worker", "argocd", "default", age(90*24*time.Hour),
+			"main", "e41b90c1f2a3b4c5d6e7f8091a2b3c4d5e6f7081", "OutOfSync", "Healthy", age(2*time.Hour)),
+		// web: Syncing + Progressing — a sync is actively running.
+		demoArgoApplication("web", "argocd", "default", age(90*24*time.Hour),
+			"main", "f77d215a8b9c0d1e2f30415263748596071829a0", "Syncing", "Progressing", age(30*time.Second)),
+		// api: Synced + Healthy — the quiet state, folds behind the others.
+		demoArgoApplication("api", "argocd", "default", age(90*24*time.Hour),
+			"main", "f77d215a8b9c0d1e2f30415263748596071829a0", "Synced", "Healthy", age(18*time.Minute)),
 	)
 	c.Seed(kube.ResourceKind("AppProject"),
 		demoCR(group+"/v1alpha1", "AppProject", "default", "argocd", age(45*24*time.Hour), nil),
 	)
+
+	// argocd-cm carries the dashboard's own base URL — §33a's 'u' reads
+	// this exact key, the same one argocd-server itself uses to build its
+	// own UI links.
+	c.Seed(kube.KindConfigMap, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "argocd-cm", Namespace: "argocd", CreationTimestamp: crdAge},
+		Data:       map[string]string{"url": "https://argocd.demo.local"},
+	})
 
 	c.Seed(kube.KindDeployment,
 		demoStableDeployment("argocd-server", "argocd", "quay.io/argoproj/argocd:v2.10.7", 1, crdAge),
@@ -484,17 +509,34 @@ func demoArgoCDFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 
 // demoArgoApplication builds an Application instance whose printer-column
 // fields (Sync/Health Status) carry the meaningful state — no synthetic
-// Ready condition, per demoArgoCDFixtures' doc comment.
-func demoArgoApplication(name, ns, project string, created metav1.Time, syncStatus, healthStatus string) *unstructured.Unstructured {
+// Ready condition, per demoArgoCDFixtures' doc comment. targetRevision/
+// revision feed §33a's REVISION cell (argoRevisionCell); syncedAt feeds its
+// SYNCED cell (argoSyncedCell, status.operationState.finishedAt).
+func demoArgoApplication(name, ns, project string, created metav1.Time, targetRevision, revision, syncStatus, healthStatus string, syncedAt metav1.Time) *unstructured.Unstructured {
 	u := demoCR("argoproj.io/v1alpha1", "Application", name, ns, created, map[string]any{
 		"project":     project,
+		"source":      map[string]any{"targetRevision": targetRevision},
 		"destination": map[string]any{"server": "https://kubernetes.default.svc", "namespace": ns},
 	})
 	u.Object["status"] = map[string]any{
-		"sync":   map[string]any{"status": syncStatus},
-		"health": map[string]any{"status": healthStatus},
+		"sync":           map[string]any{"status": syncStatus, "revision": revision},
+		"health":         map[string]any{"status": healthStatus},
+		"operationState": map[string]any{"finishedAt": syncedAt.UTC().Format(time.RFC3339)},
 	}
 	return u
+}
+
+// setArgoResourceHealth attaches one status.resources[] entry to an
+// Application — §33a's argoSubLine reads the first non-Healthy entry's own
+// health message verbatim, the same field a real Application's per-object
+// health rollup carries.
+func setArgoResourceHealth(u *unstructured.Unstructured, kind, name, ns, health, message string) {
+	u.Object["status"].(map[string]any)["resources"] = []any{
+		map[string]any{
+			"kind": kind, "name": name, "namespace": ns,
+			"health": map[string]any{"status": health, "message": message},
+		},
+	}
 }
 
 // demoCR builds a generic custom-resource instance: metadata + optional
@@ -843,7 +885,7 @@ func demoWorkerStatefulSet(name, ns string, created metav1.Time) *appsv1.Statefu
 	return s
 }
 
-// demoCronJob is CronJobs' own exemplar builder (§33a) — schedule/suspend
+// demoCronJob is CronJobs' own exemplar builder (§36a) — schedule/suspend
 // are the two fields projectCronJob's NEXT RUN/SUSPEND columns actually
 // read, so --demo mode exercises the real column derivation rather than a
 // zero-value stub.

@@ -571,6 +571,29 @@ func (c *Cluster) RequestFluxReconcile(ctx context.Context, kind kube.ResourceKi
 		kube.FluxReconcileAnnotation, time.Now().UTC().Format(time.RFC3339), false)
 }
 
+// RequestArgoRefresh stamps the refresh annotation on a seeded Argo CD
+// Application — §33a's 'r'. Goes through PatchMeta for the same reason
+// RequestFluxReconcile does: the request is an ordinary metadata write.
+func (c *Cluster) RequestArgoRefresh(ctx context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return c.PatchMeta(ctx, kind, namespace, name, true, kube.ArgoRefreshAnnotation, "normal", false)
+}
+
+// RequestArgoSync sets operation.sync.revision on a seeded Argo CD
+// Application in place — §33a's 'S' against the fake cluster.
+func (c *Cluster) RequestArgoSync(_ context.Context, kind kube.ResourceKind, namespace, name, revision string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	u, err := c.findUnstructuredLocked(kind, namespace, name)
+	if err != nil {
+		return err
+	}
+	if err := unstructured.SetNestedField(u.Object, revision, "operation", "sync", "revision"); err != nil {
+		return err
+	}
+	c.notify(kind)
+	return nil
+}
+
 // findUnstructuredLocked resolves one seeded custom resource by kind/name.
 // Callers hold c.mu.
 func (c *Cluster) findUnstructuredLocked(kind kube.ResourceKind, namespace, name string) (*unstructured.Unstructured, error) {

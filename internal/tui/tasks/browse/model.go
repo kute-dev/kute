@@ -286,7 +286,7 @@ type Model struct {
 	// pendingSetResources, since there's a per-row value buffer (or, while
 	// adding, a key+value pair) to gather before there's an action to Begin.
 	pendingMeta *metaTarget
-	// pendingCronSchedule is non-nil while §33a's 'S' inline edit-schedule
+	// pendingCronSchedule is non-nil while §36a's 'S' inline edit-schedule
 	// panel is showing (cronjobschedule.go) — a bespoke gate like
 	// pendingMeta, since there's a typed schedule buffer (plus client-side
 	// cron.ParseStandard validation) to gather before there's an action to

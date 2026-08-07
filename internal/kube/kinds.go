@@ -65,6 +65,28 @@ func IsFluxGroup(group string) bool {
 	return false
 }
 
+// ArgoGroup is Argo CD's one API group (docs/design README.md §33a). A
+// single constant rather than a switch of one: unlike Flux's five groups,
+// Argo CD ships as one CRD family, so there's nothing else to enumerate.
+const ArgoGroup = "argoproj.io"
+
+// ArgoRefreshAnnotation is the annotation argocd-application-controller
+// watches for an out-of-band "refresh now" request — §33a's 'r' stamps it
+// "normal", the same value `argocd app get --refresh` sends and the same
+// annotate-to-trigger mechanism FluxReconcileAnnotation uses on a Flux
+// object.
+const ArgoRefreshAnnotation = "argocd.argoproj.io/refresh"
+
+// IsArgoGroup reports whether group is Argo CD's own API group, and so
+// whether a kind discovered in it is a candidate for §33a's curated
+// descriptor. Candidate, not automatic: BuildDiscoveredRegistry also checks
+// the Kind, since argoproj.io serves AppProject alongside Application and
+// only Application carries sync/health status — the same group-plus-Kind
+// gate §23b's httpRouteDescriptor uses within Gateway API's shared group.
+func IsArgoGroup(group string) bool {
+	return group == ArgoGroup
+}
+
 // APIKind is the Kubernetes Kind behind k. Identical to string(k) for every
 // kind but a substituted one.
 //

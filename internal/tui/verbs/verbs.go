@@ -280,6 +280,43 @@ var (
 	FluxSource = Verb{
 		ID: "flux-source", Key: "o", Label: "source",
 	}
+	// ArgoRefresh is §33a's 'r' on an Application row: stamps
+	// argocd.argoproj.io/refresh=normal, the same annotate-to-trigger
+	// mechanism FluxReconcile uses. TierNone/no confirm for FluxReconcile's
+	// own reason — it only asks argocd-application-controller to re-diff
+	// early, the same re-diff it already does on its own poll interval.
+	// Kinds stays nil: the Application kind is discovered at connect, not
+	// known at compile time; browse gates it on Descriptor.Argo instead,
+	// same shape as FluxReconcile/Descriptor.Flux.
+	ArgoRefresh = Verb{
+		ID: "argo-refresh", Key: "r", Label: "refresh",
+		Tier: actions.TierNone, Mutating: true,
+	}
+	// ArgoSync is §33a's 'S': a merge patch on operation.sync.revision,
+	// what `argocd app sync` does as a plain API write. Unlike
+	// FluxReconcile/ArgoRefresh above, this changes what's actually
+	// deployed (a real, visible side effect on the workloads the app
+	// manages), so it gets the same TierInline will-run y/N every other
+	// state-changing verb gets rather than FluxReconcile's TierNone —
+	// RolloutRestart's own doc comment draws this exact line between
+	// "asks for what the controller would do anyway" (TierNone) and "a
+	// real, unconfirmed run" (TierInline). PROD escalates to the modal via
+	// TierFor automatically, same as RolloutRestart. Capital 'S', matching
+	// the mockup and staying clear of FluxSuspend/JobSuspend/
+	// CronJobSuspend's lowercase 's' — the two never contend on the same
+	// row (Kinds is disjoint by construction: an Application row is never
+	// a Job/CronJob/Flux kind).
+	ArgoSync = Verb{
+		ID: "argo-sync", Key: "S", Label: "sync",
+		Tier: actions.TierInline, Mutating: true,
+	}
+	// ArgoURL is §33a's 'u': copies the app's dashboard deep link
+	// (read from argocd-cm, not a cluster write) to the clipboard — the
+	// same read-only, no-tier, not-Mutating shape CopyForwardURL/
+	// CopyRouteURL already use for a local clipboard copy.
+	ArgoURL = Verb{
+		ID: "argo-url", Key: "u", Label: "dashboard url",
+	}
 	Cordon = Verb{
 		ID: "cordon", Key: "C", Label: "cordon",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
@@ -454,6 +491,7 @@ var All = []Verb{
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
 	FluxReconcile, FluxSuspend, FluxSource,
+	ArgoRefresh, ArgoSync, ArgoURL,
 	Delete, ForceDelete, RolloutRestart, CronJobRunNow, CronJobSuspend, CronJobSetSchedule, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,

@@ -1,4 +1,4 @@
-// §33a's inline edit-schedule panel ('S' on a CronJob row): a bespoke gate
+// §36a's inline edit-schedule panel ('S' on a CronJob row): a bespoke gate
 // (pendingCronSchedule) like scale.go's pendingScale, gathering a typed
 // schedule string with client-side robfig/cron/v3 validation before there's
 // an action to Begin. Unlike scale.go/setimage.go, this follows the
@@ -139,7 +139,7 @@ func (m *Model) commitCronSchedule() tea.Cmd {
 	})
 }
 
-// isCronScheduleActionID reports whether id names a §33a "cronjob-set-
+// isCronScheduleActionID reports whether id names a §36a "cronjob-set-
 // schedule" commit (commitCronSchedule's own ID scheme) — used by
 // update.go's actions.ResultMsg handler, the same way isMetaActionID routes
 // meta.go's own commits.

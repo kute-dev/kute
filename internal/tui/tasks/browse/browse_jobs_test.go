@@ -528,7 +528,7 @@ func TestCronScheduleEditRejectsInvalidCronExpressionInline(t *testing.T) {
 	}
 }
 
-// TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult pins §33a's
+// TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult pins §36a's
 // keep-open contract (CLAUDE.md: "confirm → execute → refresh → show
 // result → remain on screen") — unlike SetImage/Scale, a successful commit
 // never closes the panel on its own; only esc does.

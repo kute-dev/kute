@@ -104,6 +104,21 @@ type Mutator interface {
 	// workload. Non-destructive: it asks for the reconciliation that would
 	// have happened on the next interval anyway.
 	RequestFluxReconcile(ctx context.Context, kind ResourceKind, namespace, name string) error
+	// RequestArgoRefresh stamps argocd.argoproj.io/refresh=normal — what
+	// `argocd app get --refresh` does, and the same annotate-to-trigger
+	// mechanism RequestFluxReconcile uses on a Flux object (docs/design
+	// README.md §33a). Non-destructive: it asks argocd-application-
+	// controller to re-diff live state against git, which it already does
+	// on its own poll interval.
+	RequestArgoRefresh(ctx context.Context, kind ResourceKind, namespace, name string) error
+	// RequestArgoSync merge-patches operation.sync.revision on an Argo CD
+	// Application — what `argocd app sync` does as a plain API write, no
+	// argocd binary anywhere in the path (§33a, same "kute just shows it"
+	// stance §30a takes on `flux suspend`/`flux reconcile`). revision is
+	// the Application's own already-configured target (spec.source.
+	// targetRevision, or "HEAD" when unset) — this re-applies what git
+	// already says to run, never a move to a different ref.
+	RequestArgoSync(ctx context.Context, kind ResourceKind, namespace, name, revision string) error
 	// RetryJob clones name's spec into a new Job called newName — get, strip
 	// the fields the API server must regenerate (selector, controller-uid/
 	// job-name template labels), create. The original Job (its Status,
@@ -487,6 +502,33 @@ func (c *Cluster) RequestFluxReconcile(ctx context.Context, kind ResourceKind, n
 		FluxReconcileAnnotation, time.Now().UTC().Format(time.RFC3339), false)
 }
 
+// RequestArgoRefresh implements Mutator the same way RequestFluxReconcile
+// does: the refresh request is an ordinary metadata write, so it reuses
+// PatchMeta rather than opening a second annotation path.
+func (c *Cluster) RequestArgoRefresh(ctx context.Context, kind ResourceKind, namespace, name string) error {
+	return c.PatchMeta(ctx, kind, namespace, name, true, ArgoRefreshAnnotation, "normal", false)
+}
+
+// RequestArgoSync implements Mutator: a merge patch on operation.sync.
+// revision, the API write `argocd app sync` performs. Not a spec field —
+// .operation is Argo's own imperative trigger the application-controller
+// watches for and clears once handled — so patchDynamic's plain merge
+// patch is the right tool, same idiom SetFluxSuspend uses for spec.suspend.
+func (c *Cluster) RequestArgoSync(ctx context.Context, kind ResourceKind, namespace, name, revision string) error {
+	if name == "" {
+		return fmt.Errorf("cannot sync %s: empty name", kind)
+	}
+	patch, err := json.Marshal(map[string]any{
+		"operation": map[string]any{
+			"sync": map[string]any{"revision": revision},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return c.patchDynamic(ctx, kind, namespace, name, patch)
+}
+
 // FluxSuspendCommandString renders the kubectl patch kute actually issues —
 // not the `flux suspend kustomization podinfo` it is equivalent to.
 // §27a's rule (the will-run line names the command that *executes*)
@@ -543,6 +585,30 @@ func CronJobSetScheduleCommandString(namespace, name, schedule string) string {
 func FluxReconcileCommandString(kind ResourceKind, namespace, name string, at time.Time) string {
 	cmd := fmt.Sprintf(`kubectl annotate %s/%s %s=%q --overwrite`,
 		kind.ResourceArg(), name, FluxReconcileAnnotation, at.UTC().Format(time.RFC3339))
+	if namespace != "" {
+		cmd += " -n " + namespace
+	}
+	return cmd
+}
+
+// ArgoRefreshCommandString renders the kubectl annotate kute issues for
+// §33a's 'r' — not the `argocd app get --refresh` it is equivalent to,
+// same §27a "names the command that executes" rule FluxReconcileCommandString
+// follows.
+func ArgoRefreshCommandString(kind ResourceKind, namespace, name string) string {
+	cmd := fmt.Sprintf(`kubectl annotate %s/%s %s=normal --overwrite`,
+		kind.ResourceArg(), name, ArgoRefreshAnnotation)
+	if namespace != "" {
+		cmd += " -n " + namespace
+	}
+	return cmd
+}
+
+// ArgoSyncCommandString renders the kubectl patch kute actually issues for
+// §33a's 'S' — not the `argocd app sync` it is equivalent to, same rule.
+func ArgoSyncCommandString(kind ResourceKind, namespace, name, revision string) string {
+	cmd := fmt.Sprintf(`kubectl patch %s/%s --type merge -p '{"operation":{"sync":{"revision":%q}}}'`,
+		kind.ResourceArg(), name, revision)
 	if namespace != "" {
 		cmd += " -n " + namespace
 	}

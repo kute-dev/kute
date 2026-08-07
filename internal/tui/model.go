@@ -128,6 +128,14 @@ type TaskScope struct {
 	// Replicas/Image/Resources use for Scale/SetImage/SetResources. Empty for
 	// every other verb.
 	Schedule string
+	// ArgoSyncRevision is an "argo-sync" verb's (§33a) already-resolved
+	// target revision — the Application's own spec.source.targetRevision
+	// (or "HEAD" when unset), read off the row's rendered REVISION cell at
+	// Begin time (browse/argo.go's beginArgoSync) the same way
+	// FluxSourceKind/Name/Namespace are resolved once rather than
+	// re-derived at execute time. This re-applies what git already says to
+	// run, never a move to a different ref. Empty for every other verb.
+	ArgoSyncRevision string
 }
 
 // TaskAction describes an operation available from a task screen.

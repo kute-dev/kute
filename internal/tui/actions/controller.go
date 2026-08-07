@@ -333,6 +333,13 @@ func (c *Controller) execute() tea.Cmd {
 				err = mutator.RequestFluxReconcile(context.Background(),
 					kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
 			}
+		case "argo-refresh":
+			err = mutator.RequestArgoRefresh(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
+		case "argo-sync":
+			err = mutator.RequestArgoSync(context.Background(),
+				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
+				action.Scope.ResourceName, action.Scope.ArgoSyncRevision)
 		case "rollout-restart":
 			err = mutator.RolloutRestart(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)

@@ -51,6 +51,8 @@ type fakeMutator struct {
 	setResources         []string // "namespace/name container" of every SetResources call
 	fluxSuspends         []string // "namespace/name=true|false" of every SetFluxSuspend call
 	fluxReconciles       []string // "namespace/name" of every RequestFluxReconcile call
+	argoRefreshes        []string // "namespace/name" of every RequestArgoRefresh call
+	argoSyncs            []string // "namespace/name@revision" of every RequestArgoSync call
 	retriedJobs          []string // "namespace/name->newName" of every RetryJob call
 	jobSuspends          []string // "namespace/name=true|false" of every SetJobSuspend call
 	triggeredCronJobs    []string // "namespace/name->newJobName" of every TriggerCronJob call
@@ -209,6 +211,22 @@ func (f *fakeMutator) RequestFluxReconcile(_ context.Context, _ kube.ResourceKin
 		return f.err
 	}
 	f.fluxReconciles = append(f.fluxReconciles, namespace+"/"+name)
+	return nil
+}
+
+func (f *fakeMutator) RequestArgoRefresh(_ context.Context, _ kube.ResourceKind, namespace, name string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.argoRefreshes = append(f.argoRefreshes, namespace+"/"+name)
+	return nil
+}
+
+func (f *fakeMutator) RequestArgoSync(_ context.Context, _ kube.ResourceKind, namespace, name, revision string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.argoSyncs = append(f.argoSyncs, namespace+"/"+name+"@"+revision)
 	return nil
 }
 

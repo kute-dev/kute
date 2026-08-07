@@ -620,6 +620,12 @@ func (f *fakeRolloutMutator) SetFluxSuspend(_ context.Context, kind kube.Resourc
 func (f *fakeRolloutMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
+func (f *fakeRolloutMutator) RequestArgoRefresh(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+func (f *fakeRolloutMutator) RequestArgoSync(_ context.Context, kind kube.ResourceKind, namespace, name, revision string) error {
+	return nil
+}
 func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
 	return nil
 }

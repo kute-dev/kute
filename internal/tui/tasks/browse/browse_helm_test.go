@@ -425,6 +425,12 @@ func (f *fakeHelmMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKi
 func (f *fakeHelmMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
+func (f *fakeHelmMutator) RequestArgoRefresh(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+func (f *fakeHelmMutator) RequestArgoSync(_ context.Context, kind kube.ResourceKind, namespace, name, revision string) error {
+	return nil
+}
 func (f *fakeHelmMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
 	return nil
 }

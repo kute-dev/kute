@@ -23,6 +23,13 @@ const (
 	// group. Sorts before Custom Resources, which stays last as the
 	// catch-all long tail.
 	GroupFlux GroupID = "Flux"
+	// GroupArgo buckets the discovered Argo CD Application kind (docs/
+	// design README.md §33a) — same appended-only-when-found, mutually
+	// exclusive-with-Custom-Resources shape as GroupFlux. AppProject stays
+	// in Custom Resources: it carries none of Application's sync/health
+	// status, so it never earns the curated descriptor that would move it
+	// here (see resources/crd.go's BuildDiscoveredRegistry).
+	GroupArgo GroupID = "Argo CD"
 )
 
 // Group is a labelled bucket of resource kinds shown in the explorer.

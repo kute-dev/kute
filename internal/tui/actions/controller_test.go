@@ -100,6 +100,14 @@ func (f *fakeMutator) SetFluxSuspend(_ context.Context, kind kube.ResourceKind, 
 	return nil
 }
 
+func (f *fakeMutator) RequestArgoRefresh(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
+	return nil
+}
+
+func (f *fakeMutator) RequestArgoSync(_ context.Context, kind kube.ResourceKind, namespace, name, revision string) error {
+	return nil
+}
+
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }

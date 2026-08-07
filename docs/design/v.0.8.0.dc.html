@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">25</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">CronJobs — the schedule is the thing you operate</h1>
+  </div>
+  <p style="margin: 0 0 24px 0; font-size: 12px; color: #676780; max-width: 980px; line-height: 1.7;">A CronJob's three questions are: did the last run pass, when is the next one, and is it even enabled. Kute answers all three in the list. Three verbs earn keys — <span style="color: #9a9ab2;">ctrl-r</span> run now, <span style="color: #9a9ab2;">s</span> suspend/resume, <span style="color: #9a9ab2;">S</span> edit schedule — and nothing else gets chrome. Jobs and Pods stay generic lists reached by ↵.</p>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 25A ══════════════════ -->
+    <div id="25a" data-screen-label="25a CronJobs list + last-run history" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">CronJobs list — schedule, next run, and the last outcome</span>
+        <span style="font-size: 12px; color: #676780;">name order, always · suspended rows dim but never sort away</span>
+      </div>
+
+      <div style="width: 1180px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">CronJobs</span>
+          <span style="color: #44445c; font-size: 11px;">batch/v1</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px; padding: 5px 14px; background: #0c0c12; border-bottom: 1px solid #1c1c2c; font-size: 12px;">
+          <span><span style="color: #34d17b;">●</span> <span style="color: #d8d8e8;">4</span> <span style="color: #676780;">last run ok</span></span>
+          <span><span style="color: #ef6a6a;">✕</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">last run failed</span></span>
+          <span><span style="color: #e8c74a;">◐</span> <span style="color: #d8d8e8;">1</span> <span style="color: #676780;">active now</span></span>
+          <span><span style="color: #676780;">⏸</span> <span style="color: #d8d8e8;">2</span> <span style="color: #676780;">suspended</span></span>
+          <span style="margin-left: auto; color: #676780;">7 cronjobs · clock 14:02:11 UTC</span>
+        </div>
+
+        <div style="display: flex; align-items: stretch;">
+          <div style="flex: 1 1 0; min-width: 0; border-right: 1px solid #1c1c2c;">
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">
+              <span></span><span>NAME</span><span>SCHEDULE</span><span>SUSP</span><span>ACT</span><span>LAST RUN</span><span style="text-align: right;">NEXT</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #34d17b;">●</span>
+              <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">backup-postgres</span>
+              <span style="color: #9a9ab2;">0 2 * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #676780;">0</span>
+              <span style="color: #676780;">12h ago ✓</span>
+              <span style="color: #9a9ab2; text-align: right;">in 11h58m</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #676780;">⏸</span>
+              <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through;">db-vacuum-weekly</span>
+              <span style="color: #55556e;">0 4 * * 0</span>
+              <span style="color: #e8c74a;">yes</span>
+              <span style="color: #55556e;">0</span>
+              <span style="color: #55556e;">9d ago ✓</span>
+              <span style="color: #55556e; text-align: right;">—</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+              <span style="color: #ef6a6a;">✕</span>
+              <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly</span>
+              <span style="color: #d8d8e8;">30 1 * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #676780;">0</span>
+              <span style="color: #ef6a6a;">12h ago ✕</span>
+              <span style="color: #9a9ab2; text-align: right;">in 11h28m</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #e8c74a;">◐</span>
+              <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">sync-inventory</span>
+              <span style="color: #9a9ab2;">*/15 * * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #e8c74a;">1</span>
+              <span style="color: #676780;">2m ago ✓</span>
+              <span style="color: #9a9ab2; text-align: right;">in 12m49s</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #34d17b;">●</span>
+              <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">token-rotate</span>
+              <span style="color: #9a9ab2;">0 */6 * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #676780;">0</span>
+              <span style="color: #676780;">2h ago ✓</span>
+              <span style="color: #9a9ab2; text-align: right;">in 3h57m</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #676780;">⏸</span>
+              <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through;">warm-cache</span>
+              <span style="color: #55556e;">*/5 * * * *</span>
+              <span style="color: #e8c74a;">yes</span>
+              <span style="color: #55556e;">0</span>
+              <span style="color: #55556e;">3d ago ✓</span>
+              <span style="color: #55556e; text-align: right;">—</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span style="color: #34d17b;">●</span>
+              <span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">webhook-retry</span>
+              <span style="color: #9a9ab2;">*/2 * * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #676780;">0</span>
+              <span style="color: #676780;">1m ago ✓</span>
+              <span style="color: #9a9ab2; text-align: right;">in 59s</span>
+            </div>
+          </div>
+
+          <div style="width: 336px; flex: 0 0 336px; background: #0a0a0f;">
+            <div style="padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">LAST 5 RUNS — report-nightly</div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center;">
+              <span style="color: #ef6a6a;">✕</span><span style="color: #d8d8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly-29310450</span><span style="color: #676780; text-align: right;">1m52s</span><span style="color: #676780; text-align: right;">12h</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center;">
+              <span style="color: #34d17b;">●</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly-29309010</span><span style="color: #676780; text-align: right;">3m04s</span><span style="color: #676780; text-align: right;">36h</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center;">
+              <span style="color: #34d17b;">●</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly-29307570</span><span style="color: #676780; text-align: right;">2m58s</span><span style="color: #676780; text-align: right;">60h</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center;">
+              <span style="color: #34d17b;">●</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly-29306130</span><span style="color: #676780; text-align: right;">3m11s</span><span style="color: #676780; text-align: right;">3d</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center;">
+              <span style="color: #34d17b;">●</span><span style="color: #9a9ab2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">report-nightly-29304690</span><span style="color: #676780; text-align: right;">2m47s</span><span style="color: #676780; text-align: right;">4d</span>
+            </div>
+
+            <div style="margin: 8px 14px 0; border: 1px solid #4a2430; border-radius: 6px; background: #170e13; padding: 7px 10px;">
+              <div style="color: #ef6a6a; font-weight: 700;">✕ BackoffLimitExceeded</div>
+              <div style="color: #f0b7b7; margin-top: 2px; line-height: 1.5;">Job has reached the specified backoff limit</div>
+              <div style="color: #676780; font-size: 11px; margin-top: 2px;">3 pod failures · exit 1 · verbatim from job status</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; padding: 10px 14px 8px; font-size: 12px;">
+              <span style="color: #55556e;">concurrency</span><span style="color: #d8d8e8;">Forbid</span>
+              <span style="color: #55556e;">deadline</span><span style="color: #d8d8e8;">600s</span>
+              <span style="color: #55556e;">history</span><span style="color: #d8d8e8;">3 kept · 1 failed kept</span>
+              <span style="color: #55556e;">timezone</span><span style="color: #d8d8e8;">Etc/UTC</span>
+              <span style="color: #55556e;">backoff</span><span style="color: #d8d8e8;">3</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CRONJOBS</span>
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">jobs</span></span>
+          <span><span style="color: #a78bfa;">ctrl-r</span> <span style="color: #676780;">run now</span></span>
+          <span><span style="color: #a78bfa;">s</span> <span style="color: #676780;">suspend</span></span>
+          <span><span style="color: #a78bfa;">S</span> <span style="color: #676780;">schedule</span></span>
+          <span><span style="color: #a78bfa;">l</span> <span style="color: #676780;">logs</span></span>
+          <span><span style="color: #a78bfa;">y</span> <span style="color: #676780;">yaml</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">?</span> <span style="color: #676780;">help</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">NEXT is computed, not stored</span> — Kute parses the cron expression against spec.timeZone and counts down live off the same clock as the age column. kubectl can't show it; it's the single most-asked question about a cronjob.</li>
+          <li>LAST RUN carries its outcome inline (<span style="color: #34d17b;">✓</span>/<span style="color: #ef6a6a;">✕</span>) from the newest owned Job — so the list answers "is this thing healthy" without a detail hop. The failure card in the panel promotes the deepest message verbatim, same move as pod detail (spec 5a) and the cert chain (<a href="#24a">24a</a>).</li>
+          <li><span style="color: #e9e2ff;">Suspended rows stay in name order</span> — struck-through, dimmed, amber `yes` in SUSP, NEXT reads `—`. They don't sink to the bottom: a suspended cronjob is usually suspended <em>by you, this morning</em>, and you need to find it where you left it.</li>
+          <li>The right panel is the marked row's last 5 runs — history from ownerRefs over the Jobs watch, no extra request. Below it the metadata that changes behaviour: concurrency policy, deadline, history limits, timezone, backoff. Nothing decorative.</li>
+          <li>`↵` opens the generic Jobs list filtered to this cronjob; `l` tails logs of the newest run's pod (spec 3a plumbing). <span style="color: #e9e2ff;">No CronJob detail screen</span> — Jobs and Pods already have theirs.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 25B ══════════════════ -->
+    <div id="25b" data-screen-label="25b ctrl-r run now" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">ctrl-r — run now, with the concurrency conflict up front</span>
+        <span style="font-size: 12px; color: #676780;">reversible tier · inline will-run line, no modal</span>
+      </div>
+
+      <div style="width: 1180px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #e8c74a;">◐</span>
+          <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">sync-inventory</span>
+          <span style="color: #d8d8e8;">*/15 * * * *</span>
+          <span style="color: #676780;">no</span>
+          <span style="color: #e8c74a;">1</span>
+          <span style="color: #676780;">2m ago ✓</span>
+          <span style="color: #9a9ab2; text-align: right;">in 12m49s</span>
+        </div>
+
+        <div style="margin: 10px 14px; border: 1px solid #4a4224; border-radius: 6px; background: #16130b; padding: 8px 12px;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span style="color: #e8c74a; font-weight: 700;">◐ 1 job already active</span>
+            <span style="color: #9a9ab2;">concurrencyPolicy: Forbid</span>
+            <span style="margin-left: auto; color: #676780;">sync-inventory-29310612 · started 2m ago</span>
+          </div>
+          <div style="color: #f0e0a8; margin-top: 2px;">A manual run bypasses the policy — the two will overlap. The scheduled run at 14:15 is unaffected.</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #d8d8e8;">kubectl create job sync-inventory-manual-1402 --from=cronjob/sync-inventory -n aim-stage</span>
+          <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> run · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CRONJOBS</span>
+          <span style="color: #676780;">run sync-inventory now?</span>
+          <span style="margin-left: auto; color: #44445c;">reversible · the job is yours to delete; schedule untouched</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 11px; color: #55556e;">after ↵ — the manual run appears in history, tagged</span>
+        <div style="width: 1180px; background: #0b0b10; border: 1px solid #26263a; border-radius: 8px; overflow: hidden; font-size: 12.5px; line-height: 1.5;">
+          <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+            <span style="color: #e8c74a;">◐</span>
+            <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">sync-inventory</span>
+            <span style="color: #d8d8e8;">*/15 * * * *</span>
+            <span style="color: #676780;">no</span>
+            <span style="color: #e8c74a;">2</span>
+            <span style="color: #676780;">0s ago ◐</span>
+            <span style="color: #9a9ab2; text-align: right;">in 12m44s</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 120px 56px 52px; gap: 0 10px; padding: 4px 14px; align-items: center; border-top: 1px solid #1c1c2c;">
+            <span style="color: #e8c74a;">◐</span><span style="color: #d8d8e8;">sync-inventory-manual-1402</span><span style="color: #a78bfa; font-size: 11px;">manual · you</span><span style="color: #676780; text-align: right;">4s</span><span style="color: #676780; text-align: right;">now</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+            <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CRONJOBS</span>
+            <span style="color: #34d17b;">✓ job created · sync-inventory-manual-1402</span>
+            <span style="margin-left: auto; color: #676780;"><span style="color: #a78bfa;">l</span> tail its logs · <span style="color: #a78bfa;">↵</span> open jobs</span>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
+          <li>The whole reason run-now needs a confirm step isn't danger, it's <span style="color: #e9e2ff;">the overlap nobody expects</span>: `--from=cronjob` ignores concurrencyPolicy entirely. Kute says so, names the running job, and lets you proceed. Warning card only appears when there's an actual conflict — otherwise it's just the will-run line.</li>
+          <li><span style="color: #e9e2ff;">ctrl-r, not r</span>, because `r` is restart/renew everywhere else in kute and creating a job is not a restart. The modifier marks it as a create, matching ctrl-d for delete.</li>
+          <li>The generated name is <span style="color: #e9e2ff;">deterministic and readable</span> — `-manual-HHMM` — so it's obvious in history, in logs, and to whoever finds it tomorrow. Manual runs carry a `manual · you` tag in the history panel, sourced from the creating annotation.</li>
+          <li>Reversible tier: it doesn't touch the schedule, and the job is deletable. So — inline line, no modal, no `y` to confirm. Friction scales with risk; compare <a href="#25c">25c</a>.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 25C ══════════════════ -->
+    <div id="25c" data-screen-label="25c s suspend and resume" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25c</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">s — suspend and resume, one key both directions</span>
+        <span style="font-size: 12px; color: #676780;">suspend is danger tier (`y` to confirm) · resume is reversible</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 11px; color: #55556e;">suspending an enabled cronjob — silence has consequences, so it costs a keystroke</span>
+          <div style="width: 1180px; background: #0b0b10; border: 1px solid #4a2430; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+              <span style="color: #34d17b;">●</span>
+              <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">backup-postgres</span>
+              <span style="color: #d8d8e8;">0 2 * * *</span>
+              <span style="color: #676780;">no</span>
+              <span style="color: #676780;">0</span>
+              <span style="color: #676780;">12h ago ✓</span>
+              <span style="color: #9a9ab2; text-align: right;">in 11h58m</span>
+            </div>
+            <div style="margin: 10px 14px; border: 1px solid #4a2430; border-radius: 6px; background: #170e13; padding: 8px 12px;">
+              <div style="display: flex; align-items: baseline; gap: 10px;">
+                <span style="color: #ef6a6a; font-weight: 700;">⏸ suspend backup-postgres</span>
+                <span style="margin-left: auto; color: #676780;">nothing will announce this later</span>
+              </div>
+              <div style="color: #f0b7b7; margin-top: 3px;">The 02:00 run stops happening. Missed runs are <span style="font-weight: 700;">not</span> backfilled on resume — every night it stays suspended is a backup that never exists.</div>
+              <div style="color: #676780; font-size: 11px; margin-top: 3px;">running jobs are unaffected · no active jobs right now</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+              <span style="color: #55556e;">will run</span>
+              <span style="color: #d8d8e8;">kubectl patch cronjob/backup-postgres -n aim-stage -p '{"spec":{"suspend":true}}'</span>
+              <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #ef6a6a; font-weight: 700;">y</span> suspend · <span style="color: #a78bfa;">esc</span> cancel</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #170e13; border-top: 1px solid #4a2430; font-size: 12px;">
+              <span style="background: #3a1b23; color: #f0b7b7; padding: 0 8px; border-radius: 3px; font-weight: 700;">DANGER</span>
+              <span style="color: #f0b7b7;">press y to confirm</span>
+              <span style="margin-left: auto; color: #676780;">PROD context would also require typing the name</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 11px; color: #55556e;">resuming a suspended one — the same key, no confirm, and it tells you what you didn't get</span>
+          <div style="width: 1180px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5;">
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 120px 46px 46px 96px 96px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+              <span style="color: #676780;">⏸</span>
+              <span style="color: #f0f0fa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: line-through;">warm-cache</span>
+              <span style="color: #9a9ab2;">*/5 * * * *</span>
+              <span style="color: #e8c74a;">yes</span>
+              <span style="color: #55556e;">0</span>
+              <span style="color: #55556e;">3d ago ✓</span>
+              <span style="color: #55556e; text-align: right;">—</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+              <span style="color: #55556e;">will run</span>
+              <span style="color: #d8d8e8;">kubectl patch cronjob/warm-cache -n aim-stage -p '{"spec":{"suspend":false}}'</span>
+              <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> resume · <span style="color: #a78bfa;">esc</span> cancel</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+              <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CRONJOBS</span>
+              <span style="color: #676780;">resume warm-cache? <span style="color: #9a9ab2;">suspended 3d · 864 runs skipped, none backfilled · next in 2m11s</span></span>
+              <span style="margin-left: auto; color: #44445c;">reversible · s again to suspend</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
+          <li>One key, both directions — <span style="color: #e9e2ff;">the row already tells you which way it goes</span> (SUSP column, strike-through), so a second key would be redundant state to remember. The keybar label flips to `resume` when the marked row is suspended.</li>
+          <li><span style="color: #e9e2ff;">Asymmetric friction, deliberately.</span> Suspend is the dangerous half: it fails silently and forever, and nobody gets paged for a backup that didn't start. So it's danger tier — `y`, plus name-typing on a PROD context (spec 20a's escalation). Resume can only cause work to happen, so it's `↵`.</li>
+          <li>Both directions state <span style="color: #e9e2ff;">the backfill truth</span>: Kubernetes does not catch up missed runs. Resume shows how many were skipped — computed from the cron expression across the suspension window — because that number is what tells you whether to also fire a manual run (<a href="#25b">25b</a>).</li>
+          <li>Suspend doesn't kill in-flight jobs; the card says so, and names them when there are any. Kute never implies a stronger effect than the patch actually has.</li>
+          <li>Works on a marked set too — `s` over 4 marked cronjobs suspends all four behind one confirm, listing the names (spec 20a bulk kit).</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 25D ══════════════════ -->
+    <div id="25d" data-screen-label="25d S edit schedule" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">25d</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">S — edit schedule, with the next five runs as the proof</span>
+        <span style="font-size: 12px; color: #676780;">one field, decoded live · not a YAML round-trip</span>
+      </div>
+
+      <div style="width: 1180px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+          <span style="color: #a78bfa; font-weight: 700;">kute</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #676780;">microk8s-cluster</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #a78bfa;">aim-stage</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #9a9ab2;">cronjob/report-nightly</span>
+          <span style="color: #44445c;">›</span>
+          <span style="color: #f0f0fa; font-weight: 700;">Schedule</span>
+          <span style="margin-left: auto; color: #34d17b;">● connected · 12ms</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px 10px;">
+          <span style="color: #55556e; font-size: 11px; letter-spacing: 0.06em;">SCHEDULE</span>
+          <span style="flex: 1; background: #14101f; border: 1px solid #a78bfa; border-radius: 5px; padding: 5px 10px; color: #f0f0fa; font-size: 15px; letter-spacing: 0.12em;">30 1 * * 1-5<span style="color: #a78bfa;">▏</span></span>
+          <span style="color: #676780;">was <span style="color: #9a9ab2; text-decoration: line-through;">30 1 * * *</span></span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 0 12px; padding: 0 14px 10px;">
+          <div><div style="color: #55556e; font-size: 10px; letter-spacing: 0.06em;">MIN</div><div style="color: #d8d8e8;">30</div><div style="color: #676780; font-size: 11px;">at :30</div></div>
+          <div><div style="color: #55556e; font-size: 10px; letter-spacing: 0.06em;">HOUR</div><div style="color: #d8d8e8;">1</div><div style="color: #676780; font-size: 11px;">01:00 h</div></div>
+          <div><div style="color: #55556e; font-size: 10px; letter-spacing: 0.06em;">DOM</div><div style="color: #d8d8e8;">*</div><div style="color: #676780; font-size: 11px;">any day</div></div>
+          <div><div style="color: #55556e; font-size: 10px; letter-spacing: 0.06em;">MONTH</div><div style="color: #d8d8e8;">*</div><div style="color: #676780; font-size: 11px;">any month</div></div>
+          <div><div style="color: #55556e; font-size: 10px; letter-spacing: 0.06em;">DOW</div><div style="color: #a78bfa;">1-5</div><div style="color: #a78bfa; font-size: 11px;">Mon–Fri</div></div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; border-bottom: 1px solid #1c1c2c;">
+          <span style="color: #34d17b;">✓ valid</span>
+          <span style="color: #d8d8e8;">At 01:30, Monday through Friday</span>
+          <span style="color: #33334a;">│</span>
+          <span style="color: #55556e;">tz</span>
+          <span style="color: #d8d8e8;">Etc/UTC</span>
+          <span style="color: #676780; font-size: 11px;">tab to change · cluster is 1.27, spec.timeZone supported</span>
+        </div>
+
+        <div style="display: flex; align-items: stretch;">
+          <div style="flex: 1 1 0; min-width: 0; border-right: 1px solid #1c1c2c; padding: 8px 14px;">
+            <div style="color: #55556e; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 4px;">NEXT 5 RUNS</div>
+            <div style="display: grid; grid-template-columns: auto 1fr auto; gap: 3px 14px;">
+              <span style="color: #d8d8e8;">Fri 08 Aug 01:30</span><span style="color: #676780;">UTC</span><span style="color: #9a9ab2;">in 11h28m</span>
+              <span style="color: #d8d8e8;">Mon 11 Aug 01:30</span><span style="color: #676780;">UTC</span><span style="color: #9a9ab2;">in 3d 11h</span>
+              <span style="color: #d8d8e8;">Tue 12 Aug 01:30</span><span style="color: #676780;">UTC</span><span style="color: #9a9ab2;">in 4d 11h</span>
+              <span style="color: #d8d8e8;">Wed 13 Aug 01:30</span><span style="color: #676780;">UTC</span><span style="color: #9a9ab2;">in 5d 11h</span>
+              <span style="color: #d8d8e8;">Thu 14 Aug 01:30</span><span style="color: #676780;">UTC</span><span style="color: #9a9ab2;">in 6d 11h</span>
+            </div>
+          </div>
+          <div style="width: 400px; flex: 0 0 400px; padding: 8px 14px; background: #0a0a0f;">
+            <div style="color: #55556e; font-size: 11px; letter-spacing: 0.06em; margin-bottom: 4px;">WHAT CHANGES</div>
+            <div style="color: #e8c74a;">− Sat &amp; Sun 01:30 no longer run</div>
+            <div style="color: #676780; font-size: 11px; margin-top: 1px;">104 fewer runs per year · weekend reports stop</div>
+            <div style="color: #9a9ab2; margin-top: 5px;">= Fri 08 Aug 01:30 unchanged</div>
+            <div style="color: #676780; font-size: 11px; margin-top: 1px;">the pending run is not disturbed</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+          <span style="color: #55556e;">will run</span>
+          <span style="color: #d8d8e8;">kubectl patch cronjob/report-nightly -n aim-stage -p '{"spec":{"schedule":"30 1 * * 1-5"}}'</span>
+          <span style="margin-left: auto; color: #676780; white-space: nowrap;"><span style="color: #a78bfa;">↵</span> apply · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">SCHEDULE</span>
+          <span><span style="color: #a78bfa;">tab</span> <span style="color: #676780;">timezone</span></span>
+          <span><span style="color: #a78bfa;">ctrl-y</span> <span style="color: #676780;">full yaml edit</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">back</span></span>
+          <span style="margin-left: auto; color: #44445c;">reversible · was 30 1 * * * · esc after apply offers undo</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 1120px; line-height: 1.7;">
+          <li>Editing a schedule through YAML (spec 17a) works but is the wrong tool: <span style="color: #e9e2ff;">cron expressions are write-only for most people</span>. `S` gives one field and three kinds of feedback — per-field decoding, an English sentence, and the next five real timestamps. The timestamps are the proof; the sentence is a courtesy.</li>
+          <li><span style="color: #e9e2ff;">WHAT CHANGES is the part other tools skip.</span> A diff of the old and new firing sets, in plain terms: what stops happening, how many runs a year, whether the pending run moves. Silently dropping weekends is exactly the mistake this prevents.</li>
+          <li>Timezone is shown always, editable on `tab`, and Kute states whether the cluster is new enough for spec.timeZone — on older clusters the field is disabled and reads `UTC (cluster < 1.25)` rather than letting you set something that silently does nothing.</li>
+          <li><span style="color: #e9e2ff;">Capital S, not a second modifier</span>: shift-pairing keeps schedule next to suspend in muscle memory, and edits are rarer than toggles, so they get the harder key.</li>
+          <li>Reversible tier — a schedule patch changes nothing that already ran, and the old value stays offered as an undo. `ctrl-y` escapes to the full YAML editor for anything else on the object (concurrency, deadlines, history limits): <span style="color: #e9e2ff;">one dedicated field for the thing you edit weekly, the generic editor for the rest</span>.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: &quot;2560px&quot;},
+  &quot;showNotes&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;description&quot;: &quot;Show rationale notes under each option&quot;}
+}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showNotes: this.props.showNotes ?? true };
+  }
+}
+</script>
+</body>
+</html>

@@ -23,9 +23,12 @@ func (m *Model) recomputeVisible() {
 
 // rebuildDisplay recomputes m.display from the current m.visible +
 // expandedGroups — called whenever either changes (recomputeVisible,
-// toggleGroup).
+// toggleGroup). foldHealthy covers both §30a's Flux kinds and §33a's Argo
+// Application — staysVisible (grouping.go) already generalizes past Flux
+// alone (isUnhealthy(r.Status) || r.Suspended), so both curated kinds share
+// this one gate.
 func (m *Model) rebuildDisplay() {
-	m.display = buildDisplayRows(m.visible, m.grouped(), m.expandedGroups, m.desc.Flux)
+	m.display = buildDisplayRows(m.visible, m.grouped(), m.expandedGroups, m.desc.Flux || m.desc.Argo)
 }
 
 // selectedName returns the currently selected row's name, or "" when

@@ -444,6 +444,73 @@ func goldenFluxModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// --- 33a: Argo CD Applications ---
+
+// goldenArgoObject builds one Application with deterministic ages — AGE and
+// SYNCED are both time.Since reads (resources/argo.go), so an absolute
+// fixture instant would render a different number every day the golden
+// aged, same reasoning as goldenFluxObject's own doc comment.
+func goldenArgoObject(name string, ageDays int, targetRevision, revision, sync, health string, syncedMinutesAgo int, resourceEntries ...map[string]any) *unstructured.Unstructured {
+	created := time.Now().Add(-time.Duration(ageDays)*24*time.Hour - 7*time.Hour)
+	status := map[string]any{
+		"sync":   map[string]any{"status": sync, "revision": revision},
+		"health": map[string]any{"status": health},
+		"operationState": map[string]any{
+			"finishedAt": time.Now().Add(-time.Duration(syncedMinutesAgo) * time.Minute).Format(time.RFC3339),
+		},
+	}
+	if len(resourceEntries) > 0 {
+		status["resources"] = anySlice(resourceEntries)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": kube.ArgoGroup + "/v1alpha1",
+		"kind":       "Application",
+		"metadata": map[string]any{
+			"name": name, "namespace": "argocd",
+			"creationTimestamp": created.Format(time.RFC3339),
+		},
+		"spec":   map[string]any{"source": map[string]any{"targetRevision": targetRevision}},
+		"status": status,
+	}}
+}
+
+// goldenArgoResource builds one status.resources[] entry for goldenArgoSubLineObject.
+func goldenArgoResource(kind, name, health, message string) map[string]any {
+	return map[string]any{
+		"kind": kind, "name": name,
+		"health": map[string]any{"status": health, "message": message},
+	}
+}
+
+// goldenArgoModel renders §33a with one row per branch of its sort order —
+// the whole reason the kind is curated rather than generic: a Degraded app
+// with its sickest managed resource's message on the sub-line, an OutOfSync/
+// Healthy drift case, a Syncing/Progressing in-flight case, and a healthy
+// tail folded away behind them. The strip, the sub-line, the fold and the
+// two-axis Sync/Health columns therefore land in one frame.
+func goldenArgoModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	reg, groups := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{applicationDK()}, nil)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Application"): {
+			goldenArgoObject("billing", 92, "main", "e41b90c1f2a3b4c5d6e7f8091a2b3c4d5e6f7081", "Synced", "Degraded", 11,
+				goldenArgoResource("Deployment", "billing-api", "Degraded", `container "api" is in CrashLoopBackOff — exit 1, 2m ago`)),
+			goldenArgoObject("frontend", 92, "main", "e41b90c1f2a3b4c5d6e7f8091a2b3c4d5e6f7081", "OutOfSync", "Healthy", 120),
+			goldenArgoObject("search", 92, "main", "f77d215a8b9c0d1e2f30415263748596071829a0", "Syncing", "Progressing", 0),
+			goldenArgoObject("api", 92, "main", "f77d215a8b9c0d1e2f30415263748596071829a0", "Synced", "Healthy", 18),
+		},
+	}}
+	sess := newSession()
+	sess.Registry, sess.Groups = reg, groups
+	sess.Location.Namespace = "argocd"
+	sess.Location.Kind = kube.ResourceKind("Application")
+	// A mutator is wired so the keybar renders §33a's own verb block (r/S/u).
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	return m
+}
+
 // --- 8b: destructive-action confirm (ctrl-d delete) ---
 //
 // Both friction tiers render inline in this same package's Body()/keybar —
@@ -710,7 +777,7 @@ var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
-	"flux",
+	"flux", "argo",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -754,6 +821,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenMetaConfirmModel(t, width, height)
 	case "flux":
 		return goldenFluxModel(t, width, height)
+	case "argo":
+		return goldenArgoModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -810,6 +879,10 @@ var truecolorStatePrefixes = []string{
 	// failed, reconciling must not read as failed. A plain golden renders
 	// all three identically.
 	"flux",
+	// §33a's Sync/Health split is the same kind of colour claim: Degraded
+	// must read red, OutOfSync amber, Progressing muted, Healthy green — a
+	// plain golden can't tell any of them apart.
+	"argo",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {
