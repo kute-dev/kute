@@ -5,10 +5,14 @@
 // rollout-restart verb nor any other machinery to share with
 // deployments.go, hence their own file per browse's per-concern split
 // convention (nodes.go/sort.go/grouping.go/delete.go/helm.go). Also holds
-// Job's own two mutating verbs, ctrl-r retry and 's' suspend/resume — kept
-// here alongside the navigation above rather than split out, matching
+// Job's own two mutating verbs (ctrl-r retry, 's' suspend/resume) and
+// CronJob's own ctrl-r/'s' siblings (run now, suspend/resume — one level up:
+// a CronJob's ctrl-r triggers a Job rather than cloning itself) — kept here
+// alongside the navigation above rather than split out, matching
 // deployments.go's own precedent of keeping a kind's navigation and its
-// mutating verb(s) in one file.
+// mutating verb(s) in one file. CronJob's third verb, 'S' edit-schedule, is
+// sizable enough (its own typed-buffer panel, validation, keep-open result
+// handling) to live in its own file, cronjobschedule.go.
 package browse
 
 import (
@@ -128,5 +132,73 @@ func (m Model) jobKeybarGroup() []tui.KeyHint {
 	return []tui.KeyHint{
 		{Key: verbs.JobRetry.Key, Label: verbs.JobRetry.Label},
 		{Key: suspend.Key, Label: suspend.Label},
+	}
+}
+
+// beginCronJobRunNow starts verbs.CronJobRunNow (ctrl-r): triggers a new,
+// standalone Job named "<name>-manual-<unix-timestamp>" from the CronJob's
+// own jobTemplate, computed once here so the will-run line
+// (cronJobRunNowWillRunLine) and the actual TriggerCronJob call agree —
+// exactly beginJobRetry's shape above. Deliberately always TierInline with
+// no TierFor/isProd escalation, for the identical reason beginJobRetry
+// gives: this is a clone into a new object (the CronJob itself, its
+// schedule, its own Job history are all untouched), not a delete+recreate,
+// so it doesn't belong in components.TypeNameModal.
+func (m *Model) beginCronJobRunNow(row resources.Row) tea.Cmd {
+	newName := fmt.Sprintf("%s-manual-%d", row.Name, time.Now().Unix())
+	return m.actions.Begin(verbs.CronJobRunNow.Tier, tui.TaskAction{
+		ID:    "cronjob-run-now-" + row.Namespace + "/" + row.Name,
+		Label: fmt.Sprintf("Run %s now?", row.Name),
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: row.Name,
+			Namespace: row.Namespace, Verb: "cronjob-run-now", IsMutating: true,
+			NewName: newName,
+		},
+	})
+}
+
+// cronJobRunNowWillRunLine is the confirm's "will run: ..." line — same
+// idiom as jobRetryWillRunLine above.
+func cronJobRunNowWillRunLine(scope tui.TaskScope) string {
+	return "will run: " + kube.CronJobTriggerCommandString(scope.Namespace, scope.ResourceName, scope.NewName)
+}
+
+// beginCronJobSuspend starts verbs.CronJobSuspend ('s'): one verb, two
+// directions, exactly beginFluxSuspend's shape (flux.go) — including passing
+// verbs.CronJobSuspend.Tier straight into Begin rather than through TierFor,
+// the same choice beginCordon/beginFluxSuspend make for a verb that's
+// permanently TierNone (TierFor only escalates TierInline→TierModal, so
+// calling it here would be a no-op every time). The will-run line is set on
+// m.execFeedback before Begin, same as beginFluxSuspend, so the command is
+// on screen the instant the key lands rather than only after the result —
+// TierNone never shows a confirm for it to ride on otherwise.
+func (m *Model) beginCronJobSuspend(row resources.Row) tea.Cmd {
+	verb, label := "cronjob-suspend", fmt.Sprintf("Suspend %s?", row.Name)
+	if row.Suspended {
+		verb, label = "cronjob-resume", fmt.Sprintf("Resume %s?", row.Name)
+	}
+	m.execFeedback = kube.CronJobSuspendCommandString(row.Namespace, row.Name, !row.Suspended)
+	return m.actions.Begin(verbs.CronJobSuspend.Tier, tui.TaskAction{
+		ID:    verb + "-" + row.Name,
+		Label: label,
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: row.Name,
+			Namespace: row.Namespace, Verb: verb, IsMutating: true,
+		},
+	})
+}
+
+// cronJobKeybarGroup mirrors jobKeybarGroup/fluxKeybarGroup: copies the
+// registry Verb, flips CronJobSuspend's label to "resume" when the selected
+// row is already suspended.
+func (m Model) cronJobKeybarGroup() []tui.KeyHint {
+	suspend := verbs.CronJobSuspend
+	if row, ok := m.selectedRow(); ok && row.Suspended {
+		suspend.Label = "resume"
+	}
+	return []tui.KeyHint{
+		{Key: verbs.CronJobRunNow.Key, Label: verbs.CronJobRunNow.Label},
+		{Key: suspend.Key, Label: suspend.Label},
+		{Key: verbs.CronJobSetSchedule.Key, Label: verbs.CronJobSetSchedule.Label},
 	}
 }
