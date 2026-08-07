@@ -120,6 +120,14 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// the one property that lets it keep a bare letter (see
 		// FluxReconcile's own comment for why that doesn't generalize).
 		"flux-suspend": true, "flux-reconcile": true,
+		// §33a. CronJobSuspend is FluxSuspend's exact shape: it only pauses
+		// future scheduling, touches nothing already running, and resume
+		// restores the prior state exactly (see CronJobSuspend's own doc
+		// comment, contrasting it with JobSuspend's TierInline). CronJobSetSchedule
+		// is set-image's shape: its own inline panel (cronjobschedule.go) is
+		// the confirmation step, TierNone here is nominal — the real
+		// PROD-sensitive tier comes from TierForCronJobSetSchedule.
+		"cronjob-suspend": true, "cronjob-set-schedule": true,
 	}
 	for _, v := range All {
 		if v.Mutating && v.Tier == actions.TierNone && !untiered[v.ID] {

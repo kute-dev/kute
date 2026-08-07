@@ -229,6 +229,52 @@ var (
 		ID: "job-suspend", Key: "s", Label: "suspend",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
 	}
+	// CronJobRunNow is 'ctrl-r' on a CronJob row — the exact
+	// `kubectl create job --from=cronjob/<name>` recipe JobRetry already
+	// gives Jobs, one level up: it creates a brand-new, standalone Job from
+	// the CronJob's own jobTemplate, so the CronJob object itself (its
+	// schedule, its own spawned-Job history) is never touched. Same physical
+	// key as JobRetry/RolloutRestart above (Kinds is disjoint — a row is
+	// never both a Job and a CronJob) and the same TierInline reasoning
+	// JobRetry's own doc comment gives: this fires a real, unconfirmed run of
+	// the CronJob's business logic on a bare keypress, so it gets the same
+	// one-line y/N friction every other TierInline verb does, never the
+	// type-the-name modal — this is a clone into a new object, not a
+	// delete+recreate, the same non-destructive argument JobRetry's doc
+	// comment makes for staying out of requiresTypedName.
+	CronJobRunNow = Verb{
+		ID: "cronjob-run-now", Key: "ctrl-r", Label: "run now",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+	}
+	// CronJobSuspend is a CronJob's own 's': one verb, two directions,
+	// exactly FluxSuspend's shape — Scope.Verb is
+	// "cronjob-suspend"/"cronjob-resume" depending on the row's own Suspended
+	// state. TierNone, unlike JobSuspend's TierInline: JobSuspend's own doc
+	// comment explains that setting a Job's spec.suspend tears down its
+	// currently-active pods immediately. A CronJob's spec.suspend does
+	// nothing of the kind — it only stops the controller from creating
+	// *future* Jobs on schedule; any Job (and pod) it has already spawned
+	// keeps running untouched, exactly FluxSuspend's own "reversible and
+	// immediate, touches nothing already applied" case, not JobSuspend's.
+	// Never contends with Job's own 's' (disjoint Kinds) or NodeShell's
+	// (Node-only).
+	CronJobSuspend = Verb{
+		ID: "cronjob-suspend", Key: "s", Label: "suspend",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+	}
+	// CronJobSetSchedule is 'S' (shift) on a CronJob row — an inline text
+	// editor for spec.schedule, gathered in browse's own pendingCronSchedule
+	// buffer (cronjobschedule.go) before there's an action to Begin, the same
+	// nominal-TierNone/TierForCronJobSetSchedule-resolves-the-real-tier shape
+	// SetImage/Scale use. Uppercase to stay clear of lowercase 's' (this
+	// row's own suspend/resume), ctrl-r (run now), and every Global key
+	// already live on a CronJob row (g/n/c/a/E/e/y/m/t/…) plus Open's ↵ —
+	// checked against the full verbs.go key table, nothing else claims 'S'
+	// anywhere in the app.
+	CronJobSetSchedule = Verb{
+		ID: "cronjob-set-schedule", Key: "S", Label: "edit schedule",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+	}
 	// FluxSource is §30a's 'o': jump to the object this one reconciles
 	// from. Read-only navigation, so no tier and not mutating.
 	FluxSource = Verb{
@@ -408,7 +454,7 @@ var All = []Verb{
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
 	FluxReconcile, FluxSuspend, FluxSource,
-	Delete, ForceDelete, RolloutRestart, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
+	Delete, ForceDelete, RolloutRestart, CronJobRunNow, CronJobSuspend, CronJobSetSchedule, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
@@ -469,6 +515,17 @@ func TierForEdit(isProd bool) actions.Tier {
 // TierInline y/N Controller already renders for rollback/delete, not a
 // screen-local gate.
 func TierForSetImage(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForCronJobSetSchedule resolves CronJobSetSchedule's confirmation
+// policy — the same TierNone-outside-PROD/TierInline-in-PROD shape as
+// TierForSetImage, routed through actions.Controller/kube.Mutator like
+// SetImage rather than a screen-local gate.
+func TierForCronJobSetSchedule(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}
