@@ -506,6 +506,15 @@ func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName strin
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+	return nil
+}
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+	return nil
+}
 func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
 	f.drained = append(f.drained, node)
 	return 1, nil

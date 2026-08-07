@@ -117,6 +117,32 @@ type Mutator interface {
 	// currently-active pods immediately; suspend=false lets it resume
 	// creating pods toward its completion target.
 	SetJobSuspend(ctx context.Context, namespace, name string, suspend bool) error
+	// TriggerCronJob creates a new, standalone Job called newJobName from
+	// name's own spec.jobTemplate — get, copy ObjectMeta.Labels/Annotations
+	// and Spec off the template, create: exactly what
+	// `kubectl create job newJobName --from=cronjob/name` does. No
+	// OwnerReferences are set (kubectl's own recipe sets none either), so the
+	// manual run is a standalone object the CronJob's own
+	// successfulJobsHistoryLimit/failedJobsHistoryLimit GC never touches —
+	// the same reasoning RetryJob's own doc comment gives for a manual Job
+	// retry. The CronJob itself (its schedule, its own spawned-Job history)
+	// is never touched.
+	TriggerCronJob(ctx context.Context, namespace, name, newJobName string) error
+	// SetCronJobSuspend patches spec.suspend on a CronJob — same JSON body
+	// SetJobSuspend uses, on the batch/v1 CronJob client instead of Job.
+	// Setting suspend=true only stops the controller from creating *future*
+	// Jobs on schedule; any Job (and any pod) already spawned keeps running
+	// untouched — unlike SetJobSuspend, nothing currently active is torn
+	// down (verbs.CronJobSuspend's own doc comment has the full reasoning).
+	SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool) error
+	// SetCronJobSchedule patches spec.schedule on a CronJob — a plain merge
+	// patch, the server-side equivalent of
+	// `kubectl patch cronjob/name --type merge -p '{"spec":{"schedule":"..."}}'`.
+	// The caller (tasks/browse/cronjobschedule.go) has already validated
+	// schedule parses via robfig/cron/v3's ParseStandard before this is ever
+	// reached, so this method trusts the caller instead of re-validating and
+	// returning a second, differently-worded error for the same bad input.
+	SetCronJobSchedule(ctx context.Context, namespace, name, schedule string) error
 }
 
 // ConfigMapConsumerRef is one workload that references a ConfigMap from its
@@ -322,6 +348,71 @@ func (c *Cluster) SetJobSuspend(ctx context.Context, namespace, name string, sus
 	return err
 }
 
+// TriggerCronJob creates newJobName from name's own spec.jobTemplate — get,
+// copy the template's metadata/spec, create. The source CronJob (its
+// schedule, its own spawned-Job history) is never touched: this is what
+// `kubectl create job newJobName --from=cronjob/name` does. Like RetryJob,
+// the new Job is deliberately detached from any parent (no
+// OwnerReferences), so a manual trigger doesn't fall under the CronJob's
+// own history-limit GC.
+func (c *Cluster) TriggerCronJob(ctx context.Context, namespace, name, newJobName string) error {
+	if name == "" || newJobName == "" {
+		return fmt.Errorf("cannot trigger cronjob: empty name")
+	}
+	cj, err := c.clientset.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	tpl := cj.Spec.JobTemplate
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        newJobName,
+			Namespace:   namespace,
+			Labels:      maps.Clone(tpl.Labels),
+			Annotations: maps.Clone(tpl.Annotations),
+		},
+		Spec: *tpl.Spec.DeepCopy(),
+	}
+	if job.Annotations == nil {
+		job.Annotations = map[string]string{}
+	}
+	// The real annotation `kubectl create job --from=cronjob` stamps, so a
+	// manually-triggered run reads the same in kute or the CLI.
+	job.Annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+	delete(job.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	return err
+}
+
+// SetCronJobSuspend patches spec.suspend on a CronJob — same JSON body
+// SetJobSuspend uses, on the CronJob client instead of Job. Unlike
+// SetJobSuspend, this touches nothing already running: suspend=true only
+// stops the controller from creating *future* Jobs on schedule.
+func (c *Cluster) SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool) error {
+	if name == "" {
+		return fmt.Errorf("cannot suspend cronjob: empty name")
+	}
+	patch := fmt.Appendf(nil, `{"spec":{"suspend":%t}}`, suspend)
+	_, err := c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+	return err
+}
+
+// SetCronJobSchedule patches spec.schedule on a CronJob — a plain merge
+// patch. schedule is JSON-marshaled rather than %s-formatted since it's a
+// free string; the caller has already validated it parses as cron before
+// this is ever reached.
+func (c *Cluster) SetCronJobSchedule(ctx context.Context, namespace, name, schedule string) error {
+	if name == "" {
+		return fmt.Errorf("cannot set schedule: empty cronjob name")
+	}
+	body, err := json.Marshal(map[string]any{"spec": map[string]any{"schedule": schedule}})
+	if err != nil {
+		return err
+	}
+	_, err = c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, body, metav1.PatchOptions{})
+	return err
+}
+
 // Cordon sets (cordon=true) or clears spec.unschedulable on node via a
 // strategic-merge patch.
 func (c *Cluster) Cordon(ctx context.Context, node string, cordon bool) error {
@@ -423,6 +514,27 @@ func JobRetryCommandString(namespace, name, newName string) string {
 // rather than a Flux kind.
 func JobSuspendCommandString(namespace, name string, suspend bool) string {
 	return fmt.Sprintf(`kubectl patch job/%s --type merge -p '{"spec":{"suspend":%t}}' -n %s`, name, suspend, namespace)
+}
+
+// CronJobTriggerCommandString renders the kubectl equivalent of
+// TriggerCronJob — newJobName is precomputed by the caller so this line and
+// the actual Create call always agree, the same reason JobRetryCommandString
+// takes newName rather than deriving it.
+func CronJobTriggerCommandString(namespace, name, newJobName string) string {
+	return fmt.Sprintf("kubectl create job %s --from=cronjob/%s -n %s", newJobName, name, namespace)
+}
+
+// CronJobSuspendCommandString renders the kubectl patch kute actually issues
+// for SetCronJobSuspend — same JSON body JobSuspendCommandString uses, on a
+// CronJob rather than a Job.
+func CronJobSuspendCommandString(namespace, name string, suspend bool) string {
+	return fmt.Sprintf(`kubectl patch cronjob/%s --type merge -p '{"spec":{"suspend":%t}}' -n %s`, name, suspend, namespace)
+}
+
+// CronJobSetScheduleCommandString renders the kubectl patch kute actually
+// issues for SetCronJobSchedule.
+func CronJobSetScheduleCommandString(namespace, name, schedule string) string {
+	return fmt.Sprintf(`kubectl patch cronjob/%s --type merge -p '{"spec":{"schedule":%q}}' -n %s`, name, schedule, namespace)
 }
 
 // FluxReconcileCommandString renders the kubectl annotate kute issues for

@@ -79,6 +79,15 @@ func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName strin
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+	return nil
+}
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+	return nil
+}
 func (f *fakeMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {
 	f.namespace, f.name, f.revision = namespace, name, revision
 	return f.err

@@ -626,6 +626,15 @@ func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newNam
 func (f *fakeRolloutMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
+func (f *fakeRolloutMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+	return nil
+}
+func (f *fakeRolloutMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	return nil
+}
+func (f *fakeRolloutMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+	return nil
+}
 
 // railFixture builds an object-scoped Pod owned (via its ReplicaSet) by
 // Deployment "nva-worker" with two rollout revisions (5 current, 4 prior) —

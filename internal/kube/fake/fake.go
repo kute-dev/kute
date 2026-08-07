@@ -293,6 +293,68 @@ func (c *Cluster) SetJobSuspend(_ context.Context, namespace, name string, suspe
 	return fmt.Errorf("%s %q not found", kube.KindJob, name)
 }
 
+// TriggerCronJob is RetryJob's shape applied to a CronJob's own jobTemplate:
+// find the source CronJob, build a new standalone Job from its template, and
+// append it to KindJob's own object set — the source CronJob is left
+// untouched.
+func (c *Cluster) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindCronJob] {
+		cj, ok := obj.(*batchv1.CronJob)
+		if !ok || cj.Name != name || cj.Namespace != namespace {
+			continue
+		}
+		tpl := cj.Spec.JobTemplate
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        newJobName,
+				Namespace:   namespace,
+				Labels:      maps.Clone(tpl.Labels),
+				Annotations: maps.Clone(tpl.Annotations),
+			},
+			Spec: *tpl.Spec.DeepCopy(),
+		}
+		c.objects[kube.KindJob] = append(c.objects[kube.KindJob], job)
+		c.notify(kube.KindJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
+}
+
+// SetCronJobSuspend patches spec.suspend on a CronJob in place.
+func (c *Cluster) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindCronJob] {
+		cj, ok := obj.(*batchv1.CronJob)
+		if !ok || cj.Name != name || cj.Namespace != namespace {
+			continue
+		}
+		s := suspend
+		cj.Spec.Suspend = &s
+		c.notify(kube.KindCronJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
+}
+
+// SetCronJobSchedule patches spec.schedule on a CronJob in place.
+func (c *Cluster) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindCronJob] {
+		cj, ok := obj.(*batchv1.CronJob)
+		if !ok || cj.Name != name || cj.Namespace != namespace {
+			continue
+		}
+		cj.Spec.Schedule = schedule
+		c.notify(kube.KindCronJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
+}
+
 func (c *Cluster) Cordon(_ context.Context, node string, cordon bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -53,6 +53,9 @@ type fakeMutator struct {
 	fluxReconciles       []string // "namespace/name" of every RequestFluxReconcile call
 	retriedJobs          []string // "namespace/name->newName" of every RetryJob call
 	jobSuspends          []string // "namespace/name=true|false" of every SetJobSuspend call
+	triggeredCronJobs    []string // "namespace/name->newJobName" of every TriggerCronJob call
+	cronJobSuspends      []string // "namespace/name=true|false" of every SetCronJobSuspend call
+	cronJobSchedules     []string // "namespace/name=schedule" of every SetCronJobSchedule call
 	dryRun               bool     // true if the most recent SetResources call was a dry-run
 	metaPatches          []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
 	secretDataPatches    []string // "namespace/name key=value" or "...key-" for a removal
@@ -222,6 +225,30 @@ func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, s
 		return f.err
 	}
 	f.jobSuspends = append(f.jobSuspends, fmt.Sprintf("%s/%s=%t", namespace, name, suspend))
+	return nil
+}
+
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.triggeredCronJobs = append(f.triggeredCronJobs, namespace+"/"+name+"->"+newJobName)
+	return nil
+}
+
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.cronJobSuspends = append(f.cronJobSuspends, fmt.Sprintf("%s/%s=%t", namespace, name, suspend))
+	return nil
+}
+
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.cronJobSchedules = append(f.cronJobSchedules, namespace+"/"+name+"="+schedule)
 	return nil
 }
 

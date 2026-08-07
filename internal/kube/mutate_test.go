@@ -202,6 +202,134 @@ func TestSetJobSuspendRejectsEmptyName(t *testing.T) {
 	}
 }
 
+// TestTriggerCronJobClonesJobTemplateIntoNewJob pins TriggerCronJob's
+// non-destructive contract, mirroring TestRetryJobClonesSpecIntoNewJob: the
+// source CronJob is never touched, the new Job carries the template's own
+// metadata/spec, and it's stamped with the same
+// "cronjob.kubernetes.io/instantiate: manual" annotation the real `kubectl
+// create job --from=cronjob` recipe uses, detached from any parent so it's
+// never swept by the CronJob's own history-limit GC.
+func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
+	t.Parallel()
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 2 * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:      map[string]string{"app": "batch"},
+					Annotations: map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"},
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
+					},
+				},
+			},
+		},
+	}
+	c, cs := newTestCluster(cj)
+
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-123"); err != nil {
+		t.Fatalf("TriggerCronJob: %v", err)
+	}
+
+	// The source CronJob is untouched.
+	src, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get source: %v", err)
+	}
+	if src.Status.LastScheduleTime != nil {
+		t.Errorf("source CronJob's Status was touched: %+v", src.Status)
+	}
+
+	job, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-manual-123", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get triggered job: %v", err)
+	}
+	if len(job.OwnerReferences) != 0 {
+		t.Errorf("expected the triggered job detached (no OwnerReferences), got %+v", job.OwnerReferences)
+	}
+	if job.Annotations["cronjob.kubernetes.io/instantiate"] != "manual" {
+		t.Errorf("expected the manual-instantiate annotation, got %+v", job.Annotations)
+	}
+	if _, ok := job.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
+		t.Errorf("expected the stale last-applied-configuration annotation dropped, got %+v", job.Annotations)
+	}
+	if job.Labels["app"] != "batch" {
+		t.Errorf("expected the template's own Labels copied, got %+v", job.Labels)
+	}
+	if len(job.Spec.Template.Spec.Containers) != 1 || job.Spec.Template.Spec.Containers[0].Image != "app:1.0" {
+		t.Errorf("expected the template's own container spec copied, got %+v", job.Spec.Template.Spec)
+	}
+}
+
+func TestTriggerCronJobRejectsEmptyNames(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
+	if err := c.TriggerCronJob(context.Background(), "default", "", "nightly-manual-123"); err == nil {
+		t.Fatalf("expected an error for an empty source name")
+	}
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", ""); err == nil {
+		t.Fatalf("expected an error for an empty target name")
+	}
+}
+
+// TestSetCronJobSuspendPatchesSpecSuspend mirrors
+// TestSetJobSuspendPatchesSpecSuspend, on the CronJob client instead of Job.
+func TestSetCronJobSuspendPatchesSpecSuspend(t *testing.T) {
+	t.Parallel()
+	for _, suspend := range []bool{true, false} {
+		c, cs := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
+		if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", suspend); err != nil {
+			t.Fatalf("SetCronJobSuspend(%t): %v", suspend, err)
+		}
+		got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		if got.Spec.Suspend == nil || *got.Spec.Suspend != suspend {
+			t.Errorf("Spec.Suspend = %v, want %t", got.Spec.Suspend, suspend)
+		}
+	}
+}
+
+func TestSetCronJobSuspendRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.SetCronJobSuspend(context.Background(), "default", "", true); err == nil {
+		t.Fatalf("expected an error for an empty name")
+	}
+}
+
+// TestSetCronJobSchedulePatchesSpecSchedule pins SetCronJobSchedule's merge
+// patch against the real typed clientset.
+func TestSetCronJobSchedulePatchesSpecSchedule(t *testing.T) {
+	t.Parallel()
+	c, cs := newTestCluster(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
+	})
+	if err := c.SetCronJobSchedule(context.Background(), "default", "nightly", "*/15 * * * *"); err != nil {
+		t.Fatalf("SetCronJobSchedule: %v", err)
+	}
+	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.Schedule != "*/15 * * * *" {
+		t.Errorf("Spec.Schedule = %q, want %q", got.Spec.Schedule, "*/15 * * * *")
+	}
+}
+
+func TestSetCronJobScheduleRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster()
+	if err := c.SetCronJobSchedule(context.Background(), "default", "", "*/15 * * * *"); err == nil {
+		t.Fatalf("expected an error for an empty name")
+	}
+}
+
 // TestRolloutUndoPatchesTemplateToTargetRevision covers 16b's 'R' rollback
 // (docs/design README.md §16b): RolloutUndo finds the ReplicaSet carrying
 // the target revision annotation and copies its pod template onto the
