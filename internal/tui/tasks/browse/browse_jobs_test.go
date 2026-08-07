@@ -37,6 +37,13 @@ func cronJobObj(ns, name string) *batchv1.CronJob {
 	}
 }
 
+// suspendedCronJobObj mirrors suspendedJobObj for CronJob.
+func suspendedCronJobObj(ns, name string, suspend bool) *batchv1.CronJob {
+	cj := cronJobObj(ns, name)
+	cj.Spec.Suspend = &suspend
+	return cj
+}
+
 func TestEnterOnJobSwitchesToPodsFilteredByName(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {jobObj("default", "batch-1")},
@@ -343,5 +350,247 @@ func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
 	m2 = step(t, m2, tea.KeyPressMsg{Text: "y"})
 	if len(mut2.jobSuspends) != 1 || mut2.jobSuspends[0] != "default/batch-1=false" {
 		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.jobSuspends)
+	}
+}
+
+// TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY mirrors
+// TestCtrlRShowsConfirmThenRetriesJobOnY for CronJob's own run-now.
+func TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
+	}
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "kubectl create job") || !strings.Contains(kb.RightNote, "--from=cronjob/nightly") {
+		t.Fatalf("expected the will-run line in the confirm, got %q", kb.RightNote)
+	}
+	if len(mut.triggeredCronJobs) != 0 {
+		t.Fatalf("expected no trigger before 'y', got %v", mut.triggeredCronJobs)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.triggeredCronJobs) != 1 {
+		t.Fatalf("triggeredCronJobs = %v, want one entry", mut.triggeredCronJobs)
+	}
+	if !strings.HasPrefix(mut.triggeredCronJobs[0], "default/nightly->nightly-manual-") {
+		t.Fatalf("triggeredCronJobs[0] = %q, want a default/nightly->nightly-manual-<ts> entry", mut.triggeredCronJobs[0])
+	}
+}
+
+// TestCronJobRunNowStaysInlineEvenInProd mirrors TestJobRetryStaysInlineEvenInProd:
+// CronJobRunNow is a clone into a new object, not destructive, so it never
+// escalates past the plain inline y/N even in a PROD context.
+func TestCronJobRunNowStaysInlineEvenInProd(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected ctrl+r to stay TierInline even in a prod context, tier=%v", m.actions.Tier())
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.triggeredCronJobs) != 1 {
+		t.Fatalf("expected a plain 'y' to trigger immediately, got %v", mut.triggeredCronJobs)
+	}
+}
+
+// TestSKeyTogglesCronJobSuspendImmediatelyNoConfirm pins CronJobSuspend's
+// TierNone contract (unlike Job's own 's', TierInline): pressing 's' applies
+// the suspend/resume immediately, with no confirm state to pass through
+// first — the same shape beginFluxSuspend/beginCordon use.
+func TestSKeyTogglesCronJobSuspendImmediatelyNoConfirm(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", false)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if m.actions.Active() {
+		t.Fatalf("expected TierNone to execute immediately with no confirm state")
+	}
+	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0] != "default/nightly=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.cronJobSuspends)
+	}
+}
+
+// TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel mirrors
+// TestSKeyTogglesJobSuspendAndResumeLabel's keybar-label assertions.
+func TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", false)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if !strings.Contains(plain(m.Render()), "suspend") {
+		t.Errorf("keybar should read 'suspend' on an active row:\n%s", plain(m.Render()))
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0] != "default/nightly=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.cronJobSuspends)
+	}
+
+	mut2 := &fakeMutator{}
+	lister2 := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", true)},
+	}}
+	session2 := newSession()
+	session2.Location.Kind = kube.KindCronJob
+	m2 := New(Config{Session: session2, Lister: lister2, Mutator: mut2})
+	m2.SetSize(120, 36)
+	m2 = step(t, m2, m2.Init()())
+
+	if !strings.Contains(plain(m2.Render()), "resume") {
+		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
+	}
+	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
+	if len(mut2.cronJobSuspends) != 1 || mut2.cronJobSuspends[0] != "default/nightly=false" {
+		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.cronJobSuspends)
+	}
+}
+
+// TestShiftSOpensCronScheduleEditPanelPrefilledWithCurrentSchedule pins
+// beginCronJobSetSchedule's pre-fill contract.
+func TestShiftSOpensCronScheduleEditPanelPrefilledWithCurrentSchedule(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "S"})
+	if m.pendingCronSchedule == nil {
+		t.Fatalf("expected 'S' to open the schedule panel")
+	}
+	if got := m.pendingCronSchedule.input.Value(); got != "*/5 * * * *" {
+		t.Fatalf("pendingCronSchedule.input = %q, want the row's current schedule %q", got, "*/5 * * * *")
+	}
+}
+
+// TestCronScheduleEditRejectsInvalidCronExpressionInline pins
+// commitCronSchedule's client-side validation: an invalid expression keeps
+// the panel open with parseErr set, and never reaches the mutator.
+func TestCronScheduleEditRejectsInvalidCronExpressionInline(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "S"})
+	m.pendingCronSchedule.input.SetValue("not a cron expression")
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+
+	if m.pendingCronSchedule == nil {
+		t.Fatalf("expected the panel to stay open after an invalid commit")
+	}
+	if m.pendingCronSchedule.parseErr == nil {
+		t.Fatalf("expected parseErr set for an invalid schedule")
+	}
+	if len(mut.cronJobSchedules) != 0 {
+		t.Fatalf("expected the mutator never called for an invalid schedule, got %v", mut.cronJobSchedules)
+	}
+}
+
+// TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult pins §33a's
+// keep-open contract (CLAUDE.md: "confirm → execute → refresh → show
+// result → remain on screen") — unlike SetImage/Scale, a successful commit
+// never closes the panel on its own; only esc does.
+func TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "S"})
+	m.pendingCronSchedule.input.SetValue("*/15 * * * *")
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+
+	if len(mut.cronJobSchedules) != 1 || mut.cronJobSchedules[0] != "default/nightly=*/15 * * * *" {
+		t.Fatalf("expected a SetCronJobSchedule call, got %v", mut.cronJobSchedules)
+	}
+	if m.pendingCronSchedule == nil {
+		t.Fatalf("expected the panel to stay open after a successful commit")
+	}
+	if m.pendingCronSchedule.resultNote == "" {
+		t.Fatalf("expected an inline result note after a successful commit")
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
+	if m.pendingCronSchedule != nil {
+		t.Fatalf("expected esc to close the panel")
+	}
+}
+
+// TestCronJobSetScheduleEscalatesToInlineConfirmInProd pins
+// TierForCronJobSetSchedule's PROD gate: TierNone outside PROD (the commit
+// above applies immediately), TierInline — never TierModal — in PROD.
+func TestCronJobSetScheduleEscalatesToInlineConfirmInProd(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "S"})
+	m.pendingCronSchedule.input.SetValue("*/15 * * * *")
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected a valid commit in PROD to escalate to TierInline, tier=%v", m.actions.Tier())
+	}
+	if len(mut.cronJobSchedules) != 0 {
+		t.Fatalf("expected no call before 'y', got %v", mut.cronJobSchedules)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.cronJobSchedules) != 1 || mut.cronJobSchedules[0] != "default/nightly=*/15 * * * *" {
+		t.Fatalf("expected a SetCronJobSchedule call after confirming, got %v", mut.cronJobSchedules)
 	}
 }
