@@ -1,0 +1,36 @@
+  kute │ microk8s-cluster › argocd › Timeline · all time                                                   ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+⇅ 1 rollout   ↺ 0 restarts   ▲ 1 warnings                                                         all time · merged feed
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  WHEN       +CHANGE  WHAT                                                                                        OBJECT
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ 3m      ◆  +1m      Sync applied · application/nva-billing · main@e41b90c · ci-bot                Application/nva-bil…
+  4m      ⇅  ROLLOUT deploy/nva-billing-api · rev 12 · image nva-billing:2.8.0                                          
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  9m      ▲  before   CrashLoopBackOff · back-off restarting failed container                       Pod/nva-billing-api…
+  19m     ◆  before   Revision applied · kustomization/nva-workers · main@9d04c7e · "chore: bump    Kustomization/nva-w…
+                      base images"                                                                                      
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   TIMELINE  esc back  ↵ open │ w warnings only  t time window │ / filter │ v copy revision                     ? help  

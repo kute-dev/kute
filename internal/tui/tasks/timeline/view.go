@@ -656,9 +656,10 @@ func (m Model) entryGlyphStyle(theme tui.Theme, e kube.TimelineEntry) (string, l
 	switch e.Kind {
 	case kube.TimelineRollout:
 		return tui.GlyphRollout, lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
-	case kube.TimelineRevision:
-		// §32a: the only purple marker in the feed besides the rollout
-		// anchor it usually precedes.
+	case kube.TimelineRevision, kube.TimelineSync:
+		// §32a/§34a: "one ◆ marker, two GitOps engines" — the only purple
+		// marker in the feed besides the rollout anchor it usually
+		// precedes, shared by Flux's revision rows and Argo's sync rows.
 		return tui.GlyphRevision, lipgloss.NewStyle().Foreground(theme.AccentHi).Bold(true)
 	case kube.TimelineRestart:
 		return tui.GlyphRestarts, lipgloss.NewStyle().Foreground(theme.Warn)
@@ -960,6 +961,17 @@ func entrySummary(e kube.TimelineEntry) string {
 		parts := []string{"Revision applied", strings.ToLower(e.Object), e.GitRevision}
 		if e.CommitSubject != "" {
 			parts = append(parts, `"`+e.CommitSubject+`"`)
+		}
+		return strings.Join(parts, " · ")
+	}
+	if e.Kind == kube.TimelineSync {
+		// "Sync applied · application/nva-billing · main@e41b90c ·
+		// ci-bot" — no subject slot: Argo's own sync-completed Event
+		// carries no commit-message text to parse, unlike Flux's, and
+		// there is no other on-cluster source for one (§34a).
+		parts := []string{"Sync applied", strings.ToLower(e.Object), e.GitRevision}
+		if e.By != "" {
+			parts = append(parts, e.By)
 		}
 		return strings.Join(parts, " · ")
 	}

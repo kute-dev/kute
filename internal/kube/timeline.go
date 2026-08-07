@@ -26,6 +26,16 @@ const (
 	// answers the timeline's actual question ("what changed?") on a GitOps
 	// cluster, and gets its own marker to say so.
 	TimelineRevision
+	// TimelineSync is §34a's Argo CD analogue: an Application finished a
+	// sync operation. Shares TimelineRevision's ◆ accent-purple marker —
+	// "one ◆ marker, two GitOps engines" — but its own row text ("Sync
+	// applied", not "Revision applied") and its own field source: Argo's
+	// own sync-completed Event carries neither revision nor initiator,
+	// unlike Flux's reconcile events, so those come from the Application
+	// object itself (tasks/timeline/load.go's argoSyncStatusOf). Never
+	// carries a CommitSubject — Argo's Event has no commit-message text to
+	// parse, and there is no other on-cluster source for one.
+	TimelineSync
 )
 
 // TimelineEntry is one row of 16a/16b's merged clock, newest-first once run
@@ -42,20 +52,27 @@ type TimelineEntry struct {
 	// revision rail reads them directly rather than re-parsing Message.
 	Revision int
 	Image    string
-	// GitRevision/CommitSubject are set on TimelineRevision entries only.
-	// GitRevision is the shortened "master@efd398b"; CommitSubject is the
-	// commit's first line, which source-controller publishes *only* in an
-	// event message and which therefore may legitimately be empty — the
-	// artifact carries no commit metadata and kute reads no git remote
-	// (docs/design README.md §31a). Never fabricated.
+	// GitRevision is set on TimelineRevision and TimelineSync entries: the
+	// shortened "master@efd398b"/"main@e41b90c" form. CommitSubject is set
+	// on TimelineRevision entries only — the commit's first line, which
+	// source-controller publishes *only* in an event message and which
+	// therefore may legitimately be empty — the artifact carries no commit
+	// metadata and kute reads no git remote (docs/design README.md §31a).
+	// TimelineSync never carries one: Argo's own sync-completed Event has
+	// no commit-message text to parse, and there is no other on-cluster
+	// source for one (§34a). Never fabricated.
 	GitRevision   string
 	CommitSubject string
 	// By is a TimelineRollout entry's optional attribution — the owning
 	// Deployment's own "kubectl.kubernetes.io/change-cause" annotation,
-	// when present (16a's "· by ci@github", docs/design README.md §16a).
-	// Left empty otherwise; never fabricated. Populated by
-	// tasks/timeline's own load.go, not here — TimelineFromRollouts only
-	// sees ReplicaSets, not their owning Deployment.
+	// when present (16a's "· by ci@github", docs/design README.md §16a) —
+	// or a TimelineSync entry's sync initiator: "auto-sync", or the
+	// status.operationState.initiatedBy.username Argo recorded (§34a: "was
+	// this a human or the machine? — matters at 2am"). Left empty
+	// otherwise; never fabricated. Populated by tasks/timeline's own
+	// load.go, not here — TimelineFromRollouts only sees ReplicaSets, not
+	// their owning Deployment, and TimelineFromArgoEvents' own Event
+	// carries no initiator either.
 	By string
 	// LiveStatusText/LiveStatusBad are the 16b revision rail's
 	// current-revision (index 0 only) live rollout-progress override — set
@@ -303,6 +320,75 @@ func FluxEventRevision(e Event) string {
 // confident, always-wrong claim, which is worse than saying nothing.
 func FluxTracksSourceRevision(apiKind string) bool {
 	return apiKind != "HelmRelease"
+}
+
+// ArgoSyncStatus is what TimelineFromArgoEvents needs from an Application's
+// own status.operationState — unlike Flux's reconcile events, Argo's
+// OperationCompleted Event carries neither revision nor initiator, so
+// callers resolve them from the object itself (tasks/timeline/load.go's
+// argoSyncStatusOf).
+type ArgoSyncStatus struct {
+	Ref      string // status.operationState.operation.sync.revision, e.g. "main"
+	Revision string // status.operationState.syncResult.revision, the bare SHA it resolved to
+	By       string // "auto-sync", or status.operationState.initiatedBy.username
+}
+
+// ArgoOperationCompletedReason is the Event Reason
+// argocd-application-controller stamps once a sync operation finishes —
+// TimelineFromArgoEvents' own filter.
+const ArgoOperationCompletedReason = "OperationCompleted"
+
+// ShortArgoRevision composes Argo's own "<ref>@<7-char-sha>" short form —
+// mirrors resources.argoRevisionCell's identical composition for §33a's own
+// REVISION column, duplicated here rather than imported since kube can't
+// depend on resources (resources already depends on kube). Argo's SHA
+// carries no "sha1:"-style algorithm prefix, unlike Flux's own digests, so
+// ShortFluxRevision's colon-splitting logic doesn't apply.
+func ShortArgoRevision(ref, sha string) string {
+	if len(sha) > 7 {
+		sha = sha[:7]
+	}
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if sha == "" {
+		return ref
+	}
+	return ref + "@" + sha
+}
+
+// TimelineFromArgoEvents projects Argo CD sync-completed events into §34a
+// sync rows — 34a's own analogue of TimelineFromFluxEvents, sharing its
+// glyph/styling (docs/design README.md §34a: "one ◆ marker, two GitOps
+// engines") but its own row text ("Sync applied", not "Revision applied")
+// since an Application's sync is a different fact from a Kustomization's
+// reconcile.
+//
+// statusOf resolves an event's own object ("Application/kute-billing") to
+// the sync it just completed; an event whose object statusOf can't resolve
+// (already gone, or the lister isn't wired) is skipped rather than rendered
+// with blank fields.
+func TimelineFromArgoEvents(events []Event, statusOf func(object string) (ArgoSyncStatus, bool)) []TimelineEntry {
+	var out []TimelineEntry
+	for _, e := range events {
+		if e.Reason != ArgoOperationCompletedReason {
+			continue
+		}
+		status, ok := statusOf(e.Object)
+		if !ok {
+			continue
+		}
+		out = append(out, TimelineEntry{
+			Time:        e.LastSeen,
+			Kind:        TimelineSync,
+			Object:      e.Object,
+			Namespace:   e.Namespace,
+			Reason:      e.Reason,
+			GitRevision: ShortArgoRevision(status.Ref, status.Revision),
+			By:          status.By,
+		})
+	}
+	return out
 }
 
 // ShortFluxRevision collapses "master@sha1:efd398be…" to "master@efd398b",

@@ -1285,3 +1285,120 @@ func revisionRow(m Model) (kube.TimelineEntry, bool) {
 	}
 	return kube.TimelineEntry{}, false
 }
+
+func syncRow(m Model) (kube.TimelineEntry, bool) {
+	for _, e := range m.rows {
+		if e.Kind == kube.TimelineSync {
+			return e, true
+		}
+	}
+	return kube.TimelineEntry{}, false
+}
+
+// argoApplicationFixture builds an unstructured Application object carrying
+// the real status.operationState shape (test/e2e/fixtures/55-argocd-
+// objects.yaml's own kute-billing) — the on-cluster source
+// argoSyncStatusOf reads since Argo's own OperationCompleted Event carries
+// neither the revision nor the initiator.
+func argoApplicationFixture(name, ref, sha, username string, automated bool) *unstructured.Unstructured {
+	initiatedBy := map[string]any{}
+	if username != "" {
+		initiatedBy["username"] = username
+	}
+	if automated {
+		initiatedBy["automated"] = true
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1",
+		"kind":       "Application",
+		"metadata":   map[string]any{"name": name, "namespace": "default"},
+		"status": map[string]any{
+			"operationState": map[string]any{
+				"operation":   map[string]any{"sync": map[string]any{"revision": ref}},
+				"syncResult":  map[string]any{"revision": sha},
+				"initiatedBy": initiatedBy,
+			},
+		},
+	}}
+}
+
+// TestArgoSyncRowResolvesFromApplicationStatus pins §34a's core mechanism:
+// the OperationCompleted Event carries no revision or initiator of its own,
+// so both come from the Application object's own status.operationState.
+func TestArgoSyncRowResolvesFromApplicationStatus(t *testing.T) {
+	app := argoApplicationFixture("kute-billing", "main", "e41b90cdeadbeef0123456789abcdef012345678", "ci-bot", false)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Application"): {app},
+	}}
+	events := []kube.Event{
+		{Type: "Normal", Reason: "OperationCompleted", Object: "Application/kute-billing", Namespace: "default", Message: "application synced successfully", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{events: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	got, ok := syncRow(m)
+	if !ok {
+		t.Fatalf("expected a sync row, rows: %+v", m.rows)
+	}
+	if got.GitRevision != "main@e41b90c" {
+		t.Errorf("GitRevision = %q, want %q", got.GitRevision, "main@e41b90c")
+	}
+	if got.By != "ci-bot" {
+		t.Errorf("By = %q, want %q", got.By, "ci-bot")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "Sync applied") || !strings.Contains(view, "main@e41b90c") || !strings.Contains(view, "ci-bot") {
+		t.Fatalf("expected the sync row's text in view:\n%s", view)
+	}
+}
+
+// TestArgoSyncByFallsBackToAutoSync pins §34a's "was this a human or the
+// machine?" distinction: an automated sync (or one with no recorded
+// username) reads as "auto-sync", never fabricated as anyone's name.
+func TestArgoSyncByFallsBackToAutoSync(t *testing.T) {
+	app := argoApplicationFixture("kute-frontend", "main", "9d04c7ea0000000000000000000000000000000", "", true)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Application"): {app},
+	}}
+	events := []kube.Event{
+		{Type: "Normal", Reason: "OperationCompleted", Object: "Application/kute-frontend", Namespace: "default", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{events: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	got, ok := syncRow(m)
+	if !ok {
+		t.Fatalf("expected a sync row, rows: %+v", m.rows)
+	}
+	if got.By != "auto-sync" {
+		t.Errorf("By = %q, want %q", got.By, "auto-sync")
+	}
+}
+
+// TestCopyRevisionOnArgoSyncRow pins that 'v' works on a §34a sync row, not
+// just a §32a revision row.
+func TestCopyRevisionOnArgoSyncRow(t *testing.T) {
+	app := argoApplicationFixture("kute-billing", "main", "e41b90cdeadbeef0123456789abcdef012345678", "ci-bot", false)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Application"): {app},
+	}}
+	events := []kube.Event{
+		{Type: "Normal", Reason: "OperationCompleted", Object: "Application/kute-billing", Namespace: "default", Count: 1, LastSeen: time.Now()},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{events: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if !m.revisionSelected() {
+		t.Fatalf("expected the lone sync row to be selected and offer 'v': rows %+v", m.rows)
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "v"})
+	if cmd == nil {
+		t.Fatal("expected 'v' to return a clipboard command on a sync row")
+	}
+	if cmd() == nil {
+		t.Fatal("expected a non-nil message from the clipboard command")
+	}
+}

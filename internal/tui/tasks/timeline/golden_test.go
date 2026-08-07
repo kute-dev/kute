@@ -118,6 +118,23 @@ func goldenRevisionModel(width, height int) Model {
 	return loadFixedFeed(m, entries, nil, "")
 }
 
+// goldenGitOpsModel builds §34a's own scenario: a cluster running both Flux
+// and Argo (common mid-migration) gets one causal stream, not two feeds —
+// an Argo ◆ "Sync applied" row sits newest-first alongside a Flux ◆
+// "Revision applied" row, sharing the same marker and never disagreeing on
+// which engine did what.
+func goldenGitOpsModel(width, height int) Model {
+	entries := []kube.TimelineEntry{
+		{Time: goldenNow.Add(-3 * time.Minute), Kind: kube.TimelineSync, Object: "Application/nva-billing", Namespace: "argocd", Reason: "OperationCompleted", GitRevision: "main@e41b90c", By: "ci-bot"},
+		{Time: goldenNow.Add(-4 * time.Minute), Kind: kube.TimelineRollout, Object: "Deployment/nva-billing-api", Namespace: "argocd", Reason: "Rollout", Message: "revision 12 · nva-billing:2.8.0", Revision: 12, Image: "nva-billing:2.8.0"},
+		{Time: goldenNow.Add(-9 * time.Minute), Kind: kube.TimelineEvent, Object: "Pod/nva-billing-api-6d8f2-kq4wz", Namespace: "argocd", Severity: "Warning", Reason: "CrashLoopBackOff", Message: "back-off restarting failed container"},
+		{Time: goldenNow.Add(-19 * time.Minute), Kind: kube.TimelineRevision, Object: "Kustomization/nva-workers", Namespace: "argocd", Reason: "ReconciliationSucceeded", GitRevision: "main@9d04c7e", CommitSubject: "chore: bump base images"},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{}, Namespace: "argocd"})
+	m.SetSize(width, height)
+	return loadFixedFeed(m, entries, nil, "")
+}
+
 func goldenFixtures() map[string]string {
 	return map[string]string{
 		"namespace-120x36.golden": goldentest.Plain(goldenNamespaceModel(120, 36).Render()),
@@ -126,6 +143,8 @@ func goldenFixtures() map[string]string {
 		"object-80x24.golden":     goldentest.Plain(goldenObjectModel(80, 24).Render()),
 		"revision-120x36.golden":  goldentest.Plain(goldenRevisionModel(120, 36).Render()),
 		"revision-80x24.golden":   goldentest.Plain(goldenRevisionModel(80, 24).Render()),
+		"gitops-120x36.golden":    goldentest.Plain(goldenGitOpsModel(120, 36).Render()),
+		"gitops-80x24.golden":     goldentest.Plain(goldenGitOpsModel(80, 24).Render()),
 	}
 }
 

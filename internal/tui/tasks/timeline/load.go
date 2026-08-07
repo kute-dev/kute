@@ -41,7 +41,10 @@ func (m Model) load() tea.Cmd {
 		// §32a: Flux reconcile events become their own revision rows, so
 		// they must not also appear as ordinary event rows — the revision
 		// row says everything the reconcile event did, better.
-		fluxEvents, plainEvents := splitFluxRevisionEvents(rawEvents)
+		fluxEvents, rest := splitFluxRevisionEvents(rawEvents)
+		// §34a: same reasoning for Argo's own sync-completed events — they
+		// become their own sync rows rather than an ordinary event row.
+		argoEvents, plainEvents := splitArgoSyncEvents(rest)
 		// The subject outlives the event that carried it: this load's own
 		// "stored artifact for commit" sightings are merged into the
 		// session cache and the whole cache is what the rows read, so a
@@ -49,6 +52,7 @@ func (m Model) load() tea.Cmd {
 		subjects := session.RetainFluxCommitSubjects(
 			kube.FluxCommitSubjects(rawEvents, sourceRevisionOf(ctx, lister, namespace)))
 		revisionEntries := kube.TimelineFromFluxEvents(fluxEvents, subjects)
+		argoSyncEntries := kube.TimelineFromArgoEvents(argoEvents, argoSyncStatusOf(ctx, lister, namespace))
 
 		eventEntries := kube.TimelineFromEvents(kube.DedupeEvents(plainEvents))
 		restartEntries := restartsForScope(ctx, lister, namespace, objectKind, objectName)
@@ -56,7 +60,7 @@ func (m Model) load() tea.Cmd {
 		attachChangeCause(ctx, lister, namespace, rolloutEntries)
 		attachChangeCause(ctx, lister, namespace, rail)
 
-		merged := kube.MergeTimeline(eventEntries, restartEntries, rolloutEntries, revisionEntries)
+		merged := kube.MergeTimeline(eventEntries, restartEntries, rolloutEntries, revisionEntries, argoSyncEntries)
 		return loadedMsg{entries: merged, rail: rail, railDeployment: railDeployment}
 	}
 }
@@ -449,5 +453,76 @@ func sourceRevisionOf(ctx context.Context, lister resources.RawLister, namespace
 		}
 		cache[object] = ""
 		return ""
+	}
+}
+
+// argoApplicationKind is the bare Kind Argo's Application objects are
+// discovered and read under (internal/resources/argo.go's own descriptor
+// registers it the same way) — not a typed kube.ResourceKind constant since
+// Application is read entirely through the generic dynamic-informer path,
+// same as any other discovered CRD.
+const argoApplicationKind = kube.ResourceKind("Application")
+
+// splitArgoSyncEvents partitions events into those reporting a completed
+// Argo sync (which become §34a sync rows) and the rest.
+func splitArgoSyncEvents(events []kube.Event) (argo, plain []kube.Event) {
+	for _, e := range events {
+		if e.Reason == kube.ArgoOperationCompletedReason {
+			argo = append(argo, e)
+			continue
+		}
+		plain = append(plain, e)
+	}
+	return argo, plain
+}
+
+// argoSyncStatusOf resolves an Application object ("Application/kute-
+// billing") to the sync its own status.operationState last completed — §34a's
+// analogue of sourceRevisionOf, needed because (unlike Flux's reconcile
+// events) Argo's OperationCompleted Event carries neither the revision nor
+// who/what triggered it.
+//
+// Reads only kinds already in the cache; an un-started Application informer
+// yields no rows rather than starting one from the update loop, the same
+// contract sourceRevisionOf follows for Flux's source kinds.
+func argoSyncStatusOf(ctx context.Context, lister resources.RawLister, namespace string) func(string) (kube.ArgoSyncStatus, bool) {
+	type cacheEntry struct {
+		status kube.ArgoSyncStatus
+		found  bool
+	}
+	cache := map[string]cacheEntry{}
+	return func(object string) (kube.ArgoSyncStatus, bool) {
+		kind, name := splitObject(object)
+		if kind != argoApplicationKind || name == "" {
+			return kube.ArgoSyncStatus{}, false
+		}
+		if c, ok := cache[object]; ok {
+			return c.status, c.found
+		}
+		objs, err := lister.ListRaw(ctx, kind, namespace)
+		if err != nil {
+			cache[object] = cacheEntry{}
+			return kube.ArgoSyncStatus{}, false
+		}
+		for _, o := range objs {
+			u, ok := o.(*unstructured.Unstructured)
+			if !ok || u.GetName() != name {
+				continue
+			}
+			ref, _, _ := unstructured.NestedString(u.Object, "status", "operationState", "operation", "sync", "revision")
+			rev, _, _ := unstructured.NestedString(u.Object, "status", "operationState", "syncResult", "revision")
+			username, _, _ := unstructured.NestedString(u.Object, "status", "operationState", "initiatedBy", "username")
+			automated, _, _ := unstructured.NestedBool(u.Object, "status", "operationState", "initiatedBy", "automated")
+			by := username
+			if automated || by == "" {
+				// §34a: "was this a human or the machine? — matters at 2am."
+				by = "auto-sync"
+			}
+			status := kube.ArgoSyncStatus{Ref: ref, Revision: rev, By: by}
+			cache[object] = cacheEntry{status: status, found: true}
+			return status, true
+		}
+		cache[object] = cacheEntry{}
+		return kube.ArgoSyncStatus{}, false
 	}
 }

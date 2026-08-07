@@ -270,9 +270,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.filterInput.Focus()
 		}
 	case "v":
-		// §32a: copy the revision — the thing you paste into `git show` or
-		// an incident channel. Only meaningful on a revision row.
-		if e, ok := m.selectedRow(); ok && e.Kind == kube.TimelineRevision && e.GitRevision != "" {
+		// §32a/§34a: copy the revision — the thing you paste into `git show`
+		// or an incident channel. Only meaningful on a revision or sync row.
+		if e, ok := m.selectedRow(); ok && (e.Kind == kube.TimelineRevision || e.Kind == kube.TimelineSync) && e.GitRevision != "" {
 			return m, tea.SetClipboard(e.GitRevision)
 		}
 	case "R":

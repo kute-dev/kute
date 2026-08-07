@@ -69,9 +69,9 @@ func (m Model) namespaceKeybar() tui.Keybar {
 		groups = append(groups, []tui.KeyHint{{Key: "tab", Label: "expand/collapse normal"}})
 	}
 	if m.revisionSelected() {
-		// §32a: only offered on a revision row — there is nothing to copy
-		// from an ordinary event, and a key that does nothing is worse
-		// than an absent one.
+		// §32a/§34a: only offered on a revision or sync row — there is
+		// nothing to copy from an ordinary event, and a key that does
+		// nothing is worse than an absent one.
 		groups = append(groups, []tui.KeyHint{{Key: "v", Label: "copy revision"}})
 	}
 	return tui.Keybar{
