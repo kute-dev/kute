@@ -14,7 +14,7 @@ import (
 var RightAlignTitles = map[string]bool{
 	"Age": true, "Data": true, "Replicas": true,
 	"Completions": true, "Active": true, "Capacity": true,
-	"Traffic": true, "Rev": true, "Updated": true,
+	"Traffic": true, "Rev": true, "Updated": true, "Next Run": true,
 }
 
 // Columns builds the components.Table column specs for d from its
@@ -107,6 +107,7 @@ var fixedWidths = map[string]int{
 	"Revision":   16,
 	"Source":     26,
 	"Reconciled": 12, // "RECONCILED" + the 2-cell sort-arrow allowance
+	"Next Run":   10, // "in 23h59m" / "—" (suspended or unparseable) — widest realistic reading
 }
 
 func minWidthFor(title string) int {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -420,13 +421,77 @@ func projectCronJob(obj runtime.Object) Row {
 		return metaRow(obj)
 	}
 	ns, name, age := metaOf(obj)
-	suspended := "False"
+	suspended := c.Spec.Suspend != nil && *c.Spec.Suspend
+	suspendCell := "False"
 	status := StatusOK
-	if c.Spec.Suspend != nil && *c.Spec.Suspend {
-		suspended = "True"
+	if suspended {
+		suspendCell = "True"
 		status = StatusNeutral
 	}
-	return Row{Namespace: ns, Name: name, Cells: []string{name, c.Spec.Schedule, suspended, strconv.Itoa(len(c.Status.Active)), shortAge(age)}, Status: status}
+	nextRun := cronNextRunCell(c, suspended, time.Now())
+	return Row{
+		Namespace: ns, Name: name, Suspended: suspended,
+		Cells:  []string{name, c.Spec.Schedule, nextRun, suspendCell, strconv.Itoa(len(c.Status.Active)), shortAge(age)},
+		Status: status,
+	}
+}
+
+// cronNextRunCell renders projectCronJob's NEXT RUN cell: "—" for a
+// suspended CronJob (the SUSPEND column already says why there's nothing
+// scheduled) or one whose spec.schedule fails to parse (defensive — a
+// malformed schedule can exist server-side even though kubectl validates on
+// create, e.g. an object applied with --validate=false), otherwise
+// shortEta's "in 4m"/"in 2h" reading of how far off the next fire is.
+//
+// now is a parameter rather than a time.Now() read inside, so this stays
+// testable with a fixed clock. Anchored on wall-clock now, not
+// status.lastScheduleTime: unlike the real CronJob controller, which
+// anchors on lastScheduleTime to detect and catch up on missed runs
+// (startingDeadlineSeconds semantics), this column answers a purely
+// forward-looking question — "when does this fire next, from this instant"
+// — so anchoring on now is simpler and immune to a stale lastScheduleTime
+// (e.g. after a long apiserver outage) computing a "next" run already in
+// the past.
+//
+// spec.timeZone is honored explicitly: it's a separate CronJobSpec field,
+// not embedded in the schedule string the way a CRON_TZ=/TZ= prefix would
+// be, and cron.ParseStandard alone ignores it. now is converted into that
+// zone before Next is called; the resulting duration (.Sub against the
+// original now) comes out correct regardless of which zone either value is
+// expressed in, since Sub compares absolute instants.
+func cronNextRunCell(c *batchv1.CronJob, suspended bool, now time.Time) string {
+	if suspended {
+		return "—"
+	}
+	sched, err := cron.ParseStandard(c.Spec.Schedule)
+	if err != nil {
+		return "—"
+	}
+	evalAt := now
+	if c.Spec.TimeZone != nil && *c.Spec.TimeZone != "" {
+		if loc, err := time.LoadLocation(*c.Spec.TimeZone); err == nil {
+			evalAt = now.In(loc)
+		}
+	}
+	return shortEta(sched.Next(evalAt).Sub(now))
+}
+
+// shortEta renders a forward-looking duration as "in 4m"/"in 2h"/"in 5d" —
+// shortAge's mirror image for a time still to come (CronJob's NEXT RUN),
+// rather than one already elapsed.
+func shortEta(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return "due"
+	case d < time.Minute:
+		return fmt.Sprintf("in %ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("in %dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("in %dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("in %dd", int(d.Hours()/24))
+	}
 }
 
 func projectService(obj runtime.Object) Row {
