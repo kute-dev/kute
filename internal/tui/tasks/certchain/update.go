@@ -1,0 +1,138 @@
+package certchain
+
+import (
+	"strings"
+	"time"
+
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
+)
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.SetSize(msg.Width, msg.Height)
+	case kube.ResourceChangedMsg:
+		if m.reloadsOn(msg.Kind) {
+			return m, m.load()
+		}
+	case kube.ConnState:
+		m.conn = msg
+	case tickMsg:
+		m.now = time.Time(msg)
+		return m, tickCmd()
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	case loadedMsg:
+		return m, m.applyLoaded(msg)
+	case tea.KeyPressMsg:
+		return m.updateKey(msg)
+	}
+	return m, nil
+}
+
+// reloadsOn reports whether a change to kind could change this screen —
+// its own kind, any kind actually present in the resolved chain, or either
+// ref's kind. Never a blanket "reload on anything," which would defeat the
+// point of the narrow reads load() already does.
+func (m Model) reloadsOn(kind kube.ResourceKind) bool {
+	if kind == kube.KindCertificate || kind == kube.KindCertificateRequest {
+		return true
+	}
+	for _, n := range m.chain {
+		if n.Kind == kind {
+			return true
+		}
+	}
+	if m.haveSecret && m.secretRef.Kind == kind {
+		return true
+	}
+	if m.haveIssuer && m.issuerRef.Kind == kind {
+		return true
+	}
+	return false
+}
+
+func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
+	if msg.err != nil {
+		m.state, m.feedback = tui.TaskStateError, msg.err.Error()
+		return nil
+	}
+	if msg.gone {
+		m.state = tui.TaskStateError
+		m.feedback = m.name + " no longer exists · esc to go back"
+		return nil
+	}
+	m.fail, m.chain = msg.fail, msg.chain
+	m.secretRef, m.issuerRef = msg.secretRef, msg.issuerRef
+	m.haveSecret, m.haveIssuer = msg.haveSecret, msg.haveIssuer
+	m.attempts = msg.attempts
+	m.state = tui.TaskStateReady
+	if strings.HasPrefix(m.feedback, "loading ") {
+		m.feedback = ""
+	}
+	if n := m.selectableCount(); m.selected >= n {
+		m.selected = max(0, n-1)
+	}
+	// Default the cursor onto the deepest failure — "zero digs," the same
+	// rule fluxdetail's inventory sort gives ↵ for free by putting the
+	// failing entry first. Here the chain's order is already fixed (it's a
+	// walk, not a sortable list), so the cursor is placed explicitly
+	// instead.
+	if m.fail != nil {
+		for i, n := range m.chain {
+			if n.Kind == m.fail.Kind && n.Name == m.fail.Name {
+				m.selected = i
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "backspace":
+		return m, func() tea.Msg { return tui.BackMsg{} }
+	case "up", "k":
+		m.moveSelection(-1)
+	case "down", "j":
+		m.moveSelection(1)
+	case "enter":
+		if kind, name, ok := m.selectedTarget(); ok {
+			ns := m.namespace
+			return m, func() tea.Msg {
+				return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name}
+			}
+		}
+	case "y":
+		if m.openYAML != nil {
+			task, cmd := m.openYAML(kube.KindCertificate, m.namespace, m.name, m.width, m.height)
+			if task != nil {
+				return task, cmd
+			}
+		}
+	case "e":
+		if m.openEvents != nil {
+			task, cmd := m.openEvents(kube.KindCertificate, m.namespace, m.name, m.width, m.height)
+			if task != nil {
+				return task, cmd
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) moveSelection(delta int) {
+	n := m.selectableCount()
+	if n == 0 {
+		m.selected = 0
+		return
+	}
+	m.selected = min(max(0, m.selected+delta), n-1)
+}

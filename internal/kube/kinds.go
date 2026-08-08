@@ -232,6 +232,26 @@ const (
 	// Flux CRDs, per §30a's zero-chrome-otherwise rule — and browse's
 	// switchKind can recognize it as a carve-out that pushes tasks/fluxtree.
 	KindFluxTree ResourceKind = "FluxTree"
+
+	// cert-manager kinds (docs/design README.md §35a) are, like Gateway
+	// API's, never DefaultRegistry entries — ordinary discovered/generic CRD
+	// kinds (§14a/§14d) with no curated Descriptor. These consts exist for
+	// two narrow reasons, neither of which is registry curation: browse
+	// needs to name Certificate for its bespoke ↵ carve-out into
+	// tasks/certchain (the same kind-name carve-out Gateway API's own
+	// KindHTTPRoute takes), and tasks/certchain needs to name every kind in
+	// the Certificate → CertificateRequest → Order → Challenge ownerRef
+	// chain, plus Issuer/ClusterIssuer for the refs strip, without scattering
+	// string literals through its walk. Order and Challenge actually live in
+	// the sibling acme.cert-manager.io API group, not cert-manager.io — an
+	// accident of the real CRDs' packaging that doesn't matter here, since
+	// nothing below gates on API group.
+	KindCertificate        ResourceKind = "Certificate"
+	KindCertificateRequest ResourceKind = "CertificateRequest"
+	KindOrder              ResourceKind = "Order"
+	KindChallenge          ResourceKind = "Challenge"
+	KindIssuer             ResourceKind = "Issuer"
+	KindClusterIssuer      ResourceKind = "ClusterIssuer"
 )
 
 // ResourceChangedMsg is emitted (as a tea.Msg) when a watched informer observes

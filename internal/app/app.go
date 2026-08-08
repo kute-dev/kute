@@ -23,6 +23,7 @@ import (
 	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/tasks/browse"
+	"github.com/kute-dev/kute/internal/tui/tasks/certchain"
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
@@ -456,6 +457,7 @@ type seams interface {
 	objectdetail.EventsReader
 	timeline.EventsReader
 	whocan.WhoCanReader
+	certchain.EventsReader
 }
 
 // NewModel builds the root model. It's rooted at tasks/browse when a
@@ -586,6 +588,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenForward:        openForward,
 		OpenObjectDetail:   openObjectDetailFunc(sess, cluster, openYAML),
 		OpenFluxDetail:     openFluxDetailFunc(sess, cluster, openYAML),
+		OpenCertChain:      openCertChainFunc(sess, cluster, openYAML),
 		OpenFluxTree:       openFluxTreeFunc(sess, cluster, openFluxDetailFunc(sess, cluster, openYAML), openObjectDetailFunc(sess, cluster, openYAML)),
 		OpenRouteTable:     openRouteTableFunc(sess, cluster, openYAML),
 		OpenWhoCan:         openWhoCanFunc(sess, cluster),
@@ -664,6 +667,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenForward:        openForward,
 		OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
 		OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
+		OpenCertChain:      openCertChainFunc(sess, demoCluster, openYAML),
 		OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
 		OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
 		OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
@@ -904,6 +908,26 @@ func openFluxDetailFunc(sess *tui.Session, active seams, openYAML browse.OpenYAM
 		})
 		fd.SetSize(width, height)
 		return &fd, fd.Init()
+	}
+}
+
+// openCertChainFunc pushes tasks/certchain (§35a) for a Certificate row —
+// active alone satisfies every seam it declares, same shape as
+// openFluxDetailFunc.
+func openCertChainFunc(sess *tui.Session, active seams, openYAML browse.OpenYAMLFunc) browse.OpenCertChainFunc {
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
+	return func(namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+		cc := certchain.New(certchain.Config{
+			Session:    sess,
+			Lister:     active,
+			Events:     active,
+			OpenYAML:   certchain.OpenYAMLFunc(openYAML),
+			OpenEvents: certchain.OpenEventsFunc(openObjectEvents),
+			Namespace:  namespace,
+			Name:       name,
+		})
+		cc.SetSize(width, height)
+		return &cc, cc.Init()
 	}
 }
 

@@ -348,27 +348,67 @@ func demoCertManagerFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	issuerCols := []kube.PrinterColumn{
 		{Name: "Ready", Type: "string", JSONPath: `.status.conditions[?(@.type=="Ready")].status`},
 	}
+	// Order/Challenge carry no Ready-style condition at all — status.state
+	// is their own vocabulary (§35a's certchain reads it directly) — so
+	// their printer columns are State/Reason rather than Ready.
+	orderCols := []kube.PrinterColumn{
+		{Name: "State", Type: "string", JSONPath: ".status.state"},
+		{Name: "Reason", Type: "string", JSONPath: ".status.reason"},
+	}
+	challengeCols := []kube.PrinterColumn{
+		{Name: "State", Type: "string", JSONPath: ".status.state"},
+		{Name: "Reason", Type: "string", JSONPath: ".status.reason"},
+	}
 
 	c.Seed(kube.KindCustomResourceDefinition,
 		demoCRD("certificates.cert-manager.io", "cert-manager.io", "Certificate", "certificates", "Namespaced", "v1", true, certCols, crdAge),
 		demoCRD("certificaterequests.cert-manager.io", "cert-manager.io", "CertificateRequest", "certificaterequests", "Namespaced", "v1", true, certReqCols, crdAge),
 		demoCRD("clusterissuers.cert-manager.io", "cert-manager.io", "ClusterIssuer", "clusterissuers", "Cluster", "v1", true, issuerCols, crdAge),
+		// Order/Challenge are cert-manager's own ACME CRDs but live in the
+		// sibling acme.cert-manager.io group — §35a's certchain walks them
+		// by bare kind name only, so the group split doesn't affect routing.
+		demoCRD("orders.acme.cert-manager.io", "acme.cert-manager.io", "Order", "orders", "Namespaced", "v1", true, orderCols, crdAge),
+		demoCRD("challenges.acme.cert-manager.io", "acme.cert-manager.io", "Challenge", "challenges", "Namespaced", "v1", true, challengeCols, crdAge),
 	)
 
 	c.SeedDiscovered(demoDiscoveredKind("Certificate", "certificates", "cert-manager.io", "v1", "certificates.cert-manager.io", false, certCols))
 	c.SeedDiscovered(demoDiscoveredKind("CertificateRequest", "certificaterequests", "cert-manager.io", "v1", "certificaterequests.cert-manager.io", false, certReqCols))
 	c.SeedDiscovered(demoDiscoveredKind("ClusterIssuer", "clusterissuers", "cert-manager.io", "v1", "clusterissuers.cert-manager.io", true, issuerCols))
+	c.SeedDiscovered(demoDiscoveredKind("Order", "orders", "acme.cert-manager.io", "v1", "orders.acme.cert-manager.io", false, orderCols))
+	c.SeedDiscovered(demoDiscoveredKind("Challenge", "challenges", "acme.cert-manager.io", "v1", "challenges.acme.cert-manager.io", false, challengeCols))
 
 	c.Seed(kube.ResourceKind("Certificate"),
-		demoCertificate("api-tls", "default", true, "api-tls-secret", "letsencrypt-prod", age(5*24*time.Hour)),
-		demoCertificate("staging-tls", "staging", false, "staging-tls-secret", "letsencrypt-staging", age(2*time.Hour)),
+		demoCertificate("api-tls", "default", true, "", "api-tls-secret", "letsencrypt-prod", age(5*24*time.Hour)),
+		demoCertificate("staging-tls", "staging", false, "", "staging-tls-secret", "letsencrypt-staging", age(2*time.Hour)),
+		// §35a's own mockup scenario: a DNS-01 challenge stuck on a
+		// propagation failure, four issuance attempts in, secretName
+		// deliberately naming a Secret that's never seeded (the refs
+		// strip's "missing" case) against an issuer that is Ready (the
+		// refs strip's healthy case).
+		demoCertificate("web-tls", "default", false, "Issuing", "web-tls-cert", "letsencrypt-prod", age(41*24*time.Hour)),
 	)
 	c.Seed(kube.ResourceKind("CertificateRequest"),
-		demoCertificateRequest("api-tls-abcd1", "default", true, "letsencrypt-prod", age(5*24*time.Hour)),
+		demoCertificateRequest("api-tls-abcd1", "default", true, "letsencrypt-prod", "api-tls", age(5*24*time.Hour)),
+		// Three abandoned earlier attempts plus the current one — attempts
+		// is an honest count of these, never a fabricated number.
+		demoCertificateRequest("web-tls-0", "default", false, "letsencrypt-prod", "web-tls", age(41*24*time.Hour)),
+		demoCertificateRequest("web-tls-1a", "default", false, "letsencrypt-prod", "web-tls", age(30*24*time.Hour)),
+		demoCertificateRequest("web-tls-1b", "default", false, "letsencrypt-prod", "web-tls", age(15*24*time.Hour)),
+		demoCertificateRequestApproved("web-tls-1", "default", "web-tls", "letsencrypt-prod", age(8*time.Minute)),
 	)
 	c.Seed(kube.ResourceKind("ClusterIssuer"),
 		demoClusterIssuer("letsencrypt-prod", true, age(60*24*time.Hour)),
 		demoClusterIssuer("letsencrypt-staging", true, age(60*24*time.Hour)),
+	)
+	// api-tls is Ready — its target Secret genuinely exists, unlike
+	// web-tls's deliberately-missing one (§35a's refs-strip "missing" case).
+	c.Seed(kube.KindSecret, demoTLSSecret("api-tls-secret", "default", time.Now().Add(85*24*time.Hour), age(5*24*time.Hour)))
+	c.Seed(kube.ResourceKind("Order"),
+		demoOrder("web-tls-1-2847563921", "default", "web-tls-1", "errored", "authorization for app.aim.dev failed", age(8*time.Minute)),
+	)
+	c.Seed(kube.ResourceKind("Challenge"),
+		demoChallenge("web-tls-1-2847563921-0", "default", "web-tls-1-2847563921", "dns-01", "app.aim.dev", "pending",
+			"propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.aim.dev", age(8*time.Minute)),
 	)
 
 	// The operator itself lives in its own "cert-manager" namespace, same
@@ -650,11 +690,16 @@ func demoCRD(name, group, kind, plural, scope, version string, established bool,
 // demoCertificate builds a cert-manager.io/v1 Certificate instance. The
 // not-ready message ("Issuing certificate as Secret does not exist") is the
 // design doc's own §14d example — CONDITIONS renders it verbatim, never
-// paraphrased.
-func demoCertificate(name, ns string, ready bool, secret, issuer string, created metav1.Time) *unstructured.Unstructured {
+// paraphrased. reason feeds §35a's certchain STATE cell ("Ready=False ·
+// Issuing") — empty for the plain 14a/14d fixtures, which predate it.
+func demoCertificate(name, ns string, ready bool, reason, secret, issuer string, created metav1.Time) *unstructured.Unstructured {
 	status, message := "True", "Certificate is up to date and has not expired"
 	if !ready {
 		status, message = "False", "Issuing certificate as Secret does not exist"
+	}
+	cond := map[string]any{"type": "Ready", "status": status, "message": message}
+	if reason != "" {
+		cond["reason"] = reason
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cert-manager.io/v1",
@@ -668,14 +713,17 @@ func demoCertificate(name, ns string, ready bool, secret, issuer string, created
 			"issuerRef":  map[string]any{"name": issuer, "kind": "ClusterIssuer"},
 		},
 		"status": map[string]any{
-			"conditions": []any{
-				map[string]any{"type": "Ready", "status": status, "message": message},
-			},
+			"conditions": []any{cond},
 		},
 	}}
 }
 
-func demoCertificateRequest(name, ns string, ready bool, issuer string, created metav1.Time) *unstructured.Unstructured {
+// demoCertificateRequest builds a plain CertificateRequest, Ready true or
+// false with no Approved/Denied condition set — certOwner wires the
+// OwnerReference §35a's certchain walks Certificate → CertificateRequest by
+// (Kind+Name, never UID — the same match style every demo fixture's
+// OwnerReferences already use).
+func demoCertificateRequest(name, ns string, ready bool, issuer, certOwner string, created metav1.Time) *unstructured.Unstructured {
 	status := "True"
 	if !ready {
 		status = "False"
@@ -686,6 +734,7 @@ func demoCertificateRequest(name, ns string, ready bool, issuer string, created 
 		"metadata": map[string]any{
 			"name": name, "namespace": ns,
 			"creationTimestamp": created.UTC().Format(time.RFC3339),
+			"ownerReferences":   []any{ownerRefMap("cert-manager.io/v1", "Certificate", certOwner)},
 		},
 		"spec": map[string]any{
 			"issuerRef": map[string]any{"name": issuer, "kind": "ClusterIssuer"},
@@ -696,6 +745,90 @@ func demoCertificateRequest(name, ns string, ready bool, issuer string, created 
 			},
 		},
 	}}
+}
+
+// demoCertificateRequestApproved is §35a's "Approved · not Ready" chain
+// row — approved by the ACME issuer's auto-approver but not yet Ready,
+// which is normal mid-issuance progress (certchain's certRequestNode never
+// treats this alone as a failure).
+func demoCertificateRequestApproved(name, ns, certOwner, issuer string, created metav1.Time) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "CertificateRequest",
+		"metadata": map[string]any{
+			"name": name, "namespace": ns,
+			"creationTimestamp": created.UTC().Format(time.RFC3339),
+			"ownerReferences":   []any{ownerRefMap("cert-manager.io/v1", "Certificate", certOwner)},
+		},
+		"spec": map[string]any{
+			"issuerRef": map[string]any{"name": issuer, "kind": "ClusterIssuer"},
+		},
+		"status": map[string]any{
+			"conditions": []any{
+				map[string]any{"type": "Approved", "status": "True"},
+				map[string]any{"type": "Ready", "status": "False"},
+			},
+		},
+	}}
+}
+
+// demoOrder builds an acme.cert-manager.io/v1 Order, owned by its
+// CertificateRequest. Order carries status.state, not a Ready-style
+// condition — §35a's certchain reads it directly (orderNode).
+func demoOrder(name, ns, certRequestOwner, state, reason string, created metav1.Time) *unstructured.Unstructured {
+	status := map[string]any{"state": state}
+	if reason != "" {
+		status["reason"] = reason
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "acme.cert-manager.io/v1",
+		"kind":       "Order",
+		"metadata": map[string]any{
+			"name": name, "namespace": ns,
+			"creationTimestamp": created.UTC().Format(time.RFC3339),
+			"ownerReferences":   []any{ownerRefMap("cert-manager.io/v1", "CertificateRequest", certRequestOwner)},
+		},
+		"status": status,
+	}}
+}
+
+// demoChallenge builds an acme.cert-manager.io/v1 Challenge, owned by its
+// Order. reason mirrors real cert-manager behavior: it's populated only to
+// explain something currently going wrong, never as routine narration — the
+// signal §35a's acmeStateClass reads to call a "pending" Challenge with a
+// reason a failure.
+func demoChallenge(name, ns, orderOwner, typ, dnsName, state, reason string, created metav1.Time) *unstructured.Unstructured {
+	status := map[string]any{"state": state}
+	if reason != "" {
+		status["reason"] = reason
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "acme.cert-manager.io/v1",
+		"kind":       "Challenge",
+		"metadata": map[string]any{
+			"name": name, "namespace": ns,
+			"creationTimestamp": created.UTC().Format(time.RFC3339),
+			"ownerReferences":   []any{ownerRefMap("acme.cert-manager.io/v1", "Order", orderOwner)},
+		},
+		"spec": map[string]any{
+			"type":    typ,
+			"dnsName": dnsName,
+		},
+		"status": status,
+	}}
+}
+
+// ownerRefMap builds one metadata.ownerReferences entry in unstructured
+// form — read back by (*unstructured.Unstructured).GetOwnerReferences(),
+// which every demo cert-manager fixture above relies on for §35a's
+// ownerRef-chain walk.
+func ownerRefMap(apiVersion, kind, name string) map[string]any {
+	return map[string]any{
+		"apiVersion": apiVersion,
+		"kind":       kind,
+		"name":       name,
+		"controller": true,
+	}
 }
 
 func demoClusterIssuer(name string, ready bool, created metav1.Time) *unstructured.Unstructured {

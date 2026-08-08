@@ -771,6 +771,10 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 	if task, cmd, ok := m.openSelectedFluxDetail(); ok {
 		return task, cmd, true
 	}
+	// §35a before 14d, same reasoning: Certificate is Custom too.
+	if task, cmd, ok := m.openSelectedCertChain(); ok {
+		return task, cmd, true
+	}
 	if task, cmd, ok := m.openSelectedObjectDetail(); ok {
 		return task, cmd, true
 	}

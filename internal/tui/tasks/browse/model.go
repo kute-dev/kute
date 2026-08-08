@@ -150,6 +150,12 @@ type OpenWhoCanFunc func(verb, resource, namespace string, width, height int) (t
 // screen, not a variant of 14d — see the fluxdetail package doc.
 type OpenFluxDetailFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenCertChainFunc pushes tasks/certchain (§35a) for a Certificate row.
+// Separate from OpenObjectDetailFunc for the same reason OpenFluxDetailFunc
+// is: §35a is a different screen, not a variant of 14d. No Kind param,
+// unlike OpenFluxDetailFunc — the kind is always Certificate.
+type OpenCertChainFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenHelmHistoryFunc pushes tasks/helmhistory (18a's `h`) for a release's
 // full revision rail.
 type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -199,6 +205,7 @@ type Config struct {
 	OpenRouteTable     OpenRouteTableFunc
 	OpenWhoCan         OpenWhoCanFunc
 	OpenFluxDetail     OpenFluxDetailFunc
+	OpenCertChain      OpenCertChainFunc
 	OpenHelmHistory    OpenHelmHistoryFunc
 	OpenHelmValues     OpenHelmValuesFunc
 	OpenSecretData     OpenSecretDataFunc
@@ -239,6 +246,7 @@ type Model struct {
 	openRouteTable     OpenRouteTableFunc
 	openWhoCan         OpenWhoCanFunc
 	openFluxDetail     OpenFluxDetailFunc
+	openCertChain      OpenCertChainFunc
 	openHelmHistory    OpenHelmHistoryFunc
 	openHelmValues     OpenHelmValuesFunc
 	openSecretData     OpenSecretDataFunc
@@ -590,6 +598,7 @@ func New(cfg Config) Model {
 		openRouteTable:     cfg.OpenRouteTable,
 		openWhoCan:         cfg.OpenWhoCan,
 		openFluxDetail:     cfg.OpenFluxDetail,
+		openCertChain:      cfg.OpenCertChain,
 		openHelmHistory:    cfg.OpenHelmHistory,
 		openHelmValues:     cfg.OpenHelmValues,
 		openSecretData:     cfg.OpenSecretData,

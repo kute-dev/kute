@@ -1,0 +1,24 @@
+  kute │ microk8s-cluster › default › certificate/web-tls › Chain  ● connected  
+────────────────────────────────────────────────────────────────────────────────
+◐ Ready=False · Issuing   attempt 4         chain resolved from the watch · live
+────────────────────────────────────────────────────────────────────────────────
+▌                                                                               
+▌ ✕ challenge failed  dns-01 · app.aim.dev  8m ago · order/web-tls-1-2847563921 
+▌ propagation check failed: NXDOMAIN looking up TXT                             
+▌ _acme-challenge.app.aim.dev                                                   
+▌ message verbatim from challenge status · deepest failure in the chain, found  
+▌ for you                                                                       
+▌                                                                               
+                                                                                
+     CHAIN                               STATE                             AGE  
+────────────────────────────────────────────────────────────────────────────────
+  ◐  certificate/web-tls                 Ready=False · Issuing             41d  
+  ◐  └ certificaterequest/web-tls-1      Approved · not Ready               8m  
+  ✕    └ order/web-tls-1-2847563921      errored                            8m  
+▎ ✕      └ challenge/web-tls-1-2847563…  dns-01 · pending                   8m  
+────────────────────────────────────────────────────────────────────────────────
+refs  secret/web-tls-cert · missing  │  clusterissuer/letsencrypt-prod · Ready  
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   CHAIN  esc back  ↵ open │ y yaml  e events                           ? help  
