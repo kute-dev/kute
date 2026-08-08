@@ -857,7 +857,20 @@ func (m *Model) goToResource(msg tui.GotoResourceMsg) tea.Cmd {
 	}
 	namespaceChanged := !desc.ClusterScoped && msg.Namespace != "" && msg.Namespace != m.namespace
 
-	if !kindChanged && !namespaceChanged {
+	// m.rows == nil is the tell that this instance has never actually
+	// loaded anything — routeGoto (tui/model.go) builds a brand-new browse
+	// instance and routes msg straight into this method instead of calling
+	// Init(), trusting this method to be the one thing that starts the
+	// load. New() seeds a fresh instance's kind/namespace from
+	// Session.Location, which a jump fired from a screen pushed on top of
+	// browse (without ever changing kind away from what it already was —
+	// §35a's certchain root row is the first jump to actually hit this: it
+	// names the very Certificate the Session never stopped being "on")
+	// makes identical to msg's own target. Skipping the load in that case
+	// left the fresh instance on its constructor's permanent "Loading
+	// Certificates..." skeleton forever, since nothing else was ever going
+	// to ask it to fetch anything.
+	if !kindChanged && !namespaceChanged && m.rows != nil {
 		m.recomputeVisible()
 		return nil
 	}

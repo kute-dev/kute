@@ -8,6 +8,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // TestEnterOnCertificateRowOpensCertChain exercises §35a's routing carve-out:
@@ -57,5 +58,43 @@ func TestEnterOnCertificateRowOpensCertChain(t *testing.T) {
 	}
 	if _, ok := updated.(stubTask); !ok {
 		t.Fatalf("expected Update to return the pushed stub task, got %T", updated)
+	}
+}
+
+// TestGotoResourceOnAFreshInstanceAlwaysLoads guards the bug a certchain
+// root row's own ↵ hit: routeGoto (tui/model.go) builds a brand-new browse
+// instance via New() — which seeds kind/namespace from Session.Location,
+// unchanged since before any screen was pushed on top of browse — and
+// routes the GotoResourceMsg straight into goToResource instead of calling
+// Init(). When the jump's own target Kind/Namespace happens to already
+// match Session.Location (true here: the Certificate the chain screen was
+// pushed from never stopped being "current"), the old kindChanged/
+// namespaceChanged-only guard saw "nothing to do" and returned a nil cmd —
+// leaving a never-loaded instance on its constructor's "Loading
+// Certificates..." skeleton forever, since nothing else was ever going to
+// ask it to fetch anything.
+func TestGotoResourceOnAFreshInstanceAlwaysLoads(t *testing.T) {
+	session := newSession()
+	session.Location.Kind = kube.ResourceKind("Certificate")
+	session.Location.Namespace = "default"
+	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{{
+		Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
+		Versions:      []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
+		ClusterScoped: false, Established: true,
+	}}, nil)
+	session.Registry = reg
+
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Certificate"): {certificateInstance("web-tls", "default")},
+	}}
+	// A brand-new instance, exactly as routeGoto's m.buildBrowse() produces
+	// — never Init()'d, m.rows is still nil.
+	m := New(Config{Session: session, Lister: lister})
+
+	cmd := m.goToResource(tui.GotoResourceMsg{
+		Kind: kube.ResourceKind("Certificate"), Namespace: "default", Name: "web-tls",
+	})
+	if cmd == nil {
+		t.Fatal("expected goToResource to issue a load cmd for a never-loaded instance, got nil")
 	}
 }
