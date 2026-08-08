@@ -247,10 +247,12 @@
           <span style="color: #676780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">letsencrypt-prod</span>
           <span style="color: #676780; text-align: right;">70d</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
+        <div style="display: grid; grid-template-columns: 56px minmax(0,1fr); gap: 4px 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8;">cmctl renew admin-tls -n vna-stage</span>
-          <span style="margin-left: auto; color: #676780;"><span style="color: #a78bfa;">↵</span> renew · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
+          <span style="color: #d8d8e8; white-space: pre-wrap; word-break: break-all; line-height: 1.6;">kubectl patch certificate admin-tls -n vna-stage --subresource=status --type=merge \
+  -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}'</span>
+          <span></span>
+          <span style="color: #676780;"><span style="color: #a78bfa;">↵</span> renew · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>
         </div>
         <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
           <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CERTS</span>
@@ -282,7 +284,7 @@
       <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
         <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
           <li>Renew is <span style="color: #e9e2ff;">reversible tier</span> — cert-manager reissues into a new secret and keeps serving the old one until it's ready — so it gets the inline will-run line, not a modal. Friction scales with risk.</li>
-          <li>The honest line is <span style="color: #e9e2ff;">cmctl, not kubectl</span>: renewal is an Issuing condition patch on the status subresource, which plain kubectl can't express cleanly. Kute performs the same patch itself — cmctl need not be installed; the line is copyable documentation, same contract as everywhere.</li>
+          <li>The will-run line shows <span style="color: #e9e2ff;">the patch Kute actually applies</span> — an Issuing condition on the Certificate status subresource. Not `cmctl renew`: cmctl is what a human would type, but Kute doesn't shell out to it, and printing a command the user may not have installed breaks the will-run contract. What's shown is what runs, and `y` copies exactly that.</li>
           <li>After `↵` the row flips to issuing in place and the keybar confirms — <span style="color: #e9e2ff;">no toast, no navigation</span>. `↵` again opens the chain (<a href="#35a">35a</a>) to watch it land.</li>
           <li>Works identically from the list (<a href="#35b">35b</a>) and the chain view. On a PROD context, renew stays reversible tier — it's delete that escalates, not reissue.</li>
         </ul>

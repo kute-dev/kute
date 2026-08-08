@@ -343,6 +343,8 @@ func (c *Controller) execute() tea.Cmd {
 		case "rollout-restart":
 			err = mutator.RolloutRestart(context.Background(),
 				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
+		case "cert-renew":
+			err = mutator.RenewCertificate(context.Background(), action.Scope.Namespace, action.Scope.ResourceName)
 		case "cordon":
 			err = mutator.Cordon(context.Background(), action.Scope.ResourceName, true)
 		case "uncordon":

@@ -212,6 +212,11 @@ func (m Model) Keybar() tui.Keybar {
 					// 9a: the exact "will run: kubectl rollout restart ..." line,
 					// same idiom as set-image/set-resources above.
 					note = rolloutRestartWillRunLine(pending.Scope)
+				case "cert-renew":
+					// 35c: the exact "will run: kubectl patch certificate/...
+					// --subresource=status ..." line, same idiom as
+					// rollout-restart/argo-sync above.
+					note = certRenewWillRunLine(pending.Scope)
 				case "argo-sync":
 					// 33a: the exact "will run: kubectl patch application/... ..."
 					// line, same idiom as rollout-restart above. ArgoSync is
@@ -445,6 +450,9 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.argoVerbsApply() {
 		groups = append(groups, m.argoKeybarGroup())
+	}
+	if m.certVerbsApply() {
+		groups = append(groups, m.certKeybarGroup())
 	}
 	if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
 		groups = append(groups, m.jobKeybarGroup())

@@ -594,6 +594,31 @@ func (c *Cluster) RequestArgoSync(_ context.Context, kind kube.ResourceKind, nam
 	return nil
 }
 
+// RenewCertificate simulates §35c's 'r' against a seeded Certificate: no
+// cert-manager controller is running in demo mode to react to the Issuing
+// condition the real Cluster.RenewCertificate writes, so this flips Ready
+// to False/reason "Issuing" directly — the visible state a real controller
+// would settle into moments after the same trigger, without lastFailure
+// (so the row reads Warn/◐, never Fail/✕ — a manual renew in progress, not
+// a stuck one).
+func (c *Cluster) RenewCertificate(_ context.Context, namespace, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	u, err := c.findUnstructuredLocked(kube.KindCertificate, namespace, name)
+	if err != nil {
+		return err
+	}
+	cond := map[string]any{
+		"type": "Ready", "status": "False", "reason": "Issuing",
+		"message": "Certificate re-issuance manually triggered",
+	}
+	if err := unstructured.SetNestedSlice(u.Object, []any{cond}, "status", "conditions"); err != nil {
+		return err
+	}
+	c.notify(kube.KindCertificate)
+	return nil
+}
+
 // findUnstructuredLocked resolves one seeded custom resource by kind/name.
 // Callers hold c.mu.
 func (c *Cluster) findUnstructuredLocked(kind kube.ResourceKind, namespace, name string) (*unstructured.Unstructured, error) {

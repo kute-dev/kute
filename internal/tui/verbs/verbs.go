@@ -317,6 +317,22 @@ var (
 	ArgoURL = Verb{
 		ID: "argo-url", Key: "u", Label: "dashboard url",
 	}
+	// CertRenew is §35c's 'r' on a Certificate row: forces cert-manager to
+	// reissue with a plain merge patch on the Issuing status condition — the
+	// trigger cert-manager's own trigger controller reacts to. Not `cmctl
+	// renew`: the will-run line names the literal patch kute sends, never a
+	// binary the user may not have installed (docs/design/v.0.7.0.dc.html
+	// §35c). TierInline, but — unlike
+	// ArgoSync/RolloutRestart — never resolved through TierFor: cert-manager
+	// reissues into a new Secret and keeps serving the old one until the new
+	// one is ready, so PROD never escalates it past the plain y/N, the same
+	// "clone, not destroy" reasoning JobRetry's own doc comment gives for
+	// skipping TierFor outright. Shares 'r' with FluxReconcile/ArgoRefresh —
+	// Kinds is disjoint, so the three never contend on the same row.
+	CertRenew = Verb{
+		ID: "cert-renew", Key: "r", Label: "renew",
+		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindCertificate}, Mutating: true,
+	}
 	Cordon = Verb{
 		ID: "cordon", Key: "C", Label: "cordon",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
@@ -492,6 +508,7 @@ var All = []Verb{
 	HelmValues, HelmHistory, Mark, MarkAll,
 	FluxReconcile, FluxSuspend, FluxSource,
 	ArgoRefresh, ArgoSync, ArgoURL,
+	CertRenew,
 	Delete, ForceDelete, RolloutRestart, CronJobRunNow, CronJobSuspend, CronJobSetSchedule, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,

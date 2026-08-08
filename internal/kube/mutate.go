@@ -119,6 +119,20 @@ type Mutator interface {
 	// targetRevision, or "HEAD" when unset) — this re-applies what git
 	// already says to run, never a move to a different ref.
 	RequestArgoSync(ctx context.Context, kind ResourceKind, namespace, name, revision string) error
+	// RenewCertificate forces cert-manager to reissue a Certificate: a plain
+	// merge patch setting the Issuing status condition, the same trigger
+	// cert-manager's own trigger controller reacts to (docs/design/
+	// v.0.7.0.dc.html §35c). Not `cmctl renew` — RenewCertificateCommandString's
+	// own doc comment has the reasoning for why the will-run line shows the
+	// literal patch instead. A plain merge patch does replace
+	// status.conditions wholesale rather than updating one entry among
+	// several, which would normally risk dropping Ready along with it — the
+	// design accepts that trade deliberately: cert-manager's own controller
+	// reconciles status again within moments of any trigger, the same
+	// "asks for what the controller would do anyway" territory
+	// FluxReconcile/ArgoRefresh already stand in, just confirmed rather than
+	// TierNone because this one visibly changes what's served.
+	RenewCertificate(ctx context.Context, namespace, name string) error
 	// RetryJob clones name's spec into a new Job called newName — get, strip
 	// the fields the API server must regenerate (selector, controller-uid/
 	// job-name template labels), create. The original Job (its Status,
@@ -529,6 +543,27 @@ func (c *Cluster) RequestArgoSync(ctx context.Context, kind ResourceKind, namesp
 	return c.patchDynamic(ctx, kind, namespace, name, patch)
 }
 
+// renewCertificatePatch is the literal merge-patch body RenewCertificate
+// sends and RenewCertificateCommandString documents — kept as one constant
+// so the two can never drift apart.
+const renewCertificatePatch = `{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}`
+
+// RenewCertificate implements Mutator: one merge patch against the status
+// subresource. See the Mutator interface doc comment for why a plain merge
+// patch — rather than a read-modify-write that preserves every other
+// condition — is the deliberate choice here.
+func (c *Cluster) RenewCertificate(ctx context.Context, namespace, name string) error {
+	if name == "" {
+		return fmt.Errorf("cannot renew certificate: empty name")
+	}
+	ri, err := c.dynamicResourceFor(KindCertificate, namespace)
+	if err != nil {
+		return err
+	}
+	_, err = ri.Patch(ctx, name, types.MergePatchType, []byte(renewCertificatePatch), metav1.PatchOptions{}, "status")
+	return err
+}
+
 // FluxSuspendCommandString renders the kubectl patch kute actually issues —
 // not the `flux suspend kustomization podinfo` it is equivalent to.
 // §27a's rule (the will-run line names the command that *executes*)
@@ -613,6 +648,18 @@ func ArgoSyncCommandString(kind ResourceKind, namespace, name, revision string) 
 		cmd += " -n " + namespace
 	}
 	return cmd
+}
+
+// RenewCertificateCommandString renders the exact kubectl patch
+// RenewCertificate issues — not `cmctl renew`, the §27a rule every other
+// CommandString here follows: cmctl is what a human would type, but kute
+// never shells out to it, and printing a command the user may not have
+// installed breaks the will-run contract (docs/design/v.0.7.0.dc.html
+// §35c: "what's shown is what runs"). --subresource=status is what makes
+// this a status write rather than a no-op spec patch.
+func RenewCertificateCommandString(namespace, name string) string {
+	return fmt.Sprintf(`kubectl patch %s/%s --type merge -p '%s' -n %s --subresource=status`,
+		KindCertificate.ResourceArg(), name, renewCertificatePatch, namespace)
 }
 
 // RolloutUndo finds the ReplicaSet owned by name whose

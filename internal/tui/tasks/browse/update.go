@@ -567,6 +567,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginArgoRefresh(row)
 			}
+		case m.certVerbsApply():
+			// §35c's force-renew. Same reasoning as the Flux/Argo cases
+			// above — Kinds is disjoint, so a Certificate row never
+			// contends with a Flux/Argo/Forward one for 'r'.
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginCertRenew(row)
+			}
 		case m.kind == kube.KindForward && m.state == tui.TaskStateReady:
 			return m, m.restartSelectedForward()
 		case m.offline() && m.retrier != nil:

@@ -108,6 +108,8 @@ func (f *fakeMutator) RequestArgoSync(_ context.Context, kind kube.ResourceKind,
 	return nil
 }
 
+func (f *fakeMutator) RenewCertificate(_ context.Context, namespace, name string) error { return nil }
+
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }

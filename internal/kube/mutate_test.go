@@ -1144,3 +1144,104 @@ func TestFluxCommandStringsNameTheCommandThatRuns(t *testing.T) {
 		t.Errorf("expected the fully-qualified resource arg, got %s", got)
 	}
 }
+
+// certificateGVR/newCertDynTestCluster/newCertificate back §35c's
+// RenewCertificate tests — a Certificate whose only informer-free knowledge
+// is the discovery snapshot, the same "resolution through resourceFor,
+// never getDynKind alone" shape widgetGVR/newDynTestCluster exist for.
+var certificateGVR = schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}
+
+func newCertDynTestCluster(objs ...runtime.Object) (*Cluster, *dynamicfake.FakeDynamicClient) {
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme, map[schema.GroupVersionResource]string{certificateGVR: "CertificateList"}, objs...)
+	return &Cluster{
+		clientset: fake.NewSimpleClientset(),
+		dynClient: dyn,
+		discovered: []DiscoveredKind{{
+			GVR: certificateGVR, Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
+			Versions:    []CRDVersion{{Name: "v1", Served: true, Storage: true}},
+			Established: true, CRDName: "certificates.cert-manager.io",
+		}},
+	}, dyn
+}
+
+func newCertificate(name, ns string, conditions ...map[string]any) *unstructured.Unstructured {
+	obj := map[string]any{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "Certificate",
+		"metadata":   map[string]any{"name": name, "namespace": ns},
+	}
+	if len(conditions) > 0 {
+		conds := make([]any, len(conditions))
+		for i, c := range conditions {
+			conds[i] = c
+		}
+		obj["status"] = map[string]any{"conditions": conds}
+	}
+	return &unstructured.Unstructured{Object: obj}
+}
+
+// TestRenewCertificatePatchesStatusSubresource asserts the recorded dynamic-
+// client action, not just the absence of an error: the patch has to be a
+// merge patch, reach the status subresource specifically (a spec-only patch
+// would be a silent no-op against a real API server), and carry the exact
+// body renewCertificatePatch/RenewCertificateCommandString both name.
+func TestRenewCertificatePatchesStatusSubresource(t *testing.T) {
+	t.Parallel()
+	c, dyn := newCertDynTestCluster(newCertificate("web-tls", "default",
+		map[string]any{"type": "Ready", "status": "True"}))
+
+	if err := c.RenewCertificate(context.Background(), "default", "web-tls"); err != nil {
+		t.Fatalf("RenewCertificate: %v", err)
+	}
+
+	var patched bool
+	for _, a := range dyn.Actions() {
+		p, ok := a.(k8stesting.PatchAction)
+		if !ok {
+			continue
+		}
+		patched = true
+		if got := a.GetResource(); got != certificateGVR {
+			t.Errorf("patched %v, want %v", got, certificateGVR)
+		}
+		if p.GetPatchType() != types.MergePatchType {
+			t.Errorf("patch type = %v, want a merge patch", p.GetPatchType())
+		}
+		if p.GetSubresource() != "status" {
+			t.Errorf("subresource = %q, want %q", p.GetSubresource(), "status")
+		}
+		if got := string(p.GetPatch()); got != renewCertificatePatch {
+			t.Errorf("patch body = %s, want %s", got, renewCertificatePatch)
+		}
+	}
+	if !patched {
+		t.Fatal("no patch reached the dynamic client")
+	}
+}
+
+func TestRenewCertificateRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newCertDynTestCluster()
+	if err := c.RenewCertificate(context.Background(), "default", ""); err == nil {
+		t.Fatal("expected an error for an empty certificate name")
+	}
+}
+
+// TestRenewCertificateCommandStringNamesTheLiteralPatch pins §35c's own
+// will-run contract: the line shows kubectl, never `cmctl renew` — cmctl is
+// what a human would type, but kute doesn't shell out to it, and its body
+// must be byte-identical to renewCertificatePatch or the copyable line would
+// lie about what ↵ actually runs.
+func TestRenewCertificateCommandStringNamesTheLiteralPatch(t *testing.T) {
+	t.Parallel()
+	got := RenewCertificateCommandString("vna-stage", "admin-tls")
+	want := `kubectl patch certificate/admin-tls --type merge -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}' -n vna-stage --subresource=status`
+	if got != want {
+		t.Errorf("RenewCertificateCommandString():\n got %s\nwant %s", got, want)
+	}
+	if strings.Contains(got, "cmctl") {
+		t.Errorf("will-run line must not name the cmctl binary: %q", got)
+	}
+}
