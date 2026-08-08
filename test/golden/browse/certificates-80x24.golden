@@ -1,15 +1,15 @@
-  kute │ microk8s-cluster › nva-stage › Widgets example.io/v1 (g to jump)       
+  kute │ microk8s-cluster › default › Certificates cert-manager.io/v1 (g to j...
 ────────────────────────────────────────────────────────────────────────────────
-  ● 2 ok                                                             2 widgets  
+  ● 3 ready   ◐ 1 issuing   ✕ 1 not ready   ◷ 1 <30d                            
 ────────────────────────────────────────────────────────────────────────────────
-     NAME                                                                  AGE  
+     NAME    READY       EXPIRES     RENEWAL           ISSUER                  …
 ────────────────────────────────────────────────────────────────────────────────
-▎ ●  first-widget                                                           0s  
-  ●  second-widget                                                          0s  
-  1–2 of 2                                                              ██████  
-                                                                                
-                                                                                
-                                                                                
+▎ ✕  web-t…  False       –           retrying          letsencrypt-prod      ...
+  ◐  new-s…  False       –           issuing           letsencrypt-prod      ...
+  ◷  admin…  True        22d         due · auto        letsencrypt-prod      ...
+  ●  api-t…  True        61d         in 31d · auto     letsencrypt-prod      ...
+  ●  inter…  True        8y          in 7y · auto      selfsigned            ...
+  1–5 of 5                                                              ██████  
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   WIDGETS                                                              ? help  
+   CERTIFICATES                                                         ? help  

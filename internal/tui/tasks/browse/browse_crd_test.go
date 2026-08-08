@@ -109,14 +109,39 @@ func TestEnterOnCustomRowOpensObjectDetail(t *testing.T) {
 	}
 }
 
-// certificateInstanceNoCondition mirrors certificateInstance but carries no
-// status.conditions at all — 14a's "never fake health" fallback path.
-func certificateInstanceNoCondition(name, ns string) *unstructured.Unstructured {
+// discoveredWidgetDK/widgetInstance/widgetInstanceNoCondition are a
+// genuinely-generic discovered CRD kind — unlike Certificate (§35b's own
+// curated Descriptor as of this package), nothing recognizes "Widget" by
+// name, so it stays on the plain 14a CustomDescriptor path. Used wherever a
+// test's whole point is 14a's generic behavior rather than any one kind's
+// curated one.
+func discoveredWidgetDK() kube.DiscoveredKind {
+	return kube.DiscoveredKind{
+		Kind: "Widget", Plural: "widgets", Group: "example.io",
+		GVR:           schema.GroupVersionResource{Group: "example.io", Version: "v1", Resource: "widgets"},
+		Versions:      []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
+		ClusterScoped: false, Established: true,
+	}
+}
+
+func widgetInstance(name, ns string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "cert-manager.io/v1",
-		"kind":       "Certificate",
+		"apiVersion": "example.io/v1",
+		"kind":       "Widget",
 		"metadata":   map[string]any{"name": name, "namespace": ns},
-		"spec":       map[string]any{"secretName": name + "-secret"},
+		"status": map[string]any{
+			"conditions": []any{map[string]any{"type": "Ready", "status": "True"}},
+		},
+	}}
+}
+
+// widgetInstanceNoCondition mirrors widgetInstance but carries no
+// status.conditions at all — 14a's "never fake health" fallback path.
+func widgetInstanceNoCondition(name, ns string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "example.io/v1",
+		"kind":       "Widget",
+		"metadata":   map[string]any{"name": name, "namespace": ns},
 	}}
 }
 
@@ -162,14 +187,14 @@ func TestCRDBreadcrumbShowsCapitalizedNameAndAPIVersionTag(t *testing.T) {
 // drops the per-status counts and says "no status semantics · NAME + AGE
 // only" instead of faking a neutral-status tally.
 func TestCRDNoStatusSemanticsStripDropsCounts(t *testing.T) {
-	dk := discoveredCertificateDK()
+	dk := discoveredWidgetDK()
 	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{dk}, nil)
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.ResourceKind("Certificate"): {certificateInstanceNoCondition("bare", "default")},
+		kube.ResourceKind("Widget"): {widgetInstanceNoCondition("bare", "default")},
 	}}
 	session := newSession()
 	session.Registry = reg
-	session.Location.Kind = kube.ResourceKind("Certificate")
+	session.Location.Kind = kube.ResourceKind("Widget")
 	m := New(Config{Session: session, Lister: lister})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
@@ -253,7 +278,7 @@ func TestCRDsListSortsByGroup(t *testing.T) {
 		{Name: "bbb-issuer", Cells: []string{"bbb-issuer", "bbb.io", "v1", "Namespaced", "0", "1h"}},
 		{Name: "zzz-widget", Cells: []string{"zzz-widget", "aaa.io", "v1", "Namespaced", "0", "1h"}},
 	}
-	sortForDisplay(kube.KindCustomResourceDefinition, "", rows, false, false)
+	sortForDisplay(kube.KindCustomResourceDefinition, "", rows, false, false, false)
 	want := []string{"zzz-widget", "aaa-cert", "bbb-issuer"}
 	for i, w := range want {
 		if rows[i].Name != w {

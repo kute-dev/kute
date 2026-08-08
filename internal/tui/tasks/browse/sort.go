@@ -96,14 +96,17 @@ func argoRank(r resources.Row) int {
 // alphabetical within each of those two partitions — then unhealthy-first
 // *within* each namespace — a single namespace's rows sort exactly as 2a's
 // plain unhealthy-first.
-// unhealthyFirst adds the §30a Flux and §33a Argo kinds to the workload
-// set: their whole point is triage ("unhealthy first · suspended is a
-// state, not a footnote"), and a Kustomization that failed to reconcile or
-// a Degraded Application has to be at the top for the same reason a
-// crashlooping pod does. argoRanked picks argoRank over the generic
-// rowHealthRank for the within-namespace comparator — see argoRank's own
-// doc comment for why the two curated kinds can't share one.
-func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst, argoRanked bool) {
+// unhealthyFirst adds the §30a Flux, §33a Argo and §35b Certificate kinds
+// to the workload set: their whole point is triage ("unhealthy first ·
+// suspended is a state, not a footnote"), and a Kustomization that failed
+// to reconcile or a Degraded Application has to be at the top for the same
+// reason a crashlooping pod does. argoRanked picks argoRank over the
+// generic rowHealthRank for the within-namespace comparator — see
+// argoRank's own doc comment for why the two curated kinds can't share one.
+// certRanked adds §35b's own addition on top of the generic rank: "among
+// ready certs, soonest expiry floats up" — a same-rank tiebreak applied
+// before the fallback to name, via certExpiryTiebreak.
+func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst, argoRanked, certRanked bool) {
 	if kind == kube.KindCustomResourceDefinition {
 		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
 		// own Cells[1] is the CRD's API group; Name breaks ties within a
@@ -138,8 +141,32 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 		if ri != rj {
 			return ri < rj
 		}
+		if certRanked {
+			if t := certExpiryTiebreak(rows[i], rows[j]); t != 0 {
+				return t < 0
+			}
+		}
 		return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
 	})
+}
+
+// certExpiryTiebreak breaks a same-rank tie between two Certificate rows by
+// soonest expiry first (docs/design README.md §35b: "among ready certs,
+// soonest expiry floats up") — 0 (defer to the name tiebreak, same as every
+// other kind) when either side's ExpiresAt is zero: not yet issued, or not
+// applicable to this row's state.
+func certExpiryTiebreak(a, b resources.Row) int {
+	if a.ExpiresAt.IsZero() || b.ExpiresAt.IsZero() {
+		return 0
+	}
+	switch {
+	case a.ExpiresAt.Before(b.ExpiresAt):
+		return -1
+	case a.ExpiresAt.After(b.ExpiresAt):
+		return 1
+	default:
+		return 0
+	}
 }
 
 // crdGroupCell reads the API group cell off a 14b CRD row (crdColumns'
@@ -180,7 +207,8 @@ func (m *Model) applySort() {
 		m.applyUserSort(m.rows)
 		return
 	}
-	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux || m.desc.Argo, m.desc.Argo)
+	certRanked := m.kind == kube.KindCertificate
+	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux || m.desc.Argo || certRanked, m.desc.Argo, certRanked)
 }
 
 // applyUserSort stable-sorts rows by m.sortColumn/m.sortAsc — a no-op if

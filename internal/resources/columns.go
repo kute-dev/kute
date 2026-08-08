@@ -108,6 +108,12 @@ var fixedWidths = map[string]int{
 	"Source":     26,
 	"Reconciled": 12, // "RECONCILED" + the 2-cell sort-arrow allowance
 	"Next Run":   10, // "in 23h59m" / "—" (suspended or unparseable) — widest realistic reading
+	// §35b cert-manager Certificate columns. EXPIRES holds "expired"/"365d"/
+	// "8y"; RENEWAL holds "in 365d · auto", the widest realistic reading;
+	// ISSUER holds an unelided "letsencrypt-prod".
+	"Expires": 10,
+	"Renewal": 16,
+	"Issuer":  20,
 }
 
 func minWidthFor(title string) int {

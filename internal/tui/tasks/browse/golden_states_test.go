@@ -234,27 +234,26 @@ func goldenForwardsModel(t *testing.T, width, height int) Model {
 	return m
 }
 
-// --- 14a: custom resource list (exemplar: Certificates) ---
+// --- 14a: custom resource list (exemplar: a generic CRD) ---
+//
+// Certificate itself is no longer this exemplar as of §35b — it now gets
+// its own curated Descriptor (resources/certmanager.go), so this scenario
+// moved to the still-fully-generic Widget kind (discoveredWidgetDK) to keep
+// pinning 14a's actual generic-CRD-list rendering rather than 35b's.
 
 func goldenCRDInstancesModel(t *testing.T, width, height int) Model {
 	t.Helper()
-	dk := kube.DiscoveredKind{
-		Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
-		GVR:           schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"},
-		Versions:      []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
-		ClusterScoped: false, Established: true,
-	}
-	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{dk}, nil)
+	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{discoveredWidgetDK()}, nil)
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.ResourceKind("Certificate"): {
-			certificateInstance("api-tls", "nva-stage"),
-			certificateInstance("gateway-tls", "nva-stage"),
+		kube.ResourceKind("Widget"): {
+			widgetInstance("first-widget", "nva-stage"),
+			widgetInstance("second-widget", "nva-stage"),
 		},
 	}}
 	sess := newSession()
 	sess.Location.Namespace = "nva-stage"
 	sess.Registry = reg
-	sess.Location.Kind = kube.ResourceKind("Certificate")
+	sess.Location.Kind = kube.ResourceKind("Widget")
 	m := New(Config{Session: sess, Lister: lister})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
@@ -439,6 +438,73 @@ func goldenFluxModel(t *testing.T, width, height int) Model {
 	// (r/s/o) — fluxVerbsApply gates it on one, and the suspend hint's
 	// label flipping with the cursor row is part of what the fixture pins.
 	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	return m
+}
+
+// --- §35b: Certificates list ---
+
+// goldenCertificateObject builds one Certificate with deterministic
+// offsets — AGE, EXPIRES and RENEWAL are all time.Since/Until reads
+// (resources/certmanager.go), so an absolute fixture instant would render a
+// different number every day the golden aged, same reasoning as
+// goldenFluxObject's own doc comment. A zero notAfterDays/renewalDays/
+// lastFailureAgo omits that status field entirely, matching
+// demoCertificate's own "not set yet" convention; the "+ time.Hour" buffers
+// keep each duration solidly inside its intended day, clear of certExpiryCell's
+// own floor-division boundary.
+func goldenCertificateObject(name string, ageDays int, readyStatus string, notAfterDays, renewalDays int, lastFailureAgo time.Duration, issuer string) *unstructured.Unstructured {
+	created := time.Now().Add(-time.Duration(ageDays)*24*time.Hour - 7*time.Hour)
+	status := map[string]any{}
+	if readyStatus != "" {
+		status["conditions"] = []any{map[string]any{"type": "Ready", "status": readyStatus}}
+	}
+	if notAfterDays != 0 {
+		status["notAfter"] = time.Now().Add(time.Duration(notAfterDays)*24*time.Hour + time.Hour).UTC().Format(time.RFC3339)
+	}
+	if renewalDays != 0 {
+		status["renewalTime"] = time.Now().Add(time.Duration(renewalDays)*24*time.Hour + time.Hour).UTC().Format(time.RFC3339)
+	}
+	if lastFailureAgo != 0 {
+		status["lastFailureTime"] = time.Now().Add(-lastFailureAgo).UTC().Format(time.RFC3339)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "cert-manager.io/v1",
+		"kind":       "Certificate",
+		"metadata": map[string]any{
+			"name": name, "namespace": "default",
+			"creationTimestamp": created.UTC().Format(time.RFC3339),
+		},
+		"spec":   map[string]any{"issuerRef": map[string]any{"name": issuer}},
+		"status": status,
+	}}
+}
+
+// goldenCertificateModel renders §35b with one row per branch of
+// projectCertificate's precedence: a real failure (✕, lastFailureTime set —
+// web-tls), a first-attempt issuance (◐, Ready=False with no prior failure —
+// new-svc-tls), a ready-but-expiring cert (◷, the glyph override that still
+// counts and sorts as ready — admin-tls, whose renewalTime is already past,
+// rendering RENEWAL as "due · auto"), and a comfortably-OK tail (api-tls,
+// internal-ca — the latter exercising the EXPIRES "Ny" year format).
+func goldenCertificateModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	reg, groups := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{discoveredCertificateDK()}, nil)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.ResourceKind("Certificate"): {
+			goldenCertificateObject("web-tls", 41, "False", 0, 0, 8*time.Minute, "letsencrypt-prod"),
+			goldenCertificateObject("new-svc-tls", 0, "False", 0, 0, 0, "letsencrypt-prod"),
+			goldenCertificateObject("admin-tls", 70, "True", 22, -8, 0, "letsencrypt-prod"),
+			goldenCertificateObject("api-tls", 41, "True", 61, 31, 0, "letsencrypt-prod"),
+			goldenCertificateObject("internal-ca", 90, "True", 8*365, 7*365, 0, "selfsigned"),
+		},
+	}}
+	sess := newSession()
+	sess.Registry, sess.Groups = reg, groups
+	sess.Location.Namespace = "default"
+	sess.Location.Kind = kube.ResourceKind("Certificate")
+	m := New(Config{Session: sess, Lister: lister})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
 	return m
@@ -777,7 +843,7 @@ var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes",
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
-	"flux", "argo",
+	"flux", "argo", "certificates",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -823,6 +889,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenFluxModel(t, width, height)
 	case "argo":
 		return goldenArgoModel(t, width, height)
+	case "certificates":
+		return goldenCertificateModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -883,6 +951,10 @@ var truecolorStatePrefixes = []string{
 	// must read red, OutOfSync amber, Progressing muted, Healthy green — a
 	// plain golden can't tell any of them apart.
 	"argo",
+	// §35b's EXPIRES/RENEWAL coloring (yellow <30d, red not-ready/expired)
+	// and the ready-but-expiring ◷ glyph override are colour claims too — a
+	// plain golden can't distinguish "ready" from "ready but expiring".
+	"certificates",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

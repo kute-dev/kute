@@ -317,6 +317,13 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		parts = append(parts, glyphStyle.Render(tui.GlyphWarning)+" "+
 			numStyle.Render(strconv.Itoa(counts.Outdated))+" "+labelStyle.Render("outdated"))
 	}
+	if counts.ExpiringSoon > 0 {
+		// §35b's own cross-cutting segment, same reasoning as Outdated
+		// above: a ready-but-expiring cert is already counted "ready".
+		glyphStyle := lipgloss.NewStyle().Foreground(glyphColor(theme, resources.StatusWarn))
+		parts = append(parts, glyphStyle.Render(tui.GlyphExpiring)+" "+
+			numStyle.Render(strconv.Itoa(counts.ExpiringSoon))+" "+labelStyle.Render("<30d"))
+	}
 	left := strings.Join(parts, "   ")
 	rightText := fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display))
 	helm := false
@@ -340,6 +347,15 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		rightText = fmt.Sprintf("%d definitions · %d API groups", len(m.rows), distinctCRDGroups(m.rows))
 		if m.sortColumn == 0 {
 			rightText += " · sorted by group"
+		}
+	case m.kind == kube.KindCertificate:
+		// §35b: "6 certificates · unhealthy + soonest expiry first" — the
+		// generic "<N> <kind>" wording never names the sort guarantee.
+		// Dropped once a manual 1-9 sort overrides it, same reasoning as
+		// 14b's CRD list just above.
+		rightText = fmt.Sprintf("%d certificates", len(m.rows))
+		if m.sortColumn == 0 {
+			rightText += " · unhealthy + soonest expiry first"
 		}
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
@@ -1008,6 +1024,27 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			cells[i].Style = st.dim
 			if r.Status != resources.StatusOK {
 				cells[i].Style = st.status[r.Status]
+			}
+		case m.kind == kube.KindCertificate && cols[i].Title == "Ready":
+			// §35b: same "healthy dim, not green" idiom as Rollout/Node
+			// Status above. Kind-gated — Flux already owns an uncolored
+			// "Ready" column of its own and must not be repainted.
+			cells[i].Style = st.dim
+			if r.Status != resources.StatusOK {
+				cells[i].Style = st.status[r.Status]
+			}
+		case cols[i].Title == "Expires":
+			// §35b: yellow <30d, red expired/not-ready, dim otherwise —
+			// resources.projectCertificate's own ExpiresClass, not Status,
+			// since a ready-but-expiring cert's Status stays StatusOK.
+			cells[i].Style = st.dim
+			if r.ExpiresClass == resources.StatusWarn || r.ExpiresClass == resources.StatusFail {
+				cells[i].Style = st.status[r.ExpiresClass]
+			}
+		case cols[i].Title == "Renewal":
+			cells[i].Style = st.dim
+			if r.RenewalClass == resources.StatusWarn || r.RenewalClass == resources.StatusFail {
+				cells[i].Style = st.status[r.RenewalClass]
 			}
 		case cols[i].Title == tui.GlyphRestarts:
 			cells[i].Style = st.restartsHot

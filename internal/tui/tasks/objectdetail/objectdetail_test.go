@@ -33,6 +33,18 @@ func (f fakeEvents) ObjectEvents(_ context.Context, _ string, _ kube.ResourceKin
 
 func certificateKind() kube.ResourceKind { return kube.ResourceKind("Certificate") }
 
+// testSession builds Certificate's Descriptor via the plain generic
+// resources.CustomDescriptor rather than resources.BuildDiscoveredRegistry:
+// as of §35b, Certificate gets its own curated Descriptor from the latter
+// (resources/certmanager.go), and a Certificate row's own ↵ never actually
+// reaches 14d in the real app any more (browse/certchain.go's isCertificateKind
+// gate always routes it to tasks/certchain instead — see app.go's
+// unconditional OpenCertChain wiring). This package's own worked example
+// (14d's own design-doc-quoted "Issuing certificate as Secret does not
+// exist") is a generic-CRD-detail illustration, not a claim that Certificate
+// itself still reaches this screen — so it keeps exercising 14d's actual
+// generic path (CustomDescriptor) directly, bypassing the curated dispatch
+// entirely, rather than switching to an unrelated example kind.
 func testSession() *tui.Session {
 	dk := kube.DiscoveredKind{
 		Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
@@ -44,7 +56,8 @@ func testSession() *tui.Session {
 		},
 		Established: true,
 	}
-	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{dk}, nil)
+	reg := resources.DefaultRegistry()
+	reg.Register(resources.CustomDescriptor(dk))
 	return &tui.Session{Theme: tui.Dark(), Registry: reg, Location: tui.Location{Context: "test-cluster"}}
 }
 

@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -41,7 +42,11 @@ type Row struct {
 	// Glyph/GlyphClass are the status-column glyph and its color class
 	// (rendered via tui/glyphs.go by the screen, which owns Theme — this
 	// package stays Theme-agnostic). GlyphClass defaults to Status when a
-	// projection leaves it unset.
+	// projection leaves it unset. They differ from Status for exactly two
+	// cases today: 18a's outdated release, whose glyph goes warn-yellow
+	// while Status stays `deployed` for the strip's own tally, and §35b's
+	// ready-but-expiring Certificate, whose glyph goes ◷/warn while Status
+	// stays StatusOK so it still counts and sorts as "ready".
 	Glyph      string
 	GlyphClass StatusClass
 
@@ -96,6 +101,18 @@ type Row struct {
 	// 13c stop/restart verbs need the real ID). Unset (empty) for every
 	// other kind.
 	Key string
+
+	// ExpiresAt/ExpiresClass/RenewalClass are §35b's Certificate-only
+	// fields, outside Cells for the same reason Cordoned/Outdated are: the
+	// EXPIRES/RENEWAL cell text alone can't be read back for sorting
+	// (ExpiresAt — zero when unknown/not yet issued, browse/sort.go's
+	// soonest-expiry tiebreak) or recolored per-cell independently of the
+	// row's own Status (ExpiresClass/RenewalClass — StatusWarn <30d out,
+	// StatusFail expired, StatusOK/StatusNeutral otherwise). Unset (zero
+	// value) for every other kind.
+	ExpiresAt    time.Time
+	ExpiresClass StatusClass
+	RenewalClass StatusClass
 }
 
 // HealthCounts tallies a kind's rows by StatusClass, for the browse
@@ -110,6 +127,12 @@ type HealthCounts struct {
 	// deployed), so it is excluded from Total and only ever non-zero for the
 	// kinds whose Health implementation tallies it.
 	Outdated int
+
+	// ExpiringSoon is §35b's extra strip segment ("◷ 1 <30d") — cross-cuts
+	// the same way Outdated does: a ready-but-expiring Certificate is still
+	// tallied as ready above, and this counts it a second time. Excluded
+	// from Total, non-zero only for Certificate's own Health implementation.
+	ExpiringSoon int
 }
 
 // Total is the row count the counts were tallied from.

@@ -388,6 +388,14 @@ func BuildDiscoveredRegistry(discovered []kube.DiscoveredKind, reader ClusterRea
 		case dk.Kind == string(kube.KindHTTPRoute):
 			registry.Register(httpRouteDescriptor(dk))
 			customKinds = append(customKinds, dk.RegistryKind())
+		case dk.Kind == string(kube.KindCertificate):
+			// §35b: EXPIRES/RENEWAL only mean anything read off
+			// Certificate's own status, so it gets the same curated
+			// treatment HTTPRoute's ATTACHED column does — bare Kind
+			// match, same precedent (nothing else discovered plausibly
+			// collides with "Certificate" the way Flux's HelmRelease does).
+			registry.Register(certificateDescriptor(dk))
+			customKinds = append(customKinds, dk.RegistryKind())
 		default:
 			registry.Register(CustomDescriptor(dk))
 			customKinds = append(customKinds, dk.RegistryKind())

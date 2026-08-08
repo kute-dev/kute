@@ -19,7 +19,9 @@ import (
 // goldenCertSession mirrors testSession() (objectdetail_test.go) but with a
 // third printer column (Issuer) so the golden fixture exercises §14a's own
 // worked example column set (READY · SECRET · ISSUER), not just the
-// two-column shape the unit tests need.
+// two-column shape the unit tests need. Built via resources.CustomDescriptor
+// directly rather than resources.BuildDiscoveredRegistry — see
+// testSession's own doc comment for why, as of §35b.
 func goldenCertSession() *tui.Session {
 	dk := kube.DiscoveredKind{
 		Kind: "Certificate", Plural: "certificates", Group: "cert-manager.io",
@@ -32,7 +34,8 @@ func goldenCertSession() *tui.Session {
 		},
 		Established: true,
 	}
-	reg, _ := resources.BuildDiscoveredRegistry([]kube.DiscoveredKind{dk}, nil)
+	reg := resources.DefaultRegistry()
+	reg.Register(resources.CustomDescriptor(dk))
 	return &tui.Session{Theme: tui.Dark(), Registry: reg, Location: tui.Location{Context: "nva-staging", Namespace: "nva-stage"}}
 }
 

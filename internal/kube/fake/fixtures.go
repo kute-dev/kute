@@ -45,6 +45,9 @@ func NewDemo() *Cluster {
 
 	now := metav1.Now()
 	age := func(d time.Duration) metav1.Time { return metav1.NewTime(now.Add(-d)) }
+	// future is age's mirror image, for §35b's forward-looking
+	// notAfter/renewalTime Certificate fields.
+	future := func(d time.Duration) metav1.Time { return metav1.NewTime(now.Add(d)) }
 
 	// apiPod/workerPod carry OwnerReferences + labels so poddetail's 'o'
 	// (owning Deployment/StatefulSet) and 'i' (fronting Ingress) have real
@@ -160,7 +163,7 @@ func NewDemo() *Cluster {
 	})
 
 	demoRBACFixtures(c, age)
-	demoCertManagerFixtures(c, age)
+	demoCertManagerFixtures(c, age, future)
 	demoKubeSystemFixtures(c, age)
 	demoIngressNginxFixtures(c, age)
 	demoProductionFixtures(c, age)
@@ -333,7 +336,7 @@ func demoRoleBinding(name, ns, roleKind, roleName string, created metav1.Time, s
 // printer columns), CertificateRequest (namespaced), and ClusterIssuer
 // (cluster-scoped) — so --demo exercises CRD support end to end without a
 // real cluster.
-func demoCertManagerFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
+func demoCertManagerFixtures(c *Cluster, age, future func(time.Duration) metav1.Time) {
 	crdAge := age(90 * 24 * time.Hour)
 
 	certCols := []kube.PrinterColumn{
@@ -378,14 +381,29 @@ func demoCertManagerFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.SeedDiscovered(demoDiscoveredKind("Challenge", "challenges", "acme.cert-manager.io", "v1", "challenges.acme.cert-manager.io", false, challengeCols))
 
 	c.Seed(kube.ResourceKind("Certificate"),
-		demoCertificate("api-tls", "default", true, "", "api-tls-secret", "letsencrypt-prod", age(5*24*time.Hour)),
-		demoCertificate("staging-tls", "staging", false, "", "staging-tls-secret", "letsencrypt-staging", age(2*time.Hour)),
+		demoCertificate("api-tls", "default", true, "", "api-tls-secret", "letsencrypt-prod",
+			age(5*24*time.Hour), future(61*24*time.Hour), future(31*24*time.Hour), metav1.Time{}),
+		demoCertificate("staging-tls", "staging", false, "", "staging-tls-secret", "letsencrypt-staging",
+			age(2*time.Hour), metav1.Time{}, metav1.Time{}, metav1.Time{}),
 		// §35a's own mockup scenario: a DNS-01 challenge stuck on a
 		// propagation failure, four issuance attempts in, secretName
 		// deliberately naming a Secret that's never seeded (the refs
 		// strip's "missing" case) against an issuer that is Ready (the
-		// refs strip's healthy case).
-		demoCertificate("web-tls", "default", false, "Issuing", "web-tls-cert", "letsencrypt-prod", age(41*24*time.Hour)),
+		// refs strip's healthy case). lastFailure is set — §35b's own
+		// signal that this is a real, repeated failure (StatusFail, ✕),
+		// not just a first attempt in progress — matching the three
+		// abandoned CertificateRequests already seeded for it below.
+		demoCertificate("web-tls", "default", false, "Issuing", "web-tls-cert", "letsencrypt-prod",
+			age(41*24*time.Hour), metav1.Time{}, metav1.Time{}, age(8*time.Minute)),
+		// §35b's own remaining mockup rows.
+		demoCertificate("admin-tls", "default", true, "", "admin-tls-secret", "letsencrypt-prod",
+			age(70*24*time.Hour), future(22*24*time.Hour), age(8*24*time.Hour), metav1.Time{}),
+		demoCertificate("new-svc-tls", "default", false, "", "new-svc-tls-secret", "letsencrypt-prod",
+			age(4*time.Minute), metav1.Time{}, metav1.Time{}, metav1.Time{}),
+		demoCertificate("grafana-tls", "default", true, "", "grafana-tls-secret", "letsencrypt-prod",
+			age(62*24*time.Hour), future(62*24*time.Hour), future(32*24*time.Hour), metav1.Time{}),
+		demoCertificate("internal-ca", "default", true, "", "internal-ca-secret", "selfsigned",
+			age(90*24*time.Hour), future(8*365*24*time.Hour), future(7*365*24*time.Hour), metav1.Time{}),
 	)
 	c.Seed(kube.ResourceKind("CertificateRequest"),
 		demoCertificateRequest("api-tls-abcd1", "default", true, "letsencrypt-prod", "api-tls", age(5*24*time.Hour)),
@@ -399,6 +417,8 @@ func demoCertManagerFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.Seed(kube.ResourceKind("ClusterIssuer"),
 		demoClusterIssuer("letsencrypt-prod", true, age(60*24*time.Hour)),
 		demoClusterIssuer("letsencrypt-staging", true, age(60*24*time.Hour)),
+		// §35b's internal-ca references this one.
+		demoClusterIssuer("selfsigned", true, age(90*24*time.Hour)),
 	)
 	// api-tls is Ready — its target Secret genuinely exists, unlike
 	// web-tls's deliberately-missing one (§35a's refs-strip "missing" case).
@@ -692,7 +712,12 @@ func demoCRD(name, group, kind, plural, scope, version string, established bool,
 // design doc's own §14d example — CONDITIONS renders it verbatim, never
 // paraphrased. reason feeds §35a's certchain STATE cell ("Ready=False ·
 // Issuing") — empty for the plain 14a/14d fixtures, which predate it.
-func demoCertificate(name, ns string, ready bool, reason, secret, issuer string, created metav1.Time) *unstructured.Unstructured {
+//
+// notAfter/renewalTime/lastFailure feed §35b's own EXPIRES/RENEWAL columns
+// and READY/Fail-vs-Warn split — all three are the zero Time (omitted from
+// status entirely, cert-manager's own "not set yet" for a field that hasn't
+// been written) on the plain 14a/14d/35a fixtures that predate 35b.
+func demoCertificate(name, ns string, ready bool, reason, secret, issuer string, created, notAfter, renewalTime, lastFailure metav1.Time) *unstructured.Unstructured {
 	status, message := "True", "Certificate is up to date and has not expired"
 	if !ready {
 		status, message = "False", "Issuing certificate as Secret does not exist"
@@ -700,6 +725,16 @@ func demoCertificate(name, ns string, ready bool, reason, secret, issuer string,
 	cond := map[string]any{"type": "Ready", "status": status, "message": message}
 	if reason != "" {
 		cond["reason"] = reason
+	}
+	certStatus := map[string]any{"conditions": []any{cond}}
+	if !notAfter.IsZero() {
+		certStatus["notAfter"] = notAfter.UTC().Format(time.RFC3339)
+	}
+	if !renewalTime.IsZero() {
+		certStatus["renewalTime"] = renewalTime.UTC().Format(time.RFC3339)
+	}
+	if !lastFailure.IsZero() {
+		certStatus["lastFailureTime"] = lastFailure.UTC().Format(time.RFC3339)
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cert-manager.io/v1",
@@ -712,9 +747,7 @@ func demoCertificate(name, ns string, ready bool, reason, secret, issuer string,
 			"secretName": secret,
 			"issuerRef":  map[string]any{"name": issuer, "kind": "ClusterIssuer"},
 		},
-		"status": map[string]any{
-			"conditions": []any{cond},
-		},
+		"status": certStatus,
 	}}
 }
 

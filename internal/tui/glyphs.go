@@ -40,4 +40,10 @@ const (
 	// projection carries the same rune as a literal and this constant serves
 	// the tui-side surfaces: §30b's strip, and any future one.
 	GlyphSuspended = "‖"
+
+	// GlyphExpiring is §35b's cross-cutting "<30d" health-strip segment
+	// glyph (`◷`) for a ready-but-expiring Certificate — browse/view.go's
+	// own use, same reasoning as GlyphSuspended: resources/certmanager.go
+	// carries the identical rune as a literal on the row itself.
+	GlyphExpiring = "◷"
 )
