@@ -1,10 +1,8 @@
 <!-- ================= PAGE HEADER ================= -->
 <header class="page-header">
-  <div class="hero-aurora" aria-hidden="true"></div>
-  <div class="hero-sunburst" aria-hidden="true"></div>
   <div class="wrap">
-    <span class="eyebrow">● single binary</span>
-    <h1>Install <em style="color:var(--accent-hi); font-style:normal;">kute</em>.</h1>
+    <span class="home-kicker"><span aria-hidden="true"></span>One binary · no cluster-side install</span>
+    <h1>Install kute <em>in one command.</em></h1>
     <p class="sub">One file, no runtime to install, nothing added to your cluster. Pick your platform below, then run <code style="white-space:nowrap">kute --demo</code> to look around before you point it at anything real.</p>
   </div>
 </header>
@@ -26,8 +24,11 @@
   <div class="guide-body">
 
     <!-- ================= MACOS / LINUX ================= -->
-    <section class="guide-section" id="macos-linux">
-      <span class="eyebrow">macOS · linux</span>
+    <section class="guide-section" id="macos-linux" data-install-platform="unix">
+      <div class="guide-section-labels">
+        <span class="eyebrow">macOS · linux</span>
+        <span class="platform-match-label" hidden>Your platform</span>
+      </div>
       <h2>macOS and Linux</h2>
       <p>The install script picks the right build for your machine, checks the download against its published checksum, and — if you have <code>cosign</code> installed — its signature too.</p>
       <div class="code-block">
@@ -55,8 +56,11 @@
     </section>
 
     <!-- ================= WINDOWS ================= -->
-    <section class="guide-section" id="windows">
-      <span class="eyebrow">windows</span>
+    <section class="guide-section" id="windows" data-install-platform="windows">
+      <div class="guide-section-labels">
+        <span class="eyebrow">windows</span>
+        <span class="platform-match-label" hidden>Your platform</span>
+      </div>
       <h2>Windows</h2>
       <p>In PowerShell:</p>
       <div class="code-block">

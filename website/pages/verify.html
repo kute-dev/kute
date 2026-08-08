@@ -1,43 +1,43 @@
 <!-- ================= PAGE HEADER ================= -->
 <header class="page-header">
-  <div class="hero-aurora" aria-hidden="true"></div>
-  <div class="hero-sunburst" aria-hidden="true"></div>
   <div class="wrap">
-    <span class="eyebrow">● signed releases</span>
-    <h1>Verify a download<br>is really ours.</h1>
+    <span class="home-kicker"><span aria-hidden="true"></span>Signed releases · checksums, provenance and SBOM</span>
+    <h1>Verify a download <em>is really ours.</em></h1>
     <p class="sub">A checksum proves the archive you got matches the manifest that came down the same wire. Only a signature proves the release is ours — which matters for a tool that reads your kubeconfig and can delete production workloads on a keypress.</p>
   </div>
 </header>
 
-<!-- ================= WHAT'S IN A RELEASE ================= -->
-<section class="feature-category" id="contents">
-  <div class="wrap">
-    <div class="section-head reveal">
+<div class="guide-layout wrap">
+  <nav class="guide-rail" aria-label="On this page">
+    <span class="guide-rail-label">On this page</span>
+    <ol>
+      <li><a href="#contents">What ships</a></li>
+      <li><a href="#signature">Verify the signature</a></li>
+      <li><a href="#provenance">Verify provenance</a></li>
+      <li><a href="#sbom">Inspect the SBOM</a></li>
+      <li><a href="#installers">Installer verification</a></li>
+    </ol>
+  </nav>
+
+  <div class="guide-body">
+
+    <!-- ================= WHAT'S IN A RELEASE ================= -->
+    <section class="guide-section" id="contents">
       <span class="eyebrow">what ships</span>
       <h2>Three things travel with every archive.</h2>
       <p>Each of the six platform archives — linux, macOS and Windows, on amd64 and arm64 — carries its own signature, certificate and SBOM, plus <code>checksums.txt</code> for the release as a whole, itself signed.</p>
-    </div>
-
-    <div class="flagship-copy reveal">
-      <ul class="deepdive-list" style="max-width:640px; margin-left:auto; margin-right:auto;">
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sigstore.json</code> — the Sigstore bundle: the cosign signature over the archive, the short-lived certificate it was signed with, and the transparency-log proof, in one file. The certificate's identity names the workflow and the tag that produced the release.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sbom.json</code> — an SPDX inventory of every Go module compiled into that binary. It has a checksum in <code>checksums.txt</code> like the archive itself.</li>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sigstore.json</code> — the Sigstore bundle: the cosign signature over the archive, the short-lived certificate it was signed with, and the transparency-log proof, in one file. The certificate's identity names the workflow and the tag that produced the release.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>&lt;archive&gt;.sbom.json</code> — an SPDX inventory of every Go module compiled into that binary. It has a checksum in <code>checksums.txt</code> like the archive itself.</li>
       </ul>
-      <p style="text-align:center; margin-top:22px;">Signing is <strong>keyless</strong>: there is no kute public key to distribute, rotate, or lose. The signature is bound to an ephemeral certificate issued to the release workflow's own identity and recorded in the public Rekor transparency log. What you check is <em>who signed it</em> — so the identity in the command below is the part that has to match.</p>
-    </div>
-  </div>
-</section>
+      <p>Signing is <strong>keyless</strong>: there is no kute public key to distribute, rotate, or lose. The signature is bound to an ephemeral certificate issued to the release workflow's own identity and recorded in the public Rekor transparency log. What you check is <em>who signed it</em> — so the identity in the command below is the part that has to match.</p>
+    </section>
 
-<!-- ================= VERIFY THE SIGNATURE ================= -->
-<section class="feature-category" id="signature">
-  <div class="wrap">
-    <div class="section-head reveal">
+    <!-- ================= VERIFY THE SIGNATURE ================= -->
+    <section class="guide-section" id="signature">
       <span class="eyebrow">step one</span>
       <h2>Verify the signature.</h2>
       <p>Needs <a href="https://docs.sigstore.dev/cosign/system_config/installation/" target="_blank" rel="noopener">cosign</a> 3 or newer. Set the version and platform you downloaded, then fetch the archive with its bundle.</p>
-    </div>
-
-    <div class="flagship-copy reveal">
       <div class="code-block block">
         <div class="code-lines">
           <div><span class="prompt">$</span><span class="cmd">VERSION</span>={{.ReleaseVersion}}</div>
@@ -47,7 +47,7 @@
           <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.sigstore.json"</div>
         </div>
         <button class="copy-btn" data-copy="VERSION={{.ReleaseVersion}}&#10;FILE=kute_${VERSION}_linux_amd64.tar.gz&#10;BASE=https://github.com/kute-dev/kute/releases/download/v${VERSION}&#10;curl -fsSLO &quot;${BASE}/${FILE}&quot;&#10;curl -fsSLO &quot;${BASE}/${FILE}.sigstore.json&quot;" aria-label="Copy commands">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {{template "copyicon"}}
         </button>
       </div>
 
@@ -61,77 +61,57 @@
           <div>&nbsp;&nbsp;"${FILE}"</div>
         </div>
         <button class="copy-btn" data-copy="cosign verify-blob \&#10;  --certificate-identity-regexp '^https://github\.com/kute-dev/kute/\.github/workflows/release\.yml@refs/tags/' \&#10;  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \&#10;  --bundle &quot;${FILE}.sigstore.json&quot; \&#10;  &quot;${FILE}&quot;" aria-label="Copy command">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {{template "copyicon"}}
         </button>
       </div>
-      <div class="trust-cmd" style="margin-left:auto; margin-right:auto; display:flex; max-width:560px;"><span class="label">success is one line</span> <code>Verified OK</code></div>
-      <p style="text-align:center; margin-top:22px;">Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. On cosign 2.x add <code>--new-bundle-format</code>; that release reads the bundle only when asked, and cosign 3 made it the default. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v{{.ReleaseVersion}}'</code>.</p>
-    </div>
-  </div>
-</section>
+      <div class="trust-cmd"><span class="label">success is one line</span> <code>Verified OK</code></div>
+      <p>Anything else — including a certificate whose identity doesn't match — exits non-zero. Treat that as a failed download, not a warning. On cosign 2.x add <code>--new-bundle-format</code>; that release reads the bundle only when asked, and cosign 3 made it the default. To pin the check to one exact release instead of any kute release, swap the regexp for the literal <code>--certificate-identity 'https://github.com/kute-dev/kute/.github/workflows/release.yml@refs/tags/v{{.ReleaseVersion}}'</code>.</p>
+    </section>
 
-<!-- ================= VERIFY PROVENANCE ================= -->
-<section class="feature-category" id="provenance">
-  <div class="wrap">
-    <div class="section-head reveal">
+    <!-- ================= VERIFY PROVENANCE ================= -->
+    <section class="guide-section" id="provenance">
       <span class="eyebrow">step two</span>
       <h2>Verify what built it.</h2>
       <p>The signature says who signed the archive. Provenance says which repository, workflow, commit and runner produced it — attested by GitHub rather than by us.</p>
-    </div>
-
-    <div class="flagship-copy reveal">
       <div class="code-block block">
         <div class="code-lines">
           <div><span class="prompt">$</span><span class="cmd">gh</span> attestation verify <span class="flag">--repo</span> kute-dev/kute "${FILE}"</div>
         </div>
         <button class="copy-btn" data-copy="gh attestation verify --repo kute-dev/kute &quot;${FILE}&quot;" aria-label="Copy command">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {{template "copyicon"}}
         </button>
       </div>
-      <p style="text-align:center; margin-top:22px;">The two checks are independent, and worth running together: a signature with the right identity, alongside provenance naming a source commit you don't recognise, is a different kind of problem from either check simply failing.</p>
-    </div>
-  </div>
-</section>
+      <p>The two checks are independent, and worth running together: a signature with the right identity, alongside provenance naming a source commit you don't recognise, is a different kind of problem from either check simply failing.</p>
+    </section>
 
-<!-- ================= SBOM ================= -->
-<section class="feature-category" id="sbom">
-  <div class="wrap">
-    <div class="section-head reveal">
+    <!-- ================= SBOM ================= -->
+    <section class="guide-section" id="sbom">
       <span class="eyebrow">inventory</span>
       <h2>Ask the SBOM, not us.</h2>
       <p>Every archive ships an SPDX SBOM, so "does this ship the vulnerable version of X" is a question you can answer without trusting our answer.</p>
-    </div>
-
-    <div class="flagship-copy reveal">
       <div class="code-block block">
         <div class="code-lines">
           <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSLO</span> "${BASE}/${FILE}.sbom.json"</div>
           <div><span class="prompt">$</span><span class="cmd">grype</span> "sbom:${FILE}.sbom.json"</div>
         </div>
         <button class="copy-btn" data-copy="curl -fsSLO &quot;${BASE}/${FILE}.sbom.json&quot;&#10;grype &quot;sbom:${FILE}.sbom.json&quot;" aria-label="Copy commands">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {{template "copyicon"}}
         </button>
       </div>
-      <p style="text-align:center; margin-top:22px;">Point whichever scanner your organisation already uses at it — the SBOM is a plain SPDX inventory, not a format of ours.</p>
-    </div>
-  </div>
-</section>
+      <p>Point whichever scanner your organisation already uses at it — the SBOM is a plain SPDX inventory, not a format of ours.</p>
+    </section>
 
-<!-- ================= WHAT THE INSTALLERS DO ================= -->
-<section class="feature-category" id="installers">
-  <div class="wrap">
-    <div class="section-head reveal">
+    <!-- ================= WHAT THE INSTALLERS DO ================= -->
+    <section class="guide-section" id="installers">
       <span class="eyebrow">already automatic</span>
       <h2>What the installers do for you.</h2>
       <p><code>install.sh</code> and <code>install.ps1</code> verify this signature themselves — using the same identity as above — whenever <code>cosign</code> is on your <code>PATH</code>. They always verify the checksum.</p>
-    </div>
+      <p>Without cosign they print a note and fall back to the checksum alone. A check nobody can run is not a stronger check — but it does mean the default one-liner install on a machine without cosign is checksum-only. If you want the strong check there, install cosign first, or follow this page by hand.</p>
+      <p>Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>{{.SignedFrom}}</code> onward is signed.</p>
+      <p>A verification failure you can't explain is a security report rather than a bug report — please use <a href="https://github.com/kute-dev/kute/security/advisories/new" target="_blank" rel="noopener">GitHub's private advisory form</a> instead of a public issue.</p>
+    </section>
 
-    <div class="flagship-copy reveal">
-      <p style="text-align:center;">Without cosign they print a note and fall back to the checksum alone. A check nobody can run is not a stronger check — but it does mean the default one-liner install on a machine without cosign is checksum-only. If you want the strong check there, install cosign first, or follow this page by hand.</p>
-      <p style="text-align:center; margin-top:18px;">Releases published before signing landed have no <code>.sigstore.json</code>; the installers say so and continue. Everything from <code>{{.SignedFrom}}</code> onward is signed.</p>
-      <p style="text-align:center; margin-top:18px;">A verification failure you can't explain is a security report rather than a bug report — please use <a href="https://github.com/kute-dev/kute/security/advisories/new" target="_blank" rel="noopener">GitHub's private advisory form</a> instead of a public issue.</p>
-    </div>
   </div>
-</section>
+</div>
 
-<!-- ================= CLOSING CTA ================= -->
+{{template "platform-install" .}}

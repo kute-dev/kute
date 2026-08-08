@@ -1,0 +1,55 @@
+{{define "platform-install"}}<section class="home-install">
+  <div class="wrap">
+    <div class="home-install-panel reveal">
+      <h2>Install kute.</h2>
+      <p>One binary. Nothing installed in the cluster.</p>
+      <div class="home-command-grid os-install-options" data-install-options="unix" aria-label="Install kute on macOS or Linux">
+        <div>
+          <span class="command-label">install.sh</span>
+          <div class="code-block" aria-label="Install with the install script">
+            <div><span class="prompt">$</span><span class="cmd">curl</span> <span class="flag">-fsSL</span> https://kute.dev/install.sh | sh</div>
+            <button class="copy-btn" data-copy="curl -fsSL https://kute.dev/install.sh | sh" aria-label="Copy install script command">{{template "copyicon"}}</button>
+          </div>
+        </div>
+        <div>
+          <span class="command-label">Homebrew</span>
+          <div class="code-block" aria-label="Install with Homebrew">
+            <div><span class="prompt">$</span><span class="cmd">brew install</span> kute-dev/tap/kute</div>
+            <button class="copy-btn" data-copy="brew install kute-dev/tap/kute" aria-label="Copy Homebrew command">{{template "copyicon"}}</button>
+          </div>
+        </div>
+      </div>
+      <div class="home-command-grid os-install-options" data-install-options="windows" aria-label="Install kute on Windows" hidden>
+        <div>
+          <span class="command-label">PowerShell</span>
+          <div class="code-block" aria-label="Install with PowerShell">
+            <div><span class="prompt">&gt;</span><span class="cmd">irm</span> https://kute.dev/install.ps1 | <span class="cmd">iex</span></div>
+            <button class="copy-btn" data-copy="irm https://kute.dev/install.ps1 | iex" aria-label="Copy PowerShell command">{{template "copyicon"}}</button>
+          </div>
+        </div>
+        <div>
+          <span class="command-label">Scoop</span>
+          <div class="code-block block" aria-label="Install with Scoop">
+            <div class="code-lines">
+              <div><span class="prompt">&gt;</span><span class="cmd">scoop bucket add</span> kute-dev https://github.com/kute-dev/scoop-bucket</div>
+              <div><span class="prompt">&gt;</span><span class="cmd">scoop install</span> kute</div>
+            </div>
+            <button class="copy-btn" data-copy="scoop bucket add kute-dev https://github.com/kute-dev/scoop-bucket&#10;scoop install kute" aria-label="Copy Scoop commands">{{template "copyicon"}}</button>
+          </div>
+        </div>
+      </div>
+      <div class="home-demo-command">
+        <span class="command-label">THEN TRY IT WITH THE DEMO CLUSTER</span>
+        <div class="code-block code-block-demo" aria-label="Demo command">
+          <div><span class="prompt">$</span><span class="cmd">kute</span> <span class="flag">--demo</span></div>
+          <button class="copy-btn" data-copy="kute --demo" aria-label="Copy demo command">{{template "copyicon"}}</button>
+        </div>
+      </div>
+      <div class="home-install-links">
+        <a href="/install.html">All install options <span aria-hidden="true">→</span></a>
+        <a href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">View on GitHub <span aria-hidden="true">→</span></a>
+        {{if .Home}}<a href="/guide.html">Read the guide <span aria-hidden="true">→</span></a>{{end}}
+      </div>
+    </div>
+  </div>
+</section>{{end}}

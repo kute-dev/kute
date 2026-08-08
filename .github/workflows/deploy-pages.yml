@@ -7,6 +7,7 @@ on:
       - "cmd/site/**"
       - "docs/assets/*.mp4"
       - "docs/assets/*-poster.jpg"
+      - "docs/assets/home-*.png"
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,15 +36,15 @@ jobs:
         run: go run ./cmd/site
       - name: Stage site with demo recordings
         # The home and guide pages reference these under assets/ — kept only
-        # in docs/assets/ alongside the .tape files and .gif originals they
-        # are derived from, and merged in here at deploy time rather than
-        # duplicated under website/. Regenerate with scripts/gif-to-mp4.sh.
+        # in docs/assets/ alongside the .tape files and .gif outputs generated
+        # from the same capture, and merged in here at deploy time rather than
+        # duplicated under website/. Regenerate with the recording scripts.
         run: |
           mkdir -p _site/assets
           cp -r website/. _site/
           rm -rf _site/pages _site/templates _site/dist _site/site.json
           cp -r website/dist/. _site/
-          cp docs/assets/*.mp4 docs/assets/*-poster.jpg _site/assets/
+          cp docs/assets/*.mp4 docs/assets/*-poster.jpg docs/assets/home-*.png _site/assets/
       - name: Cache-bust demo recordings
         # GitHub Pages doesn't let us set Cache-Control, so a re-recorded clip
         # keeping the same filename would otherwise stay stuck in visitors'
@@ -52,7 +53,7 @@ jobs:
         # rather than a named one: naming the page is how this got missed when
         # the recordings moved off demo.html, and a page with no <video> is a
         # no-op here.
-        run: sed -i -E "s/(\.mp4|-poster\.jpg)\"/\1?v=${GITHUB_SHA}\"/g" _site/*.html
+        run: sed -i -E "s/(\.mp4|-poster\.jpg|home-[a-z-]+\.png)\"/\1?v=${GITHUB_SHA}\"/g" _site/*.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

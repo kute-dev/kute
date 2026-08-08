@@ -5,8 +5,10 @@ spec see [`README.md`](README.md) in this directory; this file is only about
 the website.
 
 The site's palette mirrors the TUI's semantic `Theme` so the HTML-rebuilt
-terminal mockups look like the real product. There is one deliberate exception
-and it is called out below.
+terminal mockups look like the real product. The homepage hero and explorer
+use paired dark/light `kute --demo` PNG captures instead: their job is proof,
+not approximation, and they follow the website's selected theme. There is one
+deliberate palette exception and it is called out below.
 
 ## Who it is for
 
@@ -37,27 +39,27 @@ from:
 | `website/pages/<slug>.html` | The body of one page, everything between the nav and the footer |
 | `website/templates/page.html` | The shell: head, skip link, nav slot, `<main>`, footer, scripts |
 | `website/templates/nav.html` | The nav, including `aria-current` on the active link |
-| `website/templates/install.html` | The full install panel — the install page only |
-| `website/templates/cta.html` | The compact call to action every other page closes with |
+| `website/templates/platform-install.html` | The platform-aware install panel shared by Home, Guide, and Verify |
 | `website/templates/icons.html` | SVG fragments used more than once |
 | `website/site.json` | Per-page metadata plus site-wide values |
 
 Page bodies are parsed against a clone of the shared template set, so a body
 can call `{{template "copyicon"}}` rather than pasting the same SVG path a
-dozen times. A page carries either `install` (the full panel) or `cta`, never
-both; `404` carries neither.
+dozen times. Home, Guide, and Verify invoke the same platform-aware install
+panel directly; Install already contains the full installation guide, and 404
+does not need an install surface.
 
-`website/dist/` is generated and gitignored. Preview with:
+`website/dist/` is generated and gitignored. Build a complete local copy,
+open it in a browser, and serve it until interrupted with:
 
 ```sh
-go run ./cmd/site && (cd website/dist && python3 -m http.server 8000)
+scripts/run-website.sh
 ```
 
-Assets live at `website/assets/` and are copied at deploy time, so a local
-preview needs them alongside `dist/` — or serve the staged tree the way
-`.github/workflows/deploy-pages.yml` builds it. Demo recordings live in
-`docs/assets/` and are merged in by the deploy job; they are **not** in the
-repo under `website/`, so demo videos are missing from a naive local preview.
+Pass a port as the first argument to override `4174`, or set
+`KUTE_SITE_NO_OPEN=1` to skip opening a browser. Assets live at
+`website/assets/`, while demo recordings live in `docs/assets/`; the script
+merges both into `website/dist/` just as the deploy job does.
 
 `text/template`, not `html/template`: there is no untrusted input, and
 contextual escaping rewrites content inside attributes (an apostrophe in a
@@ -142,15 +144,16 @@ third-party round trip behind it. Only weights actually used are requested.
   `TestKeyboardReferenceCoversVerbs`. A rebound or renamed key otherwise
   leaves the published reference plausible and wrong, which is worse than
   absent. Deliberate omissions go in that test's `omitted` map with a reason.
-- **Recordings are cache-busted at deploy.** GitHub Pages will not let us set
-  `Cache-Control`, so `deploy-pages.yml` appends the commit SHA to every
-  `.mp4`/`-poster.jpg` reference — across all pages, not a named one, which is
-  how the step got missed when the recordings moved off `demo.html`.
+- **Product media is cache-busted at deploy.** GitHub Pages will not let us set
+  `Cache-Control`, so `deploy-pages.yml` appends the commit SHA to every demo
+  `.mp4`, poster, and homepage `home-*.png` reference — across all pages, not a
+  named one, which is how the step got missed when recordings moved before.
 
 ## Provenance
 
-Layout rhythm, the aurora beam, pill geometry and the two-font split were
-taken from huly.io. The reference doc is kept at
+Layout rhythm, pill geometry and the original two-font split were taken from
+huly.io. The retired aurora treatment is still documented as historical
+inspiration in the reference doc at
 [`website-inspiration-huly.md`](website-inspiration-huly.md) — it describes
 Huly's system, not kute's, and contains no kute content. **The palette was
 never taken from it.**

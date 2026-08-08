@@ -13,7 +13,7 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap">
 <link rel="stylesheet" href="/assets/styles.css">
 <script>
 // Runs before first paint, deliberately blocking and inline. The deferred
@@ -48,13 +48,21 @@ try { var t = localStorage.getItem('kute-theme'); if (t) document.documentElemen
 {{.StructuredData}}
 </script>
 {{end}}</head>
-<body>
+<body class="editorial-page{{if .Home}} home-page{{end}}">
+{{if .Home}}<!--
+THESIS: kute turns cluster operations into seven answer-first jobs, refusing the generic feature-grid landing page.
+OWN-WORLD: quiet paper-like fields, precise green signals, compact controls, and real theme-matched terminal captures.
+STORY: understand the incident console, inspect the proof, then run the demo or install one binary.
+FIRST VIEWPORT: a left-aligned promise and two actions lead directly into the all-namespace triage screen.
+FORM: supplied editorial task explorer; seed key user-provided-redesign.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->{{end}}
 <a class="skip-link" href="#main">Skip to content</a>
 
 {{template "nav" .}}
 
 <main id="main">
-{{.Body}}{{if .Install}}{{template "install" .}}{{end}}{{if .CTA}}{{template "cta" .}}{{end}}
+{{.Body}}
 </main>
 
 <footer>
@@ -70,10 +78,8 @@ try { var t = localStorage.getItem('kute-theme'); if (t) document.documentElemen
         <a href="/verify.html">Verify a download</a>
         <a href="https://github.com/kute-dev/kute" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">Issues</a>
+        <span class="footer-license">Apache License 2.0</span>
       </div>
-    </div>
-    <div class="footer-legal">
-      <span>Apache License 2.0</span>
     </div>
   </div>
 </footer>

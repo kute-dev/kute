@@ -25,6 +25,10 @@ colors:
   bad-soft: "#ef8a8a"
   bad-text: "#f0b7b7"
   info: "#6aa8ef"
+  home-accent-dark: "#5ddba4"
+  home-accent-light: "#12855a"
+  home-bg-dark: "#101014"
+  home-bg-light: "#f7f7fa"
 typography:
   display:
     fontFamily: "Sora, ui-sans-serif, system-ui, sans-serif"
@@ -62,10 +66,25 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
     letterSpacing: "normal"
+  home-display:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "clamp(44px, 6vw, 68px)"
+    fontWeight: 500
+    lineHeight: 1.02
+    letterSpacing: "-0.035em"
+  home-emphasis:
+    fontFamily: "Newsreader, Georgia, serif"
+    fontStyle: italic
+    fontWeight: 400
+  home-mono:
+    fontFamily: "'Geist Mono', ui-monospace, Menlo, monospace"
 rounded:
   card: "14px"
   pill: "9999px"
   term: "10px"
+  home-control: "8px"
+  home-frame: "12px"
+  home-panel: "16px"
 spacing:
   section-gap: "96px"
   gutter: "24px"
@@ -106,15 +125,17 @@ components:
 
 **Creative North Star: "The Incident Console"**
 
-kute.dev is dark by default, terse in its type, and precise about what it's showing — because it's the marketing site for a tool whose entire premise is showing an engineer the truth about a broken cluster without decoration. The palette isn't a marketing choice layered on top of the product; it *is* the product's own semantic `Theme` (Good/Warn/Bad/Info, the same accent violet), reproduced in HTML/CSS so the terminal mockups on the page look like the real screens a visitor will see the moment they install. Layout rhythm, the aurora-beam hero treatment, pill-shaped buttons, and the two-font split (a geometric display face over a neutral UI face) are borrowed from huly.io's system — a deliberate, documented choice (see `docs/design/website-inspiration-huly.md`) — but the palette was never taken from it; it comes from kute itself.
+kute.dev is dark by default, terse in its type, and precise about what it's showing — because it's the marketing site for a tool whose entire premise is showing an engineer the truth about a broken cluster without decoration. The palette isn't a marketing choice layered on top of the product; it *is* the product's own semantic `Theme` (Good/Warn/Bad/Info, the same accent violet), reproduced in HTML/CSS so the terminal mockups on the page look like the real screens a visitor will see the moment they install. Layout rhythm, pill-shaped buttons, and the original two-font split were borrowed from huly.io's system — a deliberate, documented starting point (see `docs/design/website-inspiration-huly.md`) — while the universal editorial shell now uses Geist, Geist Mono, Newsreader, and green interaction signals.
 
-The system reads as engineered calm: generous whitespace and a slow section rhythm (96px between sections) carry the pitch, while every terminal mockup embedded in that whitespace is dense, monospaced, and exact — status dots, keybar hints, condition messages shown verbatim, the same visual grammar as the app. Nothing on the page claims more than the product does; the design's only job is to get out of the way of that claim.
+The system reads as engineered calm: generous whitespace and a slow section rhythm (96px between sections) carry the pitch, while terminal views embedded in that whitespace are dense, monospaced, and exact — status dots, keybar hints, condition messages shown verbatim, the same visual grammar as the app. The homepage's task explorer uses captures from the real demo binary; hand-built mockups remain supporting illustrations elsewhere. Nothing on the page claims more than the product does; the design's only job is to get out of the way of that claim.
+
+**Editorial shell.** Every page shares an editorial, answer-first shell scoped by `body.editorial-page`: Geist and Geist Mono replace the original shared typefaces, Newsreader italic gives display copy a human counterpoint, and green becomes the interaction signal in both themes. The compact navigation, left-aligned page headers, paper-like light surfaces, near-black dark surfaces, and compact footer are universal. Homepage-only structures such as the task explorer remain scoped by `body.home-page`. Guide's embedded `.term` mockups re-establish the TUI's violet palette and JetBrains Mono at their boundary, while real demo screenshots always use their own native theme colors and switch with the website theme.
 
 **Key Characteristics:**
 - Dark-first, both themes fully supported (light is not an afterthought — see the Colors section's AA note)
 - A single true accent (Signal Violet) used sparingly against a mostly monochrome dark canvas
 - Flat surfaces separated by tonal steps and thin borders, not shadow stacks
-- Terminal window mockups (`.term`) as the recurring signature component — the site's proof is shown, not described
+- A task-oriented product explorer pairing kute-like selected rows with real demo captures — the site's proof is shown, not described
 - Sora for headlines, Inter for reading prose, JetBrains Mono for anything that is or resembles terminal output
 
 ## Colors
@@ -122,14 +143,14 @@ The system reads as engineered calm: generous whitespace and a slow section rhyt
 A near-monochrome dark canvas (five stepped tonal surfaces) with one true accent and the product's own four-color status vocabulary — the same roles a visitor will see inside the actual TUI.
 
 ### Primary
-- **Signal Violet** (`#a78bfa` dark / `#6b46d9` light — `colors.accent`): the one true accent. CTAs, links, selection state, the hero's aurora glow, active nav indicators. Used sparingly against the dark canvas so it stays legible as "the thing to act on."
+- **Signal Violet** (`#a78bfa` dark / `#6b46d9` light — `colors.accent`): the product-proof accent. Terminal mockup links, selection state, and active indicators use it inside product boundaries; the editorial shell uses green for interaction.
 - **Signal Violet, Bright** (`#c4b5fd` dark / `#5936b8` light — `colors.accent-hi`): hover/active state for accent elements, and the color used for emphasized inline terms (`em` in headlines, crumb kind names in `.term` mockups).
 
 ### Neutral (surfaces, dark → light stepped)
 - **Void** (`#0b0b10` — `colors.bg`): page background.
 - **Chrome** (`#0e0e15` — `colors.bg-chrome`): nav bar, terminal mockup title/header bars — the "frame" tone.
 - **Strip** (`#0c0c12` — `colors.bg-strip`): the thin status-strip band inside terminal mockups.
-- **Card** (`#111119` — `colors.bg-card`): pain cards, install/CTA panels — the "content sits here" surface.
+- **Card** (`#111119` — `colors.bg-card`): pain cards and install panels — the "content sits here" surface.
 - **Card, Raised** (`#16121e` — `colors.bg-card-hi`): a half-step lighter, tinted slightly toward the accent hue; used where a card needs to read as marginally elevated without a shadow (e.g. the goto-palette mockup body).
 - **Selection Wash** (`#1d1633` — `colors.sel-bg`): the accent-tinted background for a selected/hovered row inside a terminal mockup, and real text selection (`::selection`) on the page itself.
 
@@ -173,15 +194,17 @@ A near-monochrome dark canvas (five stepped tonal surfaces) with one true accent
 
 ## Layout
 
-A centered `1180px` max-width column (`--max-width`) with `24px` side gutters below the breakpoint, and a slow `96px` rhythm between major sections (`--section-gap`) that halves to `~72px` around the compact CTA panel that closes most pages. The hero and page-header bands get extra top padding (168–180px) to clear the fixed nav.
+A centered `1180px` max-width column (`--max-width`) with `24px` side gutters below the breakpoint, and a slow `96px` rhythm between major sections (`--section-gap`). Hero and page-header bands get extra top padding to clear the fixed nav; every supporting-page header begins at `148px` on desktop and `124px` on mobile. The homepage explorer divides that column into a compact `260px` task rail and a stable media stage; below `720px` the rail becomes a horizontally scrolling tab list above the stage.
 
 Two distinct page shapes exist: the marketing pages (`index`, most sections centered, two-up and three-up card grids) and the documentation page (`guide.html`), which drops the marketing grid for a `220px` sticky contents rail beside a `minmax(0, 1fr)` prose column — Read mode inside an otherwise Persuade site.
+
+The Install guide uses the browser-reported platform as progressive emphasis: macOS/Linux or Windows receives a small “Your platform” label, and Windows moves ahead of macOS/Linux for Windows visitors. Both sections, manual downloads, and every anchor remain visible; detection never redirects or hides guide content.
 
 Responsive behavior collapses at three breakpoints: `960px` folds the guide rail from a sidebar into a horizontal scrollable strip above the prose; `720px` turns the nav into a slide-down mobile menu and drops two/three-up grids to one column; `640px` lets terminal-mockup tables scroll horizontally rather than compressing columns into illegibility (`.term-body { overflow-x: auto }`) — the mockups' internal grid never reflows, it scrolls.
 
 ## Elevation & Depth
 
-Mostly flat, tonal layering. Depth comes from five stepped background tones (`bg` → `bg-chrome` → `bg-strip` → `bg-card` → `bg-card-hi`) plus thin `1px` borders, not from a shadow stack — most cards (pain cards, deep-dive copy, the surface grid) carry no shadow at all. Shadows are reserved for a small set of surfaces that are meant to read as genuinely floating above the page: terminal mockups, the install/CTA panels, and the palette mockup, all using `shadow-xl` (`0 12px 40px rgba(0,0,0,.5)`). The one glow effect (`shadow-glow`) is scoped to the primary button and the install-panel's radial accent wash — it's the visual signature of "the thing to act on," not general polish.
+Mostly flat, tonal layering. Depth comes from five stepped background tones (`bg` → `bg-chrome` → `bg-strip` → `bg-card` → `bg-card-hi`) plus thin `1px` borders, not from a shadow stack — most cards (pain cards, deep-dive copy, the surface grid) carry no shadow at all. Shadows are reserved for a small set of surfaces that are meant to read as genuinely floating above the page: terminal mockups, the shared install panel, and the palette mockup, all using `shadow-xl` (`0 12px 40px rgba(0,0,0,.5)`). The violet system's glow effect (`shadow-glow`) is scoped to primary actions; the editorial shell deliberately removes it in favor of quieter contrast.
 
 ### Shadow Vocabulary
 - **sm** (`0 4px 6px rgba(0,0,0,.25)`): reserved, lightly used.
@@ -223,7 +246,14 @@ Two radius families cover almost everything: a **pill** (`9999px`) for every but
 - **Typography:** brand wordmark in Sora 600 with the `❯` mark in Signal Violet; nav links in 14px Inter, `text-secondary` at rest, `text` on hover.
 - **Mobile treatment:** below `720px` the nav links collapse into a slide-down panel (`chrome` background, full-bleed) toggled by a hamburger icon; the GitHub-star chip is dropped entirely to save width.
 
-### The Terminal Mockup (signature component)
+### The Product Explorer (homepage signature)
+- **Structure:** seven reasons to use kute in a vertical task rail, with one stable media stage. Routing alone has a nested Ingress/HTTPRoute switch so Gateway API gets equal proof without making the main list denser.
+- **Visual language:** the selected task quotes the TUI's accent rail and selection wash; the surrounding shell stays quiet so the real terminal capture remains dominant.
+- **Media contract:** every item opens on paired dark/light deterministic PNGs from `kute --demo`, selected with the website theme. Incident and routing items may replace that still with an explicitly started recording; changing tabs pauses and resets it. Nothing in the explorer autoplays.
+- **Responsive contract:** below `720px` tasks become horizontal tabs. Below `640px` the capture pans inside its own full-width viewport rather than shrinking terminal text into illegibility.
+- **Keyboard contract:** arrow keys follow tab orientation; Home and End jump to the edges. The Routing sub-tabs use Left/Right independently of the outer task tabs.
+
+### The Terminal Mockup (supporting component)
 The `.term` family is the site's proof, not its decoration — a hand-rebuilt HTML/CSS reproduction of kute's actual screens (title bar with traffic-light dots, breadcrumb header, status strip, table rows with health-colored glyphs, keybar) using the exact same semantic tokens as the real TUI. Variants exist for the destructive-action confirm modal (`.term-modal`, red-bordered to match the product's own reserved-red-for-destructive-confirms rule), the jump palette (`.term-palette`), the all-namespaces triage view with collapsible healthy groups (`.term-group-*`), log lines with severity coloring (`.term-log-line`), and masked/revealed Secret values (`.term-yaml-line`). Every mockup must stay visually faithful to what installing kute actually shows — this component is a promise, and its accuracy is a credibility question, not a cosmetic one.
 
 ## Do's and Don'ts
@@ -236,7 +266,7 @@ The `.term` family is the site's proof, not its decoration — a hand-rebuilt HT
 - **Do** reserve the accent glow shadow (`shadow-glow`) for the single primary action on a given panel — it is the "act here" signal, and it stops working if more than one thing on screen has it.
 
 ### Don't:
-- **Don't** apply a drop shadow to an ordinary card. Shadows are for surfaces that should read as floating windows (terminal mockups, install/CTA panels) — everything else separates by tonal step and hairline border alone.
+- **Don't** apply a drop shadow to an ordinary card. Shadows are for surfaces that should read as floating windows (terminal mockups and install panels) — everything else separates by tonal step and hairline border alone.
 - **Don't** let motion run without an escape hatch: any `.reveal`-style entrance animation must have its start state (`opacity: 0`) undone under `prefers-reduced-motion`, or the section stays permanently invisible for anyone with that preference set.
 - **Don't** autoplay media a visitor can't stop. Demo recordings use native `<video controls>`, no `autoplay` attribute, started by script only when motion isn't reduced and only while the element is on screen.
 - **Don't** use Alert Red for anything that isn't genuinely destructive or erroring. It's load-bearing exactly because it's rare — reserved for the type-the-name modal mockup, real error banners, and the `bad`-tier friction tag.

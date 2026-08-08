@@ -23,3 +23,7 @@ dist/
 # silently ignored the whole cmd/site/ package — existing files stayed tracked,
 # so nothing broke until someone added a new one there.
 /site
+.playwright-mcp
+.opencode
+docs/assets/*.gif
+docs/assets/*.png

@@ -1,11 +1,11 @@
 {
   "comment": [
     "Per-page data for cmd/site. Body content lives in pages/<slug>.html;",
-    "the shared shell, nav and install panel live in templates/.",
+    "the shared shell and nav live in templates/.",
     "footerTag is site-level: it is one string for the whole site, so the",
     "copies cannot drift apart again.",
-    "The full install panel belongs to the install page alone; every other",
-    "page closes with the compact cta instead."
+    "Home, Guide, and Verify share the platform-aware install panel; only Home",
+    "includes the Guide link. Install does not repeat the panel."
   ],
   "siteURL": "https://kute.dev/",
   "releaseVersion": "0.4.0",
@@ -20,8 +20,7 @@
       "ogTitle": "kute — the incident console for Kubernetes",
       "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
       "twitterDescription": "Your cluster, in plain sight. Modern Kubernetes TUI.",
-      "home": true,
-      "cta": true
+      "home": true
     },
     {
       "slug": "guide",
@@ -31,8 +30,7 @@
       "ogTitle": "Guide — using kute, the incident console for Kubernetes",
       "ogDescription": "From your first screen to a production delete — how to drive kute, with recordings you can follow along with.",
       "twitterDescription": "From your first screen to a production delete — how to drive kute.",
-      "home": false,
-      "cta": true
+      "home": false
     },
     {
       "slug": "install",
@@ -42,14 +40,7 @@
       "ogTitle": "Install kute — the incident console for Kubernetes",
       "ogDescription": "One binary, no cluster-side install. macOS, Linux and Windows, on x86-64 and arm64.",
       "twitterDescription": "One binary, no cluster-side install. macOS, Linux and Windows.",
-      "home": false,
-      "install": {
-        "id": "install",
-        "secondHref": "/guide.html",
-        "secondLabel": "Read the guide",
-        "thirdHref": "/verify.html",
-        "thirdLabel": "Verify a download"
-      }
+      "home": false
     },
     {
       "slug": "verify",
@@ -59,8 +50,7 @@
       "ogTitle": "Verify a download — kute, the incident console for Kubernetes",
       "ogDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
       "twitterDescription": "Signed, attested, and checkable in one command — how to verify a kute download is really ours.",
-      "home": false,
-      "cta": true
+      "home": false
     },
     {
       "slug": "404",
@@ -71,8 +61,7 @@
       "ogDescription": "",
       "twitterDescription": "",
       "home": false,
-      "noIndex": true,
-      "install": null
+      "noIndex": true
     }
   ]
 }

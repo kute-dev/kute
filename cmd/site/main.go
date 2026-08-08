@@ -30,41 +30,16 @@ import (
 	"text/template"
 )
 
-// installPanel is the shared install/CTA section. Nil for pages that omit it.
-type installPanel struct {
-	ID          string `json:"id"`
-	SecondHref  string `json:"secondHref"`
-	SecondLabel string `json:"secondLabel"`
-	ThirdHref   string `json:"thirdHref"`
-	ThirdLabel  string `json:"thirdLabel"`
-}
-
-// IDAttr renders the id attribute, including its leading space, or nothing.
-// Only the landing page anchors #install at this section.
-func (i installPanel) IDAttr() string {
-	if i.ID == "" {
-		return ""
-	}
-	return fmt.Sprintf(" id=%q", i.ID)
-}
-
 type page struct {
-	Slug               string        `json:"slug"`
-	Title              string        `json:"title"`
-	Description        string        `json:"description"`
-	Canonical          string        `json:"canonical"`
-	OGTitle            string        `json:"ogTitle"`
-	OGDescription      string        `json:"ogDescription"`
-	TwitterDescription string        `json:"twitterDescription"`
-	Home               bool          `json:"home"`
-	NoIndex            bool          `json:"noIndex"`
-	Install            *installPanel `json:"install"`
-
-	// CTA closes the page with the compact call to action instead. Only the
-	// install page carries the full panel now: repeating four package
-	// managers at the foot of every page made each one longer without
-	// telling anyone anything they could not get by following one link.
-	CTA bool `json:"cta"`
+	Slug               string `json:"slug"`
+	Title              string `json:"title"`
+	Description        string `json:"description"`
+	Canonical          string `json:"canonical"`
+	OGTitle            string `json:"ogTitle"`
+	OGDescription      string `json:"ogDescription"`
+	TwitterDescription string `json:"twitterDescription"`
+	Home               bool   `json:"home"`
+	NoIndex            bool   `json:"noIndex"`
 
 	// Body is the page-unique markup, read from pages/<slug>.html.
 	// The rest are site-level values copied onto every page at load.

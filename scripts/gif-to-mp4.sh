@@ -7,14 +7,12 @@
 #
 # Settings, all of which were measured on these recordings rather than
 # guessed:
-#   -fps_mode passthrough  betamax writes a variable frame rate of roughly
-#                          2-3 fps. Without this, x264 normalises to a
-#                          constant ~100 fps and the file is ~75% larger for
-#                          identical output.
+#   -fps_mode passthrough  Betamax writes variable-duration frames. Preserving
+#                          their timing keeps scripted sleeps from collapsing
+#                          into a fast, blinking constant-frame-rate video.
 #   -crf 24                Terminal text is unforgiving. At 24 the result is
 #                          hard to tell from the GIF; by 30 the dim greys
-#                          start to smear. VP9 was tried and lost on both
-#                          counts — at matched quality it was a third larger.
+#                          start to smear.
 #   -pix_fmt yuv420p       Required by Safari and by QuickTime.
 #   +faststart             Moves the index to the front so playback can begin
 #                          before the whole file has arrived.

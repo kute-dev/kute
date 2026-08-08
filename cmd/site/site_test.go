@@ -286,6 +286,155 @@ func TestGeneratedSiteLinksResolve(t *testing.T) {
 	}
 }
 
+func TestPagesUseEditorialShell(t *testing.T) {
+	out := t.TempDir()
+	if err := run(filepath.Join(repoRoot, "website"), out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	for _, name := range []string{"index.html", "guide.html", "install.html", "verify.html", "404.html"} {
+		body := string(mustRead(t, filepath.Join(out, name)))
+		for _, want := range []string{
+			`class="editorial-page`,
+			`family=Geist`,
+			`<span class="footer-license">Apache License 2.0</span>`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s does not contain %q", name, want)
+			}
+		}
+		for _, unwanted := range []string{`hero-aurora`, `hero-sunburst`, `<div class="footer-legal">`} {
+			if strings.Contains(body, unwanted) {
+				t.Errorf("%s still contains %q", name, unwanted)
+			}
+		}
+	}
+
+	install := string(mustRead(t, filepath.Join(out, "install.html")))
+	for _, want := range []string{
+		`<h1>Install kute <em>in one command.</em></h1>`,
+		`id="macos-linux" data-install-platform="unix"`,
+		`id="windows" data-install-platform="windows"`,
+	} {
+		if !strings.Contains(install, want) {
+			t.Errorf("install page does not contain %q", want)
+		}
+	}
+	if got := strings.Count(install, `<span class="platform-match-label" hidden>Your platform</span>`); got != 2 {
+		t.Errorf("install page has %d platform labels, want one for each detected platform section", got)
+	}
+	for _, unwanted := range []string{
+		`<section class="install"`,
+		`<h2>Install kute.</h2>`,
+	} {
+		if strings.Contains(install, unwanted) {
+			t.Errorf("install page still contains %q", unwanted)
+		}
+	}
+
+	home := string(mustRead(t, filepath.Join(out, "index.html")))
+	if !strings.Contains(home, `<body class="editorial-page home-page">`) {
+		t.Error("homepage lost its editorial and home page classes")
+	}
+	guide := string(mustRead(t, filepath.Join(out, "guide.html")))
+	for _, want := range []string{
+		`<span class="home-kicker"><span aria-hidden="true"></span>Using kute`,
+		`<h1>Everything you need <em>to drive kute.</em></h1>`,
+	} {
+		if !strings.Contains(guide, want) {
+			t.Errorf("guide page does not contain %q", want)
+		}
+	}
+
+	verify := string(mustRead(t, filepath.Join(out, "verify.html")))
+	for _, want := range []string{
+		`<span class="home-kicker"><span aria-hidden="true"></span>Signed releases`,
+		`<h1>Verify a download <em>is really ours.</em></h1>`,
+		`<section class="home-install">`,
+	} {
+		if !strings.Contains(verify, want) {
+			t.Errorf("verify page does not contain %q", want)
+		}
+	}
+
+	notFound := string(mustRead(t, filepath.Join(out, "404.html")))
+	for _, want := range []string{
+		`<span class="home-kicker"><span aria-hidden="true"></span>404 · page not found</span>`,
+		`<h1>No object <em>of that name.</em></h1>`,
+		`<div class="guide-layout wrap">`,
+		`<nav class="guide-rail" aria-label="On this site">`,
+	} {
+		if !strings.Contains(notFound, want) {
+			t.Errorf("404 page does not contain %q", want)
+		}
+	}
+}
+
+func TestHomeExplorerTabsHavePanels(t *testing.T) {
+	out := t.TempDir()
+	if err := run(filepath.Join(repoRoot, "website"), out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(mustRead(t, filepath.Join(out, "index.html")))
+	tabRe := regexp.MustCompile(`<button id="(explorer-tab-[^"]+)" class="explorer-tab"[^>]+aria-selected="(true|false)" aria-controls="([^"]+)"`)
+	tabs := tabRe.FindAllStringSubmatch(body, -1)
+	if len(tabs) != 7 {
+		t.Fatalf("homepage has %d explorer tabs, want 7", len(tabs))
+	}
+
+	selected := 0
+	for _, tab := range tabs {
+		if tab[2] == "true" {
+			selected++
+		}
+		panel := `id="` + tab[3] + `" class="explorer-panel" role="tabpanel" aria-labelledby="` + tab[1] + `"`
+		if !strings.Contains(body, panel) {
+			t.Errorf("%s controls %s, but that labelled panel is missing", tab[1], tab[3])
+		}
+	}
+	if selected != 1 {
+		t.Errorf("homepage has %d initially selected explorer tabs, want 1", selected)
+	}
+
+	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 2 {
+		t.Errorf("routing has %d subpanels, want Ingress and HTTPRoute", got)
+	}
+}
+
+func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
+	out := t.TempDir()
+	if err := run(filepath.Join(repoRoot, "website"), out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := string(mustRead(t, filepath.Join(out, "index.html")))
+
+	stems := []string{
+		"home-triage",
+		"home-pod-detail",
+		"home-timeline",
+		"home-routing-ingress",
+		"home-routing-http",
+		"home-flux",
+		"home-prod-confirm",
+		"home-certificate-failure",
+	}
+	for _, stem := range stems {
+		dark := `class="theme-shot theme-shot-dark" src="/assets/` + stem + `.png"`
+		light := `class="theme-shot theme-shot-light" src="/assets/` + stem + `-light.png"`
+		if !strings.Contains(body, dark) {
+			t.Errorf("homepage does not render the dark %s screenshot", stem)
+		}
+		if !strings.Contains(body, light) {
+			t.Errorf("homepage does not render the light %s screenshot", stem)
+		}
+	}
+
+	hero := regexp.MustCompile(`(?s)<div class="hero-shot reveal">.*?home-triage\.png.*?home-triage-light\.png.*?</div>`)
+	if !hero.MatchString(body) {
+		t.Error("homepage hero does not use the dark and light home-triage captures")
+	}
+}
+
 // TestSocialCardResolves checks the one asset no link checker sees. og:image
 // and twitter:image are absolute URLs in content= attributes, so they are
 // neither an internal path the link test follows nor an <a> the outbound
@@ -316,6 +465,44 @@ func TestSocialCardResolves(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(repoRoot, "website", rel)); err != nil {
 			t.Errorf("%s points at %s, which is not a file in website/", tag, rel)
 		}
+	}
+}
+
+func TestSupportingPagesUseHomePlatformInstallPanelWithoutSelfLink(t *testing.T) {
+	out := t.TempDir()
+	if err := run(filepath.Join(repoRoot, "website"), out); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	panel := func(page string) string {
+		t.Helper()
+		body := string(mustRead(t, filepath.Join(out, page)))
+		start := strings.Index(body, `<section class="home-install">`)
+		if start < 0 {
+			t.Fatalf("%s: platform install panel not found", page)
+		}
+		end := strings.Index(body[start:], "</section>")
+		if end < 0 {
+			t.Fatalf("%s: platform install panel is not closed", page)
+		}
+		return body[start : start+end+len("</section>")]
+	}
+
+	home := panel("index.html")
+	guide := panel("guide.html")
+	verify := panel("verify.html")
+	guideLink := `<a href="/guide.html">Read the guide <span aria-hidden="true">→</span></a>`
+	if !strings.Contains(home, guideLink) {
+		t.Fatal("index.html: platform install panel is missing the guide link")
+	}
+	if strings.Contains(guide, guideLink) {
+		t.Fatal("guide.html: platform install panel links to the page it is already on")
+	}
+	if want := strings.Replace(home, guideLink, "", 1); guide != want {
+		t.Fatal("guide.html: platform install panel differs from index.html beyond the omitted guide link")
+	}
+	if verify != guide {
+		t.Fatal("verify.html: platform install panel differs from guide.html")
 	}
 }
 

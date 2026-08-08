@@ -38,9 +38,10 @@
   // Theme toggle (dark/light), persisted
   var themeBtn = document.querySelector('[data-theme-toggle]');
   var root = document.documentElement;
+  var preferredLight = window.matchMedia('(prefers-color-scheme: light)');
   var currentTheme = function () {
     return root.getAttribute('data-theme') ||
-      (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      (preferredLight.matches ? 'light' : 'dark');
   };
   // localStorage throws, not returns null, when site data is blocked (Safari
   // private mode). Unguarded it killed this whole IIFE, and since the copy
@@ -52,6 +53,13 @@
   };
   var stored = store.get('kute-theme');
   if (stored) root.setAttribute('data-theme', stored);
+  var syncThemePosters = function () {
+    var theme = currentTheme();
+    document.querySelectorAll('[data-poster-dark][data-poster-light]').forEach(function (video) {
+      video.poster = video.getAttribute('data-poster-' + theme);
+    });
+  };
+  syncThemePosters();
   if (themeBtn) {
     // Name the action rather than the control: a static "Toggle theme" never
     // told anyone which theme they were in or what pressing it would do.
@@ -63,8 +71,47 @@
     themeBtn.addEventListener('click', function () {
       root.setAttribute('data-theme', currentTheme() === 'dark' ? 'light' : 'dark');
       store.set('kute-theme', root.getAttribute('data-theme'));
+      syncThemePosters();
       relabel();
     });
+  }
+  var onPreferredTheme = function () {
+    if (!root.getAttribute('data-theme')) syncThemePosters();
+  };
+  if (preferredLight.addEventListener) preferredLight.addEventListener('change', onPreferredTheme);
+  else if (preferredLight.addListener) preferredLight.addListener(onPreferredTheme);
+
+  // Keep useful macOS/Linux commands in static HTML, then substitute the
+  // Windows pair on the homepage and mark the relevant install-page section.
+  // The full guide remains visible: platform detection is a hint, not a gate.
+  var platform = (navigator.userAgentData && navigator.userAgentData.platform) ||
+    navigator.platform || navigator.userAgent || '';
+  var installOS = /windows|win32|win64/i.test(platform) ? 'windows' : 'unix';
+  document.querySelectorAll('[data-install-options]').forEach(function (options) {
+    options.hidden = options.getAttribute('data-install-options') !== installOS;
+  });
+  var matchedPlatformSection = null;
+  document.querySelectorAll('[data-install-platform]').forEach(function (section) {
+    var matched = section.getAttribute('data-install-platform') === installOS;
+    section.classList.toggle('platform-match', matched);
+    if (matched) matchedPlatformSection = section;
+    var label = section.querySelector('.platform-match-label');
+    if (label) label.hidden = !matched;
+  });
+  if (matchedPlatformSection) {
+    var firstPlatformSection = matchedPlatformSection.parentNode.querySelector('[data-install-platform]');
+    if (firstPlatformSection !== matchedPlatformSection) {
+      matchedPlatformSection.parentNode.insertBefore(matchedPlatformSection, firstPlatformSection);
+    }
+
+    var matchedRailLink = document.querySelector('.guide-rail a[href="#' + matchedPlatformSection.id + '"]');
+    if (matchedRailLink) {
+      var railList = matchedRailLink.closest('ol');
+      var firstPlatformLink = railList.querySelector('a[href="#macos-linux"], a[href="#windows"]');
+      if (firstPlatformLink && firstPlatformLink !== matchedRailLink) {
+        railList.insertBefore(matchedRailLink.parentNode, firstPlatformLink.parentNode);
+      }
+    }
   }
 
   // Copy-to-clipboard for install commands.
@@ -120,6 +167,87 @@
         // Previously an unhandled rejection: the button simply did nothing
         // and never said why.
         announcer.textContent = 'Copy failed — select the command and copy it manually';
+      });
+    });
+  });
+
+  // Homepage product explorer. Its content is local, so tabs activate as the
+  // arrow keys move focus; no loading delay makes manual activation useful.
+  document.querySelectorAll('[data-explorer]').forEach(function (explorer) {
+    var mainList = explorer.querySelector('.explorer-tabs');
+    var mainTabs = Array.prototype.slice.call(mainList.querySelectorAll('[role="tab"]'));
+
+    var resetMedia = function (root) {
+      root.querySelectorAll('[data-explorer-video]').forEach(function (video) {
+        video.pause();
+        try { video.currentTime = 0; } catch (e) {}
+        video.hidden = true;
+        var frame = video.closest('[data-media-frame]');
+        if (!frame) return;
+        var play = frame.querySelector('[data-play-video]');
+        frame.querySelectorAll('.theme-shot').forEach(function (image) { image.hidden = false; });
+        if (play) play.hidden = false;
+      });
+    };
+
+    var wireTabs = function (list, tabs, direction) {
+      var activate = function (tab, focus) {
+        tabs.forEach(function (candidate) {
+          var selected = candidate === tab;
+          candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+          candidate.tabIndex = selected ? 0 : -1;
+          var panel = document.getElementById(candidate.getAttribute('aria-controls'));
+          if (panel) {
+            if (!selected && !panel.hidden) resetMedia(panel);
+            panel.hidden = !selected;
+          }
+        });
+        if (focus) tab.focus();
+        if (tab.scrollIntoView) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      };
+
+      tabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { activate(tab, false); });
+        tab.addEventListener('keydown', function (e) {
+          var vertical = direction() === 'vertical';
+          var previous = vertical ? e.key === 'ArrowUp' : e.key === 'ArrowLeft';
+          var next = vertical ? e.key === 'ArrowDown' : e.key === 'ArrowRight';
+          var target = -1;
+          if (previous) target = (index - 1 + tabs.length) % tabs.length;
+          if (next) target = (index + 1) % tabs.length;
+          if (e.key === 'Home') target = 0;
+          if (e.key === 'End') target = tabs.length - 1;
+          if (target < 0) return;
+          e.preventDefault();
+          activate(tabs[target], true);
+        });
+      });
+    };
+
+    var narrow = window.matchMedia('(max-width: 720px)');
+    var mainDirection = function () { return narrow.matches ? 'horizontal' : 'vertical'; };
+    var setOrientation = function () { mainList.setAttribute('aria-orientation', mainDirection()); };
+    setOrientation();
+    if (narrow.addEventListener) narrow.addEventListener('change', setOrientation);
+    else if (narrow.addListener) narrow.addListener(setOrientation);
+    wireTabs(mainList, mainTabs, mainDirection);
+
+    explorer.querySelectorAll('.explorer-subtabs').forEach(function (subList) {
+      var subTabs = Array.prototype.slice.call(subList.querySelectorAll('[role="tab"]'));
+      wireTabs(subList, subTabs, function () { return 'horizontal'; });
+    });
+
+    explorer.querySelectorAll('[data-play-video]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var frame = button.closest('[data-media-frame]');
+        var video = frame.querySelector('[data-explorer-video]');
+        if (!video) return;
+        frame.querySelectorAll('.theme-shot').forEach(function (image) { image.hidden = true; });
+        button.hidden = true;
+        video.hidden = false;
+        video.preload = 'metadata';
+        var playing = video.play();
+        if (playing && playing.catch) playing.catch(function () {});
       });
     });
   });

@@ -1,10 +1,8 @@
 <!-- ================= PAGE HEADER ================= -->
 <header class="page-header">
-  <div class="hero-aurora" aria-hidden="true"></div>
-  <div class="hero-sunburst" aria-hidden="true"></div>
   <div class="wrap">
-    <span class="eyebrow">● using kute</span>
-    <h1>Everything you need<br>to drive <em style="color:var(--accent-hi); font-style:normal;">kute</em>.</h1>
+    <span class="home-kicker"><span aria-hidden="true"></span>Using kute · from first screen to production</span>
+    <h1>Everything you need <em>to drive kute.</em></h1>
     <p class="sub">From your first screen to a production delete: how to find things, read them, change them safely, and get unstuck. Every recording below is captured straight from <code style="white-space:nowrap">kute --demo</code>, so you can follow along without a cluster.</p>
   </div>
 </header>
@@ -111,7 +109,7 @@
 
       <div class="demo-shot reveal">
         <video src="/assets/goto-palette-demo.mp4" poster="/assets/goto-palette-demo-poster.jpg"
-               width="1220" height="770" muted loop playsinline
+               width="840" height="434" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail"></video>
       </div>
@@ -122,7 +120,7 @@
 
       <div class="demo-shot reveal">
         <video src="/assets/namespace-palette-demo.mp4" poster="/assets/namespace-palette-demo-poster.jpg"
-               width="1220" height="770" muted loop playsinline
+               width="840" height="434" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit"></video>
       </div>
@@ -234,7 +232,7 @@
       <p>This is the whole loop end to end: a namespace that looks fine, all-namespaces revealing the pod that isn't, detail and logs giving the cause, and the timeline tying it to a rollout ten minutes earlier.</p>
       <div class="demo-shot reveal">
         <video src="/assets/incident-walkthrough-all-namespaces.mp4" poster="/assets/incident-walkthrough-all-namespaces-poster.jpg"
-               width="1220" height="770" muted loop playsinline
+               width="840" height="434" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier"></video>
       </div>
@@ -311,7 +309,7 @@
 
       <div class="demo-shot reveal">
         <video src="/assets/demo-everyday-actions.mp4" poster="/assets/demo-everyday-actions-poster.jpg"
-               width="1220" height="770" muted loop playsinline
+               width="840" height="434" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues"></video>
       </div>
@@ -382,7 +380,7 @@
 
       <div class="demo-shot reveal">
         <video src="/assets/demo-routing-table.mp4" poster="/assets/demo-routing-table-poster.jpg"
-               width="1220" height="770" muted loop playsinline
+               width="840" height="434" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway"></video>
       </div>
@@ -693,3 +691,5 @@
 
   </div>
 </div>
+
+{{template "platform-install" .}}

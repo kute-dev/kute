@@ -20,13 +20,13 @@ Output "docs/assets/demo-routing-table.gif"
 Require kute
 
 Set Shell "bash"
-Set FontSize 16
+Set FontSize 11
 Set FontFamily "JetBrainsMono Nerd Font Mono"
-Set Width 1220
-Set Height 770
+Set Width 840
+Set Height 434
 Set Padding 10
 Set Framerate 24
-Set Theme "Catppuccin Mocha"
+Set Theme "3024 Night"
 Set LineHeight 1.55
 
 Env COLORTERM truecolor

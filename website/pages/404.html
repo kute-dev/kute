@@ -1,11 +1,9 @@
 <!-- ================= PAGE HEADER ================= -->
 <header class="page-header">
-  <div class="hero-aurora" aria-hidden="true"></div>
-  <div class="hero-sunburst" aria-hidden="true"></div>
   <div class="wrap">
-    <span class="eyebrow">404</span>
-    <h1>No object of that name.</h1>
-    <p class="page-sub">That page isn't here — it may have moved, or the link may be wrong. The pages below cover everything the site has.</p>
+    <span class="home-kicker"><span aria-hidden="true"></span>404 · page not found</span>
+    <h1>No object <em>of that name.</em></h1>
+    <p class="sub">That page isn't here — it may have moved, or the link may be wrong. The pages below cover everything the site has.</p>
     <div class="hero-ctas">
       <a class="btn btn-primary" href="/index.html">Back to the start</a>
       <a class="btn btn-ghost" href="/guide.html">Read the guide</a>
@@ -13,20 +11,28 @@
   </div>
 </header>
 
-<section>
-  <div class="wrap">
-    <div class="section-head reveal">
+<div class="guide-layout wrap">
+  <nav class="guide-rail" aria-label="On this site">
+    <span class="guide-rail-label">On this site</span>
+    <ol>
+      <li><a href="/index.html">Home</a></li>
+      <li><a href="/install.html">Install</a></li>
+      <li><a href="/guide.html">Guide</a></li>
+      <li><a href="/verify.html">Verify a download</a></li>
+    </ol>
+  </nav>
+
+  <div class="guide-body">
+    <section class="guide-section">
       <span class="eyebrow">where to go</span>
       <h2>Everything on the site.</h2>
-    </div>
-    <div class="flagship-copy reveal">
-      <ul class="deepdive-list" style="max-width:640px; margin-left:auto; margin-right:auto;">
+      <ul class="deepdive-list">
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><a href="/index.html">Home</a> — what kute is, and one recording of it working.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><a href="/install.html">Install</a> — every way to install kute, and what to do if it goes wrong.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><a href="/guide.html">Guide</a> — how to drive kute, with recordings from <code>kute --demo</code>.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><a href="/verify.html">Verify a download</a> — checking a release is really ours.</li>
       </ul>
-      <p style="text-align:center; margin-top:22px;">If you followed a link from somewhere on this site, that's a bug worth reporting — please <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">open an issue</a>.</p>
-    </div>
+      <p>If you followed a link from somewhere on this site, that's a bug worth reporting — please <a href="https://github.com/kute-dev/kute/issues" target="_blank" rel="noopener">open an issue</a>.</p>
+    </section>
   </div>
-</section>
+</div>
