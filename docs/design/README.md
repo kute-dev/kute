@@ -22,7 +22,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 2a — Main table (resting state)
 - **Purpose:** the default screen; 100% of body pixels on live resource data.
-- **Header bar** (bg `#0e0e15`, bottom border `#26263a`): app name `kute` (purple `#a78bfa`, bold) `│` context `microk8s-cluster` (dim `#676780`) `›` namespace `nva-stage` (purple) `›` kind `Pods` (bold `#f0f0fa`) + hint `(g to jump)` (`#55556e`, small). Right-aligned: `sync 2s` (dim) and connection status `● connected · 12ms` (green `#34d17b`).
+- **Header bar** (bg `#0e0e15`, bottom border `#26263a`): app wordmark `❯kute` — the `❯` mark in brand green `#5ddba4` (`#12855a` light), `kute` itself in the plain bright text token `#f0f0fa` (`#14141c` light, bold) `│` context `microk8s-cluster` (dim `#676780`) `›` namespace `nva-stage` (purple) `›` kind `Pods` (bold `#f0f0fa`) + hint `(g to jump)` (`#55556e`, small). Right-aligned: `sync 2s` (dim) and connection status `● connected · 12ms` (green `#34d17b`).
 - **Health strip** (bg `#0c0c12`, border-bottom `#1c1c2c`): per-status counts — `● 32 running` (green dot), `▲ 2 pending` (yellow `#e8c74a`), `✕ 1 crashloop` (red `#ef6a6a`), `○ 1 completed` (blue `#6aa8ef`); numbers in `#d8d8e8`, labels dim. Right: `36 pods · 3 nodes`.
 - **Table columns:** status dot (2ch) · NAME (flex, ellipsize) · RDY (5ch) · STATUS (13ch) · ↺ restarts (4ch) · CPU (bar+pct) · MEM (bar+pct) · NODE (9ch) · AGE (right-aligned, 4ch). Column headers uppercase, `#55556e`, letterspaced; sort indicator `↑`/`↓` in purple next to sorted column.
 - **Manual sort (1-9):** digit keys pick a column by position (1 = first data column past the status dot) on every kind's own table — first press sorts ascending, pressing the same digit again flips to descending, a different digit switches columns at its own natural first direction. Metrics/counts/recency columns (Restarts, CPU, MEM, Age, and anything else rendered right-aligned as numeric — Data, Replicas, Completions, Active, Capacity, Traffic, Rev, Updated) default descending-first (busiest/most/most-recent first); everything else (Name, Status, Node, Ready, ...) defaults ascending-first. A CPU/MEM sort stays live across the 2s metrics poll. No-op in the all-namespaces grouped view (6b) — namespace partitioning owns row order there, and the arrow stays hidden the same way it already does for the built-in default. Resets back to the built-in default (unhealthy-first, CRD's group-then-name, etc.) whenever the kind or namespace changes.
@@ -506,6 +506,7 @@ Theme selection: default = terminal background detection (`lipgloss.HasDarkBackg
 | `TextGhost` | `#44445c` / `#33334a` | `#b4b4c6` / `#c6c6d4` |
 | `Accent` purple | `#a78bfa` | `#6b46d9` |
 | `AccentHi` | `#c4b5fd` | `#5936b8` |
+| `Brand` header wordmark's `❯` mark | `#5ddba4` | `#12855a` |
 | `SelBg` selection row | `#1d1633` | `#ece5fb` |
 | `Good` green | `#34d17b` | `#148a4e` |
 | `Warn` yellow | `#e8c74a` | `#a87b0a` |

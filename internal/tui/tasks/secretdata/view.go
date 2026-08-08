@@ -35,7 +35,6 @@ func (m Model) Theme() tui.Theme {
 // a sub-view of an object.
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
@@ -46,17 +45,16 @@ func (m Model) Header() tui.HeaderState {
 		ctxName = m.session.Location.Context
 	}
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: ctxName, Style: dim},
-		{Text: " › ", Style: ghost},
-		{Text: m.namespace, Style: lipgloss.NewStyle().Foreground(theme.Accent)},
-		{Text: " › ", Style: ghost},
-		{Text: "secret/" + m.name, Style: secondary},
-		{Text: " › ", Style: ghost},
-		{Text: "Data", Style: text},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: ctxName, Style: dim},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: m.namespace, Style: lipgloss.NewStyle().Foreground(theme.Accent)},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "secret/" + m.name, Style: secondary},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "Data", Style: text},
+	)
 
 	var forwardChip tui.ConnBadge
 	if m.session != nil {

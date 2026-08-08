@@ -30,17 +30,15 @@ func (m Model) Theme() tui.Theme {
 
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: "⇄ forward › ", Style: dim},
-		{Text: m.target.Name, Style: text},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: "⇄ forward › ", Style: dim},
+		tui.Crumb{Text: m.target.Name, Style: text},
+	)
 
 	var chip tui.ConnBadge
 	if m.session != nil {

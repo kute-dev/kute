@@ -17,7 +17,6 @@ func (m Model) Render() string { return tui.Frame(m.width, m.height, m) }
 
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
@@ -28,15 +27,14 @@ func (m Model) Header() tui.HeaderState {
 	}
 	container, _ := m.activeContainer()
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: ctxName, Style: dim},
-		{Text: " › ", Style: ghost},
-		{Text: m.pod.Name, Style: text},
-		{Text: " › ", Style: ghost},
-		{Text: "logs", Style: dim},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: ctxName, Style: dim},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: m.pod.Name, Style: text},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "logs", Style: dim},
+	)
 	if container != "" {
 		crumbs = append(crumbs, tui.Crumb{Text: " · " + container, Style: dim})
 	}

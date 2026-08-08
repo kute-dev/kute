@@ -36,6 +36,11 @@ type Theme struct {
 	// Accent + selection
 	Accent, AccentHi, SelBg color.Color
 
+	// Brand is the header wordmark's "❯" chevron color (BrandCrumbs in
+	// chrome.go) — kept separate from Accent, which the same header row
+	// still uses for the namespace segment, sort arrows, etc.
+	Brand color.Color
+
 	// MarkBg is 20a's bulk-operations marked-row tint — quieter than SelBg,
 	// since a marked row's cursor-independent state must read as distinct
 	// from (and never overpower) the selection background.
@@ -99,6 +104,7 @@ func Dark() Theme {
 		AccentHi: lipgloss.Color("#c4b5fd"),
 		SelBg:    lipgloss.Color("#1d1633"),
 		MarkBg:   lipgloss.Color("#14101f"),
+		Brand:    lipgloss.Color("#5ddba4"),
 
 		Good:     lipgloss.Color("#34d17b"),
 		Warn:     lipgloss.Color("#e8c74a"),
@@ -167,6 +173,7 @@ func Light() Theme {
 		AccentHi: lipgloss.Color("#5936b8"),
 		SelBg:    lipgloss.Color("#ece5fb"),
 		MarkBg:   lipgloss.Color("#f5f1fc"),
+		Brand:    lipgloss.Color("#12855a"),
 
 		Good:     lipgloss.Color("#148a4e"),
 		Warn:     lipgloss.Color("#a87b0a"),

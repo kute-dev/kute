@@ -26,7 +26,6 @@ func (m Model) Theme() tui.Theme {
 
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
@@ -35,13 +34,12 @@ func (m Model) Header() tui.HeaderState {
 	// Kustomization in one routinely reconciles from a GitRepository in
 	// flux-system), so scoping the breadcrumb to one would misdescribe what
 	// is on screen.
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: m.contextName(), Style: dim},
-		{Text: " › ", Style: ghost},
-		{Text: "Flux", Style: text},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: m.contextName(), Style: dim},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "Flux", Style: text},
+	)
 
 	if m.state == tui.TaskStateLoading {
 		elapsed := max(m.now.Sub(m.loadStartedAt), 0)

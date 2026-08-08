@@ -38,6 +38,18 @@ type Crumb struct {
 	Style lipgloss.Style
 }
 
+// BrandCrumbs is the header's own wordmark: a "❯" in the brand-green token
+// followed by "kute" in the theme's plain text color (docs/design
+// README.md §2a). Every Chrome v2 screen's Header() starts with this.
+func BrandCrumbs(theme Theme) []Crumb {
+	mark := lipgloss.NewStyle().Foreground(theme.Brand)
+	label := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+	return []Crumb{
+		{Text: GlyphBrandMark, Style: mark},
+		{Text: "kute", Style: label},
+	}
+}
+
 // ConnBadge is the pre-styled connection indicator shown at the right of the
 // header: "● connected · 12ms" / "◌ disconnected" / "○ no cluster".
 type ConnBadge struct {

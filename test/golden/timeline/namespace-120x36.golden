@@ -1,4 +1,4 @@
-  kute │ microk8s-cluster › default › Timeline · all time                                                  ● connected  
+  ❯kute │ microk8s-cluster › default › Timeline · all time                                                 ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ⇅ 1 rollout   ↺ 2 restarts   ▲ 2 warnings                                first Restarted 3m after rollout of api-gateway
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

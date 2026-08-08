@@ -31,7 +31,6 @@ func (m Model) Theme() tui.Theme {
 
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
@@ -43,11 +42,10 @@ func (m Model) Header() tui.HeaderState {
 		ctxName = m.session.Location.Context
 	}
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost2},
-		{Text: ctxName, Style: dim},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost2},
+		tui.Crumb{Text: ctxName, Style: dim},
+	)
 	if !m.desc.ClusterScoped {
 		nsText, nsStyle := m.namespace, lipgloss.NewStyle().Foreground(theme.Accent)
 		if m.grouped() {

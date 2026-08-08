@@ -37,7 +37,6 @@ func (m Model) Theme() tui.Theme {
 // "cluster-scoped" tag.
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
@@ -48,14 +47,13 @@ func (m Model) Header() tui.HeaderState {
 		ctxName = m.session.Location.Context
 	}
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: ctxName, Style: dim},
-		{Text: " › ", Style: ghost},
-		{Text: "Cluster Overview", Style: text},
-		{Text: "  cluster-scoped", Style: faint},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: ctxName, Style: dim},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "Cluster Overview", Style: text},
+		tui.Crumb{Text: "  cluster-scoped", Style: faint},
+	)
 
 	var forwardChip tui.ConnBadge
 	if m.session != nil {

@@ -1,4 +1,4 @@
-  kute │ test-cluster › production › HTTPRoute/web-route                                             ● connected · 8ms  
+  ❯kute │ test-cluster › production › HTTPRoute/web-route                                            ● connected · 8ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   web.demo.local · 1 rules   ✓ gw/public › https · accepted                    backends resolved from the watch · live  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

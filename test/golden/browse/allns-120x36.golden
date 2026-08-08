@@ -1,4 +1,4 @@
-  kute │ microk8s-cluster › ∗ all namespaces › Pods (g to jump)                                            ● connected  
+  ❯kute │ microk8s-cluster › ∗ all namespaces › Pods (g to jump)                                           ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 2 running   ✕ 1 crashloop                                                                    3 pods · 2 namespaces  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

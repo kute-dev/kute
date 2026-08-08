@@ -1,4 +1,4 @@
-  kute │ test-cluster › production › postgresql › History                                           ● connected · 12ms  
+  ❯kute │ test-cluster › production › postgresql › History                                          ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ✕ revision 1 · failed · Upgrade "postgresql" failed: post-upgrade hooks failed: job failed: BackoffLimitExceeded      
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

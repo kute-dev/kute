@@ -27,7 +27,6 @@ func (m Model) Theme() tui.Theme {
 // question line, so it isn't repeated in the breadcrumb too.
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
@@ -37,13 +36,12 @@ func (m Model) Header() tui.HeaderState {
 		ctxName = m.session.Location.Context
 	}
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: ctxName, Style: dim},
-		{Text: " › ", Style: ghost},
-		{Text: "Who Can", Style: text},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: ctxName, Style: dim},
+		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: "Who Can", Style: text},
+	)
 
 	var forwardChip tui.ConnBadge
 	if m.session != nil {

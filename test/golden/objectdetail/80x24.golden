@@ -1,4 +1,4 @@
-  kute │ nva-staging › nva-stage › Certificates › api-tls   ● connected · 12ms  
+  ❯kute │ nva-staging › nva-stage › Certificates › api-tls  ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────
 api-tls  ✕ Not Ready  cert-manager.io/v1                         watching · live
                                                                                 

@@ -1,4 +1,4 @@
-  kute │ cluster unavailable › nva-worker-9k2ss › logs · worker                                            ▶ following  
+  ❯kute │ cluster unavailable › nva-worker-9k2ss › logs · worker                                           ▶ following  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   container worker (tab: metrics-sidecar)  ·  since 15m  ·  wrap on  ·  timestamps on            1 WRN · 1 ERR in view  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

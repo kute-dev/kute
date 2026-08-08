@@ -41,11 +41,10 @@ func (m Model) Header() tui.HeaderState {
 	if m.session != nil && m.session.Location.Context != "" {
 		ctxName = m.session.Location.Context
 	}
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: ctxName, Style: dim},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: ctxName, Style: dim},
+	)
 	if m.namespace != "" {
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},

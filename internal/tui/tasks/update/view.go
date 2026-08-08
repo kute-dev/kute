@@ -30,15 +30,13 @@ func (m Model) Theme() tui.Theme {
 // already renders nothing, per renderHeaderV2).
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
-	crumbs := []tui.Crumb{
-		{Text: "kute", Style: accent},
-		{Text: " │ ", Style: ghost},
-		{Text: "Update", Style: text},
-	}
+	crumbs := append(tui.BrandCrumbs(theme),
+		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: "Update", Style: text},
+	)
 	return tui.HeaderState{
 		Crumbs:   crumbs,
 		SyncNote: m.headerRight(theme),

@@ -31,11 +31,10 @@ func (m Model) Theme() tui.Theme {
 // §4c/§10b: no namespace/kind breadcrumb, since neither screen has one.
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 
-	crumbs := []tui.Crumb{{Text: "kute", Style: accent}}
+	crumbs := tui.BrandCrumbs(theme)
 	if m.clusterName != "" {
 		crumbs = append(crumbs, tui.Crumb{Text: " │ ", Style: ghost2}, tui.Crumb{Text: m.clusterName, Style: dim})
 	}
