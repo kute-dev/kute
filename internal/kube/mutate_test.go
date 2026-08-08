@@ -1236,8 +1236,8 @@ func TestRenewCertificateRejectsEmptyName(t *testing.T) {
 // lie about what ↵ actually runs.
 func TestRenewCertificateCommandStringNamesTheLiteralPatch(t *testing.T) {
 	t.Parallel()
-	got := RenewCertificateCommandString("vna-stage", "admin-tls")
-	want := `kubectl patch certificate/admin-tls --type merge -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}' -n vna-stage --subresource=status`
+	got := RenewCertificateCommandString("nva-stage", "admin-tls")
+	want := `kubectl patch certificate/admin-tls --type merge -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}' -n nva-stage --subresource=status`
 	if got != want {
 		t.Errorf("RenewCertificateCommandString():\n got %s\nwant %s", got, want)
 	}
