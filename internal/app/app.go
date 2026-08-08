@@ -920,6 +920,7 @@ func openCertChainFunc(sess *tui.Session, active seams, openYAML browse.OpenYAML
 		cc := certchain.New(certchain.Config{
 			Session:    sess,
 			Lister:     active,
+			Mutator:    active,
 			Events:     active,
 			OpenYAML:   certchain.OpenYAMLFunc(openYAML),
 			OpenEvents: certchain.OpenEventsFunc(openObjectEvents),

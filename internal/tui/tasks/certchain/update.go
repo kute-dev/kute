@@ -1,6 +1,7 @@
 package certchain
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -21,6 +24,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnState:
 		m.conn = msg
+		m.actions.SetOffline(m.conn.Offline())
 	case tickMsg:
 		m.now = time.Time(msg)
 		return m, tickCmd()
@@ -30,6 +34,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case loadedMsg:
 		return m, m.applyLoaded(msg)
+	case actions.ResultMsg:
+		m.actions.HandleResult(msg)
+		if msg.Err == nil {
+			return m, m.load()
+		}
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -96,6 +105,9 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.actions.Active() {
+		return m.updateConfirmKey(msg)
+	}
 	switch msg.String() {
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
@@ -124,8 +136,45 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
+	case "r":
+		if m.mutator != nil && m.state == tui.TaskStateReady && !m.conn.Offline() {
+			return m, m.beginCertRenew()
+		}
 	}
 	return m, nil
+}
+
+func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y":
+		return m, m.actions.Confirm()
+	case "n", "esc":
+		m.actions.Cancel()
+	}
+	return m, nil
+}
+
+// beginCertRenew starts verbs.CertRenew ('r') against the Certificate this
+// screen is about — verbs.CertRenew.Tier is used directly rather than
+// resolved through verbs.TierFor, deliberately (same skip
+// tasks/browse/certmanager.go's own beginCertRenew takes, whose doc comment
+// has the full reasoning).
+func (m *Model) beginCertRenew() tea.Cmd {
+	return m.actions.Begin(verbs.CertRenew.Tier, tui.TaskAction{
+		ID:    "cert-renew-" + m.namespace + "/" + m.name,
+		Label: fmt.Sprintf("Renew %s?", m.name),
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCertificate), ResourceName: m.name,
+			Namespace: m.namespace, Verb: "cert-renew", IsMutating: true,
+		},
+	})
+}
+
+// certRenewWillRunLine is beginCertRenew's confirm "will run: ..." line —
+// same command tasks/browse/certmanager.go's own certRenewWillRunLine
+// renders, duplicated per the repo's package-local-seam convention.
+func certRenewWillRunLine(scope tui.TaskScope) string {
+	return "will run: " + kube.RenewCertificateCommandString(scope.Namespace, scope.ResourceName)
 }
 
 func (m *Model) moveSelection(delta int) {

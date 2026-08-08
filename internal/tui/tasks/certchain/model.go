@@ -16,9 +16,11 @@
 // Band order is 5a's promotion rule, same as fluxdetail's: why it is broken
 // first, what it is wired to second, what it depends on third.
 //
-// §35b (the Certificates list's own EXPIRES/RENEWAL columns) and §35c (the
-// `r` force-renew verb and its will-run line) are out of scope here — this
-// screen is read-only navigation, nothing mutating.
+// §35b (the Certificates list's own EXPIRES/RENEWAL columns) is out of
+// scope here. §35c's `r` force-renew verb acts on the Certificate itself —
+// the object this whole screen is about — regardless of which chain/refs
+// row is selected, the same "always the object, never the selection" shape
+// 'y'/'e' above already take.
 package certchain
 
 import (
@@ -31,6 +33,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
@@ -49,12 +52,14 @@ type OpenYAMLFunc func(kind kube.ResourceKind, namespace, name string, width, he
 // object — same shape as objectdetail's/poddetail's.
 type OpenEventsFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
-// Config are certchain's dependencies, per repo convention. There is no
-// Mutator: with renew (§35c) deferred and delete staying reachable from the
-// Certificates list (§35b), this screen has no mutating verb.
+// Config are certchain's dependencies, per repo convention. Mutator backs
+// §35c's 'r' force-renew alone — delete stays reachable only from the
+// Certificates list (§35b), same as every other detail screen leaving
+// delete to browse.
 type Config struct {
 	Session     *tui.Session
 	Lister      resources.RawLister
+	Mutator     kube.Mutator
 	Events      EventsReader
 	OpenYAML    OpenYAMLFunc
 	OpenEvents  OpenEventsFunc
@@ -122,6 +127,8 @@ type refInfo struct {
 type Model struct {
 	session *tui.Session
 	lister  resources.RawLister
+	mutator kube.Mutator
+	actions actions.Controller
 	events  EventsReader
 
 	openYAML   OpenYAMLFunc
@@ -180,6 +187,8 @@ func New(cfg Config) Model {
 	m := Model{
 		session:    cfg.Session,
 		lister:     cfg.Lister,
+		mutator:    cfg.Mutator,
+		actions:    actions.New(cfg.Mutator),
 		events:     cfg.Events,
 		openYAML:   cfg.OpenYAML,
 		openEvents: cfg.OpenEvents,

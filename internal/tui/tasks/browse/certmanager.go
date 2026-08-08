@@ -1,9 +1,11 @@
 // Certificate-specific browse machinery for §35c (docs/design/
-// v.0.7.0.dc.html): the 'r' force-renew verb on a Certificate row. Kept in
-// its own file per browse's per-concern split convention (argo.go, flux.go,
-// jobs.go), separate from certchain.go's ↵ carve-out into tasks/certchain —
-// renew stays out of scope for that screen (tasks/certchain/keys.go's own
-// doc comment), so this file only ever reaches the row on the list itself.
+// v.0.7.0.dc.html): the 'r' force-renew verb on a Certificate row in the
+// list. Kept in its own file per browse's per-concern split convention
+// (argo.go, flux.go, jobs.go), separate from certchain.go's ↵ carve-out
+// into tasks/certchain — that screen has the same verb, wired independently
+// through its own actions.Controller (tasks/certchain/update.go's own
+// beginCertRenew), per the repo's package-local-seam convention rather than
+// exported from here.
 package browse
 
 import (
