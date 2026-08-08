@@ -40,7 +40,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">vna-stage</span>
+          <span style="color: #a78bfa;">nva-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #9a9ab2;">certificate/web-tls</span>
           <span style="color: #44445c;">›</span>
@@ -135,7 +135,7 @@
           <span style="color: #33334a;">│</span>
           <span style="color: #676780;">microk8s-cluster</span>
           <span style="color: #44445c;">›</span>
-          <span style="color: #a78bfa;">vna-stage</span>
+          <span style="color: #a78bfa;">nva-stage</span>
           <span style="color: #44445c;">›</span>
           <span style="color: #f0f0fa; font-weight: 700;">Certificates</span>
           <span style="color: #44445c; font-size: 11px;">cert-manager.io/v1</span>
@@ -249,7 +249,7 @@
         </div>
         <div style="display: grid; grid-template-columns: 56px minmax(0,1fr); gap: 4px 10px; padding: 6px 14px; background: #0c0c12; border-top: 1px solid #1c1c2c; font-size: 12px;">
           <span style="color: #55556e;">will run</span>
-          <span style="color: #d8d8e8; white-space: pre-wrap; word-break: break-all; line-height: 1.6;">kubectl patch certificate admin-tls -n vna-stage --subresource=status --type=merge \
+          <span style="color: #d8d8e8; white-space: pre-wrap; word-break: break-all; line-height: 1.6;">kubectl patch certificate admin-tls -n nva-stage --subresource=status --type=merge \
   -p '{"status":{"conditions":[{"type":"Issuing","status":"True","reason":"ManuallyTriggered"}]}}'</span>
           <span></span>
           <span style="color: #676780;"><span style="color: #a78bfa;">↵</span> renew · <span style="color: #a78bfa;">y</span> copy · <span style="color: #a78bfa;">esc</span> cancel</span>

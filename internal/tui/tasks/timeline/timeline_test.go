@@ -1104,7 +1104,7 @@ func TestSelectedRowsHaveNoUnstyledBackgroundGap(t *testing.T) {
 
 func TestShortImageDropsRegistryPrefix(t *testing.T) {
 	cases := map[string]string{
-		"registry.example.com/vna/nva.bp.app:5.31.0.58108": "nva.bp.app:5.31.0.58108",
+		"registry.example.com/nva/nva.bp.app:5.31.0.58108": "nva.bp.app:5.31.0.58108",
 		"gcr.io/my-project/my-image:tag":                   "my-image:tag",
 		"nginx:1.27":                                       "nginx:1.27",
 		"checkout-api":                                     "checkout-api",
@@ -1128,7 +1128,7 @@ func TestRailCardShowsShortImage(t *testing.T) {
 			OwnerReferences:   []metav1.OwnerReference{{Kind: "Deployment", Name: "nva-worker"}},
 		},
 		Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Image: "registry.example.com/vna/nva.bp.app:5.31.0.58108"}},
+			Containers: []corev1.Container{{Image: "registry.example.com/nva/nva.bp.app:5.31.0.58108"}},
 		}}},
 	}
 	pod := testPod("nva-worker-9k2ss", "node-a", 0)
