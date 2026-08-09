@@ -3,11 +3,13 @@
 ## Homepage Explorer
 
 The `home-*.tape` files render the real, static product checkpoints used by
-the hero and task menu on kute.dev: all-namespaces triage, pod detail,
-timeline, Ingress and HTTPRoute routing, Flux, PROD confirmation, and
-certificate failure. Every checkpoint has a dark `home-<name>.png` and light
-`home-<name>-light.png` capture so the website screenshot follows its selected
-theme. The tapes output PNG directly; the incident and routing recordings
+the hero and task menu on kute.dev. The dedicated `home-hero*.tape` pair
+captures the larger hero surface; the task menu captures cover all-namespaces
+triage, pod detail, timeline, Ingress and HTTPRoute routing, Flux, PROD
+confirmation, and certificate failure. Every checkpoint has a dark
+`home-<name>.png` and light `home-<name>-light.png` capture so the website
+screenshot follows its selected theme. The tapes output PNG directly; the
+incident and routing recordings
 remain optional clips shown from those screenshots.
 
 The recording scripts isolate both `HOME` and `XDG_STATE_HOME`. This is

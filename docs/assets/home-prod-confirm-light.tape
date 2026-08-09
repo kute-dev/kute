@@ -6,9 +6,9 @@ Require kute
 
 Set Shell "bash"
 Set FontFamily "JetBrainsMono Nerd Font Mono"
-Set FontSize 12
-Set Width 816
-Set Height 550
+Set FontSize 24
+Set Width 1632
+Set Height 1100
 Set Padding 10
 Set Theme "3024 Day"
 Set LineHeight 1.55

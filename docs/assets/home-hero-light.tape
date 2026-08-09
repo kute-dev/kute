@@ -1,14 +1,14 @@
-# Homepage checkpoint: all-namespaces triage from the real demo binary.
-Output "docs/assets/home-triage-light.png"
+# Homepage hero: all-namespaces triage from the real demo binary.
+Output "docs/assets/home-hero-light.png"
 
 Require kute
 
 Set Shell "bash"
 Set FontSize 24
 Set FontFamily "JetBrainsMono Nerd Font Mono"
-Set Width 1632
-Set Height 1100
-Set Padding 10
+Set Width 2228
+Set Height 700
+Set Padding 20
 Set Theme "3024 Day"
 Set LineHeight 1.55
 

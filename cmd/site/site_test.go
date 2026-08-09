@@ -409,6 +409,7 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 	body := string(mustRead(t, filepath.Join(out, "index.html")))
 
 	stems := []string{
+		"home-hero",
 		"home-triage",
 		"home-pod-detail",
 		"home-timeline",
@@ -429,9 +430,9 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 		}
 	}
 
-	hero := regexp.MustCompile(`(?s)<div class="hero-shot reveal">.*?home-triage\.png.*?home-triage-light\.png.*?</div>`)
+	hero := regexp.MustCompile(`(?s)<div class="hero-shot reveal">.*?home-hero\.png.*?home-hero-light\.png.*?</div>`)
 	if !hero.MatchString(body) {
-		t.Error("homepage hero does not use the dark and light home-triage captures")
+		t.Error("homepage hero does not use the dark and light home-hero captures")
 	}
 }
 
