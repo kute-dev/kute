@@ -3,9 +3,9 @@
 ▲ Ready=False · Issuing   attempt 4         chain resolved from the watch · live
 ────────────────────────────────────────────────────────────────────────────────
 ▌                                                                               
-▌ ✕ challenge failed  dns-01 · app.aim.dev  8m ago · order/web-tls-1-2847563921 
+▌ ✕ challenge failed  dns-01 · app.nva.dev  8m ago · order/web-tls-1-2847563921 
 ▌ propagation check failed: NXDOMAIN looking up TXT                             
-▌ _acme-challenge.app.aim.dev                                                   
+▌ _acme-challenge.app.nva.dev                                                   
 ▌ message verbatim from challenge status · deepest failure in the chain, found  
 ▌ for you                                                                       
 ▌                                                                               
