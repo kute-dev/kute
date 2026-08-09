@@ -1,5 +1,6 @@
 [env]
 KUBECONFIG = "{{config_root}}/.kube/config"
+_.path = "./scripts"
 
 [tools]
 go = "1.26.5"
