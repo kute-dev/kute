@@ -25,5 +25,3 @@ dist/
 /site
 .playwright-mcp
 .opencode
-docs/assets/*.gif
-docs/assets/*.png

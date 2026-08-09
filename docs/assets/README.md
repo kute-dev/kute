@@ -5,18 +5,22 @@
 The `home-*.tape` files render the real, static product checkpoints used by
 the hero and task menu on kute.dev. The dedicated `home-hero*.tape` pair
 captures the larger hero surface; the task menu captures cover all-namespaces
-triage, pod detail, timeline, Ingress and HTTPRoute routing, Flux, PROD
-confirmation, and certificate failure. Every checkpoint has a dark
-`home-<name>.png` and light `home-<name>-light.png` capture so the website
-screenshot follows its selected theme. The tapes output PNG directly; the
-incident and routing recordings
-remain optional clips shown from those screenshots.
+triage, the Goto/Namespace/Context palettes, pod detail, timeline, Ingress and
+HTTPRoute routing, Flux, PROD confirmation, and certificate failure. Every
+checkpoint has a dark `home-<name>.png` and light `home-<name>-light.png`
+capture so the website screenshot follows its selected theme. The tapes output
+PNG directly; the incident and routing recordings remain optional clips shown
+from those screenshots.
 
 The recording scripts isolate both `HOME` and `XDG_STATE_HOME`. This is
 load-bearing for `home-prod-confirm.tape`, which writes a temporary config that
 marks the demo context as production without reading or changing a user's real
 configuration. They expose only `~/.local/share/fonts` inside the temporary
 home so Betamax can resolve the font family declared by each tape.
+The navigation palette tapes also seed recents and remembered namespaces in
+that isolated state directory. The Context pair writes an isolated kubeconfig
+and PROD marker so it can show the real lazy-probe state without reading or
+probing any context configured on the recording machine.
 
 ## All Namespaces
 The recording, using kute --demo, shows an incident from a clean namespace to root cause:
