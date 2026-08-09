@@ -47,10 +47,10 @@ func TestFailingChainPromotesTheDeepestFailure(t *testing.T) {
 	if !strings.Contains(view, "challenge failed") {
 		t.Errorf("expected the failure card naming the Challenge:\n%s", view)
 	}
-	if !strings.Contains(view, "propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.aim.dev") {
+	if !strings.Contains(view, "propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.nva.dev") {
 		t.Errorf("the Challenge's status.reason must render verbatim:\n%s", view)
 	}
-	if !strings.Contains(view, "dns-01 · app.aim.dev") {
+	if !strings.Contains(view, "dns-01 · app.nva.dev") {
 		t.Errorf("expected the Challenge's own type/dnsName detail line:\n%s", view)
 	}
 	if !strings.Contains(view, "order/web-tls-1-2847563921") {

@@ -20,7 +20,7 @@ import (
 func goldenSecretDataModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{
-		"DATABASE_URL": []byte("postgres://user:pass@db.nva-stage.svc:5432/aim"),
+		"DATABASE_URL": []byte("postgres://user:pass@db.nva-stage.svc:5432/nva"),
 		"API_TOKEN":    []byte("0123456789abcdef0123456789abcdef012345"),
 		"SMTP_USER":    []byte("no-reply@nva.dev"),
 	})

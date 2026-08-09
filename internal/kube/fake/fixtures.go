@@ -424,11 +424,11 @@ func demoCertManagerFixtures(c *Cluster, age, future func(time.Duration) metav1.
 	// web-tls's deliberately-missing one (§35a's refs-strip "missing" case).
 	c.Seed(kube.KindSecret, demoTLSSecret("api-tls-secret", "default", time.Now().Add(85*24*time.Hour), age(5*24*time.Hour)))
 	c.Seed(kube.ResourceKind("Order"),
-		demoOrder("web-tls-1-2847563921", "default", "web-tls-1", "errored", "authorization for app.aim.dev failed", age(8*time.Minute)),
+		demoOrder("web-tls-1-2847563921", "default", "web-tls-1", "errored", "authorization for app.nva.dev failed", age(8*time.Minute)),
 	)
 	c.Seed(kube.ResourceKind("Challenge"),
-		demoChallenge("web-tls-1-2847563921-0", "default", "web-tls-1-2847563921", "dns-01", "app.aim.dev", "pending",
-			"propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.aim.dev", age(8*time.Minute)),
+		demoChallenge("web-tls-1-2847563921-0", "default", "web-tls-1-2847563921", "dns-01", "app.nva.dev", "pending",
+			"propagation check failed: NXDOMAIN looking up TXT _acme-challenge.app.nva.dev", age(8*time.Minute)),
 	)
 
 	// The operator itself lives in its own "cert-manager" namespace, same

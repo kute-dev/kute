@@ -87,7 +87,7 @@ type chainNode struct {
 	// over the object.
 	Message string
 	// Detail is a secondary identity line, populated only for a Challenge
-	// ("dns-01 · app.aim.dev") — empty for every other kind.
+	// ("dns-01 · app.nva.dev") — empty for every other kind.
 	Detail string
 }
 
@@ -99,7 +99,7 @@ type failure struct {
 	Kind kube.ResourceKind
 	Name string
 	// Detail is the failing node's own secondary identity line ("dns-01 ·
-	// app.aim.dev" for a Challenge), empty for every other kind.
+	// app.nva.dev" for a Challenge), empty for every other kind.
 	Detail  string
 	Message string
 	Since   time.Time
