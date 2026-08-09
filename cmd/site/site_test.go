@@ -378,8 +378,8 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 	body := string(mustRead(t, filepath.Join(out, "index.html")))
 	tabRe := regexp.MustCompile(`<button id="(explorer-tab-[^"]+)" class="explorer-tab"[^>]+aria-selected="(true|false)" aria-controls="([^"]+)"`)
 	tabs := tabRe.FindAllStringSubmatch(body, -1)
-	if len(tabs) != 7 {
-		t.Fatalf("homepage has %d explorer tabs, want 7", len(tabs))
+	if len(tabs) != 8 {
+		t.Fatalf("homepage has %d explorer tabs, want 8", len(tabs))
 	}
 
 	selected := 0
@@ -396,8 +396,13 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		t.Errorf("homepage has %d initially selected explorer tabs, want 1", selected)
 	}
 
-	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 2 {
-		t.Errorf("routing has %d subpanels, want Ingress and HTTPRoute", got)
+	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 5 {
+		t.Errorf("homepage has %d explorer subpanels, want three navigation palettes and two routing resources", got)
+	}
+	for _, id := range []string{"navigation-panel-goto", "navigation-panel-namespace", "navigation-panel-context"} {
+		if !strings.Contains(body, `id="`+id+`" class="explorer-subpanel" role="tabpanel"`) {
+			t.Errorf("homepage navigation showcase is missing %s", id)
+		}
 	}
 }
 
@@ -411,6 +416,9 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 	stems := []string{
 		"home-hero",
 		"home-triage",
+		"home-navigation-goto",
+		"home-navigation-namespace",
+		"home-navigation-context",
 		"home-pod-detail",
 		"home-timeline",
 		"home-routing-ingress",

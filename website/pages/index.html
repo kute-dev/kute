@@ -50,7 +50,7 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="home-kicker"><span aria-hidden="true"></span>What you open it for</span>
-      <h2>Seven jobs, and the screen that finishes each one.</h2>
+      <h2>Eight jobs, and the screen that finishes each one.</h2>
     </div>
 
     <div class="explorer reveal" data-explorer>
@@ -58,6 +58,10 @@
         <button id="explorer-tab-triage" class="explorer-tab" type="button" role="tab" aria-selected="true" aria-controls="explorer-panel-triage" tabindex="0">
           <span class="explorer-tab-title">Cluster triage</span>
           <span class="explorer-tab-meta">all namespaces</span>
+        </button>
+        <button id="explorer-tab-navigation" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-navigation" tabindex="-1">
+          <span class="explorer-tab-title">Move without losing place</span>
+          <span class="explorer-tab-meta">goto, namespace, context</span>
         </button>
         <button id="explorer-tab-pod" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-pod" tabindex="-1">
           <span class="explorer-tab-title">Diagnose a pod</span>
@@ -95,6 +99,39 @@
           </div>
           <a class="explorer-fullsize theme-link-dark" href="/assets/home-triage.png" target="_blank" rel="noopener">Open screenshot full size</a>
           <a class="explorer-fullsize theme-link-light" href="/assets/home-triage-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+        </article>
+
+        <article id="explorer-panel-navigation" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-navigation" tabindex="0" hidden>
+          <p class="explorer-intro">One fuzzy palette follows <code>g</code>, <code>n</code> and <code>c</code>: jump to an object, switch namespace with live health, or change context after a reachability check. Each opens on the last other place, so key + <code>↵</code> toggles back.</p>
+          <div class="explorer-subtabs" role="tablist" aria-label="Navigation palette">
+            <button id="navigation-tab-goto" type="button" role="tab" aria-selected="true" aria-controls="navigation-panel-goto" tabindex="0">Goto <code>g</code></button>
+            <button id="navigation-tab-namespace" type="button" role="tab" aria-selected="false" aria-controls="navigation-panel-namespace" tabindex="-1">Namespace <code>n</code></button>
+            <button id="navigation-tab-context" type="button" role="tab" aria-selected="false" aria-controls="navigation-panel-context" tabindex="-1">Context <code>c</code></button>
+          </div>
+          <div id="navigation-panel-goto" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-goto">
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-goto.png" width="1632" height="1100" loading="lazy" alt="kute Goto palette ranking daily resource kinds by alias over the current Pods view">
+              <img class="theme-shot theme-shot-light" src="/assets/home-navigation-goto-light.png" width="1632" height="1100" loading="lazy" alt="kute Goto palette in the light theme ranking daily resource kinds by alias over the current Pods view">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-navigation-goto.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-goto-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="navigation-panel-namespace" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-namespace" hidden>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-namespace.png" width="1632" height="1100" loading="lazy" alt="kute Namespace palette showing live pod health, recent namespaces, and all namespaces">
+              <img class="theme-shot theme-shot-light" src="/assets/home-navigation-namespace-light.png" width="1632" height="1100" loading="lazy" alt="kute Namespace palette in the light theme showing live pod health, recent namespaces, and all namespaces">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-navigation-namespace.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-namespace-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="navigation-panel-context" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-context" hidden>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-context.png" width="1632" height="1100" loading="lazy" alt="kute Context palette showing remembered namespaces, a production tag, and reachability probes">
+              <img class="theme-shot theme-shot-light" src="/assets/home-navigation-context-light.png" width="1632" height="1100" loading="lazy" alt="kute Context palette in the light theme showing remembered namespaces, a production tag, and reachability probes">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-navigation-context.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-context-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
         </article>
 
         <article id="explorer-panel-pod" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-pod" tabindex="0" hidden>
