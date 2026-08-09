@@ -1,4 +1,4 @@
-  ❯kute │ microk8s-cluster › flux-system › Kustomizations kustomize.toolkit.fluxcd.io/v1 (g to jump)       ● connected  
+  ❯ kute │ microk8s-cluster › flux-system › Kustomizations kustomize.toolkit.fluxcd.io/v1 (g to jump)      ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 3 ready   ◌ 1 reconciling   ✕ 1 failed   ‖ 1 suspended                                            6 kustomizations  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

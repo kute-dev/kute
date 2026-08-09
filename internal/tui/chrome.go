@@ -46,7 +46,7 @@ func BrandCrumbs(theme Theme) []Crumb {
 	label := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 	return []Crumb{
 		{Text: GlyphBrandMark, Style: mark},
-		{Text: "kute", Style: label},
+		{Text: " kute", Style: label},
 	}
 }
 
