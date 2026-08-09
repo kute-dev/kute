@@ -68,10 +68,10 @@ const (
 	// Namespace is where every fixture in fixtures/ lives.
 	Namespace = "kute-e2e"
 
-	// DefaultWidth/DefaultHeight match browse's own 120×36 golden fixtures,
-	// so a frame captured here is laid out the way the unit-level goldens
-	// pin it.
-	DefaultWidth  = 120
+	// Keep enough width for kind node names and their role suffixes to remain
+	// readable in the real-cluster node list. Unit golden fixtures keep their
+	// own 120-column dimensions.
+	DefaultWidth  = 140
 	DefaultHeight = 36
 
 	// TypeToConfirm is the phrase only components.TypeNameModal renders —

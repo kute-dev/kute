@@ -146,7 +146,10 @@ func TestPartialGrantAcrossScreens(t *testing.T) {
 	t.Run("nodes are granted and cluster-scoped", func(t *testing.T) {
 		a.gotoKind(t, "nodes", "Nodes")
 		a.WaitLoaded(Settle)
-		a.WaitFor(NodeNamePrefix(t), Settle)
+		// The 140-column E2E viewport keeps the deterministic control-plane
+		// name intact. Use the complete row name rather than a prefix that can
+		// also occur in the breadcrumb.
+		a.WaitFor(NodeNamePrefix(t)+"-control-plane", Settle)
 		a.Enter()
 		a.WaitLoaded(Settle)
 		a.WaitFor("ALLOCATED / ALLOCATABLE", Settle)

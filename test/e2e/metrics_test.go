@@ -51,10 +51,10 @@ func TestNoMetricsServerRendersUnknown(t *testing.T) {
 	t.Run("node detail", func(t *testing.T) {
 		a.gotoKind(t, "nodes", "Nodes")
 		// gotoKind only waits for the breadcrumb, which is on screen before
-		// the rows are. Opening a row means waiting for a row: under load,
-		// ↵ on an empty list opens nothing and the assertions below then
-		// wait out their timeout against the list they never left.
-		a.WaitFor(NodeNamePrefix(t), Settle)
+		// the rows are. The 140-column E2E viewport keeps the deterministic
+		// control-plane name intact, so use the complete row name rather than
+		// a prefix that can also occur in the breadcrumb.
+		a.WaitFor(NodeNamePrefix(t)+"-control-plane", Settle)
 		a.Enter()
 		a.WaitLoaded(Settle)
 		// The allocated/allocatable bars are computed from pod *requests*,
