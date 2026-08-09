@@ -599,7 +599,7 @@ func (c *Cluster) RequestArgoSync(_ context.Context, kind kube.ResourceKind, nam
 // condition the real Cluster.RenewCertificate writes, so this flips Ready
 // to False/reason "Issuing" directly — the visible state a real controller
 // would settle into moments after the same trigger, without lastFailure
-// (so the row reads Warn/◐, never Fail/✕ — a manual renew in progress, not
+// (so the row reads Warn/▲, never Fail/✕ — a manual renew in progress, not
 // a stuck one).
 func (c *Cluster) RenewCertificate(_ context.Context, namespace, name string) error {
 	c.mu.Lock()

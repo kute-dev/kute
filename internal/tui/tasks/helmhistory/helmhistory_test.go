@@ -448,9 +448,9 @@ func TestRetryResolvesOnceTheCacheFills(t *testing.T) {
 }
 
 // TestLoadingStateRendersTheFullShell pins 15a's claim for 18a's history:
-// the shell — breadcrumb, strip, the rail's own column headers, the keybar's
-// live esc — paints in the first frame, and only the rows are replaced by
-// placeholders. It used to be a bare centered spinner over an empty body.
+// the shell — breadcrumb, strip, the rail's own column headers, and keybar —
+// paints in the first frame, and only the rows are replaced by placeholders.
+// It used to be a bare centered spinner over an empty body.
 func TestLoadingStateRendersTheFullShell(t *testing.T) {
 	m := New(Config{Session: newSession(), Lister: fakeLister{}, Namespace: "production", Name: "postgresql"})
 	m.SetSize(120, 36)
@@ -462,7 +462,6 @@ func TestLoadingStateRendersTheFullShell(t *testing.T) {
 		"reading postgresql revisions", "decoded from the release's", // strip
 		"REV", "STATUS", "CHART", "UPDATED", // the rail's real column headers
 		"– of –",   // placeholder footer
-		"esc",      // back is live from the first frame
 		"rollback", // ...as the disabled-verb note
 	} {
 		if !strings.Contains(view, want) {

@@ -483,7 +483,7 @@ func goldenCertificateObject(name string, ageDays int, readyStatus string, notAf
 
 // goldenCertificateModel renders §35b with one row per branch of
 // projectCertificate's precedence: a real failure (✕, lastFailureTime set —
-// web-tls), a first-attempt issuance (◐, Ready=False with no prior failure —
+// web-tls), a first-attempt issuance (▲, Ready=False with no prior failure —
 // new-svc-tls), a ready-but-expiring cert (◷, the glyph override that still
 // counts and sorts as ready — admin-tls, whose renewalTime is already past,
 // rendering RENEWAL as "due · auto"), and a comfortably-OK tail (api-tls,

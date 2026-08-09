@@ -6,8 +6,8 @@ import (
 )
 
 // Keybar composes the bottom band from verb references where one already
-// exists (Help is a shared cross-screen verb); `↹ next panel`/`↵ open` are
-// screen-local, the same "no cross-screen verb to register" precedent
+// exists (Help is a shared cross-screen verb); `↹ next panel` is screen-local,
+// the same "no cross-screen verb to register" precedent
 // tasks/whocan's own v/k keys already establish. Timeline/Events (t/e) are
 // global grammar as of v.0.3.0.dc.html §29a, so they no longer render here —
 // they're taught once in the ? overlay's GLOBAL column.
@@ -17,8 +17,7 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}},
-		{{Key: tui.GlyphTab, Label: "next panel"}, {Key: "↵", Label: "open"}},
+		{{Key: tui.GlyphTab, Label: "next panel"}},
 	}
 
 	return tui.Keybar{

@@ -116,13 +116,14 @@ func helpScopeKeys() []tui.KeyHint {
 // actually exist today — the mockup's "p pause sync"/"r reconnect" aren't
 // implemented yet (Phase 4), so listing them would document a lie.
 //
-// v.0.3.0.dc.html §29a moved the "identical on every screen" verbs (filter,
-// mark, yaml, edit, events, timeline, meta — goto/namespace/context/
+// v.0.3.0.dc.html §29a moved the "identical on every screen" verbs (open,
+// filter, mark, yaml, edit, events, timeline, meta — goto/namespace/context/
 // all-namespaces already live in helpScopeKeys) out of every screen's own
 // keybar; this column is their one remaining home so they stay discoverable.
 func helpGlobalKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		{Key: "↑↓ jk", Label: "move"},
+		verbs.Open.Hint(),
 		{Key: "1-9", Label: "sort column"},
 		verbs.Filter.Hint(),
 		verbs.Mark.Hint(),

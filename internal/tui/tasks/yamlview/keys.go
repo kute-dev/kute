@@ -28,7 +28,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}},
 		{{Key: "↑↓", Label: "jk"}},
 		{{Key: "tab", Label: "fold/unfold"}, {Key: "f", Label: "unfold all"}},
 		{{Key: "/", Label: "search"}, {Key: "Y", Label: "copy"}},

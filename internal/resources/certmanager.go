@@ -76,11 +76,11 @@ func certificateHealthLabel(class StatusClass) string {
 }
 
 // certificateHealthGlyph renders §35b's one departure from the generic set:
-// an issuing (Warn) certificate's ◐, matching §35a's own chain-row glyph
+// an issuing (Warn) certificate's ▲, matching §35a's own chain-row glyph
 // for "Ready=False · Issuing" rather than the generic ▲.
 func certificateHealthGlyph(class StatusClass) string {
 	if class == StatusWarn {
-		return "◐" // ◐
+		return "▲" // ▲
 	}
 	return DefaultHealthGlyph(class)
 }
@@ -132,11 +132,11 @@ func projectCertificate(obj runtime.Object) Row {
 	case hasReady && readyCond.status == "False" && !lastFailure.IsZero():
 		class, glyph, readyText = StatusFail, "✕", "False" // ✕
 	case hasReady && readyCond.status == "False":
-		class, glyph, readyText = StatusWarn, "◐", "False" // ◐
+		class, glyph, readyText = StatusWarn, "▲", "False" // ▲
 	case hasReady:
-		class, glyph, readyText = StatusWarn, "◐", readyCond.status // ◐ (Unknown)
+		class, glyph, readyText = StatusWarn, "▲", readyCond.status // ▲ (Unknown)
 	default:
-		class, glyph, readyText = StatusWarn, "◐", "–" // ◐, "–"
+		class, glyph, readyText = StatusWarn, "▲", "–" // ▲, "–"
 	}
 
 	expiresText, expiresClass := certExpiryCell(notAfter, now)

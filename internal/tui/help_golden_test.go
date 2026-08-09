@@ -34,7 +34,7 @@ func (helpBackdropScreen) Keybar() tui.Keybar {
 	return tui.Keybar{
 		PillText: "PODS",
 		Groups: [][]tui.KeyHint{
-			{{Key: "↵", Label: "open"}, {Key: "l", Label: "logs"}, {Key: "e", Label: "exec"}},
+			{{Key: "l", Label: "logs"}, {Key: "e", Label: "exec"}},
 			{{Key: "ctrl-d", Label: "delete"}, {Key: "y", Label: "yaml"}},
 		},
 	}
@@ -50,7 +50,7 @@ func goldenHelpSession(theme tui.Theme) *tui.Session {
 		{Key: "a", Label: "all namespaces"}, {Key: "↵", Label: "toggles last"},
 	}
 	sess.HelpGlobal = []tui.KeyHint{
-		{Key: "↑↓ jk", Label: "move"}, {Key: "esc", Label: "back"},
+		{Key: "↑↓ jk", Label: "move"}, {Key: "↵", Label: "open"}, {Key: "esc", Label: "back"},
 		{Key: "U", Label: "what's new"}, {Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"},
 	}
 	return sess

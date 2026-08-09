@@ -52,7 +52,7 @@ func (m Model) Keybar() tui.Keybar {
 	return m.namespaceKeybar()
 }
 
-// namespaceKeybar is 16a's keybar: esc/open/window/'w'/'/' always (mirrors
+// namespaceKeybar is 16a's keybar: window/'w'/'/' always (mirrors
 // tasks/events' own Keybar — 'w's label toggles with warningsOnly); 'tab'
 // expand/collapse only once there's a normal group to fold/expand.
 func (m Model) namespaceKeybar() tui.Keybar {
@@ -61,7 +61,6 @@ func (m Model) namespaceKeybar() tui.Keybar {
 		warnLabel = "all events"
 	}
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
 		{{Key: "w", Label: warnLabel}, {Key: "t", Label: "time window"}},
 		{verbs.Filter.Hint()},
 	}
@@ -82,7 +81,7 @@ func (m Model) namespaceKeybar() tui.Keybar {
 	}
 }
 
-// objectKeybar is 16b's keybar: esc/open/window always; once a revision
+// objectKeybar is 16b's keybar: window always; once a revision
 // rail resolved, 'tab' toggles rail focus between it and the feed. Moving
 // the rail cursor live-syncs the feed's own cursor to that revision's
 // ROLLOUT row (update.go's syncFeedToRailSelection) — no '↵' needed — so
@@ -92,7 +91,6 @@ func (m Model) namespaceKeybar() tui.Keybar {
 // only apply while the rail has focus.
 func (m Model) objectKeybar() tui.Keybar {
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
 		{{Key: "t", Label: "time window"}},
 	}
 	if len(m.rail) > 0 {

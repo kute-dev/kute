@@ -52,9 +52,9 @@ func TestProjectCertificateReadyPrecedence(t *testing.T) {
 	}{
 		{"ready", "True", time.Time{}, StatusOK, "●", "True"},
 		{"repeated failure", "False", time.Now().Add(-time.Minute), StatusFail, "✕", "False"},
-		{"first attempt", "False", time.Time{}, StatusWarn, "◐", "False"},
-		{"unknown", "Unknown", time.Time{}, StatusWarn, "◐", "Unknown"},
-		{"no condition", "", time.Time{}, StatusWarn, "◐", "–"},
+		{"first attempt", "False", time.Time{}, StatusWarn, "▲", "False"},
+		{"unknown", "Unknown", time.Time{}, StatusWarn, "▲", "Unknown"},
+		{"no condition", "", time.Time{}, StatusWarn, "▲", "–"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -211,11 +211,11 @@ func TestCertificateHealthTalliesExpiringSoon(t *testing.T) {
 }
 
 // TestCertificateHealthGlyphAndLabel pins §35b's own departures from the
-// generic set: issuing (Warn) renders ◐, not the generic ▲.
+// generic set: issuing (Warn) renders ▲, not the generic ▲.
 func TestCertificateHealthGlyphAndLabel(t *testing.T) {
 	t.Parallel()
-	if g := certificateHealthGlyph(StatusWarn); g != "◐" {
-		t.Fatalf("Warn glyph = %q, want ◐", g)
+	if g := certificateHealthGlyph(StatusWarn); g != "▲" {
+		t.Fatalf("Warn glyph = %q, want ▲", g)
 	}
 	if g := certificateHealthGlyph(StatusOK); g != DefaultHealthGlyph(StatusOK) {
 		t.Fatalf("OK glyph = %q, want the generic default", g)

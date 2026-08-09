@@ -21,4 +21,4 @@ Deployment nva-worker                           2 folded   resourceVersion 48213
  17       - name: worker                                                        
  18         image: "nva/worker:1.42.0"                                          
 ────────────────────────────────────────────────────────────────────────────────
-   YAML  esc back │ ↑↓ jk │ tab fold/unfold  f unfold all │ / search  Y copy    
+   YAML  ↑↓ jk │ tab fold/unfold  f unfold all │ / search  Y copy       ? help  

@@ -196,7 +196,7 @@ func certRequestNode(u *unstructured.Unstructured, depth int) chainNode {
 
 	var state, message string
 	class := resources.StatusWarn
-	glyph := "◐"
+	glyph := "▲"
 	switch {
 	case hasDenied && denied.status == "True":
 		state, class, glyph, message = "Denied", resources.StatusFail, "✕", denied.message
@@ -274,7 +274,7 @@ func acmeStateClass(state, reason string) (resources.StatusClass, string) {
 		if reason != "" {
 			return resources.StatusFail, "✕"
 		}
-		return resources.StatusWarn, "◐"
+		return resources.StatusWarn, "▲"
 	}
 }
 
@@ -286,7 +286,7 @@ func readyState(c condition) (text string, class resources.StatusClass, glyph st
 	case "True":
 		text, class, glyph = "True", resources.StatusOK, "●"
 	case "False":
-		text, class, glyph = "Ready=False", resources.StatusWarn, "◐"
+		text, class, glyph = "Ready=False", resources.StatusWarn, "▲"
 		if c.reason != "" {
 			text += " · " + c.reason
 		}

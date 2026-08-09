@@ -21,4 +21,4 @@ CONDITIONS                                ALLOCATED / ALLOCATABLE
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   NODE  esc back │ ↵ open  l logs  x exec  f forward │ s node shell │ C cord...
+   NODE  l logs  x exec  f forward │ s node shell │ C cordon  D drain           

@@ -4,15 +4,15 @@ cache-0 ╭───────────────────────
         │ ? help  keys for PODS view · globals below                  │         
         │─────────────────────────────────────────────────────────────│         
         │ PODS VIEW           SCOPE               GLOBAL              │         
-        │ ↵ open              g goto              ↑↓ jk move          │         
-        │ l logs              n namespace         esc back            │         
-        │ e exec              c context           U what's new        │         
-        │ ctrl-d delete       a all namespaces    ? help              │         
-        │ y yaml              ↵ toggles last      ctrl+q quit         │         
+        │ l logs              g goto              ↑↓ jk move          │         
+        │ e exec              n namespace         ↵ open              │         
+        │ ctrl-d delete       c context           esc back            │         
+        │ y yaml              a all namespaces    U what's new        │         
+        │                     ↵ toggles last      ? help              │         
+        │                                         ctrl+q quit         │         
         │─────────────────────────────────────────────────────────────│         
         │                                                   esc close │         
         ╰─────────────────────────────────────────────────────────────╯         
-                                                                                
                                                                                 
                                                                                 
                                                                                 

@@ -25,7 +25,6 @@ func (m Model) Keybar() tui.Keybar {
 		warnLabel = "all events"
 	}
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}, verbs.Open.Hint()},
 		{{Key: "w", Label: warnLabel}, {Key: "t", Label: "time window"}},
 	}
 	if row, ok := m.selectedRow(); ok && row.kind == rowGroup {

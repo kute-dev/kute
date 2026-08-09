@@ -114,7 +114,6 @@ func (m Model) Keybar() tui.Keybar {
 				{Key: "↑↓", Label: "row"}, {Key: tui.GlyphTab, Label: "switch grid"},
 				{Key: "↵", Label: "edit"}, {Key: "a/insert", Label: "add"},
 				{Key: "ctrl-d", Label: "remove key · y/N"}, {Key: "y", Label: "copy key=value"},
-				{Key: "esc", Label: "back"},
 			}
 		}
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}
@@ -372,9 +371,6 @@ func (m Model) Keybar() tui.Keybar {
 	groups := [][]tui.KeyHint{}
 	if m.kind == kube.KindPod {
 		podGroup := []tui.KeyHint{}
-		if m.openPodDetail != nil {
-			podGroup = append(podGroup, verbs.Open.Hint())
-		}
 		if m.openLogs != nil {
 			podGroup = append(podGroup, verbs.Logs.Hint())
 		}
@@ -388,9 +384,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.kind == kube.KindNode {
 		nodeGroup := []tui.KeyHint{}
-		if m.openNodeDetail != nil {
-			nodeGroup = append(nodeGroup, verbs.Open.Hint())
-		}
 		nodeGroup = append(nodeGroup, verbs.NodeShell.Hint())
 		groups = append(groups, nodeGroup)
 		if m.mutator != nil {
@@ -433,7 +426,7 @@ func (m Model) Keybar() tui.Keybar {
 		groups = append(groups, []tui.KeyHint{verbs.Forward.Hint()})
 	}
 	if m.kind == kube.KindHelmRelease {
-		helmGroup := []tui.KeyHint{verbs.Open.Hint()}
+		helmGroup := []tui.KeyHint{}
 		if m.openHelmValues != nil {
 			helmGroup = append(helmGroup, verbs.HelmValues.Hint())
 		}
@@ -443,7 +436,9 @@ func (m Model) Keybar() tui.Keybar {
 		if m.mutator != nil {
 			helmGroup = append(helmGroup, verbs.Rollback.Hint())
 		}
-		groups = append(groups, helmGroup)
+		if len(helmGroup) > 0 {
+			groups = append(groups, helmGroup)
+		}
 	}
 	if m.fluxVerbsApply() {
 		groups = append(groups, m.fluxKeybarGroup())
@@ -459,15 +454,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
 		groups = append(groups, m.cronJobKeybarGroup())
-	}
-	if m.kind == kube.KindCustomResourceDefinition {
-		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
-	}
-	if m.kind == kube.KindIngress && m.openRouteTable != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
-	}
-	if m.desc.Custom && m.openObjectDetail != nil {
-		groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
 	}
 	if m.kind == kube.KindForward {
 		fwdGroup := []tui.KeyHint{verbs.StopForward.Hint(), verbs.RestartForward.Hint(), verbs.CopyForwardURL.Hint()}

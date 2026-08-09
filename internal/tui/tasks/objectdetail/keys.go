@@ -50,7 +50,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	if len(m.siblings) > 1 {
 		groups = append(groups, []tui.KeyHint{{Key: "j/k", Label: "next/prev"}})
 	}

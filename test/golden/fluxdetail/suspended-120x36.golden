@@ -33,4 +33,4 @@ applied revision  main@2b91f04 · source ahead
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   KUSTOMIZE  esc back │ r reconcile  s resume │ o source  y yaml                                               ? help  
+   KUSTOMIZE  r reconcile  s resume │ o source  y yaml                                                          ? help  

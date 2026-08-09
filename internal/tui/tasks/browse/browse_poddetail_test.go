@@ -93,10 +93,9 @@ func TestEnterCommitsFilterThenOpensPodDetail(t *testing.T) {
 	}
 }
 
-// TestPodKeybarShowsOpenAndLogsWhenWired confirms the Pods-kind keybar
-// group carries both verbs.Open and verbs.Logs once both callbacks are set
-// (keys.go's Keybar), matching 11a's precedent for the Nodes group.
-func TestPodKeybarShowsOpenAndLogsWhenWired(t *testing.T) {
+// TestPodKeybarOmitsGenericOpenButShowsLogs confirms generic navigation stays
+// in help while the Pod-specific logs action remains in the keybar.
+func TestPodKeybarOmitsGenericOpenButShowsLogs(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {pod("default", "api-0")},
 	}}
@@ -120,8 +119,8 @@ func TestPodKeybarShowsOpenAndLogsWhenWired(t *testing.T) {
 			}
 		}
 	}
-	if !hasOpen || !hasLogs {
-		t.Fatalf("expected both open and logs hints in Pods keybar, got %+v", kb.Groups)
+	if hasOpen || !hasLogs {
+		t.Fatalf("expected no generic open hint and a logs hint in Pods keybar, got %+v", kb.Groups)
 	}
 }
 

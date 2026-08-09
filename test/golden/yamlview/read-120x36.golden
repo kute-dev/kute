@@ -33,4 +33,4 @@ Deployment nva-worker                                                           
     ▸ status (12 lines folded)                                                                                          
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   YAML  esc back │ ↑↓ jk │ tab fold/unfold  f unfold all │ / search  Y copy                                    ? help  
+   YAML  ↑↓ jk │ tab fold/unfold  f unfold all │ / search  Y copy                                               ? help  

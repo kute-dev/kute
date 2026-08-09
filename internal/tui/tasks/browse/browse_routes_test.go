@@ -110,10 +110,9 @@ func TestEnterOnDiscoveredHTTPRouteOpensRouteTableNotObjectDetail(t *testing.T) 
 	}
 }
 
-// TestIngressKeybarShowsOpenHint mirrors TestCRDAndCustomKeybarsShowOpenHint
-// for the one built-in kind that isn't Custom but still gets a ↵
-// destination now (routes.go).
-func TestIngressKeybarShowsOpenHint(t *testing.T) {
+// TestIngressKeybarOmitsGenericOpenHint confirms Enter still routes through
+// routes.go without repeating the global open operation in the keybar.
+func TestIngressKeybarOmitsGenericOpenHint(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindIngress: {testIngressRow("web", "default")},
 	}}
@@ -136,7 +135,7 @@ func TestIngressKeybarShowsOpenHint(t *testing.T) {
 			}
 		}
 	}
-	if !hasOpenHint {
-		t.Fatalf("expected ↵ open in the Ingress keybar, got %+v", m.Keybar().Groups)
+	if hasOpenHint {
+		t.Fatalf("expected no generic ↵ open in the Ingress keybar, got %+v", m.Keybar().Groups)
 	}
 }

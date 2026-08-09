@@ -5,15 +5,15 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// Keybar is §31a's: esc/↵ always, the §30a verbs when a write seam is
-// wired, and tab only once there is a folded tail to expand.
+// Keybar is §31a's contextual open-object hint, the §30a verbs when a write
+// seam is wired, and tab only once there is a folded tail to expand.
 func (m Model) Keybar() tui.Keybar {
 	if m.state != tui.TaskStateReady {
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: m.pillText()}
 	}
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	if len(m.inventory) > 0 {
-		groups[0] = append(groups[0], tui.KeyHint{Key: "↵", Label: "open object"})
+		groups = append(groups, []tui.KeyHint{{Key: "↵", Label: "open object"}})
 	}
 
 	if m.mutator != nil && !m.offline() {

@@ -287,12 +287,10 @@ func TestCRDsListSortsByGroup(t *testing.T) {
 	}
 }
 
-// TestCRDAndCustomKeybarsShowOpenHint mirrors
-// TestPodKeybarShowsOpenAndLogsWhenWired for the two new routing kinds:
-// both the CustomResourceDefinitions list and any discovered Custom kind
-// need "↵ open" in their keybar (keys.go), matching the fact that ↵
-// actually does something on both (crddetail.go).
-func TestCRDAndCustomKeybarsShowOpenHint(t *testing.T) {
+// TestCRDAndCustomKeybarsOmitGenericOpenHint confirms routing kinds do not
+// repeat the global open operation in their keybars. Enter behavior itself
+// is covered by the navigation tests above.
+func TestCRDAndCustomKeybarsOmitGenericOpenHint(t *testing.T) {
 	hasOpenHint := func(kb tui.Keybar) bool {
 		for _, g := range kb.Groups {
 			for _, h := range g {
@@ -313,8 +311,8 @@ func TestCRDAndCustomKeybarsShowOpenHint(t *testing.T) {
 		m := New(Config{Session: session, Lister: lister})
 		m.SetSize(120, 36)
 		m = step(t, m, m.Init()())
-		if !hasOpenHint(m.Keybar()) {
-			t.Fatalf("expected ↵ open in the CustomResourceDefinitions keybar, got %+v", m.Keybar().Groups)
+		if hasOpenHint(m.Keybar()) {
+			t.Fatalf("expected no generic ↵ open in the CustomResourceDefinitions keybar, got %+v", m.Keybar().Groups)
 		}
 	})
 
@@ -335,8 +333,8 @@ func TestCRDAndCustomKeybarsShowOpenHint(t *testing.T) {
 		})
 		m.SetSize(120, 36)
 		m = step(t, m, m.Init()())
-		if !hasOpenHint(m.Keybar()) {
-			t.Fatalf("expected ↵ open in a Custom kind's keybar, got %+v", m.Keybar().Groups)
+		if hasOpenHint(m.Keybar()) {
+			t.Fatalf("expected no generic ↵ open in a Custom kind's keybar, got %+v", m.Keybar().Groups)
 		}
 	})
 }

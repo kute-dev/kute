@@ -281,7 +281,6 @@ func TestLoadingStateRender(t *testing.T) {
 		"fetching node-a…", "conditions, allocation & pods load together", // strip
 		"CONDITIONS", "ALLOCATED / ALLOCATABLE", "TAINTS", // real facts-panel titles
 		"NAME", "NAMESPACE", "MEM", "CPU", "AGE", // real pods-table columns
-		"esc", "back", // live nav key
 		"facts & pods enable when data lands", // disabled-verbs note
 	} {
 		if !strings.Contains(view, want) {

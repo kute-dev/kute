@@ -67,7 +67,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}, {Key: "↑↓", Label: "move"}}}
+	groups := [][]tui.KeyHint{{{Key: "↑↓", Label: "move"}}}
 	if m.mutator != nil && !verbs.AddConfigMapKey.HiddenWhileOffline(m.conn.Offline()) {
 		hints := []tui.KeyHint{{Key: "↵", Label: "edit"}, verbs.AddConfigMapKey.Hint(), verbs.RemoveConfigMapKey.Hint()}
 		if row, ok := m.selectedKeyRow(); ok && row.multiline() {

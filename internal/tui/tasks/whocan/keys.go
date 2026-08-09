@@ -24,7 +24,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{
-		{{Key: "esc", Label: "back"}},
 		{{Key: "v", Label: "verb"}, {Key: "K", Label: "pick resource kind"}},
 	}
 	if row, ok := m.selectedRow(); ok && row.subject.BindingName != "" {

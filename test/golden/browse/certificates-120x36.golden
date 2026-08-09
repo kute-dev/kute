@@ -1,11 +1,11 @@
   ❯kute │ microk8s-cluster › default › Certificates cert-manager.io/v1 (g to jump)                         ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ● 3 ready   ◐ 1 issuing   ✕ 1 not ready   ◷ 1 <30d                 5 certificates · unhealthy + soonest expiry first  
+  ● 3 ready   ▲ 1 issuing   ✕ 1 not ready   ◷ 1 <30d                 5 certificates · unhealthy + soonest expiry first  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                        READY       EXPIRES     RENEWAL           ISSUER                  AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▎ ✕  web-tls                                     False       –           retrying          letsencrypt-prod        41d  
-  ◐  new-svc-tls                                 False       –           issuing           letsencrypt-prod         7h  
+  ▲  new-svc-tls                                 False       –           issuing           letsencrypt-prod         7h  
   ◷  admin-tls                                   True        22d         due · auto        letsencrypt-prod        70d  
   ●  api-tls                                     True        61d         in 31d · auto     letsencrypt-prod        41d  
   ●  internal-ca                                 True        8y          in 7y · auto      selfsigned              90d  

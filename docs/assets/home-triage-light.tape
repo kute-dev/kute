@@ -6,7 +6,6 @@ Require kute
 Set Shell "bash"
 Set FontSize 26
 Set FontFamily "JetBrainsMono Nerd Font Mono"
-Set LetterSpacing 2
 Set Width 2228
 Set Height 909
 Set Padding 20

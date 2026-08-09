@@ -18,24 +18,23 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{
 			Pill:      pill,
 			PillText:  pillText,
-			Groups:    [][]tui.KeyHint{{{Key: "esc", Label: "back"}}},
 			RightNote: "facts & rows enable when data lands",
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	if m.rowCount() > 0 {
 		switch m.flavor {
-		case flavorGateway:
-			groups = append(groups, []tui.KeyHint{verbs.Open.Hint()})
 		case flavorRoute:
-			hints := []tui.KeyHint{verbs.Open.Hint()}
+			hints := []tui.KeyHint{}
 			if m.parentGatewayName != "" {
 				hints = append(hints, verbs.OpenParentGateway.Hint())
 			}
-			groups = append(groups, hints)
+			if len(hints) > 0 {
+				groups = append(groups, hints)
+			}
 		case flavorIngress:
-			hints := []tui.KeyHint{verbs.Open.Hint(), verbs.CopyRouteURL.Hint()}
+			hints := []tui.KeyHint{verbs.CopyRouteURL.Hint()}
 			if len(m.tlsFacts) > 0 {
 				if m.tlsFocused {
 					hints = append(hints, verbs.OpenTLSSecret.Hint())

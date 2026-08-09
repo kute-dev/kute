@@ -218,7 +218,13 @@ func TestSuspendFlipsDirectionWithTheRow(t *testing.T) {
 		t.Fatal("the demo fixtures must include a suspended reconciler")
 	}
 	m.selected = idx
-	if !strings.Contains(plain(m.Keybar().Groups[2][1].Label), "resume") {
+	hasResume := false
+	for _, group := range m.Keybar().Groups {
+		for _, hint := range group {
+			hasResume = hasResume || strings.Contains(plain(hint.Label), "resume")
+		}
+	}
+	if !hasResume {
 		t.Errorf("the keybar must offer resume on a suspended row, got %+v", m.Keybar().Groups)
 	}
 	m.Update(tea.KeyPressMsg{Text: "s"})

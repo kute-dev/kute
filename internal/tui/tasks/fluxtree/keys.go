@@ -14,22 +14,20 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{
 			Pill:      tui.ModeBrowse,
 			PillText:  pillText,
-			Groups:    [][]tui.KeyHint{{{Key: "esc", Label: "back"}}},
 			RightNote: "rows enable when the Flux caches fill",
 		}
 	}
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	row, hasRow := m.selectedRow()
 	if hasRow {
 		// ↵ reads differently on the two halves of the chain and the label
 		// says which: a reconciler has an inventory to open (§31a), a source
 		// has an artifact and a list row.
-		open := verbs.Open
-		open.Label = "inventory"
-		if row.isSource {
-			open.Label = "open"
+		if !row.isSource {
+			open := verbs.Open
+			open.Label = "inventory"
+			groups = append(groups, []tui.KeyHint{{Key: open.Key, Label: open.Label}})
 		}
-		groups = append(groups, []tui.KeyHint{{Key: open.Key, Label: open.Label}})
 	}
 	if m.verbsApply() && hasRow {
 		// One key, scope following the cursor: on a reconciler 'r' reconciles

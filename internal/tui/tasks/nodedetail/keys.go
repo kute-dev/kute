@@ -21,14 +21,12 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	if m.state == tui.TaskStateLoading {
-		// 15a applied to a detail screen: only esc-back is live before the
-		// node/pods land — every row/node-scoped verb stays dark
+		// 15a applied to a detail screen: every row/node-scoped verb stays dark
 		// (docs/design README.md §15a: "row actions enable when data
 		// lands").
 		return tui.Keybar{
 			Pill:      tui.ModeBrowse,
 			PillText:  "NODE",
-			Groups:    [][]tui.KeyHint{{{Key: "esc", Label: "back"}}},
 			RightNote: "facts & pods enable when data lands",
 		}
 	}
@@ -43,12 +41,9 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	offline := m.conn.Offline()
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	if len(m.pods) > 0 {
 		podGroup := []tui.KeyHint{}
-		if m.openPod != nil {
-			podGroup = append(podGroup, verbs.Open.Hint())
-		}
 		if m.openLogs != nil {
 			podGroup = append(podGroup, verbs.Logs.Hint())
 		}

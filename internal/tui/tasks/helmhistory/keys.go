@@ -30,13 +30,12 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{Pill: tui.ModeConfirm, PillText: "CONFIRM"}
 	}
 	if m.state == tui.TaskStateLoading {
-		// 15a applied to a detail screen: esc is live from the first frame,
-		// every revision-scoped verb stays dark ("row actions enable when
+		// 15a applied to a detail screen: every revision-scoped verb stays dark
+		// ("row actions enable when
 		// data lands", docs/design README.md §15a).
 		return tui.Keybar{
 			Pill:       tui.ModeBrowse,
 			PillText:   "HELM",
-			Groups:     [][]tui.KeyHint{{{Key: "esc", Label: "back"}}},
 			RightNote:  "rollback enables when the revisions land",
 			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 		}
@@ -49,7 +48,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}, {Key: "↑↓", Label: "move"}}}
+	groups := [][]tui.KeyHint{{{Key: "↑↓", Label: "move"}}}
 	if m.mutator != nil && !verbs.Rollback.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Rollback.Hint()})
 	}

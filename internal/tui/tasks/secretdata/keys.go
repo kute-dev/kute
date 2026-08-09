@@ -58,7 +58,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}, {Key: "↑↓", Label: "move"}}}
+	groups := [][]tui.KeyHint{{{Key: "↑↓", Label: "move"}}}
 	if m.mutator != nil && !verbs.AddSecretKey.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{
 			{Key: "↵", Label: "edit"}, verbs.AddSecretKey.Hint(), verbs.RemoveSecretKey.Hint(),

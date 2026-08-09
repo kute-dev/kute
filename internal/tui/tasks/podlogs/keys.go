@@ -18,7 +18,7 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
+	groups := [][]tui.KeyHint{}
 	groups = append(groups, []tui.KeyHint{
 		{Key: "space", Label: followLabel(m.view.AutoScroll)},
 		{Key: "w/e", Label: "prev/next warn/err"},

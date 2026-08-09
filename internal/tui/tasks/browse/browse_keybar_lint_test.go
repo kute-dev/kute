@@ -18,7 +18,7 @@ import (
 // 'r') and nothing guarded against it recurring. This renders the real,
 // fully-wired Keybar() — mutator, forwards, and every openXxx callback
 // present, so every conditional group in keys.go is live — for each kind
-// that composes more than a bare "open" hint, and fails if any two hints in
+// that composes row-specific hints, and fails if any two hints in
 // the flattened Groups (plus RightHints) share a Key.
 func TestKeybarNoDuplicateKeysPerKind(t *testing.T) {
 	t.Parallel()

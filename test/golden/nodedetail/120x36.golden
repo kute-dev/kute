@@ -33,4 +33,4 @@ CONDITIONS                                                    ALLOCATED / ALLOCA
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   NODE  esc back │ ↵ open  l logs  x exec  f forward │ s node shell │ C cordon  D drain                                
+   NODE  l logs  x exec  f forward │ s node shell │ C cordon  D drain                                                   

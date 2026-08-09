@@ -6,8 +6,8 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// Keybar is §35a's: esc/↵/y/e always available once the chain has loaded,
-// plus §35c's 'r' force-renew when a mutator is wired.
+// Keybar is §35a's chain-specific y/e hints, plus §35c's 'r' force-renew
+// when a mutator is wired. Generic back/open navigation lives in help.
 func (m Model) Keybar() tui.Keybar {
 	if m.actions.Active() {
 		if m.actions.Tier() == actions.TierInline {
@@ -30,10 +30,6 @@ func (m Model) Keybar() tui.Keybar {
 	if m.state != tui.TaskStateReady {
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "CHAIN"}
 	}
-	groups := [][]tui.KeyHint{{{Key: "esc", Label: "back"}}}
-	if m.selectableCount() > 0 {
-		groups[0] = append(groups[0], verbs.Open.Hint())
-	}
 	verbGroup := []tui.KeyHint{verbs.YAML.Hint(), verbs.Events.Hint()}
 	// 4a's offline treatment (docs/design README.md §52, §301): the renew
 	// hint disappears from the keybar the same way browse's own list does,
@@ -41,11 +37,10 @@ func (m Model) Keybar() tui.Keybar {
 	if m.mutator != nil && !verbs.CertRenew.HiddenWhileOffline(m.conn.Offline()) {
 		verbGroup = append(verbGroup, verbs.CertRenew.Hint())
 	}
-	groups = append(groups, verbGroup)
 	return tui.Keybar{
 		Pill:       tui.ModeBrowse,
 		PillText:   "CHAIN",
-		Groups:     groups,
+		Groups:     [][]tui.KeyHint{verbGroup},
 		RightNote:  m.feedback,
 		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 	}
