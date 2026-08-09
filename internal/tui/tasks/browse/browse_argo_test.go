@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 )
 
@@ -91,6 +93,36 @@ func TestArgoDegradedOutOfSyncProgressingHealthySortOrder(t *testing.T) {
 		if order[i] != want[i] {
 			t.Fatalf("row order = %v, want %v", order, want)
 		}
+	}
+}
+
+func TestArgoSyncAndHealthCellsUseIndependentColors(t *testing.T) {
+	m := argoModel(t, application("billing", "main", "abc0000", "Synced", "Degraded"))
+	theme := tui.Dark()
+	styles := newRowCellStyles(theme, false, false, false)
+	cols := browseColumns(m.desc)
+
+	tests := []struct {
+		name       string
+		obj        runtime.Object
+		wantSync   color.Color
+		wantHealth color.Color
+	}{
+		{"synced degraded", application("billing", "main", "abc0000", "Synced", "Degraded"), theme.TextSecondary, theme.Bad},
+		{"out of sync healthy", application("frontend", "main", "abc0000", "OutOfSync", "Healthy"), theme.Warn, theme.TextSecondary},
+		{"syncing progressing", application("search", "main", "abc0000", "Syncing", "Progressing"), theme.TextSecondary, theme.TextSecondary},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := m.desc.Project(tt.obj)
+			cells := m.rowCells(r, nil, cols, 120, styles, theme, 0, 0, "", false, false)
+			if got := cells[2].Style.GetForeground(); got != tt.wantSync {
+				t.Errorf("Sync foreground = %v, want %v", got, tt.wantSync)
+			}
+			if got := cells[3].Style.GetForeground(); got != tt.wantHealth {
+				t.Errorf("Health foreground = %v, want %v", got, tt.wantHealth)
+			}
+		})
 	}
 }
 

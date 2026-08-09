@@ -100,6 +100,9 @@ var fixedWidths = map[string]int{
 	"App Ver":  10, // "15.4.0"
 	"Rev":      5,  // revision number, right-aligned ("REV" + the arrow allowance)
 	"Updated":  10, // "3d ago" / "12m ago"
+	// §33a Argo CD Application columns. SYNC leaves the full "OutOfSync"
+	// visible instead of truncating the status that explains the warning.
+	"Sync": 11,
 	// §30a Flux columns. READY holds the widest word it renders
 	// ("suspended"); REVISION holds "master@efd398b"; SOURCE holds
 	// "helm/prometheus-community", the longest seen on a real cluster.

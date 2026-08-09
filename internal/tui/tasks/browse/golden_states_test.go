@@ -948,8 +948,8 @@ var truecolorStatePrefixes = []string{
 	// all three identically.
 	"flux",
 	// §33a's Sync/Health split is the same kind of colour claim: Degraded
-	// must read red, OutOfSync amber, Progressing muted, Healthy green — a
-	// plain golden can't tell any of them apart.
+	// must read red, OutOfSync amber, and quiet states secondary — a plain
+	// golden can't tell any of them apart.
 	"argo",
 	// §35b's EXPIRES/RENEWAL coloring (yellow <30d, red not-ready/expired)
 	// and the ready-but-expiring ◷ glyph override are colour claims too — a

@@ -1023,6 +1023,21 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			if r.Status != resources.StatusOK {
 				cells[i].Style = st.status[r.Status]
 			}
+		case m.desc.Argo && cols[i].Title == "Sync":
+			// §33a: sync and health are independent axes. Quiet sync values
+			// stay secondary while drift gets its own warning color, even
+			// when the application's aggregate status is Degraded.
+			cells[i].Style = st.ready
+			if cells[i].Text == "OutOfSync" {
+				cells[i].Style = st.status[resources.StatusWarn]
+			}
+		case m.desc.Argo && cols[i].Title == "Health":
+			// Healthy/Progressing are intentionally neutral in the design;
+			// only terminal health values carry the failure color.
+			cells[i].Style = st.ready
+			if cells[i].Text == "Degraded" || cells[i].Text == "Missing" {
+				cells[i].Style = st.status[resources.StatusFail]
+			}
 		case m.kind == kube.KindCertificate && cols[i].Title == "Ready":
 			// §35b: same "healthy dim, not green" idiom as Rollout/Node
 			// Status above. Kind-gated — Flux already owns an uncolored

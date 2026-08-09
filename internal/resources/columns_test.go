@@ -173,6 +173,20 @@ func TestColumnsEventsFlexesFirstColumnWhenNoName(t *testing.T) {
 	}
 }
 
+func TestArgoSyncColumnFitsOutOfSync(t *testing.T) {
+	t.Parallel()
+	d := argoDescriptor(argoApplicationDiscoveredKind())
+	for _, col := range Columns(d) {
+		if col.Title == "Sync" {
+			if col.Min < len("OutOfSync") {
+				t.Fatalf("Sync width = %d, want at least %d to render OutOfSync", col.Min, len("OutOfSync"))
+			}
+			return
+		}
+	}
+	t.Fatal("Argo descriptor has no Sync column")
+}
+
 // TestFixedWidthsLeaveRoomForSortArrow guards the invariant documented on
 // fixedWidths: a fixed column never flexes, so its entry is its on-screen
 // width, and components.Table's renderHeaderV2 drops the " ↑"/" ↓" sort

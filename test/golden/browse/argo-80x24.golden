@@ -2,11 +2,11 @@
 ────────────────────────────────────────────────────────────────────────────────
   ● 1 healthy   ▲ 1 out of sync   ✕ 1 degraded   ◌ 1 progressing                
 ────────────────────────────────────────────────────────────────────────────────
-     NAME             SYNC    HEALTH         REVISION          SYNCED      AGE  
+     NAME        SYNC         HEALTH         REVISION          SYNCED      AGE  
 ────────────────────────────────────────────────────────────────────────────────
-▎ ✕  billing          Synced  Degraded       main@e41b90c      11m ago     92d  
+▎ ✕  billing     Synced       Degraded       main@e41b90c      11m ago     92d  
     Deployment/billing-api: container "api" is in CrashLoopBackOff — exit 1, …  
-  ▲  frontend         OutOf…  Healthy        main@e41b90c      2h ago      92d  
+  ▲  frontend    OutOfSync    Healthy        main@e41b90c      2h ago      92d  
   + 2 healthy · ↹ expand                                                        
   1–4 of 4                                                              ██████  
                                                                                 

@@ -34,11 +34,9 @@ func TestArgoApplications(t *testing.T) {
 
 		// Both independent axes visible at once, pinned above the fold:
 		// Synced+Degraded and OutOfSync+Healthy — different incidents, on
-		// their own columns rather than collapsed into one glyph. The SYNC
-		// column is narrow enough to truncate "OutOfSync" to "OutOf…", so
-		// that's the substring to wait for, not the full word (the health
-		// strip above asserts the untruncated word instead).
-		a.WaitForAll(Settle, "kute-billing", "kute-frontend", "Degraded", "OutOf")
+		// their own columns rather than collapsed into one glyph. SYNC is wide
+		// enough to keep Argo's full status vocabulary visible.
+		a.WaitForAll(Settle, "kute-billing", "kute-frontend", "Degraded", "OutOfSync")
 
 		// §33a's sub-line: the diagnosis Argo itself wrote, verbatim on the
 		// row — naming the worker Deployment, which genuinely CrashLoopBackOffs
