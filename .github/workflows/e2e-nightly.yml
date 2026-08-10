@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
       - name: Create the cluster and apply fixtures
         env:
           K8S_VERSION: ${{ matrix.k8s }}
@@ -63,7 +63,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14 # v4.2.3
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
       # kwok, not kind: 5k pods on fake nodes is a size kind cannot reach on
       # a runner, and connect time and informer heap are what this measures.
       - name: Create the scale cluster
