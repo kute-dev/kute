@@ -18,6 +18,7 @@ behind each change and the trade-offs deliberately accepted, not a backlog.
 3. [Measured effect](#3-measured-effect)
 4. [Design decisions worth remembering](#4-design-decisions-worth-remembering)
 5. [Follow-ups](#5-follow-ups)
+6. [CronJobs: a second lazy dependency and a third one-shot read (v0.8.0)](#6-cronjobs-a-second-lazy-dependency-and-a-third-one-shot-read-v080)
 
 ---
 
@@ -494,6 +495,81 @@ clears it, and the informer's own change event reloads the screen.
 `internal/kube/helm.go`, `cluster.go`, `dynamic.go`, `health.go`, `internal/app/app.go`,
 `internal/tui/kindsync.go`, `internal/tui/tasks/browse/{aux,update}.go`,
 `internal/tui/tasks/{helmhistory,events,timeline,whocan}/update.go`
+
+## 6. CronJobs: a second lazy dependency and a third one-shot read (v0.8.0)
+
+Planned for the v0.8.0 CronJobs rework (`docs/plans/0.8.0-plan.md`); not yet implemented as
+of this writing, but recorded here so the lazy-loading rules that already govern every other
+kind are decided in advance rather than improvised mid-implementation. Nothing below changes
+the eager set — Namespace, Pod, Node stay the only informers `Cluster.Start` waits on.
+
+### CronJob's own informer is lazy like any other kind
+
+`KindCronJob` starts the same way every non-eager kind does: the first `ListRaw(KindCronJob)`
+call — triggered by opening the CronJobs list — runs `ensureKind`, which registers and starts
+its informer via the shared `typedKinds` table (`internal/kube/watch.go`). Nothing before that
+first read touches it.
+
+### Job becomes a required lazy dependency the moment CronJobs opens
+
+CronJobs answers "did the last run pass, when is the next one, is it even enabled" from data
+that does not live on the CronJob object alone — the last terminal outcome, the active-run
+count, and the retained-history table all come from that CronJob's own associated Jobs.
+So `browse`'s CronJob branch also lists `KindJob` — once, cluster/namespace-scoped like any
+other kind, not narrowed by cronjob name server-side — and aggregates it client-side into
+per-CronJob summaries. **There is no `ListRaw(Job)` per CronJob row**: a screen showing seven
+CronJobs issues one Job list, not seven, the same "list primary/related raw objects once, then
+aggregate" shape §5.5's Helm release cache and 18a's rollout-glyph read already use for their
+own secondary kinds.
+
+`KindCronJob: {KindJob, KindPod}` belongs in `internal/tui/tasks/browse/auxkinds.go` so a Job
+or Pod change reloads the list — `auxKinds` is what makes a screen's *secondary* reads reload
+on their own watch events instead of going stale (§2's `43202a4`). Both `KindCronJob` and
+`KindJob` are required for the list's own Ready/Empty gate (`tui.KindsSynced(lister,
+KindCronJob, KindJob)`, checked even when CronJob rows are already present, `KindsError`
+checked immediately after) — the anti-hang and no-fabricated-empty-state rules `132f229`/
+`9939ab7` established apply here exactly as they do everywhere else: a kind with genuinely
+zero associated Jobs must still wait for that cache to settle before the row renders "no
+retained runs," and a Job-cache read that settles with an error must show an inline load-error
+strip rather than silently rendering the no-history path.
+
+Pod is different in kind from Job here: it is already one of the three eager kinds (§2's
+`54d5d1e`), so CronJobs never has to start it, and it is read **best-effort**, not required —
+it enriches a failed Job's exit-code/log target and nothing else blocks on it. A Pod that has
+already been garbage-collected loses only that enrichment; the Job's own condition
+message/reason stays authoritative.
+
+**Opening CronJobs must never make Job or CronJob eager at connect**, and must never poll —
+the live NEXT countdown and the strip's own UTC wall clock come from a one-second `tea.Tick`
+local to the CronJob screens (list, detail, schedule editor), which only rebuilds
+already-fetched summaries into new display strings. It never calls `ListRaw`, metrics, or
+discovery, exactly the same boundary the metrics poll (`Conventions`, this file's §4) and
+every other UI-only clock in Kute already respects.
+
+### A third one-shot read: cached server version
+
+CronJobs' schedule editor (36d) needs to know whether the connected API server is new enough
+to honor `spec.timeZone` before it lets a user rely on setting one — an older server can prune
+the field silently rather than reject the write, so guessing wrong is a write that looks
+successful and does nothing. `CLAUDE.md`'s Conventions section names the two one-shot reads
+that already exist — `CountLive` (palette counts) and 8a's live `managedFields` fetch — as the
+only reads exempt from "watch-based updates, not polling." This adds a third of the same
+shape: one cached `Discovery().ServerVersion()` call, taken during connect/context-switch
+alongside the eager informer start, never repeated on a timer and never re-issued per screen
+open.
+
+The result is a tri-state `supported`/`unsupported`/`unknown` capability stored on the stable
+cluster/fake context (mirroring how `ConnState` and other connection-scoped facts are held) and
+injected into `tasks/cronjobschedule` as a package-local capability interface — the same
+pattern every task dependency follows (`Architecture`'s "define the interface you need in the
+task package" rule), not a new optional seam bolted onto `resources.RawLister`. Kubernetes
+1.27+ reads `supported`; below 1.25 reads `unsupported`; 1.25–1.26 reads `unknown` unless an
+already-populated `spec.timeZone` on the object being edited is itself direct evidence that
+this particular object's field works, regardless of what the version alone would suggest. An
+`unknown`/`unsupported` capability makes the timezone field read-only without fabricating a
+cluster version; an already-populated value stays visible and editable-adjacent either way.
+Node kubelet versions are deliberately never consulted for this — a mixed-version node pool
+says nothing about the control plane's own API version.
 
 ## Running the measurement
 
