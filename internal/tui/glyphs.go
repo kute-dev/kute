@@ -50,4 +50,26 @@ const (
 	// own use, same reasoning as GlyphSuspended: resources/certmanager.go
 	// carries the identical rune as a literal on the row itself.
 	GlyphExpiring = "◷"
+
+	// GlyphCronActive is v0.8.0 §36a/§36c's amber "job currently active"
+	// marker (`◐`) — a CronJob row's status glyph while ACT>0, and the
+	// browse health strip's cross-cutting "active now" segment (this
+	// outranks a healthy/failed LAST RUN reading in the row's own glyph
+	// priority, per docs/design README.md §4.3, even though the strip's
+	// Status tally still counts the row by its last *terminal* outcome).
+	// resources/cronjobs.go can't reference this constant directly (that
+	// package must not import tui, per resources.go's own note) so it
+	// carries the identical rune as a literal; this is the source-of-truth
+	// documented on both sides.
+	GlyphCronActive = "◐"
+
+	// GlyphCronPaused is v0.8.0 §36a/§36c's dim "schedule suspended" marker
+	// (`⏸`) — a suspended CronJob's row glyph and the health strip's
+	// "suspended" segment. Deliberately a different rune from
+	// GlyphSuspended (`‖`) above: that one is Flux's §30a/§30b
+	// paused-reconciliation glyph, a different kind's status vocabulary
+	// even though both describe "not running right now, on purpose".
+	// resources/cronjobs.go carries the identical rune as a literal, same
+	// reasoning as GlyphCronActive.
+	GlyphCronPaused = "⏸"
 )

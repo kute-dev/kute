@@ -62,12 +62,25 @@ type Row struct {
 	// keypress time — see kube.NodeShellUnavailable.
 	NodeShellUnavailable string
 
-	// Suspended marks a Flux row whose spec.suspend is set (§30a), or a Job
-	// row whose own spec.suspend is set (projectJob — Job's own 's' verb).
-	// It rides outside Cells for the same reason Cordoned does: the 's' verb
-	// toggles this state, so browse needs to know which direction to mutate
-	// at keypress time, and the health strip counts it.
+	// Suspended marks a Flux row whose spec.suspend is set (§30a), a Job
+	// row whose own spec.suspend is set (projectJob — Job's own 's' verb),
+	// or a CronJob row whose own spec.suspend is set (ProjectCronJob —
+	// §36a/§36c's 's' verb). It rides outside Cells for the same reason
+	// Cordoned does: the 's' verb toggles this state, so browse needs to
+	// know which direction to mutate at keypress time, and the health strip
+	// counts it.
 	Suspended bool
+
+	// Active marks a CronJob row with at least one currently-active
+	// associated Job (ProjectCronJob, §36a/§4.3) — the ACT column's own
+	// state, outside Cells for the same reason Suspended is: a consumer
+	// must read this field rather than re-parsing the ACT cell's digit
+	// back into a bool, and the health strip's cross-cutting "active now"
+	// segment counts it directly. It cross-cuts Status exactly the way
+	// Suspended does — an active CronJob's last *terminal* run can still
+	// have been a success, so Status stays StatusOK while Active is true.
+	// Unset (false) for every other kind.
+	Active bool
 
 	// StatusText is a projection's own one-word summary of the row's health
 	// ("ready", "reconciling", "suspended"), for a detail view's title chip.
@@ -133,6 +146,21 @@ type HealthCounts struct {
 	// tallied as ready above, and this counts it a second time. Excluded
 	// from Total, non-zero only for Certificate's own Health implementation.
 	ExpiringSoon int
+
+	// Active is v0.8.0 §36a/§4.3's extra strip segment ("◐ 1 active now")
+	// for CronJobs — cross-cuts the same way Outdated/ExpiringSoon do: a
+	// CronJob with an active run is already tallied by its last *terminal*
+	// outcome above (OK/Fail/Neutral), and this counts it a second time.
+	// Excluded from Total, non-zero only for CronJob's own Health
+	// implementation.
+	Active int
+
+	// Suspended is v0.8.0 §36a/§4.3's extra strip segment ("⏸ 2 suspended")
+	// for CronJobs — same cross-cutting reasoning as Active above: a
+	// suspended CronJob keeps whatever OK/Fail/Neutral bucket its retained
+	// history already earned it. Excluded from Total, non-zero only for
+	// CronJob's own Health implementation.
+	Suspended int
 }
 
 // Total is the row count the counts were tallied from.

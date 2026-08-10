@@ -61,7 +61,18 @@ func DefaultRegistry() Registry {
 		{Kind: kube.KindStatefulSet, Group: GroupWorkloads, Display: "StatefulSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Age"}, Describe: "stable, ordered pod identities", Project: projectStatefulSet},
 		{Kind: kube.KindReplicaSet, Group: GroupWorkloads, Display: "ReplicaSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Replicas", "Age"}, Describe: "pod replica sets behind a deployment", Project: projectReplicaSet},
 		{Kind: kube.KindJob, Group: GroupWorkloads, Display: "Jobs", Icon: "◈", Columns: []string{"Name", "Completions", "Active", "Age"}, Describe: "run-to-completion pods", Project: projectJob},
-		{Kind: kube.KindCronJob, Group: GroupWorkloads, Display: "CronJobs", Icon: "◷", Columns: []string{"Name", "Schedule", "Next Run", "Suspend", "Active", "Age"}, Describe: "jobs run on a schedule", Project: projectCronJob},
+		// Columns/Project/Health per v0.8.0 plan §4.3 (Phase 1): NAME /
+		// SCHEDULE / SUSP / ACT / LAST RUN / NEXT, CronJob-specific health
+		// semantics (cronJobHealth/cronJobHealthLabel, cronjobs.go).
+		//
+		// Project is deliberately Job-unaware — see
+		// projectCronJobFallback's own doc comment in projections.go and
+		// cronjobs.go's package doc comment. browse's CronJob branch
+		// (Phase 4) bypasses this entirely and calls
+		// resources.BuildCronJobSummaries + resources.ProjectCronJob
+		// directly with real Job/Pod data; no future caller should expect
+		// this Project field alone to produce a Job-aware row.
+		{Kind: kube.KindCronJob, Group: GroupWorkloads, Display: "CronJobs", Icon: "◷", Columns: []string{"Name", "Schedule", "Susp", "Act", "Last Run", "Next"}, Describe: "jobs run on a schedule", Project: projectCronJobFallback, Health: cronJobHealth, HealthLabel: cronJobHealthLabel},
 		{Kind: kube.KindService, Group: GroupNetworking, Display: "Services", Icon: "◇", Columns: []string{"Name", "Type", "ClusterIP", "Ports", "Age"}, Describe: "stable network endpoints", Project: projectService},
 		{Kind: kube.KindIngress, Group: GroupNetworking, Display: "Ingresses", Icon: "◇", Columns: []string{"Name", "Class", "Hosts", "TLS", "Backends", "Age"}, Describe: "external HTTP(S) routing rules", Project: projectIngress(nil)},
 		{Kind: kube.KindConfigMap, Group: GroupConfig, Display: "ConfigMaps", Icon: "⚙", Columns: []string{"Name", "Data", "Age"}, Describe: "non-secret configuration data", Project: projectConfigMap},

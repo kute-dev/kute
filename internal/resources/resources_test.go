@@ -328,104 +328,11 @@ func TestProjectJobNotSuspendedLeavesRowUnset(t *testing.T) {
 	}
 }
 
-// TestProjectCronJobSuspendedSetsRowSuspended pins the fix to a pre-existing
-// gap: projectCronJob used to only stringify Spec.Suspend into Cells, never
-// setting Row.Suspended itself — the field §36a's suspend/resume keybar
-// toggle (jobKeybarGroup's own row.Suspended-flipping shape) depends on.
-func TestProjectCronJobSuspendedSetsRowSuspended(t *testing.T) {
-	suspend := true
-	cj := &batchv1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
-		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *", Suspend: &suspend},
-	}
-	row := projectCronJob(cj)
-	if !row.Suspended {
-		t.Fatalf("expected Row.Suspended = true, got false")
-	}
-	if row.Status != StatusNeutral {
-		t.Fatalf("expected StatusNeutral for a suspended CronJob, got %s", row.Status)
-	}
-	if row.Cells[3] != "True" {
-		t.Fatalf("expected SUSPEND cell %q, got %q", "True", row.Cells[3])
-	}
-}
-
-// TestProjectCronJobNotSuspendedLeavesRowUnset mirrors
-// TestProjectJobNotSuspendedLeavesRowUnset.
-func TestProjectCronJobNotSuspendedLeavesRowUnset(t *testing.T) {
-	cj := &batchv1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
-		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
-	}
-	row := projectCronJob(cj)
-	if row.Suspended {
-		t.Fatalf("expected Row.Suspended = false for a nil Spec.Suspend")
-	}
-	if row.Status != StatusOK {
-		t.Fatalf("expected StatusOK for a non-suspended CronJob, got %s", row.Status)
-	}
-}
-
-// TestCronNextRunCellSuspendedRow pins the "—" reading for a suspended row —
-// the SUSPEND column already says why there's nothing scheduled.
-func TestCronNextRunCellSuspendedRow(t *testing.T) {
-	cj := &batchv1.CronJob{Spec: batchv1.CronJobSpec{Schedule: "*/5 * * * *"}}
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	if got := cronNextRunCell(cj, true, now); got != "—" {
-		t.Fatalf("cronNextRunCell(suspended) = %q, want %q", got, "—")
-	}
-}
-
-// TestCronNextRunCellUnparseableSchedule pins the defensive "—" reading for
-// a schedule that fails to parse — a malformed schedule can exist
-// server-side even though kubectl validates on create.
-func TestCronNextRunCellUnparseableSchedule(t *testing.T) {
-	cj := &batchv1.CronJob{Spec: batchv1.CronJobSpec{Schedule: "not a cron expression"}}
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	if got := cronNextRunCell(cj, false, now); got != "—" {
-		t.Fatalf("cronNextRunCell(unparseable) = %q, want %q", got, "—")
-	}
-}
-
-// TestCronNextRunCellActiveSchedule pins the "in Xm"/"in Xh" reading against
-// a fixed clock — now is a parameter, so this is fully deterministic.
-func TestCronNextRunCellActiveSchedule(t *testing.T) {
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	tests := []struct {
-		name     string
-		schedule string
-		want     string
-	}{
-		{"every 5 minutes", "*/5 * * * *", "in 5m"},
-		{"daily at 02:00, 2h away", "0 2 * * *", "in 2h"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cj := &batchv1.CronJob{Spec: batchv1.CronJobSpec{Schedule: tt.schedule}}
-			if got := cronNextRunCell(cj, false, now); got != tt.want {
-				t.Errorf("cronNextRunCell(%q) = %q, want %q", tt.schedule, got, tt.want)
-			}
-		})
-	}
-}
-
-// TestCronNextRunCellHonorsTimeZone pins the fix that a CronJob's own
-// spec.timeZone (a separate field from the schedule string, unlike a
-// CRON_TZ=/TZ= prefix) is actually applied — a schedule that fires at local
-// midnight in a zone many hours off UTC must compute a different "next run"
-// than the same schedule read as plain UTC.
-func TestCronNextRunCellHonorsTimeZone(t *testing.T) {
-	// now is 00:30 UTC. Interpreted as UTC, "0 0 * * *" (fires at 00:00) is
-	// next due in 23h30m. Interpreted in America/Los_Angeles (UTC-8 in
-	// January), local time is 16:30 the previous day, so local midnight is
-	// only 7h30m away.
-	now := time.Date(2026, 1, 1, 0, 30, 0, 0, time.UTC)
-	tz := "America/Los_Angeles"
-	cj := &batchv1.CronJob{Spec: batchv1.CronJobSpec{Schedule: "0 0 * * *", TimeZone: &tz}}
-	if got, want := cronNextRunCell(cj, false, now), "in 7h"; got != want {
-		t.Fatalf("cronNextRunCell(with TimeZone) = %q, want %q", got, want)
-	}
-}
+// CronJob's own projection (Row.Suspended/Row.Active, the NEXT-cell
+// schedule/timezone handling, health tallying) moved to
+// internal/resources/cronjobs.go as part of the v0.8.0 Phase 1 CronJob/Job
+// aggregation rework — see cronjobs_test.go for its coverage
+// (TestProjectCronJob*, TestNextCronRuns*, TestBuildCronJobSummaries*).
 
 func TestProjectIngressBackends(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
