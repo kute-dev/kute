@@ -1,0 +1,24 @@
+  ❯ kute │ test-cluster › default › CronJobs › nightly             ● connected  
+────────────────────────────────────────────────────────────────────────────────
+◐  nightly  0 2 * * *                                      next controller local
+                                                                                
+SUSPENDED    CONCURRENCY    DEADLINE    BACKOFF LIMIT                           
+no           Forbid         600s        4                                       
+ACTIVE    HISTORY KEPT              LAST SCHEDULE    CONTROLLER                 
+1         3 succeeded · 1 failed    never            –                          
+                                                                                
+▌ ✕ BackoffLimitExceeded  last run · 40m ago · nightly-29310600                 
+▌ Job has reached the specified backoff limit                                   
+▌ 3 pod failures · exit 1 · l logs of the last failed pod                       
+                                                                                
+JOBS  associated with this cronjob · newest first · 3 retained · history limi...
+      NAME             SOURCE                 START   DURATION         OUTCOME  
+────────────────────────────────────────────────────────────────────────────────
+▎ ◐   nightly-293106…  schedule 09:13        2m ago         2m         running  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+   DETAIL  ↵ open job │ ctrl-r run now  s suspend                       ? help  

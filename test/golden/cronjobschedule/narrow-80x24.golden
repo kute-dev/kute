@@ -1,0 +1,24 @@
+  ❯ kute │ test-cluster › default › cronjob/nightly › Schedule     ● connected  
+────────────────────────────────────────────────────────────────────────────────
+  default/nightly                                           clock 09:15:00 UTC  
+────────────────────────────────────────────────────────────────────────────────
+SCHEDULE  30 3 * * 1-5                                                          
+          MIN 30 · HOUR 3 · DOM * · MONTH * · DOW 1-5                           
+          at 03:30 on Monday through Friday                                     
+                                                                                
+TIMEZONE  America/New_York                           tab to edit                
+                                                                                
+NEXT 5 RUNS                                                                     
+  2026-03-04 03:30 EST  in 23h                                                  
+  2026-03-05 03:30 EST  in 1d                                                   
+  2026-03-06 03:30 EST  in 2d                                                   
+  2026-03-09 03:30 EDT  in 5d                                                   
+  2026-03-10 03:30 EDT  in 6d                                                   
+                                                                                
+WHAT CHANGES                                                                    
+  +261 added · −364 removed · annual delta -103                                 
+  next occurrence changes                                                       
+                                                                                
+────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────
+   SCHEDULE  ↵ apply  y copy  tab timezone  ctrl-y full yaml edit  esc back     

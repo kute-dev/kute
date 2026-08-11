@@ -1,0 +1,36 @@
+  ❯ kute │ test-cluster › default › cronjob/nightly › Schedule                                             ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  default/nightly                                                                                   clock 09:15:00 UTC  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+SCHEDULE  * * *                                                                                                         
+          invalid schedule: expected exactly 5 fields, found 3: [* * *]                                                 
+                                                                                                                        
+TIMEZONE  America/New_York                                                                   tab to edit                
+                                                                                                                        
+NEXT 5 RUNS                                                                                                             
+  —                                                                                                                     
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  will run fix the error above before applying                                                                          
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   SCHEDULE  ↵ apply  y copy  tab timezone  ctrl-y full yaml edit  esc back                                             

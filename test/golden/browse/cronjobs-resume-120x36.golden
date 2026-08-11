@@ -1,0 +1,36 @@
+  ❯ kute │ microk8s-cluster › default › CronJobs (g to jump)                                               ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ○ 1 no history   ⏸ 1 suspended                                                       1 cronjobs · clock 09:27:00 UTC  
+  backup │ concurrency Allow │ deadline none │ history 3 ok · 1 failed │ tz UTC │ backoff 6                             
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                     SCHEDULE        SUSP    ACT     LAST RUN                            NEXT  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ⏸  backup                                   */5 * * * *     yes     0       no retained runs                       —  
+  1–1 of 1                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   RESUME  ↵ resume  esc cancel         resume backup? suspended 2m · no schedules missed while suspended · next in 3m  

@@ -1,0 +1,36 @@
+  ❯ kute │ microk8s-cluster › default › CronJobs (g to jump)                                               ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ● 2 last run ok   ✕ 1 last run failed   ○ 1 no history   ◐ 1 active now   ⏸ 1 suspended                               
+  backup │ concurrency Allow │ deadline none │ history 3 ok · 1 failed │ tz controller local │ backoff 6                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                     SCHEDULE        SUSP    ACT     LAST RUN                            NEXT  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ⏸  backup                                   */5 * * * *     yes     0       no retained runs                       —  
+  ●  nightly                                  */5 * * * *     no      0       6m ago ✓                controller local  
+  ✕  report                                   */5 * * * *     no      0       40m ago ✕               controller local  
+  ◐  sync                                     */5 * * * *     no      1       25m ago ✓               controller local  
+  1–4 of 4                                                                                                      ██████  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   CRONJOBS  ctrl-r run now  s resume  S edit schedule │ ctrl-d delete                                          ? help  

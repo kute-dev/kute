@@ -844,6 +844,8 @@ var goldenStatePrefixes = []string{
 	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
 	"flux", "argo", "certificates",
+	"cronjobs", "cronjobs-failed", "cronjobs-suspended", "cronjobs-runnow",
+	"cronjobs-suspend-confirm", "cronjobs-resume",
 }
 
 func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
@@ -891,6 +893,18 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenArgoModel(t, width, height)
 	case "certificates":
 		return goldenCertificateModel(t, width, height)
+	case "cronjobs":
+		return goldenCronJobModel(t, width, height)
+	case "cronjobs-failed":
+		return goldenCronJobFailedModel(t, width, height)
+	case "cronjobs-suspended":
+		return goldenCronJobSuspendedModel(t, width, height)
+	case "cronjobs-runnow":
+		return goldenCronJobRunNowModel(t, width, height)
+	case "cronjobs-suspend-confirm":
+		return goldenCronJobSuspendConfirmModel(t, width, height)
+	case "cronjobs-resume":
+		return goldenCronJobResumeModel(t, width, height)
 	default:
 		t.Fatalf("unknown golden state prefix %q", prefix)
 		return Model{}
@@ -955,6 +969,12 @@ var truecolorStatePrefixes = []string{
 	// and the ready-but-expiring ◷ glyph override are colour claims too — a
 	// plain golden can't distinguish "ready" from "ready but expiring".
 	"certificates",
+	// §36a/§36b/§36c's own colour claims: a suspended row's dim/strike name
+	// and amber SUSP, a failed row's red LAST RUN + continuation line, the
+	// WarnBanner-token overlap card, and the red-bordered PROD suspend
+	// modal — a plain golden can't tell any of these apart from their
+	// neutral/healthy counterparts (0.8.0 plan Phase 9 golden state 9).
+	"cronjobs", "cronjobs-failed", "cronjobs-suspended", "cronjobs-runnow", "cronjobs-suspend-confirm",
 }
 
 func truecolorStateFixtures(t *testing.T) map[string]string {

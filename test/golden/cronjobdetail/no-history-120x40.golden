@@ -1,0 +1,40 @@
+  ❯ kute │ test-cluster › default › CronJobs › quiet                                                       ● connected  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+○  quiet  0 4 * * 0                                                                                next controller local
+                                                                                                                        
+SUSPENDED    CONCURRENCY    DEADLINE    BACKOFF LIMIT                                                                   
+no           Allow          –           6 (default)                                                                     
+ACTIVE    HISTORY KEPT              LAST SCHEDULE    CONTROLLER                                                         
+0         3 succeeded · 1 failed    never            –                                                                  
+                                                                                                                        
+JOBS  associated with this cronjob · newest first · 0 retained · history limits 3 succeeded / 1 failed   ↵ opens the job
+      NAME                                                     SOURCE                 START   DURATION         OUTCOME  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  No resources found                                                                                                    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   DETAIL  ctrl-r run now  s suspend                                                                            ? help  
