@@ -177,6 +177,13 @@ type CronJobSiblingRef struct {
 // openCronJobPods jump-to-Pods shortcut (0.8.0 plan §2's "Enter" row).
 type OpenCronJobDetailFunc func(namespace, name string, siblings []CronJobSiblingRef, index, width, height int) (tea.Model, tea.Cmd)
 
+// OpenCronJobScheduleFunc pushes tasks/cronjobschedule (36d) for the
+// selected CronJob's own schedule editor — replaces Phase 0-5's placeholder
+// beginCronJobSetSchedule inline panel (cronjobschedule.go, deleted by
+// Phase 6) now that 'S' navigates to a real pushed screen instead of
+// gathering a typed buffer directly in browse's own model.
+type OpenCronJobScheduleFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenHelmHistoryFunc pushes tasks/helmhistory (18a's `h`) for a release's
 // full revision rail.
 type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -208,32 +215,33 @@ type OpenFluxTreeFunc func(width, height int) (tea.Model, tea.Cmd)
 // (package-local Config struct, interface-typed fields, New fills zero
 // values).
 type Config struct {
-	Session            *tui.Session
-	Lister             resources.RawLister
-	Metrics            MetricsReader
-	NodeMetrics        NodeMetricsReader
-	Mutator            kube.Mutator
-	OpenLogs           OpenLogsFunc
-	OpenNodeDetail     OpenNodeDetailFunc
-	OpenPodDetail      OpenPodDetailFunc
-	OpenYAML           OpenYAMLFunc
-	OpenEvents         OpenEventsFunc
-	OpenTimeline       OpenTimelineFunc
-	OpenObjectTimeline OpenObjectTimelineFunc
-	OpenExec           OpenExecFunc
-	OpenForward        OpenForwardFunc
-	OpenObjectDetail   OpenObjectDetailFunc
-	OpenRouteTable     OpenRouteTableFunc
-	OpenWhoCan         OpenWhoCanFunc
-	OpenFluxDetail     OpenFluxDetailFunc
-	OpenCertChain      OpenCertChainFunc
-	OpenCronJobDetail  OpenCronJobDetailFunc
-	OpenHelmHistory    OpenHelmHistoryFunc
-	OpenHelmValues     OpenHelmValuesFunc
-	OpenSecretData     OpenSecretDataFunc
-	OpenConfigMapData  OpenConfigMapDataFunc
-	OpenOverview       OpenOverviewFunc
-	OpenFluxTree       OpenFluxTreeFunc
+	Session             *tui.Session
+	Lister              resources.RawLister
+	Metrics             MetricsReader
+	NodeMetrics         NodeMetricsReader
+	Mutator             kube.Mutator
+	OpenLogs            OpenLogsFunc
+	OpenNodeDetail      OpenNodeDetailFunc
+	OpenPodDetail       OpenPodDetailFunc
+	OpenYAML            OpenYAMLFunc
+	OpenEvents          OpenEventsFunc
+	OpenTimeline        OpenTimelineFunc
+	OpenObjectTimeline  OpenObjectTimelineFunc
+	OpenExec            OpenExecFunc
+	OpenForward         OpenForwardFunc
+	OpenObjectDetail    OpenObjectDetailFunc
+	OpenRouteTable      OpenRouteTableFunc
+	OpenWhoCan          OpenWhoCanFunc
+	OpenFluxDetail      OpenFluxDetailFunc
+	OpenCertChain       OpenCertChainFunc
+	OpenCronJobDetail   OpenCronJobDetailFunc
+	OpenCronJobSchedule OpenCronJobScheduleFunc
+	OpenHelmHistory     OpenHelmHistoryFunc
+	OpenHelmValues      OpenHelmValuesFunc
+	OpenSecretData      OpenSecretDataFunc
+	OpenConfigMapData   OpenConfigMapDataFunc
+	OpenOverview        OpenOverviewFunc
+	OpenFluxTree        OpenFluxTreeFunc
 	// Forwards is the app-wide port-forward registry (13c's stop/restart/
 	// stop-all verbs act on it directly, unlike OpenForward's picker push) —
 	// nil disables those verbs the same way a nil Mutator disables delete.
@@ -255,37 +263,38 @@ type Config struct {
 type Model struct {
 	width, height int
 
-	session            *tui.Session
-	lister             resources.RawLister
-	metrics            MetricsReader
-	nodeMetricsSrc     NodeMetricsReader
-	mutator            kube.Mutator
-	actions            actions.Controller
-	openLogs           OpenLogsFunc
-	openNodeDetail     OpenNodeDetailFunc
-	openPodDetail      OpenPodDetailFunc
-	openYAML           OpenYAMLFunc
-	openEvents         OpenEventsFunc
-	openTimeline       OpenTimelineFunc
-	openObjectTimeline OpenObjectTimelineFunc
-	openExec           OpenExecFunc
-	openForward        OpenForwardFunc
-	openObjectDetail   OpenObjectDetailFunc
-	openRouteTable     OpenRouteTableFunc
-	openWhoCan         OpenWhoCanFunc
-	openFluxDetail     OpenFluxDetailFunc
-	openCertChain      OpenCertChainFunc
-	openCronJobDetail  OpenCronJobDetailFunc
-	openHelmHistory    OpenHelmHistoryFunc
-	openHelmValues     OpenHelmValuesFunc
-	openSecretData     OpenSecretDataFunc
-	openConfigMapData  OpenConfigMapDataFunc
-	openOverview       OpenOverviewFunc
-	openFluxTree       OpenFluxTreeFunc
-	forwards           *kube.ForwardManager
-	retrier            ConnRetrier
-	timeout            time.Duration
-	currentUser        string
+	session             *tui.Session
+	lister              resources.RawLister
+	metrics             MetricsReader
+	nodeMetricsSrc      NodeMetricsReader
+	mutator             kube.Mutator
+	actions             actions.Controller
+	openLogs            OpenLogsFunc
+	openNodeDetail      OpenNodeDetailFunc
+	openPodDetail       OpenPodDetailFunc
+	openYAML            OpenYAMLFunc
+	openEvents          OpenEventsFunc
+	openTimeline        OpenTimelineFunc
+	openObjectTimeline  OpenObjectTimelineFunc
+	openExec            OpenExecFunc
+	openForward         OpenForwardFunc
+	openObjectDetail    OpenObjectDetailFunc
+	openRouteTable      OpenRouteTableFunc
+	openWhoCan          OpenWhoCanFunc
+	openFluxDetail      OpenFluxDetailFunc
+	openCertChain       OpenCertChainFunc
+	openCronJobDetail   OpenCronJobDetailFunc
+	openCronJobSchedule OpenCronJobScheduleFunc
+	openHelmHistory     OpenHelmHistoryFunc
+	openHelmValues      OpenHelmValuesFunc
+	openSecretData      OpenSecretDataFunc
+	openConfigMapData   OpenConfigMapDataFunc
+	openOverview        OpenOverviewFunc
+	openFluxTree        OpenFluxTreeFunc
+	forwards            *kube.ForwardManager
+	retrier             ConnRetrier
+	timeout             time.Duration
+	currentUser         string
 	// execFeedback carries a non-zero kubectl-exec exit's message (docs/design
 	// README.md §10a: "exit returns to the same pod with a feedback line on
 	// non-zero exit") — single-container pods exec directly from browse
@@ -324,12 +333,6 @@ type Model struct {
 	// pendingSetResources, since there's a per-row value buffer (or, while
 	// adding, a key+value pair) to gather before there's an action to Begin.
 	pendingMeta *metaTarget
-	// pendingCronSchedule is non-nil while §36a's 'S' inline edit-schedule
-	// panel is showing (cronjobschedule.go) — a bespoke gate like
-	// pendingMeta, since there's a typed schedule buffer (plus client-side
-	// cron.ParseStandard validation) to gather before there's an action to
-	// Begin.
-	pendingCronSchedule *cronScheduleTarget
 	// pendingCronJobRun is non-nil while §36b's ctrl-r run-now preflight is
 	// showing (cronjob_actions.go) — a bespoke gate like pendingScale, since
 	// run-now stages its own preview (overlap warning, generated name)
@@ -680,48 +683,49 @@ func New(cfg Config) Model {
 	}
 
 	return Model{
-		width:              tui.DefaultWidth,
-		height:             tui.DefaultHeight,
-		session:            cfg.Session,
-		lister:             cfg.Lister,
-		metrics:            cfg.Metrics,
-		nodeMetricsSrc:     cfg.NodeMetrics,
-		mutator:            cfg.Mutator,
-		actions:            actions.New(cfg.Mutator),
-		openLogs:           cfg.OpenLogs,
-		openNodeDetail:     cfg.OpenNodeDetail,
-		openPodDetail:      cfg.OpenPodDetail,
-		openYAML:           cfg.OpenYAML,
-		openEvents:         cfg.OpenEvents,
-		openTimeline:       cfg.OpenTimeline,
-		openObjectTimeline: cfg.OpenObjectTimeline,
-		openExec:           cfg.OpenExec,
-		openForward:        cfg.OpenForward,
-		openObjectDetail:   cfg.OpenObjectDetail,
-		openRouteTable:     cfg.OpenRouteTable,
-		openWhoCan:         cfg.OpenWhoCan,
-		openFluxDetail:     cfg.OpenFluxDetail,
-		openCertChain:      cfg.OpenCertChain,
-		openCronJobDetail:  cfg.OpenCronJobDetail,
-		openHelmHistory:    cfg.OpenHelmHistory,
-		openHelmValues:     cfg.OpenHelmValues,
-		openSecretData:     cfg.OpenSecretData,
-		openConfigMapData:  cfg.OpenConfigMapData,
-		openOverview:       cfg.OpenOverview,
-		openFluxTree:       cfg.OpenFluxTree,
-		forwards:           cfg.Forwards,
-		retrier:            cfg.Retrier,
-		timeout:            cfg.LoadTimeout,
-		currentUser:        cfg.CurrentUser,
-		kind:               kind,
-		namespace:          namespace,
-		desc:               desc,
-		state:              state,
-		feedback:           feedback,
-		now:                time.Now(),
-		loadStartedAt:      time.Now(),
-		filterInput:        filterInput,
-		spinner:            components.NewSpinner(),
+		width:               tui.DefaultWidth,
+		height:              tui.DefaultHeight,
+		session:             cfg.Session,
+		lister:              cfg.Lister,
+		metrics:             cfg.Metrics,
+		nodeMetricsSrc:      cfg.NodeMetrics,
+		mutator:             cfg.Mutator,
+		actions:             actions.New(cfg.Mutator),
+		openLogs:            cfg.OpenLogs,
+		openNodeDetail:      cfg.OpenNodeDetail,
+		openPodDetail:       cfg.OpenPodDetail,
+		openYAML:            cfg.OpenYAML,
+		openEvents:          cfg.OpenEvents,
+		openTimeline:        cfg.OpenTimeline,
+		openObjectTimeline:  cfg.OpenObjectTimeline,
+		openExec:            cfg.OpenExec,
+		openForward:         cfg.OpenForward,
+		openObjectDetail:    cfg.OpenObjectDetail,
+		openRouteTable:      cfg.OpenRouteTable,
+		openWhoCan:          cfg.OpenWhoCan,
+		openFluxDetail:      cfg.OpenFluxDetail,
+		openCertChain:       cfg.OpenCertChain,
+		openCronJobDetail:   cfg.OpenCronJobDetail,
+		openCronJobSchedule: cfg.OpenCronJobSchedule,
+		openHelmHistory:     cfg.OpenHelmHistory,
+		openHelmValues:      cfg.OpenHelmValues,
+		openSecretData:      cfg.OpenSecretData,
+		openConfigMapData:   cfg.OpenConfigMapData,
+		openOverview:        cfg.OpenOverview,
+		openFluxTree:        cfg.OpenFluxTree,
+		forwards:            cfg.Forwards,
+		retrier:             cfg.Retrier,
+		timeout:             cfg.LoadTimeout,
+		currentUser:         cfg.CurrentUser,
+		kind:                kind,
+		namespace:           namespace,
+		desc:                desc,
+		state:               state,
+		feedback:            feedback,
+		now:                 time.Now(),
+		loadStartedAt:       time.Now(),
+		filterInput:         filterInput,
+		spinner:             components.NewSpinner(),
 	}
 }
 

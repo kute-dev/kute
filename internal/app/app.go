@@ -25,6 +25,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/browse"
 	"github.com/kute-dev/kute/internal/tui/tasks/certchain"
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
+	"github.com/kute-dev/kute/internal/tui/tasks/cronjobschedule"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
 	"github.com/kute-dev/kute/internal/tui/tasks/fluxdetail"
@@ -458,6 +459,7 @@ type seams interface {
 	timeline.EventsReader
 	whocan.WhoCanReader
 	certchain.EventsReader
+	cronjobschedule.CapabilityReader
 }
 
 // NewModel builds the root model. It's rooted at tasks/browse when a
@@ -572,33 +574,34 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openObjectEvents := openObjectEventsFunc(sess, cluster, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, cluster, openObjectEvents)
 	b := browse.New(browse.Config{
-		Session:            sess,
-		Lister:             lister,
-		Metrics:            cluster,
-		NodeMetrics:        cluster,
-		Mutator:            cluster,
-		OpenLogs:           openLogs,
-		OpenNodeDetail:     openNodeDetail,
-		OpenPodDetail:      openPodDetail,
-		OpenYAML:           openYAML,
-		OpenEvents:         openEvents,
-		OpenTimeline:       openTimeline,
-		OpenObjectTimeline: browse.OpenObjectTimelineFunc(openObjectTimeline),
-		OpenExec:           browse.OpenExecFunc(openExec),
-		OpenForward:        openForward,
-		OpenObjectDetail:   openObjectDetailFunc(sess, cluster, openYAML),
-		OpenFluxDetail:     openFluxDetailFunc(sess, cluster, openYAML),
-		OpenCertChain:      openCertChainFunc(sess, cluster, openYAML),
-		OpenFluxTree:       openFluxTreeFunc(sess, cluster, openFluxDetailFunc(sess, cluster, openYAML), openObjectDetailFunc(sess, cluster, openYAML)),
-		OpenRouteTable:     openRouteTableFunc(sess, cluster, openYAML),
-		OpenWhoCan:         openWhoCanFunc(sess, cluster),
-		OpenHelmHistory:    openHelmHistoryFunc(sess, cluster),
-		OpenHelmValues:     openHelmValuesFunc(sess),
-		OpenSecretData:     openSecretDataFunc(sess, cluster),
-		OpenConfigMapData:  openConfigMapDataFunc(sess, cluster),
-		OpenOverview:       openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
-		Forwards:           sess.Forwards,
-		Retrier:            cluster,
+		Session:             sess,
+		Lister:              lister,
+		Metrics:             cluster,
+		NodeMetrics:         cluster,
+		Mutator:             cluster,
+		OpenLogs:            openLogs,
+		OpenNodeDetail:      openNodeDetail,
+		OpenPodDetail:       openPodDetail,
+		OpenYAML:            openYAML,
+		OpenEvents:          openEvents,
+		OpenTimeline:        openTimeline,
+		OpenObjectTimeline:  browse.OpenObjectTimelineFunc(openObjectTimeline),
+		OpenExec:            browse.OpenExecFunc(openExec),
+		OpenForward:         openForward,
+		OpenObjectDetail:    openObjectDetailFunc(sess, cluster, openYAML),
+		OpenFluxDetail:      openFluxDetailFunc(sess, cluster, openYAML),
+		OpenCertChain:       openCertChainFunc(sess, cluster, openYAML),
+		OpenFluxTree:        openFluxTreeFunc(sess, cluster, openFluxDetailFunc(sess, cluster, openYAML), openObjectDetailFunc(sess, cluster, openYAML)),
+		OpenRouteTable:      openRouteTableFunc(sess, cluster, openYAML),
+		OpenWhoCan:          openWhoCanFunc(sess, cluster),
+		OpenHelmHistory:     openHelmHistoryFunc(sess, cluster),
+		OpenHelmValues:      openHelmValuesFunc(sess),
+		OpenSecretData:      openSecretDataFunc(sess, cluster),
+		OpenConfigMapData:   openConfigMapDataFunc(sess, cluster),
+		OpenCronJobSchedule: openCronJobScheduleFunc(sess, cluster),
+		OpenOverview:        openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
+		Forwards:            sess.Forwards,
+		Retrier:             cluster,
 	})
 	return &b
 }
@@ -651,33 +654,34 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, demoCluster, openObjectEvents)
 	b := browse.New(browse.Config{
-		Session:            sess,
-		Lister:             lister,
-		Metrics:            demoCluster,
-		NodeMetrics:        demoCluster,
-		Mutator:            demoCluster,
-		OpenLogs:           openLogs,
-		OpenNodeDetail:     openNodeDetail,
-		OpenPodDetail:      openPodDetail,
-		OpenYAML:           openYAML,
-		OpenEvents:         openEvents,
-		OpenTimeline:       openTimeline,
-		OpenObjectTimeline: browse.OpenObjectTimelineFunc(openObjectTimeline),
-		OpenExec:           browse.OpenExecFunc(openExec),
-		OpenForward:        openForward,
-		OpenObjectDetail:   openObjectDetailFunc(sess, demoCluster, openYAML),
-		OpenFluxDetail:     openFluxDetailFunc(sess, demoCluster, openYAML),
-		OpenCertChain:      openCertChainFunc(sess, demoCluster, openYAML),
-		OpenFluxTree:       openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
-		OpenRouteTable:     openRouteTableFunc(sess, demoCluster, openYAML),
-		OpenWhoCan:         openWhoCanFunc(sess, demoCluster),
-		OpenHelmHistory:    openHelmHistoryFunc(sess, demoCluster),
-		OpenHelmValues:     openHelmValuesFunc(sess),
-		OpenSecretData:     openSecretDataFunc(sess, demoCluster),
-		OpenConfigMapData:  openConfigMapDataFunc(sess, demoCluster),
-		OpenOverview:       openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
-		Forwards:           sess.Forwards,
-		Retrier:            demoCluster,
+		Session:             sess,
+		Lister:              lister,
+		Metrics:             demoCluster,
+		NodeMetrics:         demoCluster,
+		Mutator:             demoCluster,
+		OpenLogs:            openLogs,
+		OpenNodeDetail:      openNodeDetail,
+		OpenPodDetail:       openPodDetail,
+		OpenYAML:            openYAML,
+		OpenEvents:          openEvents,
+		OpenTimeline:        openTimeline,
+		OpenObjectTimeline:  browse.OpenObjectTimelineFunc(openObjectTimeline),
+		OpenExec:            browse.OpenExecFunc(openExec),
+		OpenForward:         openForward,
+		OpenObjectDetail:    openObjectDetailFunc(sess, demoCluster, openYAML),
+		OpenFluxDetail:      openFluxDetailFunc(sess, demoCluster, openYAML),
+		OpenCertChain:       openCertChainFunc(sess, demoCluster, openYAML),
+		OpenFluxTree:        openFluxTreeFunc(sess, demoCluster, openFluxDetailFunc(sess, demoCluster, openYAML), openObjectDetailFunc(sess, demoCluster, openYAML)),
+		OpenRouteTable:      openRouteTableFunc(sess, demoCluster, openYAML),
+		OpenWhoCan:          openWhoCanFunc(sess, demoCluster),
+		OpenHelmHistory:     openHelmHistoryFunc(sess, demoCluster),
+		OpenHelmValues:      openHelmValuesFunc(sess),
+		OpenSecretData:      openSecretDataFunc(sess, demoCluster),
+		OpenConfigMapData:   openConfigMapDataFunc(sess, demoCluster),
+		OpenCronJobSchedule: openCronJobScheduleFunc(sess, demoCluster),
+		OpenOverview:        openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
+		Forwards:            sess.Forwards,
+		Retrier:             demoCluster,
 	})
 	return &b
 }
@@ -1072,6 +1076,25 @@ func openConfigMapDataFunc(sess *tui.Session, active seams) browse.OpenConfigMap
 		})
 		cd.SetSize(width, height)
 		return &cd, cd.Init()
+	}
+}
+
+// openCronJobScheduleFunc pushes tasks/cronjobschedule (36d) for a CronJob
+// row's own schedule editor — active alone satisfies every seam it needs
+// (ListRaw for the CronJob itself, kube.Mutator.SetCronJobSchedule for
+// apply/undo, TimeZoneCapability for §3.8's tri-state gate).
+func openCronJobScheduleFunc(sess *tui.Session, active seams) browse.OpenCronJobScheduleFunc {
+	return func(namespace, name string, width, height int) (tea.Model, tea.Cmd) {
+		cs := cronjobschedule.New(cronjobschedule.Config{
+			Session:      sess,
+			Lister:       active,
+			Mutator:      active,
+			Capabilities: active,
+			Namespace:    namespace,
+			Name:         name,
+		})
+		cs.SetSize(width, height)
+		return &cs, cs.Init()
 	}
 }
 

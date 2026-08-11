@@ -515,6 +515,29 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	}
 }
 
+// TestCronJobSetScheduleCommandStringMirrorsPatchBody pins the will-run
+// line's three-state timezone contract (schedule.go's own doc comment):
+// nil omits spec.timeZone, a pointer to "" renders JSON null, a pointer to
+// a name renders that string — matching SetCronJobSchedule's own
+// json.Marshal exactly.
+func TestCronJobSetScheduleCommandStringMirrorsPatchBody(t *testing.T) {
+	t.Parallel()
+	untouched := CronJobSetScheduleCommandString("default", "nightly", "*/15 * * * *", nil)
+	if !strings.Contains(untouched, `"schedule":"*/15 * * * *"`) || strings.Contains(untouched, "timeZone") {
+		t.Errorf("untouched command = %q, want schedule only, no timeZone key", untouched)
+	}
+	tz := "America/New_York"
+	set := CronJobSetScheduleCommandString("default", "nightly", "0 2 * * *", &tz)
+	if !strings.Contains(set, `"timeZone":"America/New_York"`) {
+		t.Errorf("set command = %q, want timeZone %q", set, tz)
+	}
+	empty := ""
+	cleared := CronJobSetScheduleCommandString("default", "nightly", "0 2 * * *", &empty)
+	if !strings.Contains(cleared, `"timeZone":null`) {
+		t.Errorf("cleared command = %q, want an explicit timeZone null", cleared)
+	}
+}
+
 func TestSetCronJobScheduleRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()

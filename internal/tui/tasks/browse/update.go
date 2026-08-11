@@ -43,8 +43,6 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 		return m.setResourcesPasteTarget()
 	case m.pendingMeta != nil:
 		return m.metaPasteTarget()
-	case m.pendingCronSchedule != nil:
-		return m.cronSchedulePasteTarget()
 	case m.pendingBulkDelete != nil:
 		if m.pendingBulkDelete.tier != actions.TierModal {
 			return nil // non-prod bulk delete is a plain y/N, no buffer
@@ -258,18 +256,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// pre-commit interaction state with the server's error, and only
 			// esc/back (updateMetaKey's own "esc" case) ever closes it.
 			cmd := m.handleMetaResult(msg)
-			if msg.Err == nil {
-				return m, tea.Batch(cmd, m.load())
-			}
-			return m, cmd
-		}
-		if isCronScheduleActionID(msg.ActionID) && m.pendingCronSchedule != nil {
-			// §36a follows the same keep-open contract as 26a (see
-			// handleCronScheduleResult's own doc comment) — a schedule commit
-			// never closes the panel, success or failure, so m.load() refreshes
-			// the row's Schedule/Next Run cells behind it rather than the panel
-			// itself needing to re-render them.
-			cmd := m.handleCronScheduleResult(msg)
 			if msg.Err == nil {
 				return m, tea.Batch(cmd, m.load())
 			}
@@ -501,9 +487,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingMeta != nil {
 		return m.updateMetaKey(msg)
 	}
-	if m.pendingCronSchedule != nil {
-		return m.updateCronScheduleKey(msg)
-	}
 	if m.pendingBulkDelete != nil {
 		return m.updateBulkDeleteKey(msg)
 	}
@@ -601,14 +584,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "S":
 		if m.argoVerbsApply() {
-			// §33a's sync. Disjoint from CronJobSetSchedule below (Kinds
-			// never overlap — a row is never both an Application and a
-			// CronJob).
+			// §33a's sync. Disjoint from the CronJob schedule push below
+			// (Kinds never overlap — a row is never both an Application and
+			// a CronJob).
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginArgoSync(row)
 			}
 		}
-		m.beginCronJobSetSchedule()
+		if task, cmd, ok := m.openSelectedCronJobSchedule(); ok {
+			return task, cmd
+		}
 	case "+":
 		m.beginScale(1)
 	case "-":

@@ -63,10 +63,10 @@ func (m Model) Keybar() tui.Keybar {
 	if m.pendingSetImage != nil && !m.actions.Active() {
 		// While a PROD confirm is showing, the generic m.actions.Active()
 		// branch further down takes over (its own "set-image" case renders
-		// setImageWillRunLine) — same !m.actions.Active() guard pendingMeta/
-		// pendingCronSchedule use, for the same reason: the panel stays open
-		// underneath either way (setimage_view.go's will-run strip shows the
-		// confirm-pending state).
+		// setImageWillRunLine) — same !m.actions.Active() guard pendingMeta
+		// uses, for the same reason: the panel stays open underneath either
+		// way (setimage_view.go's will-run strip shows the confirm-pending
+		// state).
 		t := m.pendingSetImage
 		hints := []tui.KeyHint{{Key: "↵", Label: "apply"}, {Key: "↑↓", Label: "pick from history"}}
 		if len(t.containers) > 1 {
@@ -123,38 +123,6 @@ func (m Model) Keybar() tui.Keybar {
 			}
 		}
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}
-	}
-	if m.pendingCronSchedule != nil && !m.actions.Active() {
-		// Same !m.actions.Active() guard pendingMeta's block uses above, for
-		// the same reason: while a PROD-escalated "cronjob-set-schedule"
-		// confirm is showing, the generic m.actions.Active() branch further
-		// down takes over rendering the y/N — the panel stays open underneath
-		// either way.
-		t := m.pendingCronSchedule
-		kb := tui.Keybar{
-			Pill: tui.ModeBrowse, PillText: "EDIT SCHEDULE",
-			// The typed buffer is shown as a KeyHint, same idiom scale.go's own
-			// keybar uses for pendingScale (browse's only other single-field
-			// embedded panel with no dedicated Body() override, view.go:539-548
-			// — pendingSetImage/pendingSetResources/pendingMeta each get one,
-			// pendingScale/pendingCronSchedule stay on the table and rely on the
-			// keybar alone to show what's being typed).
-			Groups: [][]tui.KeyHint{{
-				{Key: t.input.Value() + tui.GlyphSelBar, Label: "schedule"},
-				{Key: "↵", Label: "apply"}, {Key: "esc", Label: "cancel"},
-			}},
-		}
-		switch {
-		case t.parseErr != nil:
-			kb.RightWarnNote = "invalid schedule: " + t.parseErr.Error()
-		case t.resultErr != "":
-			kb.RightWarnNote = "failed: " + t.resultErr
-		case t.resultNote != "":
-			kb.RightNote = t.resultNote
-		default:
-			kb.RightNote = m.cronScheduleWillRunLine()
-		}
-		return kb
 	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {
@@ -530,5 +498,5 @@ func singularDisplay(plural string) string {
 func (m Model) CapturingInput() bool {
 	return (m.filterActive && !m.filterListFocused) || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
 		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
-		m.pendingCronSchedule != nil || m.pendingBulkDelete != nil
+		m.pendingBulkDelete != nil
 }

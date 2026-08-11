@@ -758,9 +758,29 @@ func CronJobSuspendCommandString(namespace, name string, suspend bool) string {
 }
 
 // CronJobSetScheduleCommandString renders the kubectl patch kute actually
-// issues for SetCronJobSchedule.
-func CronJobSetScheduleCommandString(namespace, name, schedule string) string {
-	return fmt.Sprintf(`kubectl patch cronjob/%s --type merge -p '{"spec":{"schedule":%q}}' -n %s`, name, schedule, namespace)
+// issues for SetCronJobSchedule. timezone follows CronJobScheduleEdit.TimeZone's
+// own three-state contract: nil omits spec.timeZone from the patch entirely
+// (untouched), a pointer to "" renders an explicit JSON null (clear), and a
+// pointer to a non-empty IANA name renders that string (set) — so the
+// will-run line shown before a commit is byte-for-byte what
+// SetCronJobSchedule's own json.Marshal produces, not a hand-approximated
+// second rendering that could drift from it.
+func CronJobSetScheduleCommandString(namespace, name, schedule string, timezone *string) string {
+	spec := map[string]any{"schedule": schedule}
+	if timezone != nil {
+		if *timezone == "" {
+			spec["timeZone"] = nil
+		} else {
+			spec["timeZone"] = *timezone
+		}
+	}
+	body, err := json.Marshal(map[string]any{"spec": spec})
+	if err != nil {
+		// Never reached — spec is a small map of strings/nil built above,
+		// which always marshals — but a will-run line must never panic.
+		return fmt.Sprintf(`kubectl patch cronjob/%s --type merge -p '{"spec":{"schedule":%q}}' -n %s`, name, schedule, namespace)
+	}
+	return fmt.Sprintf("kubectl patch cronjob/%s --type merge -p '%s' -n %s", name, body, namespace)
 }
 
 // FluxReconcileCommandString renders the kubectl annotate kute issues for

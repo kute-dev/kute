@@ -105,6 +105,12 @@ type Cluster struct {
 	started bool
 	synced  bool
 	mu      sync.Mutex
+
+	// tzCapability is capability.go's tri-state "does this server honor
+	// CronJob spec.timeZone" answer, refreshed by probeTimeZoneCapability
+	// on Start/SwitchContext — never read directly, always through
+	// TimeZoneCapability() (mu-guarded like every other field above).
+	tzCapability TimeZoneCapability
 }
 
 // dynamicKindInfo is one dynamically registered kind's watch/list handle.
@@ -224,6 +230,7 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	c.refreshDiscovery(ctx)
+	c.probeTimeZoneCapability(ctx)
 	return nil
 }
 

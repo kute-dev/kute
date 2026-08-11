@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
@@ -42,6 +43,11 @@ func NewDemo() *Cluster {
 	// default" query has a real closest-miss row to show, the same persona
 	// docs/design README.md's own 4b mockup names.
 	c.SetUserName("dev-readonly")
+	// --demo pretends to be a recent, fully-supported cluster: the
+	// schedule editor's timezone field is editable rather than read-only,
+	// matching what a real 1.27+ cluster (kind's own default today) would
+	// answer.
+	c.SetTimeZoneCapability(kube.TimeZoneCapabilitySupported)
 
 	now := metav1.Now()
 	age := func(d time.Duration) metav1.Time { return metav1.NewTime(now.Add(-d)) }
@@ -1054,11 +1060,19 @@ func demoWorkerStatefulSet(name, ns string, created metav1.Time) *appsv1.Statefu
 // demoCronJob is CronJobs' own exemplar builder (§36a) — schedule/suspend
 // are the two fields projectCronJob's NEXT RUN/SUSPEND columns actually
 // read, so --demo mode exercises the real column derivation rather than a
-// zero-value stub.
+// zero-value stub. UID/ResourceVersion are set (unlike most of this file's
+// other demo builders) because Phase 2's SetCronJobSuspend/SetCronJobSchedule
+// both require a non-empty resourceVersion precondition — a CronJob with the
+// zero value would make every --demo suspend/resume/schedule-edit fail with
+// "missing resourceVersion precondition" before ever reaching the fake
+// cluster's own optimistic-concurrency check.
 func demoCronJob(name, ns, schedule string, suspend bool, created metav1.Time) *batchv1.CronJob {
 	cj := &batchv1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, CreationTimestamp: created},
-		Spec:       batchv1.CronJobSpec{Schedule: schedule},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns, CreationTimestamp: created,
+			UID: types.UID("demo-cronjob-" + ns + "-" + name), ResourceVersion: "1", Generation: 1,
+		},
+		Spec: batchv1.CronJobSpec{Schedule: schedule},
 	}
 	if suspend {
 		cj.Spec.Suspend = &suspend

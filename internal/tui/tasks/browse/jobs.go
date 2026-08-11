@@ -74,6 +74,23 @@ func (m Model) openSelectedCronJobDetail() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
+// openSelectedCronJobSchedule pushes §36d (tasks/cronjobschedule) for the
+// selected CronJob row's own schedule editor — Phase 6's replacement for
+// the pre-Phase-6 inline beginCronJobSetSchedule buffer (the deleted
+// cronjobschedule.go). Same "ok is false until app.go wires the opener"
+// contract openSelectedCronJobDetail's own doc comment describes.
+func (m Model) openSelectedCronJobSchedule() (tea.Model, tea.Cmd, bool) {
+	if m.openCronJobSchedule == nil || m.kind != kube.KindCronJob {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	task, cmd := m.openCronJobSchedule(row.Namespace, row.Name, m.width, m.height)
+	return task, cmd, task != nil
+}
+
 // selectedCronJobSummary returns the full aggregated resources.CronJobSummary
 // behind the selected row — view.go's behavior strip and cronJobLogsTarget
 // below both need spec/Job-history fields Row's own display Cells don't

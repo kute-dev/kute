@@ -86,6 +86,35 @@ type Cluster struct {
 	// to implement the same optimistic-concurrency contract itself for
 	// --demo and task-level UI tests to exercise Conflict responses.
 	cronJobRVSeq int
+
+	// tzCapability is the fake counterpart of *kube.Cluster's own
+	// tzCapability (capability.go) — the tri-state tasks/cronjobschedule
+	// (36d) gates timezone editing on. Zero value is
+	// kube.TimeZoneCapabilityUnknown, same as a real Cluster before its
+	// first probe; NewDemo's own fixtures.go sets Supported so --demo shows
+	// a fully editable timezone field, and tests can set any of the three
+	// via SetTimeZoneCapability to exercise the Unknown/Unsupported
+	// read-only paths without a real cluster.
+	tzCapability kube.TimeZoneCapability
+}
+
+// TimeZoneCapability returns the fake cluster's own tri-state answer — the
+// same seam *kube.Cluster.TimeZoneCapability() provides, so
+// tasks/cronjobschedule's package-local capability interface is satisfied
+// by both without a type switch.
+func (c *Cluster) TimeZoneCapability() kube.TimeZoneCapability {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.tzCapability
+}
+
+// SetTimeZoneCapability sets the fake cluster's tri-state answer (fixtures/
+// tests only — a real Cluster's own value comes solely from its one-shot
+// Discovery().ServerVersion() probe, never a setter).
+func (c *Cluster) SetTimeZoneCapability(tz kube.TimeZoneCapability) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tzCapability = tz
 }
 
 // New builds an empty fake cluster scoped to namespace/context.
