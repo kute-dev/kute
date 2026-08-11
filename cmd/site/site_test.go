@@ -185,9 +185,17 @@ func TestReleaseVersionsAgree(t *testing.T) {
 func TestKeyboardReferenceCoversVerbs(t *testing.T) {
 	guide := readFile(t, "website/pages/guide.html")
 
-	// Empty on purpose — the guide documents every verb today. Anything
-	// deliberately left out belongs here with its reason.
-	omitted := map[string]string{}
+	// Anything deliberately left out belongs here with its reason.
+	omitted := map[string]string{
+		// 0.8.0 plan Phase 3 registers these ahead of the screen that uses
+		// them (tasks/cronjobschedule, Phase 6) so the registry, not the
+		// screen, is the single source of truth for their key/label from the
+		// start. Documenting them in the public guide before the screen
+		// ships would describe a key that doesn't do anything yet — add both
+		// to the keyboard reference once Phase 6 lands.
+		"cronjob-focus-timezone":     "0.8.0 Phase 6 — tasks/cronjobschedule not yet built",
+		"cronjob-schedule-full-edit": "0.8.0 Phase 6 — tasks/cronjobschedule not yet built",
+	}
 
 	for _, v := range verbs.All {
 		if _, ok := omitted[v.ID]; ok {

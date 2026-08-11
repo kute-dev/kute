@@ -1030,3 +1030,81 @@ func TestHandleBulkResultAllFail(t *testing.T) {
 		t.Fatalf("Failed() = %v, want both entries", msg.Failed())
 	}
 }
+
+// --- 0.8.0 plan Phase 3: verb registry and action policy ------------------
+
+// TestRequiresTypedName pins the exported predicate's verb set (0.8.0 plan
+// §3 Phase 3 task 11): the delete family, rollout-restart, rollout-undo, and
+// now cronjob-suspend — but never cronjob-resume, which never reaches
+// TierModal at all (verbs.TierForCronJobSuspend), the same way job-suspend/
+// job-resume and drain/rollback stay off this list entirely.
+func TestRequiresTypedName(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]bool{
+		"delete": true, "force-delete": true, "rollout-undo": true,
+		"rollout-restart": true, "cronjob-suspend": true,
+	}
+	dontWant := []string{
+		"cronjob-resume", "job-suspend", "job-resume", "drain", "rollback",
+		"cordon", "flux-suspend", "cronjob-set-schedule", "set-image",
+	}
+	for verb := range want {
+		if !RequiresTypedName(verb) {
+			t.Errorf("RequiresTypedName(%q) = false, want true", verb)
+		}
+	}
+	for _, verb := range dontWant {
+		if RequiresTypedName(verb) {
+			t.Errorf("RequiresTypedName(%q) = true, want false", verb)
+		}
+	}
+}
+
+// TestConfirmRequiresTypedNameForCronJobSuspendInProd pins RequiresTypedName
+// actually gating Confirm(), not just the predicate in isolation — the same
+// name-match requirement TestBeginTierModalRequiresNameMatch pins for
+// delete, now exercised through cronjob-suspend's own verb string.
+func TestConfirmRequiresTypedNameForCronJobSuspendInProd(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	action := tui.TaskAction{
+		ID:    "cronjob-suspend-nightly",
+		Label: "Suspend nightly?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-suspend", IsMutating: true,
+		},
+	}
+	c.Begin(TierModal, action)
+	if cmd := c.Confirm(); cmd != nil {
+		t.Fatal("expected Confirm to no-op before any name is typed")
+	}
+	for _, r := range "night" {
+		typeRune(&c, r)
+	}
+	if cmd := c.Confirm(); cmd != nil {
+		t.Fatal("expected Confirm to no-op on a partial match")
+	}
+	if len(mut.cronJobSuspends) != 0 {
+		t.Fatalf("expected no suspend call yet, got %v", mut.cronJobSuspends)
+	}
+
+	for _, r := range "ly" {
+		typeRune(&c, r)
+	}
+	if !c.NameMatches() {
+		t.Fatalf("expected NameMatches once typed == %q, got typed %q", "nightly", c.TypedName())
+	}
+	cmd := c.Confirm()
+	if cmd == nil {
+		t.Fatal("expected Confirm to execute once the name matches")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.cronJobSuspends) != 1 {
+		t.Fatalf("cronJobSuspends = %v, want one call", mut.cronJobSuspends)
+	}
+}

@@ -186,7 +186,7 @@ func (c *Controller) Confirm() tea.Cmd {
 	if c.state != tui.TaskStateConfirming || c.pending == nil {
 		return nil
 	}
-	if c.tier == TierModal && requiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
+	if c.tier == TierModal && RequiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
 		return nil
 	}
 	if c.forceArmed {
@@ -196,19 +196,28 @@ func (c *Controller) Confirm() tea.Cmd {
 	return c.execute()
 }
 
-// requiresTypedName reports whether verb's TierModal confirmation needs the
+// RequiresTypedName reports whether verb's TierModal confirmation needs the
 // typed-name match — the delete family, 16b's rollout-undo (docs/design
-// README.md §16b: "type-the-deployment-name modal in PROD"), and 9a's
+// README.md §16b: "type-the-deployment-name modal in PROD"), 9a's
 // rollout-restart (§9a/§419: "delete and rollout restart are both tiered —
-// inline y/N in non-prod, type-the-name modal in PROD contexts"). Drain's
-// TierModal confirm, and 18a's Helm rollback (a different Scope.Verb,
-// "rollback"), both stay the simple y/N ConfirmCard. Job's own "job-retry"
-// deliberately never reaches TierModal at all (browse/jobs.go's
+// inline y/N in non-prod, type-the-name modal in PROD contexts"), and 36c's
+// cronjob-suspend (0.8.0 plan §3 task 2/3: "suspend/PROD: TierModal with
+// typed resource name" — cronjob-resume never reaches TierModal at all, so
+// it's deliberately absent here, the same way job-retry stays absent below).
+// Drain's TierModal confirm, and 18a's Helm rollback (a different
+// Scope.Verb, "rollback"), both stay the simple y/N ConfirmCard. Job's own
+// "job-retry" deliberately never reaches TierModal at all (browse/jobs.go's
 // beginJobRetry) — components.TypeNameModal this gates is reserved for
 // destructive confirms, and Retry (a clone, not a delete+recreate) isn't
 // one.
-func requiresTypedName(verb string) bool {
-	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo" || verb == "rollout-restart"
+//
+// This is the single predicate every confirm surface, key router, and paste
+// router must call — browse's own requiresTypeNameConfirm used to duplicate
+// this verb list locally (0.8.0 plan §3 Phase 3 task 11: "Export one
+// action-controller predicate... rather than duplicating verb lists").
+func RequiresTypedName(verb string) bool {
+	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo" ||
+		verb == "rollout-restart" || verb == "cronjob-suspend"
 }
 
 // Cancel abandons the pending confirmation.

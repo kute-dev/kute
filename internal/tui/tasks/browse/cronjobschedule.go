@@ -21,7 +21,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // cronScheduleTarget is the state pendingCronSchedule gates on while the
@@ -116,6 +115,13 @@ func (m *Model) updateCronScheduleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 // failure keeps the panel open with t.parseErr set inline — no dry-run
 // round trip, unlike setresources.go's own inline-error idiom, since a cron
 // expression's validity is decidable without touching the cluster.
+//
+// Always TierNone, PROD included (0.8.0 plan §3 decision 10: "Remove the
+// existing PROD-only TierForCronJobSetSchedule confirmation policy. Schedule
+// apply and undo are reversible TierNone actions in every context; the
+// dedicated editor is already the intentionality gate."). Once Phase 6
+// replaces this whole file with the pushed `tasks/cronjobschedule` screen,
+// that screen's own apply commits through the same TierNone tier.
 func (m *Model) commitCronSchedule() tea.Cmd {
 	t := m.pendingCronSchedule
 	value := strings.TrimSpace(t.input.Value())
@@ -128,7 +134,7 @@ func (m *Model) commitCronSchedule() tea.Cmd {
 	t.resultNote = ""
 	pc := value
 	t.pendingCommit = &pc
-	return m.actions.Begin(verbs.TierForCronJobSetSchedule(m.isProd()), tui.TaskAction{
+	return m.actions.Begin(actions.TierNone, tui.TaskAction{
 		ID:    "cronjob-set-schedule-" + t.namespace + "/" + t.name,
 		Label: fmt.Sprintf("Set %s's schedule to %q?", t.name, value),
 		Scope: tui.TaskScope{
@@ -183,11 +189,4 @@ func (m *Model) handleCronScheduleResult(msg actions.ResultMsg) tea.Cmd {
 func (m Model) cronScheduleWillRunLine() string {
 	t := m.pendingCronSchedule
 	return "will run: " + kube.CronJobSetScheduleCommandString(t.namespace, t.name, t.input.Value())
-}
-
-// cronJobSetScheduleWillRunLine is the confirm's "will run: ..." line (only
-// reached when TierForCronJobSetSchedule escalates to TierInline in PROD) —
-// same idiom as jobSuspendWillRunLine (jobs.go).
-func cronJobSetScheduleWillRunLine(scope tui.TaskScope) string {
-	return "will run: " + kube.CronJobSetScheduleCommandString(scope.Namespace, scope.ResourceName, scope.Schedule)
 }

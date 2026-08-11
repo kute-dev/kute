@@ -21,32 +21,25 @@ import (
 
 // isDeleteVerb reports whether verb is the delete family 8b's type-the-name
 // modal handles — the narrower set typeNameConfirmModal needs to tell apart
-// from 9a's rollout-restart, since only the delete family carries an owner/
-// grace-period detail.
+// from every other verb actions.RequiresTypedName also routes here (9a's
+// rollout-restart, 36c's cronjob-suspend), since only the delete family
+// carries an owner/grace-period detail.
 func isDeleteVerb(verb string) bool {
 	return verb == "delete" || verb == "force-delete"
-}
-
-// requiresTypeNameConfirm reports whether verb's TierModal confirmation
-// needs the full type-the-name modal (components.TypeNameModal) rather than
-// the plain y/N ConfirmCard — the delete family plus 9a's rollout-restart
-// (docs/design README.md §9a/§419: "delete and rollout restart are both
-// tiered — inline y/N in non-prod, type-the-name modal in PROD contexts").
-// Everything else that reaches TierModal (Drain) keeps rendering through
-// the existing minimal ConfirmCard. Mirrors actions.requiresTypedName's verb
-// set for the subset of verbs browse itself renders — rollout-undo is
-// timeline's screen, not browse's, so it never reaches this gate.
-func requiresTypeNameConfirm(verb string) bool {
-	return isDeleteVerb(verb) || verb == "rollout-restart"
 }
 
 // typingConfirmName reports whether the type-the-name modal is the active
 // confirm surface — i.e. whether there's a text buffer on screen at all.
 // updateConfirmKey routes keys by it and pasteTarget routes pastes by it, so
-// the two can't disagree about where typed input is going.
+// the two can't disagree about where typed input is going. Reads
+// actions.RequiresTypedName directly rather than a browse-local copy of its
+// verb list (0.8.0 plan §3 Phase 3 task 11) — browse's TierModal surface is
+// always this one predicate's verbs; rollout-undo is timeline's screen and
+// never reaches here, but including it costs nothing since browse never
+// stages that verb.
 func (m Model) typingConfirmName() bool {
 	pending := m.actions.Pending()
-	return m.actions.Tier() == actions.TierModal && pending != nil && requiresTypeNameConfirm(pending.Scope.Verb)
+	return m.actions.Tier() == actions.TierModal && pending != nil && actions.RequiresTypedName(pending.Scope.Verb)
 }
 
 // isProd reports whether the active session's current context is tagged
@@ -113,13 +106,13 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 	})
 }
 
-// typeNameConfirmModal renders the type-the-name modal for a pending
-// delete/force-delete or rollout-restart — the verbs requiresTypeNameConfirm
-// routes here (every other TierModal verb, i.e. Drain, keeps rendering
-// through nodes.go's existing confirmBody/ConfirmCard, untouched by this
-// file). The delete family gets 8b's owner/grace-period detail and its ctrl-k
-// force-delete hint; rollout-restart (9a) has neither concept, so it gets the
-// same "will run: kubectl rollout restart …" line the non-prod inline
+// typeNameConfirmModal renders the type-the-name modal for a pending verb
+// actions.RequiresTypedName routes here (every other TierModal verb, i.e.
+// Drain, keeps rendering through nodes.go's existing confirmBody/
+// ConfirmCard, untouched by this file). The delete family gets 8b's owner/
+// grace-period detail and its ctrl-k force-delete hint; rollout-restart (9a)
+// and cronjob-suspend (36c) have neither concept, so each gets its own exact
+// "will run: kubectl …" line instead, the same one its non-prod inline
 // confirm's keybar already shows.
 func (m Model) typeNameConfirmModal(width, height int) string {
 	theme := m.Theme()
@@ -131,10 +124,16 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 	if pending := m.actions.Pending(); pending != nil {
 		title = "✕ " + pending.Label
 		target = pending.Scope.ResourceName
-		if pending.Scope.Verb == "rollout-restart" {
+		switch {
+		case pending.Scope.Verb == "rollout-restart":
 			actionVerb = "restart"
 			detail = rolloutRestartWillRunLine(pending.Scope)
-		} else {
+		case pending.Scope.Verb == "cronjob-suspend":
+			// PROD escalation only — cronjob-resume never reaches TierModal
+			// (verbs.TierForCronJobSuspend), so this branch is suspend-only.
+			actionVerb = "suspend"
+			detail = cronJobSuspendWillRunLine(pending.Scope)
+		case isDeleteVerb(pending.Scope.Verb):
 			if pending.Owner != "" {
 				ownerLine = pending.Owner + " — will be recreated"
 			}

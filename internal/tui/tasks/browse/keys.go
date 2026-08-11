@@ -238,12 +238,17 @@ func (m Model) Keybar() tui.Keybar {
 					// the exact "will run: kubectl create job ...
 					// --from=cronjob/..." line, same idiom as job-retry above.
 					note = cronJobRunNowWillRunLine(pending.Scope)
-				case "cronjob-set-schedule":
-					// only reached when TierForCronJobSetSchedule escalates to
-					// TierInline in PROD — cronjob-suspend/cronjob-resume never
-					// appear here, fixed TierNone, never escalates, exactly like
-					// cordon/flux-suspend are also absent from this switch.
-					note = cronJobSetScheduleWillRunLine(pending.Scope)
+				case "cronjob-suspend":
+					// only reached outside PROD — verbs.TierForCronJobSuspend
+					// escalates suspend to TierModal in PROD instead (routed to
+					// delete.go's typeNameConfirmModal via
+					// actions.RequiresTypedName's "cronjob-suspend" entry).
+					// cronjob-resume never appears here, fixed TierNone (staged,
+					// reversible, immediate), exactly like cordon/flux-suspend's
+					// own absence. cronjob-set-schedule is likewise absent now —
+					// its apply is unconditionally TierNone (0.8.0 plan §3
+					// decision 10).
+					note = cronJobSuspendWillRunLine(pending.Scope)
 				case "set-meta":
 					// 26a: the panel itself stays open under this confirm
 					// (meta.go's own doc comment) and already renders the full

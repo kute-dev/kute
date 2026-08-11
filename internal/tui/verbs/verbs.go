@@ -75,8 +75,14 @@ var (
 	Goto   = Verb{ID: "goto", Key: "g", Label: "goto", Global: true}
 	Filter = Verb{ID: "filter", Key: "/", Label: "filter", Global: true}
 	Open   = Verb{ID: "open", Key: "↵", Label: "open"}
-	Logs   = Verb{ID: "logs", Key: "l", Label: "logs", Kinds: []kube.ResourceKind{kube.KindPod}}
-	YAML   = Verb{ID: "yaml", Key: "y", Label: "yaml"}
+	// Logs' Kinds includes CronJob as well as Pod (0.8.0 plan §36a: "l opens
+	// logs for the newest useful Pod of the selected row's active or
+	// latest-failed Job") — a CronJob row is never itself the log source,
+	// browse resolves an actual Pod target first and only then reaches this
+	// verb, the same one-level-of-indirection Timeline's object-scoped 't'
+	// already does for a non-Pod kind.
+	Logs = Verb{ID: "logs", Key: "l", Label: "logs", Kinds: []kube.ResourceKind{kube.KindPod, kube.KindCronJob}}
+	YAML = Verb{ID: "yaml", Key: "y", Label: "yaml"}
 	// Exec is 'x' on a pod — an interactive shell inside a container, handed
 	// off to a kubectl subprocess (kube.ExecSpec over tea.ExecProcess) rather
 	// than routed through kube.Mutator, hence TierNone: there's no confirm
@@ -235,46 +241,88 @@ var (
 	// the CronJob's own jobTemplate, so the CronJob object itself (its
 	// schedule, its own spawned-Job history) is never touched. Same physical
 	// key as JobRetry/RolloutRestart above (Kinds is disjoint — a row is
-	// never both a Job and a CronJob) and the same TierInline reasoning
-	// JobRetry's own doc comment gives: this fires a real, unconfirmed run of
-	// the CronJob's business logic on a bare keypress, so it gets the same
-	// one-line y/N friction every other TierInline verb does, never the
-	// type-the-name modal — this is a clone into a new object, not a
-	// delete+recreate, the same non-destructive argument JobRetry's doc
-	// comment makes for staying out of requiresTypedName.
+	// never both a Job and a CronJob) and the same non-destructive argument
+	// JobRetry's own doc comment makes for staying out of RequiresTypedName:
+	// this is a clone into a new object, not a delete+recreate.
+	//
+	// Tier stays TierInline for now — the plain inline y/N Controller
+	// already renders generically (jobs.go's beginCronJobRunNow, keys.go's
+	// "cronjob-run-now" will-run-line case). The 0.8.0 plan's 36b target
+	// replaces this with browse staging the preflight (selected CronJob,
+	// overlap warning, generated name) in screen state *before* ever calling
+	// Begin, then invoking Begin(TierNone, …) once staged — TierNone because
+	// the staging step is itself the confirmation. That staging is Phase 5
+	// work (cronjob_actions.go); flipping this field ahead of it would drop
+	// the only confirmation ctrl-r has today with nothing yet in its place,
+	// so the field and its call site move together, in Phase 5.
 	CronJobRunNow = Verb{
 		ID: "cronjob-run-now", Key: "ctrl-r", Label: "run now",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
 	}
-	// CronJobSuspend is a CronJob's own 's': one verb, two directions,
-	// exactly FluxSuspend's shape — Scope.Verb is
-	// "cronjob-suspend"/"cronjob-resume" depending on the row's own Suspended
-	// state. TierNone, unlike JobSuspend's TierInline: JobSuspend's own doc
-	// comment explains that setting a Job's spec.suspend tears down its
-	// currently-active pods immediately. A CronJob's spec.suspend does
-	// nothing of the kind — it only stops the controller from creating
-	// *future* Jobs on schedule; any Job (and pod) it has already spawned
-	// keeps running untouched, exactly FluxSuspend's own "reversible and
-	// immediate, touches nothing already applied" case, not JobSuspend's.
+	// CronJobSuspend is a CronJob's own 's': one verb, two directions —
+	// Scope.Verb is "cronjob-suspend"/"cronjob-resume" depending on the
+	// row's own Suspended state — but, unlike FluxSuspend/JobSuspend, the two
+	// directions now carry genuinely different tiers (0.8.0 plan §36c):
+	// suspend is CronJob's "dangerous half" (it fails silently and forever;
+	// nobody gets paged for a scheduled run that never started), so it costs
+	// a keystroke — TierInline outside PROD, the type-the-name modal inside
+	// one — while resume stays reversible-and-immediate TierNone, restoring
+	// exactly the prior state the same way Cordon/FluxSuspend's own resume
+	// does. TierForCronJobSuspend resolves the real per-direction/PROD tier;
+	// this field's own TierNone is the nominal fallback (SetImage's own
+	// nominal-Tier shape), matching resume's default. Bulk: true — 36c: "s
+	// suspends or resumes every marked CronJob behind one confirmation".
 	// Never contends with Job's own 's' (disjoint Kinds) or NodeShell's
 	// (Node-only).
 	CronJobSuspend = Verb{
 		ID: "cronjob-suspend", Key: "s", Label: "suspend",
-		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true, Bulk: true,
 	}
-	// CronJobSetSchedule is 'S' (shift) on a CronJob row — an inline text
-	// editor for spec.schedule, gathered in browse's own pendingCronSchedule
-	// buffer (cronjobschedule.go) before there's an action to Begin, the same
-	// nominal-TierNone/TierForCronJobSetSchedule-resolves-the-real-tier shape
-	// SetImage/Scale use. Uppercase to stay clear of lowercase 's' (this
-	// row's own suspend/resume), ctrl-r (run now), and every Global key
-	// already live on a CronJob row (g/n/c/a/E/e/y/m/t/…) plus Open's ↵ —
-	// checked against the full verbs.go key table, nothing else claims 'S'
-	// anywhere in the app.
+	// CronJobSetSchedule is 'S' (shift) on a CronJob row — pure navigation to
+	// the pushed schedule editor (0.8.0 plan §36d, `internal/tui/tasks/
+	// cronjobschedule`), not a mutation itself, so Mutating stays false the
+	// same way Open/Forward are false: the editor screen applies the actual
+	// patch (through its own registered verb, reused Open relabeled "apply")
+	// once the operator commits there. This replaces the inline
+	// pendingCronSchedule buffer (cronjobschedule.go) that predates the
+	// dedicated task — that file still owns 'S' until Phase 6 replaces it
+	// with real navigation, at which point this verb's Kinds/Key/Label carry
+	// over unchanged. Uppercase to stay clear of lowercase 's' (this row's
+	// own suspend/resume), ctrl-r (run now), and every Global key already
+	// live on a CronJob row (g/n/c/a/E/e/y/m/t/…) plus Open's ↵ — checked
+	// against the full verbs.go key table, nothing else claims 'S' anywhere
+	// in the app.
 	CronJobSetSchedule = Verb{
 		ID: "cronjob-set-schedule", Key: "S", Label: "edit schedule",
-		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+		Kinds: []kube.ResourceKind{kube.KindCronJob},
 	}
+	// CronJobCopyCommand is the schedule editor's and the run-now/resume
+	// preflights' shared 'y' — a screen-local override of the global YAML
+	// key, the same reuse CopyForwardURL/CopyRouteURL already make (0.8.0
+	// plan §36b: "y copies the will-run command"; §36d: "y copy"). Read-only
+	// clipboard copy, so no Tier and not Mutating, same shape as
+	// CopyForwardURL.
+	CronJobCopyCommand = Verb{ID: "cronjob-copy-command", Key: "y", Label: "copy"}
+	// CronJobFocusTimezone is 36d's schedule editor 'tab' — moves focus onto
+	// the timezone field, gated there by the capability read (§3.8) rather
+	// than always-editable. Same screen-local-tab-focus shape as
+	// FocusTLSStrip; read-only UI focus, not a mutation.
+	CronJobFocusTimezone = Verb{ID: "cronjob-focus-timezone", Key: "tab", Label: "timezone"}
+	// CronJobScheduleUndo is 36d's one-step undo after a successful apply —
+	// itself "an ordinary reversible mutation through the same registry"
+	// (§36d), so Mutating: true, TierNone: applying the previous accepted
+	// schedule/timezone pair is exactly as reversible as the apply it
+	// undoes.
+	CronJobScheduleUndo = Verb{ID: "cronjob-schedule-undo", Key: "u", Label: "undo", Mutating: true}
+	// CronJobScheduleFullEdit is 36d's 'ctrl-y' escape hatch to the full
+	// kubectl-edit subprocess (17a's existing tty-handoff machinery) for
+	// anything the schedule editor doesn't cover — concurrency, deadlines,
+	// history limits. Same tty-handoff shape as Edit/Exec/NodeShell: Mutating
+	// because it applies whatever the user saves, no Tier because kubectl
+	// owns the session once kute suspends. A dedicated key rather than
+	// reusing the global Edit verb's 'E' — 'E' would just be ordinary typed
+	// input while a schedule/timezone buffer is focused.
+	CronJobScheduleFullEdit = Verb{ID: "cronjob-schedule-full-edit", Key: "ctrl-y", Label: "full yaml edit", Mutating: true}
 	// FluxSource is §30a's 'o': jump to the object this one reconciles
 	// from. Read-only navigation, so no tier and not mutating.
 	FluxSource = Verb{
@@ -509,7 +557,10 @@ var All = []Verb{
 	FluxReconcile, FluxSuspend, FluxSource,
 	ArgoRefresh, ArgoSync, ArgoURL,
 	CertRenew,
-	Delete, ForceDelete, RolloutRestart, CronJobRunNow, CronJobSuspend, CronJobSetSchedule, Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
+	Delete, ForceDelete, RolloutRestart, JobRetry, JobSuspend,
+	CronJobRunNow, CronJobSuspend, CronJobSetSchedule,
+	CronJobCopyCommand, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
+	Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
 	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
@@ -576,15 +627,25 @@ func TierForSetImage(isProd bool) actions.Tier {
 	return actions.TierNone
 }
 
-// TierForCronJobSetSchedule resolves CronJobSetSchedule's confirmation
-// policy — the same TierNone-outside-PROD/TierInline-in-PROD shape as
-// TierForSetImage, routed through actions.Controller/kube.Mutator like
-// SetImage rather than a screen-local gate.
-func TierForCronJobSetSchedule(isProd bool) actions.Tier {
-	if isProd {
-		return actions.TierInline
+// TierForCronJobSuspend resolves CronJobSuspend's confirmation policy, which
+// — unlike TierForEdit/TierForSetImage's single PROD axis — depends on
+// direction first (0.8.0 plan §36c, decision §3 task 2): resume is always
+// TierNone, reversible-and-immediate exactly like Cordon, because it stages
+// its own preview (suspended duration, missed-run count, next run) before
+// ever reaching Begin, the same "stage first, TierNone execute" shape
+// CronJobRunNow's own doc comment describes for run-now. Suspend is the
+// asymmetric, dangerous half — TierInline outside PROD (the ordinary inline
+// y/N Controller already renders), escalating to TierModal in PROD, where
+// RequiresTypedName's own "cronjob-suspend" entry routes it to the
+// type-the-name modal rather than Drain/Rollback's plain ConfirmCard.
+func TierForCronJobSuspend(suspending, isProd bool) actions.Tier {
+	if !suspending {
+		return actions.TierNone
 	}
-	return actions.TierNone
+	if isProd {
+		return actions.TierModal
+	}
+	return actions.TierInline
 }
 
 // TierForSetResources resolves SetResources's confirmation policy — the same

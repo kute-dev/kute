@@ -417,7 +417,13 @@ func TestCronJobRunNowStaysInlineEvenInProd(t *testing.T) {
 // TierNone contract (unlike Job's own 's', TierInline): pressing 's' applies
 // the suspend/resume immediately, with no confirm state to pass through
 // first — the same shape beginFluxSuspend/beginCordon use.
-func TestSKeyTogglesCronJobSuspendImmediatelyNoConfirm(t *testing.T) {
+// TestSKeyOnCronJobSuspendRequiresConfirmNonProd pins 0.8.0 §36c's
+// asymmetric friction: unlike FluxSuspend/beginCordon, suspend is CronJob's
+// "dangerous half" and costs a keystroke — TierInline outside PROD — even
+// though the underlying verb (Scope.Verb "cronjob-suspend") is the same one
+// TestSKeyOnCronJobSuspendResumeStaysTierNone's resume half leaves at
+// TierNone.
+func TestSKeyOnCronJobSuspendRequiresConfirmNonProd(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", false)},
 	}}
@@ -429,17 +435,68 @@ func TestSKeyTogglesCronJobSuspendImmediatelyNoConfirm(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "s"})
-	if m.actions.Active() {
-		t.Fatalf("expected TierNone to execute immediately with no confirm state")
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected 's' on an active CronJob to open the inline prompt, tier=%v", m.actions.Tier())
 	}
+	if len(mut.cronJobSuspends) != 0 {
+		t.Fatalf("expected no call before 'y', got %v", mut.cronJobSuspends)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0] != "default/nightly=true" {
 		t.Fatalf("expected a suspend call, got %v", mut.cronJobSuspends)
 	}
 }
 
-// TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel mirrors
-// TestSKeyTogglesJobSuspendAndResumeLabel's keybar-label assertions.
-func TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel(t *testing.T) {
+// TestCronJobSuspendEscalatesToModalConfirmInProd mirrors
+// TestJobSuspendEscalatesToModalConfirmInProd, but — unlike Job's own
+// suspend, which is a plain y/N even in PROD (browse's ConfirmCard) — a
+// CronJob suspend confirmation in PROD is routed to the full type-the-name
+// modal (actions.RequiresTypedName's "cronjob-suspend" entry, 0.8.0 plan §3
+// tasks 2/3), the same red-bordered surface delete/rollout-restart use.
+func TestCronJobSuspendEscalatesToModalConfirmInProd(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", false)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
+		t.Fatalf("expected 's' in a prod context to escalate to TierModal, tier=%v", m.actions.Tier())
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "PROD CONTEXT") {
+		t.Fatalf("expected the PROD CONTEXT tag in the modal:\n%s", view)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.cronJobSuspends) != 0 {
+		t.Fatalf("expected enter to no-op before the name matches: %v", mut.cronJobSuspends)
+	}
+	for _, r := range "nightly" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0] != "default/nightly=true" {
+		t.Fatalf("expected a suspend call, got %v", mut.cronJobSuspends)
+	}
+}
+
+// TestSKeyOnCronJobSuspendResumeStaysTierNone mirrors
+// TestSKeyTogglesJobSuspendAndResumeLabel's keybar-label assertions, but —
+// unlike Job's own resume, which still needs 'y' — resume stays reversible-
+// and-immediate TierNone: it stages its own preview before Begin the same
+// way run-now does, so by the time 's' lands there's nothing left for
+// Controller's own confirm to add (0.8.0 plan §36c: "Resume is reversible
+// and executes on ↵ with no destructive escalation"). This holds in PROD
+// too — TierForCronJobSuspend never escalates the resume direction.
+func TestSKeyOnCronJobSuspendResumeStaysTierNone(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", false)},
 	}}
@@ -453,10 +510,6 @@ func TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel(t *testing.T) {
 	if !strings.Contains(plain(m.Render()), "suspend") {
 		t.Errorf("keybar should read 'suspend' on an active row:\n%s", plain(m.Render()))
 	}
-	m = step(t, m, tea.KeyPressMsg{Text: "s"})
-	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0] != "default/nightly=true" {
-		t.Fatalf("expected a suspend call, got %v", mut.cronJobSuspends)
-	}
 
 	mut2 := &fakeMutator{}
 	lister2 := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
@@ -464,6 +517,7 @@ func TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel(t *testing.T) {
 	}}
 	session2 := newSession()
 	session2.Location.Kind = kube.KindCronJob
+	session2.Config = config.Config{ProdContexts: []string{session2.Location.Context}}
 	m2 := New(Config{Session: session2, Lister: lister2, Mutator: mut2})
 	m2.SetSize(120, 36)
 	m2 = step(t, m2, m2.Init()())
@@ -472,6 +526,9 @@ func TestSKeyOnCronJobFlipsSuspendResumeKeybarLabel(t *testing.T) {
 		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
 	}
 	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
+	if m2.actions.Active() {
+		t.Fatalf("expected resume to execute immediately with no confirm state, even in PROD")
+	}
 	if len(mut2.cronJobSuspends) != 1 || mut2.cronJobSuspends[0] != "default/nightly=false" {
 		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.cronJobSuspends)
 	}
@@ -566,7 +623,15 @@ func TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult(t *testing.T) {
 // TestCronJobSetScheduleEscalatesToInlineConfirmInProd pins
 // TierForCronJobSetSchedule's PROD gate: TierNone outside PROD (the commit
 // above applies immediately), TierInline — never TierModal — in PROD.
-func TestCronJobSetScheduleEscalatesToInlineConfirmInProd(t *testing.T) {
+// TestCronJobSetScheduleStaysTierNoneInProd pins the removal of the
+// PROD-only escalation this test used to pin the opposite of (0.8.0 plan §3
+// decision 10: "Remove the existing PROD-only TierForCronJobSetSchedule
+// confirmation policy. Schedule apply and undo are reversible TierNone
+// actions in every context; the dedicated editor is already the
+// intentionality gate."). A valid commit executes immediately, PROD
+// included, with no further Controller confirm to ride on top of the
+// panel's own keep-open contract.
+func TestCronJobSetScheduleStaysTierNoneInProd(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {cronJobObj("default", "nightly")},
 	}}
@@ -582,15 +647,13 @@ func TestCronJobSetScheduleEscalatesToInlineConfirmInProd(t *testing.T) {
 	m.pendingCronSchedule.input.SetValue("*/15 * * * *")
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
 
-	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected a valid commit in PROD to escalate to TierInline, tier=%v", m.actions.Tier())
+	if m.actions.Active() {
+		t.Fatalf("expected TierNone to execute immediately with no confirm state, even in PROD")
 	}
-	if len(mut.cronJobSchedules) != 0 {
-		t.Fatalf("expected no call before 'y', got %v", mut.cronJobSchedules)
+	if m.pendingCronSchedule == nil {
+		t.Fatal("expected the panel to stay open after commit (keep-open contract)")
 	}
-
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.cronJobSchedules) != 1 || mut.cronJobSchedules[0] != "default/nightly=*/15 * * * *" {
-		t.Fatalf("expected a SetCronJobSchedule call after confirming, got %v", mut.cronJobSchedules)
+		t.Fatalf("expected an immediate SetCronJobSchedule call, got %v", mut.cronJobSchedules)
 	}
 }

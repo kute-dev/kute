@@ -120,14 +120,25 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// the one property that lets it keep a bare letter (see
 		// FluxReconcile's own comment for why that doesn't generalize).
 		"flux-suspend": true, "flux-reconcile": true,
-		// §36a. CronJobSuspend is FluxSuspend's exact shape: it only pauses
-		// future scheduling, touches nothing already running, and resume
-		// restores the prior state exactly (see CronJobSuspend's own doc
-		// comment, contrasting it with JobSuspend's TierInline). CronJobSetSchedule
-		// is set-image's shape: its own inline panel (cronjobschedule.go) is
-		// the confirmation step, TierNone here is nominal — the real
-		// PROD-sensitive tier comes from TierForCronJobSetSchedule.
-		"cronjob-suspend": true, "cronjob-set-schedule": true,
+		// §36c. CronJobSuspend's own .Tier is nominal now (SetImage's own
+		// nominal-Tier shape), matching resume's TierNone default — the real
+		// per-direction/PROD tier comes from TierForCronJobSuspend, which
+		// gives suspend real friction (TierInline/TierModal) while resume
+		// stays this reversible-and-immediate TierNone, restoring the prior
+		// state exactly (see CronJobSuspend's own doc comment). CronJobSetSchedule
+		// isn't listed here any more — it's pure navigation now (Mutating:
+		// false), so it never reaches this loop's condition at all.
+		"cronjob-suspend": true,
+		// §36d. CronJobScheduleUndo is itself "an ordinary reversible
+		// mutation through the same registry" (docs/design README.md §36d) —
+		// applying the previous accepted schedule/timezone pair is exactly as
+		// reversible as the apply it undoes, TierNone the same way. Its own
+		// pushed screen (tasks/cronjobschedule) is the confirmation step,
+		// same as CronJobSetSchedule's editor is for the apply itself.
+		// CronJobScheduleFullEdit is a tty-handoff verb, same shape as
+		// exec/node-shell/edit above: no Tier because kubectl owns the
+		// session once kute suspends.
+		"cronjob-schedule-undo": true, "cronjob-schedule-full-edit": true,
 		// §33a. ArgoRefresh is FluxReconcile's exact shape: it asks
 		// argocd-application-controller to re-diff early, the same re-diff
 		// it already does on its own poll interval. ArgoSync is not
@@ -235,5 +246,143 @@ func TestTtyHandoffVerbsAreGatedOffline(t *testing.T) {
 	}
 	if Forward.HiddenWhileOffline(true) {
 		t.Error("Forward should stay available while offline — a local session, not a write")
+	}
+}
+
+// TestAllRegistersEveryDefinedVerb pins 0.8.0 plan §3 Phase 3 task 7: a verb
+// defined as a package-level var but missing from All silently breaks
+// help/lookup consistency (ByID, the ? overlay's fixed columns) while still
+// working at every call site that references the var directly — exactly how
+// JobRetry/JobSuspend went unnoticed. Checked by ID rather than by counting,
+// so it stays correct as more verbs are added.
+func TestAllRegistersEveryDefinedVerb(t *testing.T) {
+	t.Parallel()
+
+	defined := []Verb{
+		Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
+		Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
+		HelmValues, HelmHistory, Mark, MarkAll,
+		FluxReconcile, FluxSuspend, FluxSource,
+		ArgoRefresh, ArgoSync, ArgoURL,
+		CertRenew,
+		Delete, ForceDelete, RolloutRestart, JobRetry, JobSuspend,
+		CronJobRunNow, CronJobSuspend, CronJobSetSchedule,
+		CronJobCopyCommand, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
+		Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
+		AddSecretKey, RemoveSecretKey,
+		AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
+		Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
+		CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
+	}
+	for _, v := range defined {
+		if _, ok := ByID(v.ID); !ok {
+			t.Errorf("%s is a defined verb but missing from All/ByID", v.ID)
+		}
+	}
+}
+
+// TestJobRetryAndJobSuspendRegistered is the narrow regression pin for the
+// specific bug task 7 found: JobRetry/JobSuspend (used directly by
+// browse/jobs.go) were defined but never added to All.
+func TestJobRetryAndJobSuspendRegistered(t *testing.T) {
+	t.Parallel()
+
+	if v, ok := ByID("job-retry"); !ok || v.Key != JobRetry.Key {
+		t.Fatalf("ByID(job-retry) = %+v, %v, want %+v", v, ok, JobRetry)
+	}
+	if v, ok := ByID("job-suspend"); !ok || v.Key != JobSuspend.Key {
+		t.Fatalf("ByID(job-suspend) = %+v, %v, want %+v", v, ok, JobSuspend)
+	}
+}
+
+// TestTierForCronJobSuspend pins §36c's asymmetric-friction shape: resume is
+// always TierNone regardless of PROD, suspend is TierInline outside PROD and
+// escalates to TierModal inside it — the same PROD axis TierFor gives
+// Inline verbs, but resolved per-direction since CronJobSuspend's own
+// Verb.Tier is only the nominal (resume) default.
+func TestTierForCronJobSuspend(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		suspending bool
+		isProd     bool
+		want       actions.Tier
+	}{
+		{"resume non-prod", false, false, actions.TierNone},
+		{"resume prod", false, true, actions.TierNone},
+		{"suspend non-prod", true, false, actions.TierInline},
+		{"suspend prod", true, true, actions.TierModal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := TierForCronJobSuspend(tt.suspending, tt.isProd); got != tt.want {
+				t.Errorf("TierForCronJobSuspend(%v, %v) = %v, want %v", tt.suspending, tt.isProd, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCronJobSetScheduleIsPureNavigation pins decision §3 task 5/10:
+// CronJobSetSchedule stopped being a nominal-Tier mutating verb (the
+// SetImage/Scale shape) and became pure navigation to the pushed editor —
+// Mutating: false, so it never needs a TierFor* resolver of its own and
+// never appears in TestMutatingVerbsCoverAllRegisteredWriteOps's allow-list.
+func TestCronJobSetScheduleIsPureNavigation(t *testing.T) {
+	t.Parallel()
+
+	if CronJobSetSchedule.Mutating {
+		t.Error("CronJobSetSchedule should be pure navigation (Mutating: false) — the pushed editor applies the actual patch")
+	}
+}
+
+// TestCronJobScheduleModeVerbsRegistered pins task 6: the schedule editor's
+// mode-specific keys (copy/timezone/undo/full-edit) are registered ahead of
+// the screen that uses them (Phase 6), with the exact keys/labels docs/
+// design README.md §36d names.
+func TestCronJobScheduleModeVerbsRegistered(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		verb  Verb
+		key   string
+		label string
+	}{
+		{CronJobCopyCommand, "y", "copy"},
+		{CronJobFocusTimezone, "tab", "timezone"},
+		{CronJobScheduleUndo, "u", "undo"},
+		{CronJobScheduleFullEdit, "ctrl-y", "full yaml edit"},
+	}
+	for _, tt := range tests {
+		if tt.verb.Key != tt.key || tt.verb.Label != tt.label {
+			t.Errorf("%s = key %q label %q, want key %q label %q", tt.verb.ID, tt.verb.Key, tt.verb.Label, tt.key, tt.label)
+		}
+	}
+	if !CronJobScheduleUndo.Mutating {
+		t.Error("CronJobScheduleUndo should be Mutating — it applies the previous schedule/timezone through the mutator")
+	}
+	if !CronJobScheduleFullEdit.Mutating {
+		t.Error("CronJobScheduleFullEdit should be Mutating — same tty-handoff shape as Edit")
+	}
+	if CronJobCopyCommand.Mutating || CronJobFocusTimezone.Mutating {
+		t.Error("copy/focus-timezone are read-only UI actions, not mutations")
+	}
+}
+
+// TestLogsAppliesToCronJob pins task 9: Logs' Kinds now includes CronJob
+// (§36a: "l opens logs for the newest useful Pod of the selected row's
+// active or latest-failed Job"), alongside its original Pod applicability.
+func TestLogsAppliesToCronJob(t *testing.T) {
+	t.Parallel()
+
+	if !Logs.AppliesTo(kube.KindCronJob) {
+		t.Error("Logs should apply to CronJob rows")
+	}
+	if !Logs.AppliesTo(kube.KindPod) {
+		t.Error("Logs should still apply to Pod rows")
+	}
+	if Logs.AppliesTo(kube.KindNode) {
+		t.Error("Logs should not apply to Node rows")
 	}
 }

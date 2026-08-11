@@ -24,6 +24,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -164,21 +165,35 @@ func cronJobRunNowWillRunLine(scope tui.TaskScope) string {
 }
 
 // beginCronJobSuspend starts verbs.CronJobSuspend ('s'): one verb, two
-// directions, exactly beginFluxSuspend's shape (flux.go) — including passing
-// verbs.CronJobSuspend.Tier straight into Begin rather than through TierFor,
-// the same choice beginCordon/beginFluxSuspend make for a verb that's
-// permanently TierNone (TierFor only escalates TierInline→TierModal, so
-// calling it here would be a no-op every time). The will-run line is set on
-// m.execFeedback before Begin, same as beginFluxSuspend, so the command is
-// on screen the instant the key lands rather than only after the result —
-// TierNone never shows a confirm for it to ride on otherwise.
+// directions, but — unlike beginFluxSuspend/beginCordon — the two directions
+// now resolve to different tiers (0.8.0 plan §36c/§3 task 2): resume passes
+// verbs.TierForCronJobSuspend(false, …) straight through, always TierNone,
+// so it executes immediately exactly like beginFluxSuspend/beginCordon do;
+// suspend passes verbs.TierForCronJobSuspend(true, m.isProd()) instead,
+// which is TierInline outside PROD and TierModal inside it — the ordinary
+// Controller-driven inline y/N / type-the-name modal every other tiered verb
+// already gets, rendered generically (keys.go's "cronjob-suspend" case,
+// delete.go's typeNameConfirmModal). m.execFeedback is set only for the
+// TierNone (resume) path — a TierInline/TierModal confirm renders its own
+// will-run line (cronJobSuspendWillRunLine) instead, the same split
+// beginJobSuspend's TierInline-only shape doesn't need to make.
+//
+// TODO(0.8.0 Phase 4/5): CronJobResourceVersion/CronJobGeneration/StagedAt
+// stay zero-valued here — resources.Row carries no resourceVersion/
+// generation yet (that's Phase 4's cache-local CronJob+Job aggregation).
+// SetCronJobSuspend's precondition and expected-generation stamp are both
+// no-ops until that data reaches this Scope.
 func (m *Model) beginCronJobSuspend(row resources.Row) tea.Cmd {
 	verb, label := "cronjob-suspend", fmt.Sprintf("Suspend %s?", row.Name)
+	suspending := !row.Suspended
 	if row.Suspended {
 		verb, label = "cronjob-resume", fmt.Sprintf("Resume %s?", row.Name)
 	}
-	m.execFeedback = kube.CronJobSuspendCommandString(row.Namespace, row.Name, !row.Suspended)
-	return m.actions.Begin(verbs.CronJobSuspend.Tier, tui.TaskAction{
+	tier := verbs.TierForCronJobSuspend(suspending, m.isProd())
+	if tier == actions.TierNone {
+		m.execFeedback = kube.CronJobSuspendCommandString(row.Namespace, row.Name, suspending)
+	}
+	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    verb + "-" + row.Name,
 		Label: label,
 		Scope: tui.TaskScope{
@@ -186,6 +201,13 @@ func (m *Model) beginCronJobSuspend(row resources.Row) tea.Cmd {
 			Namespace: row.Namespace, Verb: verb, IsMutating: true,
 		},
 	})
+}
+
+// cronJobSuspendWillRunLine is beginCronJobSuspend's confirm "will run: ..."
+// line for the TierInline/TierModal (suspend) path — same idiom as
+// jobSuspendWillRunLine.
+func cronJobSuspendWillRunLine(scope tui.TaskScope) string {
+	return "will run: " + kube.CronJobSuspendCommandString(scope.Namespace, scope.ResourceName, scope.Verb == "cronjob-suspend")
 }
 
 // cronJobKeybarGroup mirrors jobKeybarGroup/fluxKeybarGroup: copies the
