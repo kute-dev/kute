@@ -126,7 +126,10 @@ func (m Model) Header() tui.HeaderState {
 
 // stripLineCount is how many Strips lines the current state renders — kept
 // in sync with Strips itself so selection.go's tableDataRows can budget the
-// table viewport correctly.
+// table viewport correctly. §36a's CronJob behavior strip is NOT counted
+// here — per the design mockup it renders at the bottom of the table body,
+// not among these top-of-screen strips; see tableDataRows/tableBody's own
+// reservation for it instead.
 func (m Model) stripLineCount() int {
 	switch m.state {
 	case tui.TaskStateEmpty, tui.TaskStateLoading:
@@ -139,12 +142,6 @@ func (m Model) stripLineCount() int {
 		if m.filterActive {
 			n++
 		}
-		if m.kind == kube.KindCronJob && !m.offline() {
-			// §36a's behavior strip (Phase 4 task 9) — reserved unconditionally
-			// so the keybar never gets truncated at 80x24 (task 10), even when
-			// nothing's selected yet.
-			n++
-		}
 		return n
 	default:
 		return 0
@@ -155,7 +152,11 @@ func (m Model) stripLineCount() int {
 // table column header still renders — the app is fine"), the per-status
 // health strip once ready (or, offline, the 4a reconnect banner + stale
 // snapshot strip in its place), and — while filtering — an extra line with
-// the live query, matched/total, and a "hidden by filter" notice.
+// the live query, matched/total, and a "hidden by filter" notice. §36a's
+// CronJob behavior strip is deliberately not one of these: the design
+// mockup docks it above the keybar, below the table, so tableBody renders
+// it as a trailing line instead — see cronJobBehaviorStripLine's own doc
+// comment.
 func (m Model) Strips(width int) []string {
 	theme := m.Theme()
 	switch m.state {
@@ -172,9 +173,6 @@ func (m Model) Strips(width int) []string {
 		}
 		if m.filterActive {
 			lines = append(lines, m.filterStripLine(theme, width))
-		}
-		if m.kind == kube.KindCronJob && !m.offline() {
-			lines = append(lines, m.cronJobBehaviorStripLine(theme, width))
 		}
 		return lines
 	default:
@@ -506,8 +504,13 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 // zero-value behavior (ConcurrencyPolicy "" == Allow, history limits 3/1,
 // Job's own BackoffLimit 6) rather than rendering a misleading blank.
 // Renders an inset-only line when nothing's selected (filtered to zero
-// rows, or the cursor rests on a group/fold line) so stripLineCount's
-// reserved height stays correct either way.
+// rows, or the cursor rests on a group/fold line) so tableBody's reserved
+// height stays correct either way. Composed as a trailing line of
+// tableBody, not Strips: the mockup docks this strip directly above the
+// keybar, below the table — the same "extra line inside Body's own
+// budgeted height" idiom secretdata/configmapdata's willRunStrip and
+// browse's own meta.go panel use, rather than a Chrome-level strip above
+// the table.
 func (m Model) cronJobBehaviorStripLine(theme tui.Theme, width int) string {
 	if line, ok := m.cronJobRunOverlapBannerLine(theme, width); ok {
 		// §36b's amber overlap-warning banner (cronjob_actions.go) swaps into
@@ -1021,16 +1024,22 @@ func (m Model) tableBody(width, height int) string {
 		rows = append(rows, components.Row{Cells: cells, RowStyle: st.dim})
 	}
 
+	// One line reserved for FooterLine always; CronJobs reserve a second for
+	// §36a's trailing behavior strip, docked below the table rather than
+	// among Strips' top-of-screen lines (keep in sync with selection.go's
+	// tableDataRows).
+	reserved := 1
+	cronJobStrip := m.kind == kube.KindCronJob && !m.offline()
+	if cronJobStrip {
+		reserved = 2
+	}
 	t := components.Table{
-		Columns:  tableCols,
-		Rows:     rows,
-		Selected: m.selected,
-		Offset:   m.offset,
-		Width:    width,
-		// One line reserved for FooterLine, one for the rule dividing the
-		// column headers from the data rows (keep in sync with selection.go's
-		// tableDataRows).
-		Height:         max(height-1, 1),
+		Columns:        tableCols,
+		Rows:           rows,
+		Selected:       m.selected,
+		Offset:         m.offset,
+		Width:          width,
+		Height:         max(height-reserved, 1),
 		SortKey:        sortKey,
 		SortAsc:        sortAsc,
 		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint),
@@ -1041,7 +1050,11 @@ func (m Model) tableBody(width, height int) string {
 		ShowHeaderRule: true,
 		RuleStyle:      lipgloss.NewStyle().Foreground(theme.TextGhost2),
 	}
-	return t.Render() + "\n" + t.FooterLine(width)
+	out := t.Render() + "\n" + t.FooterLine(width)
+	if cronJobStrip {
+		out += "\n" + m.cronJobBehaviorStripLine(theme, width)
+	}
+	return out
 }
 
 // rowCells builds one data row's per-column cells with 2a's per-column

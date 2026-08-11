@@ -68,8 +68,10 @@ func cronJobBrowseSession() *tui.Session {
 }
 
 // TestCronJobColumnsAndStableNameOrder pins Phase 4 test 1: the exact §36a
-// column set, and fixed namespace/name order regardless of health (unlike
-// every workloadKinds member's default unhealthy-first sort).
+// column set, and namespace/name order as the *default* (unlike every
+// workloadKinds member's default unhealthy-first sort) — see
+// TestCronJobManualSortOverridesDefaultAndSurvivesClockTick below for the
+// manual-sort override on top of this default.
 func TestCronJobColumnsAndStableNameOrder(t *testing.T) {
 	cjA := cronJobObj("default", "zzz-last")
 	cjB := cronJobObj("default", "aaa-first")
@@ -85,7 +87,42 @@ func TestCronJobColumnsAndStableNameOrder(t *testing.T) {
 		t.Fatalf("columns = %v, want [Name Schedule Susp Act Last Run Next]", got)
 	}
 	if len(m.rows) != 2 || m.rows[0].Name != "aaa-first" || m.rows[1].Name != "zzz-last" {
-		t.Fatalf("expected fixed name order [aaa-first zzz-last], got %+v", m.rows)
+		t.Fatalf("expected default name order [aaa-first zzz-last], got %+v", m.rows)
+	}
+}
+
+// TestCronJobManualSortOverridesDefaultAndSurvivesClockTick pins the current
+// §36a contract: CronJobs sort exactly like every other kind — a manual 1-9
+// column pick overrides the name-order default — and, unlike every other
+// kind, that choice must survive applyCronJobTick's once-a-second rebuild
+// (model.go), which regenerates m.rows from cronJobSummaries in their own
+// fixed base order on every tick.
+func TestCronJobManualSortOverridesDefaultAndSurvivesClockTick(t *testing.T) {
+	cjA := cronJobObj("default", "zzz-last")
+	cjA.Spec.Schedule = "0 0 * * *"
+	cjB := cronJobObj("default", "aaa-first")
+	cjB.Spec.Schedule = "*/5 * * * *"
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cjA, cjB},
+	}}
+	m := New(Config{Session: cronJobBrowseSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	// Sort by Schedule (column 2): "*/5 * * * *" < "0 0 * * *" ascending,
+	// putting aaa-first (whose schedule starts with '*') ahead of zzz-last —
+	// overriding the name-order default that would otherwise put
+	// aaa-first first anyway, so also flip direction to prove the override
+	// actually took effect rather than coincidentally matching name order.
+	m.handleSortKey(2)
+	m.handleSortKey(2) // press again: flips to descending
+	if len(m.rows) != 2 || m.rows[0].Name != "zzz-last" || m.rows[1].Name != "aaa-first" {
+		t.Fatalf("expected manual descending Schedule sort [zzz-last aaa-first], got %+v", m.rows)
+	}
+
+	m.applyCronJobTick(time.Now())
+	if len(m.rows) != 2 || m.rows[0].Name != "zzz-last" || m.rows[1].Name != "aaa-first" {
+		t.Fatalf("expected manual sort to survive the clock tick, got %+v", m.rows)
 	}
 }
 
@@ -123,10 +160,12 @@ func TestCronJobActiveRowKeepsPriorLastRunWhileActShowsRunning(t *testing.T) {
 	}
 }
 
-// TestCronJobFailureSubLineOnlyUnderSelectedRow pins Phase 4 task 8/test 4:
-// the inline failure reason renders only beneath the *selected* failed
-// CronJob, never every failed row at once — and follows the cursor.
-func TestCronJobFailureSubLineOnlyUnderSelectedRow(t *testing.T) {
+// TestCronJobFailureSubLineAlwaysVisible pins the current §36a contract: the
+// inline failure reason renders under *every* failed CronJob row, all the
+// time — the same always-on treatment §30a/§33a's Flux/Argo SubLine already
+// gets — never gated by which row is selected, and unaffected by moving the
+// cursor.
+func TestCronJobFailureSubLineAlwaysVisible(t *testing.T) {
 	cjA := cronJobObj("default", "report-nightly")
 	cjA.UID = "cj-a"
 	cjB := cronJobObj("default", "webhook-retry")
@@ -144,23 +183,24 @@ func TestCronJobFailureSubLineOnlyUnderSelectedRow(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()())
 
-	// Selection starts on report-nightly (alphabetically first) — only its
-	// failure line should render.
+	// Both failed rows show their own reason line regardless of selection —
+	// report-nightly is selected (alphabetically first) but webhook-retry's
+	// line renders too.
 	view := plain(m.Render())
 	if !strings.Contains(view, "BackoffLimitExceeded") {
-		t.Fatalf("expected the selected row's failure reason visible:\n%s", view)
+		t.Fatalf("expected report-nightly's failure reason visible:\n%s", view)
 	}
-	if strings.Contains(view, "DeadlineExceeded") {
-		t.Fatalf("expected the non-selected row's failure reason hidden:\n%s", view)
+	if !strings.Contains(view, "DeadlineExceeded") {
+		t.Fatalf("expected webhook-retry's failure reason visible even though it's not selected:\n%s", view)
 	}
 
 	m.moveSelection(1)
 	view = plain(m.Render())
-	if strings.Contains(view, "BackoffLimitExceeded") {
-		t.Fatalf("expected the no-longer-selected row's failure reason hidden after moving:\n%s", view)
+	if !strings.Contains(view, "BackoffLimitExceeded") {
+		t.Fatalf("expected report-nightly's failure reason to stay visible after moving off it:\n%s", view)
 	}
 	if !strings.Contains(view, "DeadlineExceeded") {
-		t.Fatalf("expected the newly selected row's failure reason visible after moving:\n%s", view)
+		t.Fatalf("expected webhook-retry's failure reason still visible:\n%s", view)
 	}
 }
 

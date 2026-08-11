@@ -1,7 +1,6 @@
   ❯ kute │ microk8s-cluster › default › CronJobs (g to jump)                                               ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 2 last run ok   ✕ 1 last run failed   ○ 1 no history   ◐ 1 active now   ⏸ 1 suspended                               
-  nightly │ concurrency Allow │ deadline none │ history 3 ok · 1 failed │ tz controller local │ backoff 6               
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                                         
                                                                                                                         
@@ -23,6 +22,7 @@
          │   ↵ suspend (when name matches)   esc cancel                                                       │         
          │                                                                                                    │         
          ╰────────────────────────────────────────────────────────────────────────────────────────────────────╯         
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

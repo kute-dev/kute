@@ -1,12 +1,12 @@
   ❯ kute │ microk8s-cluster › default › CronJobs (g to jump)                                               ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ○ 1 no history   ⏸ 1 suspended                                                       1 cronjobs · clock 09:27:00 UTC  
-  backup │ concurrency Allow │ deadline none │ history 3 ok · 1 failed │ tz UTC │ backoff 6                             
+  ○ 1 no history   ⏸ 1 suspended                                                       1 cronjobs · clock 12:12:00 UTC  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                     SCHEDULE        SUSP    ACT     LAST RUN                            NEXT  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▎ ⏸  backup                                   */5 * * * *     yes     0       no retained runs                       —  
   1–1 of 1                                                                                                      ██████  
+  backup │ concurrency Allow │ deadline none │ history 3 ok · 1 failed │ tz UTC │ backoff 6                             
                                                                                                                         
                                                                                                                         
                                                                                                                         

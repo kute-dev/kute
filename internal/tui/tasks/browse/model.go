@@ -579,14 +579,16 @@ func (m Model) scheduleCronJobTick(epoch int) tea.Cmd {
 }
 
 // applyCronJobTick rebuilds m.rows from the stored cronJobSummaries at the
-// current instant (Phase 4 task 5) — no lister call, ever. recomputeVisible
-// re-derives m.visible/m.display from the refreshed rows and preserves
-// filtering/selected identity (task 15); syncCronJobSubLine (its own last
-// step) recomputes the failure continuation line for whatever's selected
-// now that every row's SubLine was just reset by the fresh ProjectCronJob
-// call below. A stale summaries/rows length mismatch (only possible mid-
-// reload, between a kind switch and its first rowsLoadedMsg) is a no-op;
-// the reload in flight settles it.
+// current instant (Phase 4 task 5) — no lister call, ever. ProjectCronJob
+// sets each row's own SubLine directly (docs/design README.md §36a: every
+// failed row shows its reason, not just the selected one), so no selection
+// bookkeeping is needed here. applySort re-applies a manual 1-9 sort
+// (sort.go) since the rebuild above always regenerates rows in the
+// cronJobSummaries' own fixed name order; recomputeVisible then re-derives
+// m.visible/m.display from the (possibly resorted) rows and preserves
+// filtering/selected identity (task 15). A stale summaries/rows length
+// mismatch (only possible mid-reload, between a kind switch and its first
+// rowsLoadedMsg) is a no-op; the reload in flight settles it.
 func (m *Model) applyCronJobTick(now time.Time) {
 	if len(m.cronJobSummaries) != len(m.rows) {
 		return
@@ -598,6 +600,7 @@ func (m *Model) applyCronJobTick(now time.Time) {
 		}
 		m.rows[i] = row
 	}
+	m.applySort()
 	m.recomputeVisible()
 }
 
@@ -1244,10 +1247,12 @@ func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace 
 	podObjs, _ := lister.ListRaw(ctx, kube.KindPod, namespace)
 
 	summaries := resources.BuildCronJobSummaries(cronJobObjs, jobObjs, podObjs)
-	// Fixed namespace/name order, always (§36a: "suspended rows stay in
-	// name order") — the same stable sort resources.List itself applies,
-	// since CronJob is deliberately absent from sort.go's workloadKinds/
-	// unhealthyFirst sets (resources/cronjobs.go's own doc comment).
+	// Namespace/name order is the base default (§36a: sorted by name unless
+	// the user picks a column) — the same stable sort resources.List itself
+	// applies, since CronJob is deliberately absent from sort.go's
+	// workloadKinds/unhealthyFirst sets (resources/cronjobs.go's own doc
+	// comment). applyRowsLoaded's own applySort call (update.go) layers a
+	// manual 1-9 sort on top of this when one is active.
 	sort.SliceStable(summaries, func(i, j int) bool {
 		a, b := summaries[i].Object, summaries[j].Object
 		if a.Namespace != b.Namespace {

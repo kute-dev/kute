@@ -233,16 +233,13 @@ func (m Model) applyUserSort(rows []resources.Row) {
 // direction, a different column switches to it at its own natural first
 // direction (defaultSortAsc) — a no-op while grouped (6b's namespace
 // partitioning owns row order there) or if this kind has no such column.
+// CronJobs sort exactly like every other kind (docs/design README.md §36a):
+// name order by default (sortForDisplay's no-op path, since CronJob is
+// absent from workloadKinds/unhealthyFirst), but a manual 1-9 press wins
+// over that default the same as anywhere else — applyCronJobTick re-applies
+// it every clock tick so it survives the per-second row rebuild.
 func (m *Model) handleSortKey(col int) {
 	if m.grouped() {
-		return
-	}
-	if m.kind == kube.KindCronJob {
-		// §36a: "name order, always" — a manual 1-9 override would let the
-		// user sort a suspended CronJob out of the position it was left in,
-		// exactly what the fixed order exists to prevent. tableBody's own
-		// sortColumn>0 guard is what hides the header's sort arrow, so
-		// simply never setting m.sortColumn here is sufficient.
 		return
 	}
 	if col < 1 || col > len(m.desc.Columns) {

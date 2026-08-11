@@ -17,12 +17,13 @@
 //
 // Deliberately not done here: internal/tui/tasks/browse/sort.go's
 // workloadKinds map (unhealthy-first sort) does not gain a KindCronJob
-// entry. §36a keeps CronJobs in fixed namespace/name order always — a
+// entry. §36a's default keeps CronJobs in namespace/name order — a
 // suspended CronJob is usually suspended by the operator that morning and
 // needs to be found where it was left, not sunk to the bottom by a
-// health-first default (docs/design README.md §36a). That's a browse
-// concern outside Phase 1's scope, noted here only so the omission reads as
-// intentional rather than forgotten.
+// health-first default — but, like every other kind, a manual 1-9 column
+// pick (docs/design README.md §36a) overrides that default. That's a
+// browse concern outside Phase 1's scope, noted here only so the omission
+// reads as intentional rather than forgotten.
 package resources
 
 import (
@@ -675,6 +676,11 @@ func ProjectCronJob(summary CronJobSummary, now time.Time) Row {
 		lastRunCell = shortAge(now.Sub(runTimestamp(*summary.LastTerminal))) + " ago " + terminalMark(*summary.LastTerminal)
 	}
 
+	subLine := ""
+	if summary.LastTerminal != nil && summary.LastTerminal.Failed {
+		subLine = cronJobFailureSubLine(*summary.LastTerminal)
+	}
+
 	return Row{
 		Namespace: cj.Namespace,
 		Name:      cj.Name,
@@ -691,6 +697,27 @@ func ProjectCronJob(summary CronJobSummary, now time.Time) Row {
 		GlyphClass: glyphClass,
 		Suspended:  suspended,
 		Active:     active,
+		SubLine:    subLine,
+	}
+}
+
+// cronJobFailureSubLine formats §36a's failure continuation line: the newest
+// terminal run's own Job condition reason/message, verbatim — the same
+// "prose renders as a continuation line, never paraphrased" rule
+// fluxSubLine/argoSubLine follow (resources/flux.go, resources/argo.go).
+// Unlike those two curated kinds, this one is not gated by row selection —
+// every failed CronJob shows its own line, all the time (docs/design
+// README.md §36a).
+func cronJobFailureSubLine(s JobSummary) string {
+	switch {
+	case s.Reason != "" && s.Message != "":
+		return s.Reason + " — " + s.Message
+	case s.Reason != "":
+		return s.Reason
+	case s.Message != "":
+		return s.Message
+	default:
+		return "failed — no message retained"
 	}
 }
 
