@@ -199,7 +199,7 @@ func writeSiteFiles(s site, outDir string) error {
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0b10",
-  "theme_color": "#0b0b10",
+  "theme_color": "#5ddba4",
   "icons": [
     { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
