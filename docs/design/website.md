@@ -152,8 +152,6 @@ third-party round trip behind it. Only weights actually used are requested.
 ## Provenance
 
 Layout rhythm, pill geometry and the original two-font split were taken from
-huly.io. The retired aurora treatment is still documented as historical
-inspiration in the reference doc at
-[`website-inspiration-huly.md`](website-inspiration-huly.md) — it describes
-Huly's system, not kute's, and contains no kute content. **The palette was
-never taken from it.**
+huly.io, including the retired aurora hero treatment. **The palette was never
+taken from it** — it is kute's own semantic `Theme` tokens, reproduced in
+HTML/CSS.
