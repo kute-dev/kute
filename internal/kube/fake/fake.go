@@ -1260,6 +1260,18 @@ func (c *Cluster) SetUserName(name string) {
 	c.userName = name
 }
 
+// CurrentUser answers the identity SetUserName pinned — the fake
+// counterpart of a real *kube.Cluster's Context.UserName field, which app.go
+// reads directly since kube.Cluster.Context is a plain struct field with no
+// getter of its own. app.go's composition root (0.8.0 plan Phase 8) uses
+// this to wire browse.Config.CurrentUser in --demo, the identity §36b's
+// run-now stamps into kube.AnnotationTriggeredBy.
+func (c *Cluster) CurrentUser() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.userName
+}
+
 // SetUserGroups sets the pinned current user's known group memberships —
 // the fake counterpart of a client cert's Subject Organization fields
 // (kube.Context.UserGroups), so --demo can also exercise a Group-only

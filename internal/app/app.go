@@ -25,6 +25,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/browse"
 	"github.com/kute-dev/kute/internal/tui/tasks/certchain"
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
+	"github.com/kute-dev/kute/internal/tui/tasks/cronjobdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/cronjobschedule"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
@@ -573,6 +574,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openTimeline := openTimelineFunc(sess, cluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, cluster, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, cluster, openObjectEvents)
+	openCronJobSchedule := openCronJobScheduleFunc(sess, cluster)
 	b := browse.New(browse.Config{
 		Session:             sess,
 		Lister:              lister,
@@ -598,10 +600,12 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenHelmValues:      openHelmValuesFunc(sess),
 		OpenSecretData:      openSecretDataFunc(sess, cluster),
 		OpenConfigMapData:   openConfigMapDataFunc(sess, cluster),
-		OpenCronJobSchedule: openCronJobScheduleFunc(sess, cluster),
+		OpenCronJobSchedule: openCronJobSchedule,
+		OpenCronJobDetail:   openCronJobDetailFunc(sess, cluster, openLogs, openYAML, openCronJobSchedule, cluster.Context.UserName),
 		OpenOverview:        openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
 		Forwards:            sess.Forwards,
 		Retrier:             cluster,
+		CurrentUser:         cluster.Context.UserName,
 	})
 	return &b
 }
@@ -653,6 +657,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, demoCluster, openObjectEvents)
+	openCronJobSchedule := openCronJobScheduleFunc(sess, demoCluster)
 	b := browse.New(browse.Config{
 		Session:             sess,
 		Lister:              lister,
@@ -678,10 +683,12 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenHelmValues:      openHelmValuesFunc(sess),
 		OpenSecretData:      openSecretDataFunc(sess, demoCluster),
 		OpenConfigMapData:   openConfigMapDataFunc(sess, demoCluster),
-		OpenCronJobSchedule: openCronJobScheduleFunc(sess, demoCluster),
+		OpenCronJobSchedule: openCronJobSchedule,
+		OpenCronJobDetail:   openCronJobDetailFunc(sess, demoCluster, openLogs, openYAML, openCronJobSchedule, demoCluster.CurrentUser()),
 		OpenOverview:        openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
 		Forwards:            sess.Forwards,
 		Retrier:             demoCluster,
+		CurrentUser:         demoCluster.CurrentUser(),
 	})
 	return &b
 }
@@ -1095,6 +1102,43 @@ func openCronJobScheduleFunc(sess *tui.Session, active seams) browse.OpenCronJob
 		})
 		cs.SetSize(width, height)
 		return &cs, cs.Init()
+	}
+}
+
+// openCronJobDetailFunc pushes tasks/cronjobdetail (§36e) for a CronJob
+// row — active alone satisfies every seam it needs (ListRaw for the
+// CronJob/Job/Pod caches its own aggregation reads, kube.Mutator for its
+// own run-now/suspend/resume verbs, same as browse's CronJob branch).
+// openLogs/openYAML/openSchedule are the already-built closures buildBrowse-
+// Task/buildDemoBrowseTask hand to browse itself, so cronjobdetail's `l`/`y`/
+// `S` push exactly the same screens browse's own keys do rather than a
+// second, possibly-drifting construction. currentUser threads through
+// browse.Config.CurrentUser's own identity (real: cluster.Context.UserName,
+// demo: fake.Cluster.CurrentUser()) so cronjobdetail's run-now preflight
+// stamps the same kube.AnnotationTriggeredBy creator browse's list does.
+func openCronJobDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openSchedule browse.OpenCronJobScheduleFunc, currentUser string) browse.OpenCronJobDetailFunc {
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
+	return func(namespace, name string, siblings []browse.CronJobSiblingRef, index, width, height int) (tea.Model, tea.Cmd) {
+		refs := make([]cronjobdetail.SiblingRef, len(siblings))
+		for i, s := range siblings {
+			refs[i] = cronjobdetail.SiblingRef{Namespace: s.Namespace, Name: s.Name}
+		}
+		cd := cronjobdetail.New(cronjobdetail.Config{
+			Session:      sess,
+			Lister:       active,
+			Mutator:      active,
+			OpenLogs:     cronjobdetail.OpenLogsFunc(openLogs),
+			OpenYAML:     cronjobdetail.OpenYAMLFunc(openYAML),
+			OpenEvents:   cronjobdetail.OpenEventsFunc(openObjectEvents),
+			OpenSchedule: cronjobdetail.OpenScheduleFunc(openSchedule),
+			Namespace:    namespace,
+			Name:         name,
+			Siblings:     refs,
+			SiblingIndex: index,
+			CurrentUser:  currentUser,
+		})
+		cd.SetSize(width, height)
+		return &cd, cd.Init()
 	}
 }
 
