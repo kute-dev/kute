@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -300,7 +301,7 @@ func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, s
 	return nil
 }
 
-func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName, _ string, _ time.Time) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -308,7 +309,7 @@ func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobN
 	return nil
 }
 
-func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, _ string, _ int64, _ time.Time) error {
 	if f.err != nil {
 		return f.err
 	}
@@ -316,12 +317,12 @@ func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name strin
 	return nil
 }
 
-func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
 	if f.err != nil {
-		return f.err
+		return kube.CronJobScheduleResult{}, f.err
 	}
-	f.cronJobSchedules = append(f.cronJobSchedules, namespace+"/"+name+"="+schedule)
-	return nil
+	f.cronJobSchedules = append(f.cronJobSchedules, namespace+"/"+name+"="+edit.Schedule)
+	return kube.CronJobScheduleResult{Schedule: edit.Schedule, ResourceVersion: "2"}, nil
 }
 
 func TestNodeColumnsRenderStatusPodsAndVersion(t *testing.T) {

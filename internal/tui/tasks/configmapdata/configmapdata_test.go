@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -112,14 +113,14 @@ func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName strin
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
-func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName, creator string, at time.Time) error {
 	return nil
 }
-func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
 	return nil
 }
-func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
-	return nil
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
+	return kube.CronJobScheduleResult{}, nil
 }
 
 func newSession() *tui.Session {

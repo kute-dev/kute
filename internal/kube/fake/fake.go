@@ -24,15 +24,23 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
+
+// cronJobGroupResource is CronJob's GroupResource for constructing the same
+// typed Conflict error apierrors.IsConflict recognizes against a real
+// cluster — Plan Phase 2 task 13's "conflicts are testable" parity
+// requirement.
+var cronJobGroupResource = schema.GroupResource{Group: "batch", Resource: "cronjobs"}
 
 // Cluster is the in-memory stand-in for *kube.Cluster. The zero value (via
 // New) is an empty cluster; NewDemo seeds it with the fixtures --demo shows.
@@ -68,6 +76,16 @@ type Cluster struct {
 	events chan kube.ResourceChangedMsg
 	connCh chan kube.ConnStateMsg
 	conn   kube.ConnState
+
+	// cronJobRVSeq is the fake cluster's own resourceVersion source for
+	// CronJob mutations (SetCronJobSuspend/SetCronJobSchedule) — Plan Phase
+	// 2 task 13's "enforce/increment resourceVersion on mutations". The
+	// shared k8s.io/client-go/kubernetes/fake clientset (used to unit-test
+	// *kube.Cluster itself, a different package) doesn't check this at all;
+	// this app-level fake has no apiserver underneath it either, so it has
+	// to implement the same optimistic-concurrency contract itself for
+	// --demo and task-level UI tests to exercise Conflict responses.
+	cronJobRVSeq int
 }
 
 // New builds an empty fake cluster scoped to namespace/context.
@@ -294,12 +312,21 @@ func (c *Cluster) SetJobSuspend(_ context.Context, namespace, name string, suspe
 }
 
 // TriggerCronJob is RetryJob's shape applied to a CronJob's own jobTemplate:
-// find the source CronJob, build a new standalone Job from its template, and
-// append it to KindJob's own object set — the source CronJob is left
-// untouched.
-func (c *Cluster) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+// find the source CronJob, build a new standalone Job from its template,
+// stamp Kute's manual-run annotations, and append it to KindJob's own object
+// set — the source CronJob is left untouched. Matches
+// kube.Cluster.TriggerCronJob's own annotation set and last-applied
+// cleanup, and rejects a name already in use (via
+// kube.ErrManualJobNameConflict) the same way a real Create call would with
+// AlreadyExists — Plan Phase 2 task 13/14.
+func (c *Cluster) TriggerCronJob(_ context.Context, namespace, name, newJobName, creator string, at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindJob] {
+		if job, ok := obj.(*batchv1.Job); ok && job.Name == newJobName && job.Namespace == namespace {
+			return fmt.Errorf("%w: job %q already exists in namespace %q", kube.ErrManualJobNameConflict, newJobName, namespace)
+		}
+	}
 	for _, obj := range c.objects[kube.KindCronJob] {
 		cj, ok := obj.(*batchv1.CronJob)
 		if !ok || cj.Name != name || cj.Namespace != namespace {
@@ -315,6 +342,15 @@ func (c *Cluster) TriggerCronJob(_ context.Context, namespace, name, newJobName 
 			},
 			Spec: *tpl.Spec.DeepCopy(),
 		}
+		if job.Annotations == nil {
+			job.Annotations = map[string]string{}
+		}
+		job.Annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+		job.Annotations[kube.AnnotationCronJobName] = cj.Name
+		job.Annotations[kube.AnnotationCronJobUID] = string(cj.UID)
+		job.Annotations[kube.AnnotationTriggeredBy] = creator
+		job.Annotations[kube.AnnotationTriggeredAt] = at.UTC().Format(time.RFC3339)
+		delete(job.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
 		c.objects[kube.KindJob] = append(c.objects[kube.KindJob], job)
 		c.notify(kube.KindJob)
 		return nil
@@ -322,8 +358,46 @@ func (c *Cluster) TriggerCronJob(_ context.Context, namespace, name, newJobName 
 	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
 }
 
-// SetCronJobSuspend patches spec.suspend on a CronJob in place.
-func (c *Cluster) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+// checkCronJobResourceVersion is SetCronJobSuspend/SetCronJobSchedule's
+// shared optimistic-concurrency check: resourceVersion is required, and a
+// mismatch against cj's own current value returns a typed Conflict error
+// (apierrors.IsConflict) rather than a plain fmt.Errorf, so a caller can
+// tell a stale-precondition failure apart from any other error the same way
+// it would against a real apiserver. Must be called with c.mu already held.
+func checkCronJobResourceVersion(cj *batchv1.CronJob, resourceVersion string) error {
+	if resourceVersion == "" {
+		return fmt.Errorf("cannot patch cronjob %q: missing resourceVersion precondition", cj.Name)
+	}
+	if cj.ResourceVersion != resourceVersion {
+		return apierrors.NewConflict(cronJobGroupResource, cj.Name,
+			fmt.Errorf("the object has been modified; please apply your changes to the latest version and try again"))
+	}
+	return nil
+}
+
+// bumpCronJob advances cj's resourceVersion and generation together — the
+// same "any write changes both" behavior a real apiserver guarantees, and
+// what makes the resourceVersion precondition check above meaningful across
+// repeated calls (Plan Phase 2 task 13). The next resourceVersion is always
+// strictly greater than both the cluster's own running counter and cj's
+// current numeric resourceVersion (when it parses as one, which every
+// fixture/test in this repo seeds), so a caller-chosen initial seed value
+// (e.g. "1") can never coincidentally collide with the sequence's own early
+// numbers. Must be called with c.mu already held.
+func (c *Cluster) bumpCronJob(cj *batchv1.CronJob) {
+	next := c.cronJobRVSeq + 1
+	if n, err := strconv.Atoi(cj.ResourceVersion); err == nil && n >= next {
+		next = n + 1
+	}
+	c.cronJobRVSeq = next
+	cj.ResourceVersion = strconv.Itoa(next)
+	cj.Generation++
+}
+
+// SetCronJobSuspend patches spec.suspend on a CronJob in place, stamping/
+// clearing Kute's own suspend-timestamp annotations atomically — matches
+// kube.Cluster.SetCronJobSuspend's own contract (Plan Phase 2 task 13).
+func (c *Cluster) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, obj := range c.objects[kube.KindCronJob] {
@@ -331,16 +405,34 @@ func (c *Cluster) SetCronJobSuspend(_ context.Context, namespace, name string, s
 		if !ok || cj.Name != name || cj.Namespace != namespace {
 			continue
 		}
+		if err := checkCronJobResourceVersion(cj, resourceVersion); err != nil {
+			return err
+		}
 		s := suspend
 		cj.Spec.Suspend = &s
+		if cj.Annotations == nil {
+			cj.Annotations = map[string]string{}
+		}
+		if suspend {
+			cj.Annotations[kube.AnnotationSuspendedAt] = at.UTC().Format(time.RFC3339)
+			cj.Annotations[kube.AnnotationSuspendedGeneration] = strconv.FormatInt(currentGeneration+1, 10)
+		} else {
+			delete(cj.Annotations, kube.AnnotationSuspendedAt)
+			delete(cj.Annotations, kube.AnnotationSuspendedGeneration)
+		}
+		c.bumpCronJob(cj)
 		c.notify(kube.KindCronJob)
 		return nil
 	}
 	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
 }
 
-// SetCronJobSchedule patches spec.schedule on a CronJob in place.
-func (c *Cluster) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
+// SetCronJobSchedule patches spec.schedule (and optionally spec.timeZone) on
+// a CronJob in place, matching kube.Cluster.SetCronJobSchedule's set/clear/
+// untouched timezone contract and resourceVersion precondition, and
+// returning the same kube.CronJobScheduleResult shape (Plan Phase 2 task
+// 13).
+func (c *Cluster) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, obj := range c.objects[kube.KindCronJob] {
@@ -348,11 +440,27 @@ func (c *Cluster) SetCronJobSchedule(_ context.Context, namespace, name, schedul
 		if !ok || cj.Name != name || cj.Namespace != namespace {
 			continue
 		}
-		cj.Spec.Schedule = schedule
+		if err := checkCronJobResourceVersion(cj, edit.ResourceVersion); err != nil {
+			return kube.CronJobScheduleResult{}, err
+		}
+		cj.Spec.Schedule = edit.Schedule
+		if edit.TimeZone != nil {
+			if *edit.TimeZone == "" {
+				cj.Spec.TimeZone = nil
+			} else {
+				tz := *edit.TimeZone
+				cj.Spec.TimeZone = &tz
+			}
+		}
+		c.bumpCronJob(cj)
 		c.notify(kube.KindCronJob)
-		return nil
+		result := kube.CronJobScheduleResult{Schedule: cj.Spec.Schedule, ResourceVersion: cj.ResourceVersion}
+		if cj.Spec.TimeZone != nil {
+			result.TimeZone = *cj.Spec.TimeZone
+		}
+		return result, nil
 	}
-	return fmt.Errorf("%s %q not found", kube.KindCronJob, name)
+	return kube.CronJobScheduleResult{}, fmt.Errorf("%s %q not found", kube.KindCronJob, name)
 }
 
 func (c *Cluster) Cordon(_ context.Context, node string, cordon bool) error {

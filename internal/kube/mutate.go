@@ -14,6 +14,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -149,29 +150,115 @@ type Mutator interface {
 	// TriggerCronJob creates a new, standalone Job called newJobName from
 	// name's own spec.jobTemplate — get, copy ObjectMeta.Labels/Annotations
 	// and Spec off the template, create: exactly what
-	// `kubectl create job newJobName --from=cronjob/name` does. No
-	// OwnerReferences are set (kubectl's own recipe sets none either), so the
-	// manual run is a standalone object the CronJob's own
-	// successfulJobsHistoryLimit/failedJobsHistoryLimit GC never touches —
-	// the same reasoning RetryJob's own doc comment gives for a manual Job
-	// retry. The CronJob itself (its schedule, its own spawned-Job history)
-	// is never touched.
-	TriggerCronJob(ctx context.Context, namespace, name, newJobName string) error
-	// SetCronJobSuspend patches spec.suspend on a CronJob — same JSON body
-	// SetJobSuspend uses, on the batch/v1 CronJob client instead of Job.
+	// `kubectl create job newJobName --from=cronjob/name` does, stamped with
+	// Kute's own manual-run annotations (§36b/§4.2): the source CronJob's
+	// name/UID (AnnotationCronJobName/AnnotationCronJobUID — how
+	// resources.BuildCronJobSummaries associates this Job back to its
+	// CronJob without an owner reference), who asked
+	// (AnnotationTriggeredBy = creator) and when (AnnotationTriggeredAt =
+	// at, RFC3339 UTC — the moment the run was staged/confirmed, not
+	// whenever the API server happens to accept the Create), plus the
+	// kubectl-compatible `cronjob.kubernetes.io/instantiate=manual`
+	// annotation for CLI parity. No OwnerReferences are set (kubectl's own
+	// recipe sets none either), so the manual run is a standalone object the
+	// CronJob's own successfulJobsHistoryLimit/failedJobsHistoryLimit GC
+	// never touches — the same reasoning RetryJob's own doc comment gives
+	// for a manual Job retry. The CronJob itself (its schedule, its own
+	// spawned-Job history) is never touched.
+	//
+	// Returns an error wrapping ErrManualJobNameConflict when newJobName is
+	// already taken (a real AlreadyExists race on the staged name — two
+	// operators racing the same CronJob in the same minute, or a leftover
+	// Job from a prior run) so a caller can distinguish it via errors.Is and
+	// offer restaging against refreshed Job names, rather than silently
+	// picking a different name after the user already confirmed this one.
+	TriggerCronJob(ctx context.Context, namespace, name, newJobName, creator string, at time.Time) error
+	// SetCronJobSuspend patches spec.suspend on a CronJob, atomically
+	// alongside Kute's own suspend-timestamp annotations (§3.3): suspending
+	// stamps AnnotationSuspendedAt = at (RFC3339 UTC, the moment the suspend
+	// was staged/confirmed) and AnnotationSuspendedGeneration =
+	// currentGeneration+1 — the generation the CronJob will have once this
+	// very patch lands, precomputed by the caller from its own already-
+	// loaded CronJobSummary.Object.Generation rather than re-derived here,
+	// the same "preview and execution agree" contract TriggerCronJob's
+	// newJobName follows. Resuming clears both annotations in the same
+	// patch that unsets spec.suspend (at is unused on that path).
+	// resourceVersion is a required precondition: the patch also carries
+	// metadata.resourceVersion, so a concurrent external spec change since
+	// the caller last read the object returns Conflict (see
+	// apierrors.IsConflict) instead of silently overwriting it or stamping
+	// a generation guess that no longer matches reality — the same reason a
+	// stale suspendedAt annotation is deliberately never trusted
+	// (resources.suspendedAt's own generation check).
+	//
 	// Setting suspend=true only stops the controller from creating *future*
 	// Jobs on schedule; any Job (and any pod) already spawned keeps running
 	// untouched — unlike SetJobSuspend, nothing currently active is torn
 	// down (verbs.CronJobSuspend's own doc comment has the full reasoning).
-	SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool) error
-	// SetCronJobSchedule patches spec.schedule on a CronJob — a plain merge
-	// patch, the server-side equivalent of
-	// `kubectl patch cronjob/name --type merge -p '{"spec":{"schedule":"..."}}'`.
-	// The caller (tasks/browse/cronjobschedule.go) has already validated
-	// schedule parses via robfig/cron/v3's ParseStandard before this is ever
-	// reached, so this method trusts the caller instead of re-validating and
-	// returning a second, differently-worded error for the same bad input.
-	SetCronJobSchedule(ctx context.Context, namespace, name, schedule string) error
+	SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error
+	// SetCronJobSchedule atomically patches spec.schedule and (optionally)
+	// spec.timeZone on a CronJob — the server-side equivalent of
+	// `kubectl patch cronjob/name --type merge -p '{"spec":{"schedule":"...","timeZone":...}}'`.
+	// edit.ResourceVersion is a required precondition, the same
+	// metadata.resourceVersion-in-the-patch-body mechanism
+	// SetCronJobSuspend uses, so a concurrent external edit returns Conflict
+	// rather than being silently overwritten. edit.TimeZone distinguishes
+	// "leave spec.timeZone untouched" (nil) from "clear it" (pointer to
+	// "", serialized as an explicit JSON null under the merge patch) from
+	// "set it" (pointer to a non-empty IANA name) — §3.8/§3.9's set/clear
+	// distinction, so an empty or capability-unsupported value can never
+	// accidentally serialize as a stale timezone string. The caller
+	// (tasks/cronjobschedule, Phase 6) has already validated schedule
+	// parses via robfig/cron/v3's ParseStandard and timezone via
+	// time.LoadLocation before this is ever reached, so this method trusts
+	// the caller instead of re-validating and returning a second,
+	// differently-worded error for the same bad input.
+	//
+	// The returned CronJobScheduleResult carries the API's own accepted
+	// schedule/timezone plus the CronJob's new resourceVersion — the
+	// editor's refresh/undo must key off this authoritative value rather
+	// than assume an immediate, possibly-stale informer cache read is
+	// ready.
+	SetCronJobSchedule(ctx context.Context, namespace, name string, edit CronJobScheduleEdit) (CronJobScheduleResult, error)
+}
+
+// ErrManualJobNameConflict wraps a Create AlreadyExists error for a staged
+// manual CronJob run's target Job name (§36b) — TriggerCronJob's newJobName
+// was already taken by the time the create actually ran. Not a bug in
+// ManualJobName's own collision handling: the name was correct against the
+// Job cache the caller staged against, and something else (a racing
+// operator, a leftover fixture) claimed it in between. Callers check
+// errors.Is(err, ErrManualJobNameConflict) to offer restaging against
+// refreshed Job names (Plan Phase 2 task 14) rather than silently picking a
+// different name after the user already confirmed the one shown in the
+// preview.
+var ErrManualJobNameConflict = errors.New("a job with this name already exists")
+
+// CronJobScheduleEdit is SetCronJobSchedule's input (Plan Phase 2 task 6-8).
+// TimeZone is a three-state pointer distinguishing "don't touch
+// spec.timeZone" (nil) from "clear it" (pointer to "") from "set it"
+// (pointer to a non-empty IANA name) — the same nil-vs-pointer-to-""
+// convention ResourceEdits already uses for an explicit unset.
+// ResourceVersion is required: SetCronJobSchedule refuses to patch without
+// one, since an unconditional schedule write is exactly the silent-overwrite
+// behavior §4.2/Phase 2 exists to prevent.
+type CronJobScheduleEdit struct {
+	Schedule        string
+	TimeZone        *string
+	ResourceVersion string
+}
+
+// CronJobScheduleResult is SetCronJobSchedule's successful return: the
+// server's own accepted schedule/timezone reflected back (never just an
+// echo of the request — a caller must read what the API actually stored)
+// plus the CronJob's new resourceVersion after the patch. TimeZone is ""
+// when spec.timeZone is unset after the edit. §36d's editor uses this,
+// never an immediate informer-cache read, to know refresh/undo is ready
+// (Plan Phase 2 task 10).
+type CronJobScheduleResult struct {
+	Schedule        string
+	TimeZone        string
+	ResourceVersion string
 }
 
 // ConfigMapConsumerRef is one workload that references a ConfigMap from its
@@ -378,13 +465,14 @@ func (c *Cluster) SetJobSuspend(ctx context.Context, namespace, name string, sus
 }
 
 // TriggerCronJob creates newJobName from name's own spec.jobTemplate — get,
-// copy the template's metadata/spec, create. The source CronJob (its
-// schedule, its own spawned-Job history) is never touched: this is what
-// `kubectl create job newJobName --from=cronjob/name` does. Like RetryJob,
-// the new Job is deliberately detached from any parent (no
-// OwnerReferences), so a manual trigger doesn't fall under the CronJob's
-// own history-limit GC.
-func (c *Cluster) TriggerCronJob(ctx context.Context, namespace, name, newJobName string) error {
+// copy the template's metadata/spec, stamp Kute's manual-run annotations,
+// create. The source CronJob (its schedule, its own spawned-Job history) is
+// never touched: this is what `kubectl create job newJobName --from=cronjob/name`
+// does, plus the association/attribution annotations documented on the
+// Mutator interface. Like RetryJob, the new Job is deliberately detached
+// from any parent (no OwnerReferences), so a manual trigger doesn't fall
+// under the CronJob's own history-limit GC.
+func (c *Cluster) TriggerCronJob(ctx context.Context, namespace, name, newJobName, creator string, at time.Time) error {
 	if name == "" || newJobName == "" {
 		return fmt.Errorf("cannot trigger cronjob: empty name")
 	}
@@ -408,38 +496,99 @@ func (c *Cluster) TriggerCronJob(ctx context.Context, namespace, name, newJobNam
 	// The real annotation `kubectl create job --from=cronjob` stamps, so a
 	// manually-triggered run reads the same in kute or the CLI.
 	job.Annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+	// Kute's own association/attribution annotations (§4.2/§36b) — how
+	// resources.cronJobAssociation finds this ownerless Job again, and who/
+	// when JobSummary.Creator reports.
+	job.Annotations[AnnotationCronJobName] = cj.Name
+	job.Annotations[AnnotationCronJobUID] = string(cj.UID)
+	job.Annotations[AnnotationTriggeredBy] = creator
+	job.Annotations[AnnotationTriggeredAt] = at.UTC().Format(time.RFC3339)
 	delete(job.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
 	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("%w: %w", ErrManualJobNameConflict, err)
+	}
 	return err
 }
 
-// SetCronJobSuspend patches spec.suspend on a CronJob — same JSON body
-// SetJobSuspend uses, on the CronJob client instead of Job. Unlike
+// SetCronJobSuspend patches spec.suspend on a CronJob, stamping/clearing
+// Kute's own suspend-timestamp annotations in the same atomic patch — see
+// the Mutator interface doc comment for the full reasoning. Unlike
 // SetJobSuspend, this touches nothing already running: suspend=true only
 // stops the controller from creating *future* Jobs on schedule.
-func (c *Cluster) SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool) error {
+func (c *Cluster) SetCronJobSuspend(ctx context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
 	if name == "" {
 		return fmt.Errorf("cannot suspend cronjob: empty name")
 	}
-	patch := fmt.Appendf(nil, `{"spec":{"suspend":%t}}`, suspend)
-	_, err := c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
-	return err
-}
-
-// SetCronJobSchedule patches spec.schedule on a CronJob — a plain merge
-// patch. schedule is JSON-marshaled rather than %s-formatted since it's a
-// free string; the caller has already validated it parses as cron before
-// this is ever reached.
-func (c *Cluster) SetCronJobSchedule(ctx context.Context, namespace, name, schedule string) error {
-	if name == "" {
-		return fmt.Errorf("cannot set schedule: empty cronjob name")
+	if resourceVersion == "" {
+		return fmt.Errorf("cannot suspend cronjob %q: missing resourceVersion precondition", name)
 	}
-	body, err := json.Marshal(map[string]any{"spec": map[string]any{"schedule": schedule}})
+	var annotations map[string]any
+	if suspend {
+		annotations = map[string]any{
+			AnnotationSuspendedAt:         at.UTC().Format(time.RFC3339),
+			AnnotationSuspendedGeneration: strconv.FormatInt(currentGeneration+1, 10),
+		}
+	} else {
+		// A JSON merge patch value of null removes the key entirely — the
+		// same idiom metaPatchJSON/secretDataPatchJSON use for a removal.
+		annotations = map[string]any{
+			AnnotationSuspendedAt:         nil,
+			AnnotationSuspendedGeneration: nil,
+		}
+	}
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"resourceVersion": resourceVersion,
+			"annotations":     annotations,
+		},
+		"spec": map[string]any{"suspend": suspend},
+	})
 	if err != nil {
 		return err
 	}
 	_, err = c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, body, metav1.PatchOptions{})
 	return err
+}
+
+// SetCronJobSchedule atomically patches spec.schedule and (optionally)
+// spec.timeZone on a CronJob — see the Mutator interface doc comment for
+// the set/clear/untouched timezone contract and the resourceVersion
+// precondition.
+func (c *Cluster) SetCronJobSchedule(ctx context.Context, namespace, name string, edit CronJobScheduleEdit) (CronJobScheduleResult, error) {
+	if name == "" {
+		return CronJobScheduleResult{}, fmt.Errorf("cannot set schedule: empty cronjob name")
+	}
+	if edit.ResourceVersion == "" {
+		return CronJobScheduleResult{}, fmt.Errorf("cannot set schedule for %q: missing resourceVersion precondition", name)
+	}
+	spec := map[string]any{"schedule": edit.Schedule}
+	if edit.TimeZone != nil {
+		if *edit.TimeZone == "" {
+			spec["timeZone"] = nil // explicit clear, never a stale leftover string
+		} else {
+			spec["timeZone"] = *edit.TimeZone
+		}
+	}
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{"resourceVersion": edit.ResourceVersion},
+		"spec":     spec,
+	})
+	if err != nil {
+		return CronJobScheduleResult{}, err
+	}
+	updated, err := c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.MergePatchType, body, metav1.PatchOptions{})
+	if err != nil {
+		return CronJobScheduleResult{}, err
+	}
+	result := CronJobScheduleResult{
+		Schedule:        updated.Spec.Schedule,
+		ResourceVersion: updated.ResourceVersion,
+	}
+	if updated.Spec.TimeZone != nil {
+		result.TimeZone = *updated.Spec.TimeZone
+	}
+	return result, nil
 }
 
 // Cordon sets (cordon=true) or clears spec.unschedulable on node via a

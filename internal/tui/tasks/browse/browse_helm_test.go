@@ -440,14 +440,14 @@ func (f *fakeHelmMutator) RetryJob(_ context.Context, namespace, name, newName s
 func (f *fakeHelmMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
-func (f *fakeHelmMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+func (f *fakeHelmMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName, creator string, at time.Time) error {
 	return nil
 }
-func (f *fakeHelmMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+func (f *fakeHelmMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
 	return nil
 }
-func (f *fakeHelmMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
-	return nil
+func (f *fakeHelmMutator) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
+	return kube.CronJobScheduleResult{}, nil
 }
 func (f *fakeHelmMutator) HelmRollback(_ context.Context, namespace, name string, revision int) error {
 	f.namespace, f.name, f.revision = namespace, name, revision

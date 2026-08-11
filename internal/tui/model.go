@@ -136,6 +136,62 @@ type TaskScope struct {
 	// re-derived at execute time. This re-applies what git already says to
 	// run, never a move to a different ref. Empty for every other verb.
 	ArgoSyncRevision string
+	// CronJobResourceVersion is the source CronJob's own resourceVersion at
+	// staging time — the precondition "cronjob-suspend"/"cronjob-resume"
+	// and "cronjob-set-schedule" pass to kube.Mutator's SetCronJobSuspend/
+	// SetCronJobSchedule (0.8.0 plan §4.2/Phase 2 tasks 5-7) so a concurrent
+	// external edit returns Conflict rather than being silently overwritten.
+	// Empty for every other verb.
+	CronJobResourceVersion string
+	// CronJobGeneration is the source CronJob's own Generation at staging
+	// time — a "cronjob-suspend" verb's SetCronJobSuspend call stamps
+	// kute.dev/suspended-generation as this value + 1, the generation the
+	// object will have once the suspend patch itself lands (§3.3), the same
+	// "preview and execution use the identical value" contract NewName
+	// follows for a create/clone verb. Zero for every other verb.
+	CronJobGeneration int64
+	// CronJobTimeZone is a "cronjob-set-schedule" verb's timezone edit: nil
+	// leaves spec.timeZone untouched, a pointer to "" explicitly clears it,
+	// a pointer to a non-empty IANA name sets it (§3.8/§3.9's set/clear
+	// distinction — an empty or capability-unsupported value must never
+	// accidentally serialize as a stale timezone string). nil for every
+	// other verb.
+	CronJobTimeZone *string
+	// StagedAt is the instant a "cronjob-run-now" or "cronjob-suspend"
+	// action was staged/confirmed — kept distinct from the moment the API
+	// server actually accepts the write (kute.dev/triggered-at /
+	// kute.dev/suspended-at, §3.3/§36b) so a delayed confirm still records
+	// when the operator asked, not when the request happened to land. Zero
+	// for every other verb.
+	StagedAt time.Time
+	// TriggerCreator is a "cronjob-run-now" verb's kute.dev/triggered-by
+	// value — who/what asked for the manual run (§36b). Empty for every
+	// other verb.
+	TriggerCreator string
+	// BulkTargets, when non-empty, turns this action into a marked-set bulk
+	// action (Plan Phase 2 task 11): actions.Controller iterates it,
+	// substituting each target's Namespace/ResourceName/
+	// CronJobResourceVersion/CronJobGeneration onto a copy of this Scope for
+	// one execution per target, and reports a BulkResultMsg with one
+	// TargetResult per entry rather than a single joined error — so a
+	// caller can tell which targets failed and retain only those marks.
+	// Every other field on Scope (Verb, TriggerCreator, Schedule, …) stays
+	// shared across every target. Empty for a single-target action, which
+	// is the ordinary case.
+	BulkTargets []BulkTarget
+}
+
+// BulkTarget names one object in a marked-set bulk action (Plan Phase 2
+// task 11) — namespace-qualified so a bulk action can span namespaces in
+// all-namespaces mode. ResourceVersion/Generation mirror TaskScope's own
+// per-target precondition fields (CronJobResourceVersion/CronJobGeneration),
+// since a bulk suspend/resume validates and stamps each target
+// independently rather than sharing one precondition across all of them.
+type BulkTarget struct {
+	Namespace       string
+	ResourceName    string
+	ResourceVersion string
+	Generation      int64
 }
 
 // TaskAction describes an operation available from a task screen.

@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -208,11 +210,13 @@ func TestSetJobSuspendRejectsEmptyName(t *testing.T) {
 // metadata/spec, and it's stamped with the same
 // "cronjob.kubernetes.io/instantiate: manual" annotation the real `kubectl
 // create job --from=cronjob` recipe uses, detached from any parent so it's
-// never swept by the CronJob's own history-limit GC.
+// never swept by the CronJob's own history-limit GC. Also pins Phase 2 task
+// 1/4: the Kute source/creator/time annotations (Plan §4.2/§36b, Phase 2
+// test 4).
 func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 	t.Parallel()
 	cj := &batchv1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", UID: types.UID("cj-uid-1")},
 		Spec: batchv1.CronJobSpec{
 			Schedule: "0 2 * * *",
 			JobTemplate: batchv1.JobTemplateSpec{
@@ -230,7 +234,8 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 	}
 	c, cs := newTestCluster(cj)
 
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-123"); err != nil {
+	triggeredAt := time.Date(2026, 3, 4, 2, 0, 0, 0, time.UTC)
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0200", "operator@example.com", triggeredAt); err != nil {
 		t.Fatalf("TriggerCronJob: %v", err)
 	}
 
@@ -243,7 +248,7 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 		t.Errorf("source CronJob's Status was touched: %+v", src.Status)
 	}
 
-	job, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-manual-123", metav1.GetOptions{})
+	job, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-manual-0200", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get triggered job: %v", err)
 	}
@@ -252,6 +257,18 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 	}
 	if job.Annotations["cronjob.kubernetes.io/instantiate"] != "manual" {
 		t.Errorf("expected the manual-instantiate annotation, got %+v", job.Annotations)
+	}
+	if job.Annotations[AnnotationCronJobName] != "nightly" {
+		t.Errorf("AnnotationCronJobName = %q, want %q", job.Annotations[AnnotationCronJobName], "nightly")
+	}
+	if job.Annotations[AnnotationCronJobUID] != "cj-uid-1" {
+		t.Errorf("AnnotationCronJobUID = %q, want %q", job.Annotations[AnnotationCronJobUID], "cj-uid-1")
+	}
+	if job.Annotations[AnnotationTriggeredBy] != "operator@example.com" {
+		t.Errorf("AnnotationTriggeredBy = %q, want %q", job.Annotations[AnnotationTriggeredBy], "operator@example.com")
+	}
+	if job.Annotations[AnnotationTriggeredAt] != "2026-03-04T02:00:00Z" {
+		t.Errorf("AnnotationTriggeredAt = %q, want %q", job.Annotations[AnnotationTriggeredAt], "2026-03-04T02:00:00Z")
 	}
 	if _, ok := job.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		t.Errorf("expected the stale last-applied-configuration annotation dropped, got %+v", job.Annotations)
@@ -267,50 +284,152 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 func TestTriggerCronJobRejectsEmptyNames(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
-	if err := c.TriggerCronJob(context.Background(), "default", "", "nightly-manual-123"); err == nil {
+	if err := c.TriggerCronJob(context.Background(), "default", "", "nightly-manual-0200", "op", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty source name")
 	}
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", ""); err == nil {
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "", "op", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty target name")
 	}
 }
 
+// TestTriggerCronJobWrapsAlreadyExists pins Phase 2 task 14: a real
+// AlreadyExists race on the staged manual name (e.g. a leftover Job from a
+// prior run, or two operators racing the same CronJob) surfaces as
+// ErrManualJobNameConflict so a caller can distinguish it via errors.Is and
+// offer restaging, rather than treating it like any other failure.
+func TestTriggerCronJobWrapsAlreadyExists(t *testing.T) {
+	t.Parallel()
+	cj := &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}}
+	existing := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-manual-0200", Namespace: "default"}}
+	c, _ := newTestCluster(cj, existing)
+
+	err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0200", "op", time.Now())
+	if err == nil {
+		t.Fatal("expected an error for a name already taken")
+	}
+	if !errors.Is(err, ErrManualJobNameConflict) {
+		t.Fatalf("expected errors.Is(err, ErrManualJobNameConflict), got %v", err)
+	}
+}
+
 // TestSetCronJobSuspendPatchesSpecSuspend mirrors
-// TestSetJobSuspendPatchesSpecSuspend, on the CronJob client instead of Job.
+// TestSetJobSuspendPatchesSpecSuspend, on the CronJob client instead of
+// Job, and pins Phase 2 task 5: suspend stamps the Kute timestamp/
+// generation annotations atomically with spec.suspend; resume clears both
+// (Phase 2 tests 6-7).
 func TestSetCronJobSuspendPatchesSpecSuspend(t *testing.T) {
 	t.Parallel()
-	for _, suspend := range []bool{true, false} {
-		c, cs := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
-		if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", suspend); err != nil {
-			t.Fatalf("SetCronJobSuspend(%t): %v", suspend, err)
-		}
-		got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
-		if err != nil {
-			t.Fatalf("Get: %v", err)
-		}
-		if got.Spec.Suspend == nil || *got.Spec.Suspend != suspend {
-			t.Errorf("Spec.Suspend = %v, want %t", got.Spec.Suspend, suspend)
-		}
+	at := time.Date(2026, 5, 1, 9, 30, 0, 0, time.UTC)
+
+	// Suspend: spec + both annotations land atomically, generation stamped
+	// as currentGeneration+1.
+	c, cs := newTestCluster(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "10", Generation: 3},
+	})
+	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "10", 3, at); err != nil {
+		t.Fatalf("SetCronJobSuspend(true): %v", err)
+	}
+	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.Suspend == nil || !*got.Spec.Suspend {
+		t.Errorf("Spec.Suspend = %v, want true", got.Spec.Suspend)
+	}
+	if got.Annotations[AnnotationSuspendedAt] != "2026-05-01T09:30:00Z" {
+		t.Errorf("AnnotationSuspendedAt = %q, want %q", got.Annotations[AnnotationSuspendedAt], "2026-05-01T09:30:00Z")
+	}
+	if got.Annotations[AnnotationSuspendedGeneration] != "4" {
+		t.Errorf("AnnotationSuspendedGeneration = %q, want %q (currentGeneration+1)", got.Annotations[AnnotationSuspendedGeneration], "4")
+	}
+
+	// Resume: spec flips back, both annotations are cleared, active Jobs
+	// (there are none seeded here, but the point is this patch never
+	// touches KindJob) are untouched — see TestSetCronJobSuspendResumeLeavesActiveJobsUntouched.
+	c2, cs2 := newTestCluster(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nightly", Namespace: "default", ResourceVersion: "20", Generation: 4,
+			Annotations: map[string]string{
+				AnnotationSuspendedAt:         "2026-05-01T09:30:00Z",
+				AnnotationSuspendedGeneration: "4",
+			},
+		},
+	})
+	if err := c2.SetCronJobSuspend(context.Background(), "default", "nightly", false, "20", 4, time.Time{}); err != nil {
+		t.Fatalf("SetCronJobSuspend(false): %v", err)
+	}
+	got2, err := cs2.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get after resume: %v", err)
+	}
+	if got2.Spec.Suspend == nil || *got2.Spec.Suspend {
+		t.Errorf("Spec.Suspend after resume = %v, want false", got2.Spec.Suspend)
+	}
+	if _, ok := got2.Annotations[AnnotationSuspendedAt]; ok {
+		t.Errorf("expected AnnotationSuspendedAt cleared on resume, got %+v", got2.Annotations)
+	}
+	if _, ok := got2.Annotations[AnnotationSuspendedGeneration]; ok {
+		t.Errorf("expected AnnotationSuspendedGeneration cleared on resume, got %+v", got2.Annotations)
+	}
+}
+
+// TestSetCronJobSuspendResumeLeavesActiveJobsUntouched pins Phase 2 test 7's
+// other half explicitly: resume patches only the CronJob, never anything
+// under KindJob.
+func TestSetCronJobSuspendResumeLeavesActiveJobsUntouched(t *testing.T) {
+	t.Parallel()
+	activeJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly-28112233", Namespace: "default"},
+		Status:     batchv1.JobStatus{Active: 1},
+	}
+	c, cs := newTestCluster(
+		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "1", Generation: 1}},
+		activeJob,
+	)
+	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", false, "1", 1, time.Time{}); err != nil {
+		t.Fatalf("SetCronJobSuspend(false): %v", err)
+	}
+	got, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-28112233", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get active job: %v", err)
+	}
+	if got.Status.Active != 1 {
+		t.Errorf("expected the active Job untouched, got Status.Active=%d", got.Status.Active)
 	}
 }
 
 func TestSetCronJobSuspendRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetCronJobSuspend(context.Background(), "default", "", true); err == nil {
+	if err := c.SetCronJobSuspend(context.Background(), "default", "", true, "1", 1, time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
 
+// TestSetCronJobSuspendRequiresResourceVersion pins the required-precondition
+// contract: an empty resourceVersion is refused client-side rather than
+// silently patching without one.
+func TestSetCronJobSuspendRequiresResourceVersion(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
+	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "", 1, time.Now()); err == nil {
+		t.Fatalf("expected an error for a missing resourceVersion precondition")
+	}
+}
+
 // TestSetCronJobSchedulePatchesSpecSchedule pins SetCronJobSchedule's merge
-// patch against the real typed clientset.
+// patch against the real typed clientset, including task 10's returned
+// CronJobScheduleResult reflecting the server's own accepted values.
 func TestSetCronJobSchedulePatchesSpecSchedule(t *testing.T) {
 	t.Parallel()
 	c, cs := newTestCluster(&batchv1.CronJob{
-		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5"},
 		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
 	})
-	if err := c.SetCronJobSchedule(context.Background(), "default", "nightly", "*/15 * * * *"); err != nil {
+	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+		Schedule: "*/15 * * * *", ResourceVersion: "5",
+	})
+	if err != nil {
 		t.Fatalf("SetCronJobSchedule: %v", err)
 	}
 	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
@@ -320,13 +439,129 @@ func TestSetCronJobSchedulePatchesSpecSchedule(t *testing.T) {
 	if got.Spec.Schedule != "*/15 * * * *" {
 		t.Errorf("Spec.Schedule = %q, want %q", got.Spec.Schedule, "*/15 * * * *")
 	}
+	if result.Schedule != "*/15 * * * *" {
+		t.Errorf("result.Schedule = %q, want %q", result.Schedule, "*/15 * * * *")
+	}
+	if result.ResourceVersion != got.ResourceVersion {
+		t.Errorf("result.ResourceVersion = %q, want the patched object's own %q", result.ResourceVersion, got.ResourceVersion)
+	}
+}
+
+// TestSetCronJobScheduleSetsAndClearsTimeZone pins task 8: timezone set and
+// clear are distinct operations, and leaving TimeZone nil never touches an
+// existing value.
+func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
+	t.Parallel()
+
+	c, cs := newTestCluster(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "1"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
+	})
+	tz := "America/New_York"
+	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+		Schedule: "0 2 * * *", TimeZone: &tz, ResourceVersion: "1",
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (set timezone): %v", err)
+	}
+	if result.TimeZone != tz {
+		t.Errorf("result.TimeZone = %q, want %q", result.TimeZone, tz)
+	}
+	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.TimeZone == nil || *got.Spec.TimeZone != tz {
+		t.Errorf("Spec.TimeZone = %v, want %q", got.Spec.TimeZone, tz)
+	}
+
+	// A nil TimeZone (only the schedule changes) must never touch the
+	// existing value.
+	result2, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+		Schedule: "*/30 * * * *", ResourceVersion: got.ResourceVersion,
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (schedule only): %v", err)
+	}
+	if result2.TimeZone != tz {
+		t.Errorf("result2.TimeZone = %q, want the untouched %q", result2.TimeZone, tz)
+	}
+	got2, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get after schedule-only edit: %v", err)
+	}
+	if got2.Spec.TimeZone == nil || *got2.Spec.TimeZone != tz {
+		t.Errorf("expected Spec.TimeZone left untouched at %q, got %v", tz, got2.Spec.TimeZone)
+	}
+
+	// An explicit clear (pointer to "") removes it — never serialized as a
+	// stale timezone string.
+	emptyTZ := ""
+	result3, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+		Schedule: "*/30 * * * *", TimeZone: &emptyTZ, ResourceVersion: got2.ResourceVersion,
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (clear timezone): %v", err)
+	}
+	if result3.TimeZone != "" {
+		t.Errorf("result3.TimeZone = %q, want cleared \"\"", result3.TimeZone)
+	}
+	got3, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get after clear: %v", err)
+	}
+	if got3.Spec.TimeZone != nil {
+		t.Errorf("expected Spec.TimeZone cleared, got %v", *got3.Spec.TimeZone)
+	}
 }
 
 func TestSetCronJobScheduleRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetCronJobSchedule(context.Background(), "default", "", "*/15 * * * *"); err == nil {
+	if _, err := c.SetCronJobSchedule(context.Background(), "default", "", CronJobScheduleEdit{Schedule: "*/15 * * * *", ResourceVersion: "1"}); err == nil {
 		t.Fatalf("expected an error for an empty name")
+	}
+}
+
+// TestSetCronJobScheduleRequiresResourceVersion mirrors the suspend
+// counterpart: an unconditional schedule write is exactly the
+// silent-overwrite behavior the precondition exists to prevent.
+func TestSetCronJobScheduleRequiresResourceVersion(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
+	if _, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{Schedule: "*/15 * * * *"}); err == nil {
+		t.Fatalf("expected an error for a missing resourceVersion precondition")
+	}
+}
+
+// TestSetCronJobSchedulePropagatesConflict pins Phase 2 test 8's other half:
+// when the server rejects the patch as a resourceVersion conflict (a
+// concurrent external edit), SetCronJobSchedule surfaces that error
+// untouched rather than retrying or masking it — apierrors.IsConflict must
+// still answer true on what this method returns. A PrependReactor stands in
+// for the live API server's own precondition check, which the shared fake
+// clientset (unlike a real apiserver) does not implement — see
+// TestSetCronJobScheduleConflictsAgainstFakeCluster in fake_test.go for the
+// same contract enforced end-to-end against kube/fake's own Cluster.
+func TestSetCronJobSchedulePropagatesConflict(t *testing.T) {
+	t.Parallel()
+	c, cs := newTestCluster(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
+	})
+	cs.PrependReactor("patch", "cronjobs", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewConflict(
+			schema.GroupResource{Group: "batch", Resource: "cronjobs"}, "nightly",
+			fmt.Errorf("the object has been modified"))
+	})
+	_, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+		Schedule: "*/15 * * * *", ResourceVersion: "1", // stale on purpose
+	})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected apierrors.IsConflict(err), got %v", err)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -24,6 +25,29 @@ func backspace(c *Controller) {
 	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyBackspace})
 }
 
+// cronJobTriggerCall/cronJobSuspendCall/cronJobScheduleCall record every
+// argument the controller passed into the corresponding kube.Mutator
+// CronJob method — including the new Phase 2 parameters (creator/at,
+// resourceVersion/generation, the full CronJobScheduleEdit) — so a test can
+// assert on the controller's own dispatch, not just that a call happened.
+type cronJobTriggerCall struct {
+	Namespace, Name, NewJobName, Creator string
+	At                                   time.Time
+}
+
+type cronJobSuspendCall struct {
+	Namespace, Name string
+	Suspend         bool
+	ResourceVersion string
+	Generation      int64
+	At              time.Time
+}
+
+type cronJobScheduleCall struct {
+	Namespace, Name string
+	Edit            kube.CronJobScheduleEdit
+}
+
 type fakeMutator struct {
 	deleted              []string
 	forceDeleted         []string
@@ -31,7 +55,21 @@ type fakeMutator struct {
 	secretDataPatches    []string
 	configMapDataPatches []string
 	rolloutRestarts      []string
-	err                  error
+	cronJobTriggers      []cronJobTriggerCall
+	cronJobSuspends      []cronJobSuspendCall
+	cronJobSchedules     []cronJobScheduleCall
+	// scheduleResult/scheduleErr let a test control SetCronJobSchedule's
+	// own return value independently of the generic err field below (e.g.
+	// to exercise a Conflict without also breaking every other verb's
+	// success-path assertions that share this fakeMutator).
+	scheduleResult kube.CronJobScheduleResult
+	scheduleErr    error
+	// suspendErrByName lets a test give SetCronJobSuspend a per-target
+	// error, keyed by CronJob name — TestBulkExecutionReportsPerTargetPartialFailure's
+	// only way to exercise a genuine partial failure through the real
+	// executeBulk dispatch rather than constructing a BulkResultMsg by hand.
+	suspendErrByName map[string]error
+	err              error
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, kind kube.ResourceKind, ns, name string) error {
@@ -117,14 +155,28 @@ func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName strin
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
-func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
-	return nil
+func (f *fakeMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName, creator string, at time.Time) error {
+	f.cronJobTriggers = append(f.cronJobTriggers, cronJobTriggerCall{
+		Namespace: namespace, Name: name, NewJobName: newJobName, Creator: creator, At: at,
+	})
+	return f.err
 }
-func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
-	return nil
+func (f *fakeMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
+	f.cronJobSuspends = append(f.cronJobSuspends, cronJobSuspendCall{
+		Namespace: namespace, Name: name, Suspend: suspend,
+		ResourceVersion: resourceVersion, Generation: currentGeneration, At: at,
+	})
+	if err, ok := f.suspendErrByName[name]; ok {
+		return err
+	}
+	return f.err
 }
-func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
-	return nil
+func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
+	f.cronJobSchedules = append(f.cronJobSchedules, cronJobScheduleCall{Namespace: namespace, Name: name, Edit: edit})
+	if f.scheduleErr != nil {
+		return kube.CronJobScheduleResult{}, f.scheduleErr
+	}
+	return f.scheduleResult, nil
 }
 
 func deleteAction() tui.TaskAction {
@@ -620,5 +672,361 @@ func TestArmForceDeleteNoOpsForNonPodDelete(t *testing.T) {
 	c.ArmForceDelete()
 	if c.ForceArmed() {
 		t.Fatal("expected ArmForceDelete to no-op for a non-Pod delete")
+	}
+}
+
+// --- 0.8.0 plan Phase 2: CronJob mutation dispatch ------------------------
+
+func strPtr(s string) *string { return &s }
+
+func cronJobRunNowAction() tui.TaskAction {
+	at := time.Date(2026, 8, 11, 3, 4, 0, 0, time.UTC)
+	return tui.TaskAction{
+		ID:    "cronjob-run-now-default/nightly",
+		Label: "Run nightly now?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly",
+			Namespace: "default", Verb: "cronjob-run-now", IsMutating: true,
+			NewName: "nightly-manual-0304", TriggerCreator: "michael", StagedAt: at,
+		},
+	}
+}
+
+// TestCronJobRunNowPassesNewNameCreatorAndStagedAtThrough pins that
+// executeScope's "cronjob-run-now" branch forwards Scope.NewName/
+// TriggerCreator/StagedAt to TriggerCronJob unchanged — the precomputed
+// ManualJobName value the confirm preview already showed, and the identity
+// of who/when staged the run (0.8.0 plan Phase 2 task 1/4, §36b).
+func TestCronJobRunNowPassesNewNameCreatorAndStagedAtThrough(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, cronJobRunNowAction())
+	if cmd == nil {
+		t.Fatal("expected TierNone cronjob-run-now to return an execution command")
+	}
+	msg, ok := cmd().(ResultMsg)
+	if !ok {
+		t.Fatalf("command returned %T, want ResultMsg", cmd())
+	}
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.cronJobTriggers) != 1 {
+		t.Fatalf("cronJobTriggers = %v, want one entry", mut.cronJobTriggers)
+	}
+	got := mut.cronJobTriggers[0]
+	want := cronJobTriggerCall{
+		Namespace: "default", Name: "nightly", NewJobName: "nightly-manual-0304",
+		Creator: "michael", At: time.Date(2026, 8, 11, 3, 4, 0, 0, time.UTC),
+	}
+	if got != want {
+		t.Fatalf("TriggerCronJob call = %+v, want %+v", got, want)
+	}
+}
+
+// TestCronJobSuspendPassesResourceVersionGenerationAndStagedAtThrough pins
+// executeScope's "cronjob-suspend" branch and, specifically, the generation
+// math contract: the controller passes Scope.CronJobGeneration straight
+// through as the CronJob's *current* (pre-patch) generation. Mutator
+// implementations (real and fake) are the ones that add 1 when stamping
+// kute.dev/suspended-generation (§3.3) — a controller that pre-incremented
+// here would double-count against bumpCronJob/the real API server's own
+// generation bump.
+func TestCronJobSuspendPassesResourceVersionGenerationAndStagedAtThrough(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	at := time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID: "cronjob-suspend-nightly", Label: "Suspend nightly?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-suspend", IsMutating: true,
+			CronJobResourceVersion: "42", CronJobGeneration: 3, StagedAt: at,
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected TierNone cronjob-suspend to return an execution command")
+	}
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.cronJobSuspends) != 1 {
+		t.Fatalf("cronJobSuspends = %v, want one entry", mut.cronJobSuspends)
+	}
+	got := mut.cronJobSuspends[0]
+	if got.Namespace != "default" || got.Name != "nightly" || !got.Suspend {
+		t.Fatalf("unexpected suspend call: %+v", got)
+	}
+	if got.Generation != 3 {
+		t.Fatalf("Generation passed to SetCronJobSuspend = %d, want the pre-patch generation 3 unchanged", got.Generation)
+	}
+	if got.ResourceVersion != "42" {
+		t.Fatalf("ResourceVersion = %q, want %q", got.ResourceVersion, "42")
+	}
+	if !got.At.Equal(at) {
+		t.Fatalf("At = %v, want %v", got.At, at)
+	}
+}
+
+// TestCronJobResumePassesResourceVersionAndGenerationThrough mirrors the
+// suspend test for the "cronjob-resume" direction.
+func TestCronJobResumePassesResourceVersionAndGenerationThrough(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID: "cronjob-resume-nightly", Label: "Resume nightly?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-resume", IsMutating: true,
+			CronJobResourceVersion: "43", CronJobGeneration: 4,
+		},
+	})
+	cmd()
+	if len(mut.cronJobSuspends) != 1 || mut.cronJobSuspends[0].Suspend {
+		t.Fatalf("expected one resume (suspend=false) call, got %v", mut.cronJobSuspends)
+	}
+	got := mut.cronJobSuspends[0]
+	if got.ResourceVersion != "43" || got.Generation != 4 {
+		t.Fatalf("unexpected resume preconditions: %+v", got)
+	}
+}
+
+// TestCronJobSetScheduleReturnsResultOnSuccess pins that a successful
+// "cronjob-set-schedule" action reaches ResultMsg.CronJobSchedule with the
+// mutator's own returned CronJobScheduleResult (0.8.0 plan Phase 2 task 10)
+// — never a mere echo of the request — and that scheduleEdit's translation
+// carries Schedule/TimeZone/ResourceVersion into the CronJobScheduleEdit
+// unchanged.
+func TestCronJobSetScheduleReturnsResultOnSuccess(t *testing.T) {
+	result := kube.CronJobScheduleResult{Schedule: "*/15 * * * *", TimeZone: "America/New_York", ResourceVersion: "99"}
+	mut := &fakeMutator{scheduleResult: result}
+	c := New(mut)
+	tz := "America/New_York"
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID: "cronjob-set-schedule-nightly", Label: "Update schedule?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-set-schedule", IsMutating: true,
+			Schedule: "*/15 * * * *", CronJobTimeZone: &tz, CronJobResourceVersion: "98",
+		},
+	})
+	msg := cmd().(ResultMsg)
+	if msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if msg.CronJobSchedule == nil {
+		t.Fatal("expected ResultMsg.CronJobSchedule populated on success")
+	}
+	if *msg.CronJobSchedule != result {
+		t.Fatalf("CronJobSchedule = %+v, want %+v", *msg.CronJobSchedule, result)
+	}
+	if len(mut.cronJobSchedules) != 1 {
+		t.Fatalf("cronJobSchedules = %v, want one call", mut.cronJobSchedules)
+	}
+	edit := mut.cronJobSchedules[0].Edit
+	if edit.Schedule != "*/15 * * * *" || edit.ResourceVersion != "98" {
+		t.Fatalf("unexpected edit: %+v", edit)
+	}
+	if edit.TimeZone == nil || *edit.TimeZone != "America/New_York" {
+		t.Fatalf("TimeZone = %v, want pointer to America/New_York", edit.TimeZone)
+	}
+}
+
+// TestCronJobSetScheduleReturnsNilResultOnFailure pins the failure half of
+// the same contract: ResultMsg.CronJobSchedule stays nil, never a
+// zero-valued struct a caller could mistake for a real (if empty) result.
+func TestCronJobSetScheduleReturnsNilResultOnFailure(t *testing.T) {
+	mut := &fakeMutator{scheduleErr: errors.New("Conflict")}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID: "cronjob-set-schedule-nightly", Label: "Update schedule?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-set-schedule", IsMutating: true,
+			Schedule: "*/15 * * * *", CronJobResourceVersion: "98",
+		},
+	})
+	msg := cmd().(ResultMsg)
+	if msg.Err == nil {
+		t.Fatal("expected an error")
+	}
+	if msg.CronJobSchedule != nil {
+		t.Fatalf("expected nil CronJobSchedule on failure, got %+v", *msg.CronJobSchedule)
+	}
+}
+
+// TestScheduleEditTimeZoneThreeStateTranslation pins §3.8/§3.9's three-state
+// timezone contract at the one place the translation happens (scheduleEdit):
+// nil leaves spec.timeZone untouched, a pointer to "" clears it, a pointer
+// to a non-empty IANA name sets it. Also confirms scheduleEdit copies the
+// pointer rather than aliasing Scope's own, so a later mutation to the
+// screen's buffer can't retroactively change an edit already dispatched.
+func TestScheduleEditTimeZoneThreeStateTranslation(t *testing.T) {
+	cases := []struct {
+		name string
+		tz   *string
+	}{
+		{"nil leaves untouched", nil},
+		{"pointer to empty clears", strPtr("")},
+		{"pointer to iana name sets", strPtr("America/New_York")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scope := tui.TaskScope{Schedule: "* * * * *", CronJobResourceVersion: "1", CronJobTimeZone: tc.tz}
+			edit := scheduleEdit(scope)
+			if (edit.TimeZone == nil) != (tc.tz == nil) {
+				t.Fatalf("TimeZone nilness = %v, want %v", edit.TimeZone == nil, tc.tz == nil)
+			}
+			if tc.tz != nil {
+				if edit.TimeZone == nil || *edit.TimeZone != *tc.tz {
+					t.Fatalf("TimeZone = %v, want %v", edit.TimeZone, *tc.tz)
+				}
+				if edit.TimeZone == tc.tz {
+					t.Fatal("expected scheduleEdit to copy the timezone pointer, not alias Scope's own")
+				}
+			}
+		})
+	}
+}
+
+// bulkSuspendAction builds a "cronjob-suspend" bulk action: the base Scope
+// (ResourceName/Namespace/StagedAt) is shared across every target, and
+// targets supplies the per-target Namespace/ResourceName/ResourceVersion/
+// Generation substitution (0.8.0 plan Phase 2 task 11).
+func bulkSuspendAction(targets ...tui.BulkTarget) tui.TaskAction {
+	return tui.TaskAction{
+		ID:    "cronjob-suspend-bulk",
+		Label: "Suspend 2 cronjobs?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), ResourceName: "nightly", Namespace: "default",
+			Verb: "cronjob-suspend", IsMutating: true,
+			StagedAt:    time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC),
+			BulkTargets: targets,
+		},
+	}
+}
+
+// TestBulkExecutionRunsOncePerTargetSubstitutingPerTargetFields pins
+// executeBulk's own contract: one mutator call per Scope.BulkTargets entry,
+// each substituting Namespace/ResourceName/CronJobResourceVersion/
+// CronJobGeneration from the target while every other Scope field (here,
+// StagedAt) stays shared and unchanged across every call.
+func TestBulkExecutionRunsOncePerTargetSubstitutingPerTargetFields(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	targets := []tui.BulkTarget{
+		{Namespace: "default", ResourceName: "nightly", ResourceVersion: "10", Generation: 1},
+		{Namespace: "batch", ResourceName: "hourly", ResourceVersion: "20", Generation: 2},
+	}
+	cmd := c.Begin(TierNone, bulkSuspendAction(targets...))
+	if cmd == nil {
+		t.Fatal("expected a bulk TierNone action to return an execution command")
+	}
+	msg, ok := cmd().(BulkResultMsg)
+	if !ok {
+		t.Fatalf("command returned %T, want BulkResultMsg", cmd())
+	}
+	if len(msg.Results) != 2 {
+		t.Fatalf("Results = %v, want 2 entries", msg.Results)
+	}
+	if len(mut.cronJobSuspends) != 2 {
+		t.Fatalf("cronJobSuspends = %v, want 2 calls", mut.cronJobSuspends)
+	}
+	want := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
+	for i, target := range targets {
+		got := mut.cronJobSuspends[i]
+		if got.Namespace != target.Namespace || got.Name != target.ResourceName {
+			t.Fatalf("call %d target = %+v, want namespace/name %s/%s", i, got, target.Namespace, target.ResourceName)
+		}
+		if got.ResourceVersion != target.ResourceVersion || got.Generation != target.Generation {
+			t.Fatalf("call %d precondition = %+v, want version=%s generation=%d", i, got, target.ResourceVersion, target.Generation)
+		}
+		if !got.At.Equal(want) {
+			t.Fatalf("call %d At = %v, want the shared StagedAt %v", i, got.At, want)
+		}
+		if msg.Results[i].Namespace != target.Namespace || msg.Results[i].ResourceName != target.ResourceName {
+			t.Fatalf("Results[%d] = %+v, want namespace/name %s/%s", i, msg.Results[i], target.Namespace, target.ResourceName)
+		}
+		if msg.Results[i].Err != nil {
+			t.Fatalf("Results[%d].Err = %v, want nil", i, msg.Results[i].Err)
+		}
+	}
+}
+
+// TestBulkExecutionReportsPerTargetPartialFailure drives one target to
+// failure through the real mutator dispatch (not a hand-built BulkResultMsg)
+// and checks both BulkResultMsg.Failed() and HandleBulkResult's partial-
+// failure message/state.
+func TestBulkExecutionReportsPerTargetPartialFailure(t *testing.T) {
+	mut := &fakeMutator{suspendErrByName: map[string]error{"hourly": errors.New("conflict")}}
+	c := New(mut)
+	targets := []tui.BulkTarget{
+		{Namespace: "default", ResourceName: "nightly", ResourceVersion: "10", Generation: 1},
+		{Namespace: "batch", ResourceName: "hourly", ResourceVersion: "20", Generation: 2},
+	}
+	cmd := c.Begin(TierNone, bulkSuspendAction(targets...))
+	msg := cmd().(BulkResultMsg)
+	if len(msg.Results) != 2 {
+		t.Fatalf("Results = %v, want 2 entries", msg.Results)
+	}
+	if msg.Results[0].Err != nil {
+		t.Fatalf("expected nightly to succeed, got %v", msg.Results[0].Err)
+	}
+	if msg.Results[1].Err == nil {
+		t.Fatal("expected hourly to fail")
+	}
+	failed := msg.Failed()
+	if len(failed) != 1 || failed[0].ResourceName != "hourly" {
+		t.Fatalf("Failed() = %v, want only hourly", failed)
+	}
+
+	c.HandleBulkResult(msg)
+	if c.State() != tui.TaskStateError {
+		t.Fatalf("state = %q, want error", c.State())
+	}
+	if !strings.Contains(c.Message(), "1 of 2") {
+		t.Fatalf("message %q, want mention of 1 of 2 targets failing", c.Message())
+	}
+}
+
+// TestHandleBulkResultAllSuccess pins HandleBulkResult's success path: no
+// failed targets means TaskStateSuccess with a count in the message.
+func TestHandleBulkResultAllSuccess(t *testing.T) {
+	c := New(&fakeMutator{})
+	msg := BulkResultMsg{ActionID: "x", Label: "Suspend", Results: []TargetResult{
+		{Namespace: "default", ResourceName: "nightly"},
+		{Namespace: "batch", ResourceName: "hourly"},
+	}}
+	c.HandleBulkResult(msg)
+	if c.State() != tui.TaskStateSuccess {
+		t.Fatalf("state = %q, want success", c.State())
+	}
+	if !strings.Contains(c.Message(), "2") {
+		t.Fatalf("message %q, want a mention of the 2 succeeded targets", c.Message())
+	}
+	if len(msg.Failed()) != 0 {
+		t.Fatalf("Failed() = %v, want none", msg.Failed())
+	}
+}
+
+// TestHandleBulkResultAllFail pins the fully-failed path: every target
+// failing is worded distinctly from a partial failure ("all N targets"),
+// per HandleBulkResult's own doc comment.
+func TestHandleBulkResultAllFail(t *testing.T) {
+	c := New(&fakeMutator{})
+	msg := BulkResultMsg{ActionID: "x", Label: "Suspend", Results: []TargetResult{
+		{Namespace: "default", ResourceName: "nightly", Err: errors.New("conflict")},
+		{Namespace: "batch", ResourceName: "hourly", Err: errors.New("forbidden")},
+	}}
+	c.HandleBulkResult(msg)
+	if c.State() != tui.TaskStateError {
+		t.Fatalf("state = %q, want error", c.State())
+	}
+	if !strings.Contains(c.Message(), "all 2") {
+		t.Fatalf("message %q, want mention of all targets failing", c.Message())
+	}
+	if len(msg.Failed()) != 2 {
+		t.Fatalf("Failed() = %v, want both entries", msg.Failed())
 	}
 }

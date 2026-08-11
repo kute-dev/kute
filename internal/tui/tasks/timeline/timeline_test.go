@@ -635,14 +635,14 @@ func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newNam
 func (f *fakeRolloutMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
-func (f *fakeRolloutMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName string) error {
+func (f *fakeRolloutMutator) TriggerCronJob(_ context.Context, namespace, name, newJobName, creator string, at time.Time) error {
 	return nil
 }
-func (f *fakeRolloutMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
+func (f *fakeRolloutMutator) SetCronJobSuspend(_ context.Context, namespace, name string, suspend bool, resourceVersion string, currentGeneration int64, at time.Time) error {
 	return nil
 }
-func (f *fakeRolloutMutator) SetCronJobSchedule(_ context.Context, namespace, name, schedule string) error {
-	return nil
+func (f *fakeRolloutMutator) SetCronJobSchedule(_ context.Context, namespace, name string, edit kube.CronJobScheduleEdit) (kube.CronJobScheduleResult, error) {
+	return kube.CronJobScheduleResult{}, nil
 }
 
 // railFixture builds an object-scoped Pod owned (via its ReplicaSet) by

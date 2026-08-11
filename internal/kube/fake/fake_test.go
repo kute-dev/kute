@@ -2,14 +2,19 @@ package fake
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
@@ -195,6 +200,300 @@ func TestCordonAndDrainSkipDaemonSetAndMirrorPods(t *testing.T) {
 	remaining, _ := c.ListRaw(context.Background(), kube.KindPod, "default")
 	if len(remaining) != 1 {
 		t.Fatalf("expected the DaemonSet pod to survive, got %d pods remaining", len(remaining))
+	}
+}
+
+// TestTriggerCronJobStampsManualAnnotationsAndNotifies pins Plan Phase 2
+// task 13's fake/live parity for TriggerCronJob: the same source/creator/
+// time annotations kube.Cluster's real implementation stamps, an ownerless
+// standalone Job, and a KindJob change notification (Phase 2 test 9).
+func TestTriggerCronJobStampsManualAnnotationsAndNotifies(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", UID: types.UID("cj-uid-1")},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 2 * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "batch"}},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
+					},
+				},
+			},
+		},
+	})
+
+	at := time.Date(2026, 3, 4, 2, 30, 0, 0, time.UTC)
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "operator@example.com", at); err != nil {
+		t.Fatalf("TriggerCronJob: %v", err)
+	}
+
+	objs, _ := c.ListRaw(context.Background(), kube.KindJob, "default")
+	if len(objs) != 1 {
+		t.Fatalf("expected one triggered Job, got %d", len(objs))
+	}
+	job := objs[0].(*batchv1.Job)
+	if len(job.OwnerReferences) != 0 {
+		t.Errorf("expected the triggered job detached (no OwnerReferences), got %+v", job.OwnerReferences)
+	}
+	if job.Annotations[kube.AnnotationCronJobName] != "nightly" {
+		t.Errorf("AnnotationCronJobName = %q, want %q", job.Annotations[kube.AnnotationCronJobName], "nightly")
+	}
+	if job.Annotations[kube.AnnotationCronJobUID] != "cj-uid-1" {
+		t.Errorf("AnnotationCronJobUID = %q, want %q", job.Annotations[kube.AnnotationCronJobUID], "cj-uid-1")
+	}
+	if job.Annotations[kube.AnnotationTriggeredBy] != "operator@example.com" {
+		t.Errorf("AnnotationTriggeredBy = %q, want %q", job.Annotations[kube.AnnotationTriggeredBy], "operator@example.com")
+	}
+	if job.Annotations[kube.AnnotationTriggeredAt] != "2026-03-04T02:30:00Z" {
+		t.Errorf("AnnotationTriggeredAt = %q, want %q", job.Annotations[kube.AnnotationTriggeredAt], "2026-03-04T02:30:00Z")
+	}
+	if job.Annotations["cronjob.kubernetes.io/instantiate"] != "manual" {
+		t.Errorf("expected the manual-instantiate annotation, got %+v", job.Annotations)
+	}
+
+	select {
+	case msg := <-c.Events():
+		if msg.Kind != kube.KindJob {
+			t.Fatalf("notify kind = %v, want Job", msg.Kind)
+		}
+	default:
+		t.Fatalf("expected a KindJob ResourceChangedMsg after TriggerCronJob")
+	}
+}
+
+// TestTriggerCronJobDeepCopiesTemplate pins Phase 2 test 1: unlike
+// kube.Cluster's own equivalent test, this one is meaningful precisely
+// because kube/fake.Cluster has no client-go serialization boundary between
+// Create and Get — objects are stored as the same in-memory pointers that
+// were passed in, so an aliased (not cloned) Labels map or Spec would be
+// directly observable by mutating the returned Job and re-reading the
+// source CronJob's own jobTemplate.
+func TestTriggerCronJobDeepCopiesTemplate(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 2 * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "batch"}},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0", Env: []corev1.EnvVar{{Name: "X", Value: "1"}}}}},
+					},
+				},
+			},
+		},
+	})
+
+	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "op", time.Now()); err != nil {
+		t.Fatalf("TriggerCronJob: %v", err)
+	}
+	objs, _ := c.ListRaw(context.Background(), kube.KindJob, "default")
+	job := objs[0].(*batchv1.Job)
+
+	// Mutate the created Job's own copies...
+	job.Labels["app"] = "mutated"
+	job.Spec.Template.Spec.Containers[0].Image = "mutated:2.0"
+	job.Spec.Template.Spec.Containers[0].Env[0].Value = "mutated"
+
+	// ...and confirm the source CronJob's own template is untouched.
+	cjObjs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	tpl := cjObjs[0].(*batchv1.CronJob).Spec.JobTemplate
+	if tpl.Labels["app"] != "batch" {
+		t.Errorf("source template Labels mutated through the created Job's own copy: %+v", tpl.Labels)
+	}
+	if tpl.Spec.Template.Spec.Containers[0].Image != "app:1.0" {
+		t.Errorf("source template container image mutated through the created Job's own copy: %q", tpl.Spec.Template.Spec.Containers[0].Image)
+	}
+	if tpl.Spec.Template.Spec.Containers[0].Env[0].Value != "1" {
+		t.Errorf("source template container env mutated through the created Job's own copy: %q", tpl.Spec.Template.Spec.Containers[0].Env[0].Value)
+	}
+}
+
+// TestTriggerCronJobRejectsDuplicateName pins task 13's "fake create rejects
+// duplicate names" requirement and task 14's restage seam: the error wraps
+// kube.ErrManualJobNameConflict just like a real AlreadyExists race would.
+func TestTriggerCronJobRejectsDuplicateName(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
+	c.Seed(kube.KindJob, &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-manual-0230", Namespace: "default"}})
+
+	err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "op", time.Now())
+	if err == nil {
+		t.Fatal("expected an error for a name already taken")
+	}
+	if !errors.Is(err, kube.ErrManualJobNameConflict) {
+		t.Fatalf("expected errors.Is(err, kube.ErrManualJobNameConflict), got %v", err)
+	}
+}
+
+// TestSetCronJobSuspendStampsAndClearsAnnotations pins task 13's suspend/
+// resume parity: annotations stamped atomically with spec.suspend on
+// suspend, cleared on resume, resourceVersion/generation bumped either way.
+func TestSetCronJobSuspendStampsAndClearsAnnotations(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "1", Generation: 3},
+	})
+
+	at := time.Date(2026, 5, 1, 9, 30, 0, 0, time.UTC)
+	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "1", 3, at); err != nil {
+		t.Fatalf("SetCronJobSuspend(true): %v", err)
+	}
+	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	cj := objs[0].(*batchv1.CronJob)
+	if cj.Spec.Suspend == nil || !*cj.Spec.Suspend {
+		t.Fatalf("Spec.Suspend = %v, want true", cj.Spec.Suspend)
+	}
+	if cj.Annotations[kube.AnnotationSuspendedAt] != "2026-05-01T09:30:00Z" {
+		t.Errorf("AnnotationSuspendedAt = %q, want %q", cj.Annotations[kube.AnnotationSuspendedAt], "2026-05-01T09:30:00Z")
+	}
+	if cj.Annotations[kube.AnnotationSuspendedGeneration] != "4" {
+		t.Errorf("AnnotationSuspendedGeneration = %q, want %q", cj.Annotations[kube.AnnotationSuspendedGeneration], "4")
+	}
+	if cj.Generation != 4 {
+		t.Errorf("Generation = %d, want 4 (bumped by the suspend patch)", cj.Generation)
+	}
+	suspendedRV := cj.ResourceVersion
+	if suspendedRV == "1" {
+		t.Errorf("expected resourceVersion bumped past the original %q", "1")
+	}
+
+	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", false, suspendedRV, 4, time.Time{}); err != nil {
+		t.Fatalf("SetCronJobSuspend(false): %v", err)
+	}
+	objs, _ = c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	cj = objs[0].(*batchv1.CronJob)
+	if cj.Spec.Suspend == nil || *cj.Spec.Suspend {
+		t.Fatalf("Spec.Suspend after resume = %v, want false", cj.Spec.Suspend)
+	}
+	if _, ok := cj.Annotations[kube.AnnotationSuspendedAt]; ok {
+		t.Errorf("expected AnnotationSuspendedAt cleared on resume, got %+v", cj.Annotations)
+	}
+	if _, ok := cj.Annotations[kube.AnnotationSuspendedGeneration]; ok {
+		t.Errorf("expected AnnotationSuspendedGeneration cleared on resume, got %+v", cj.Annotations)
+	}
+	if cj.ResourceVersion == suspendedRV {
+		t.Errorf("expected resourceVersion bumped again on resume, still %q", cj.ResourceVersion)
+	}
+}
+
+// TestSetCronJobSuspendConflictsOnStaleResourceVersion pins task 13's
+// "conflicts are testable" requirement: a stale resourceVersion precondition
+// returns a typed Conflict error, and the CronJob is left untouched.
+func TestSetCronJobSuspendConflictsOnStaleResourceVersion(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5", Generation: 1},
+	})
+
+	err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "stale", 1, time.Now())
+	if err == nil {
+		t.Fatal("expected an error for a stale resourceVersion")
+	}
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected apierrors.IsConflict(err), got %v", err)
+	}
+	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	cj := objs[0].(*batchv1.CronJob)
+	if cj.Spec.Suspend != nil {
+		t.Errorf("expected Spec.Suspend untouched after a conflict, got %v", cj.Spec.Suspend)
+	}
+	if cj.ResourceVersion != "5" {
+		t.Errorf("expected ResourceVersion untouched after a conflict, got %q", cj.ResourceVersion)
+	}
+}
+
+// TestSetCronJobScheduleConflictsAgainstFakeCluster is the fake-cluster
+// counterpart to mutate_test.go's TestSetCronJobSchedulePropagatesConflict —
+// this one exercises kube/fake's own resourceVersion enforcement rather
+// than a reactor standing in for one, so a caller can drive a schedule-
+// editor Conflict path (§36d) entirely against --demo/task tests.
+func TestSetCronJobScheduleConflictsAgainstFakeCluster(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
+	})
+
+	_, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+		Schedule: "*/15 * * * *", ResourceVersion: "stale",
+	})
+	if err == nil {
+		t.Fatal("expected an error for a stale resourceVersion")
+	}
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected apierrors.IsConflict(err), got %v", err)
+	}
+	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	cj := objs[0].(*batchv1.CronJob)
+	if cj.Spec.Schedule != "0 2 * * *" {
+		t.Errorf("expected Spec.Schedule untouched after a conflict, got %q", cj.Spec.Schedule)
+	}
+}
+
+// TestSetCronJobScheduleSetsAndClearsTimeZone is the fake-cluster
+// counterpart to mutate_test.go's TestSetCronJobScheduleSetsAndClearsTimeZone
+// — same set/clear/untouched contract, plus the returned
+// kube.CronJobScheduleResult and a KindCronJob notification each time
+// (Phase 2 test 9).
+func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "1"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
+	})
+
+	tz := "America/New_York"
+	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+		Schedule: "0 2 * * *", TimeZone: &tz, ResourceVersion: "1",
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (set timezone): %v", err)
+	}
+	if result.TimeZone != tz {
+		t.Errorf("result.TimeZone = %q, want %q", result.TimeZone, tz)
+	}
+	select {
+	case msg := <-c.Events():
+		if msg.Kind != kube.KindCronJob {
+			t.Fatalf("notify kind = %v, want CronJob", msg.Kind)
+		}
+	default:
+		t.Fatalf("expected a KindCronJob ResourceChangedMsg after SetCronJobSchedule")
+	}
+
+	// A nil TimeZone (schedule-only edit) must never touch the existing
+	// value.
+	result2, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+		Schedule: "*/30 * * * *", ResourceVersion: result.ResourceVersion,
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (schedule only): %v", err)
+	}
+	if result2.TimeZone != tz {
+		t.Errorf("result2.TimeZone = %q, want the untouched %q", result2.TimeZone, tz)
+	}
+
+	// An explicit clear removes it.
+	emptyTZ := ""
+	result3, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+		Schedule: "*/30 * * * *", TimeZone: &emptyTZ, ResourceVersion: result2.ResourceVersion,
+	})
+	if err != nil {
+		t.Fatalf("SetCronJobSchedule (clear timezone): %v", err)
+	}
+	if result3.TimeZone != "" {
+		t.Errorf("result3.TimeZone = %q, want cleared \"\"", result3.TimeZone)
 	}
 }
 

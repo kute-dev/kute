@@ -28,6 +28,46 @@ type ResultMsg struct {
 	ActionID string
 	Label    string
 	Err      error
+	// CronJobSchedule is populated only on a successful "cronjob-set-
+	// schedule" action — the API's own accepted schedule/timezone plus the
+	// CronJob's new resourceVersion (0.8.0 plan Phase 2 task 10). nil for
+	// every other verb, and nil on failure. The schedule editor (§36d) must
+	// key its refresh/undo readiness off this authoritative value rather
+	// than an immediate, possibly-stale informer cache read.
+	CronJobSchedule *kube.CronJobScheduleResult
+}
+
+// TargetResult is one bulk target's individual outcome — BulkResultMsg's
+// per-object detail (0.8.0 plan Phase 2 task 11): the controller owns
+// iteration over a pending action's Scope.BulkTargets, so a caller sees
+// which targets failed rather than one joined error that can't tell success
+// from failure per object.
+type TargetResult struct {
+	Namespace    string
+	ResourceName string
+	Err          error
+}
+
+// BulkResultMsg reports a bulk action's per-target outcomes (Scope.
+// BulkTargets non-empty). Screens pass it to HandleBulkResult; Results is in
+// the same order as the pending action's Scope.BulkTargets.
+type BulkResultMsg struct {
+	ActionID string
+	Label    string
+	Results  []TargetResult
+}
+
+// Failed returns the subset of Results with a non-nil Err — the marks a
+// caller should retain after a partial failure (0.8.0 plan Phase 2 task 11:
+// "let the caller retain only failed marks").
+func (m BulkResultMsg) Failed() []TargetResult {
+	var out []TargetResult
+	for _, r := range m.Results {
+		if r.Err != nil {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // Controller holds the state of the at-most-one in-flight action for a screen.
@@ -273,6 +313,30 @@ func (c *Controller) HandleResult(msg ResultMsg) {
 	c.message = "Done: " + msg.Label + "."
 }
 
+// HandleBulkResult is HandleResult's counterpart for a bulk action (0.8.0
+// plan Phase 2 task 11): success when every target succeeded, error with a
+// count when any failed. Callers that need per-target detail (e.g. to keep
+// only the failed rows marked) read msg.Results/msg.Failed() themselves —
+// this only drives the controller's own State()/Message().
+func (c *Controller) HandleBulkResult(msg BulkResultMsg) {
+	c.pending = nil
+	c.tier = TierNone
+	c.typedInput.Blur()
+	c.forceArmed = false
+	failed := msg.Failed()
+	if len(failed) == 0 {
+		c.state = tui.TaskStateSuccess
+		c.message = fmt.Sprintf("Done: %s (%d).", msg.Label, len(msg.Results))
+		return
+	}
+	c.state = tui.TaskStateError
+	if len(failed) == len(msg.Results) {
+		c.message = fmt.Sprintf("Failed to %s: all %d targets failed.", msg.Label, len(failed))
+		return
+	}
+	c.message = fmt.Sprintf("%s: %d of %d targets failed.", msg.Label, len(failed), len(msg.Results))
+}
+
 // Prompt is the confirmation question shown while Active.
 func (c Controller) Prompt() string {
 	if c.pending == nil {
@@ -293,101 +357,184 @@ func (c *Controller) execute() tea.Cmd {
 	mutator := c.mutator
 	c.state = tui.TaskStateLoading
 	c.message = capitalize(action.Scope.Verb) + " " + action.Scope.ResourceName + "…"
-	return func() tea.Msg {
-		var err error
-		switch action.Scope.Verb {
-		case "delete":
-			err = mutator.DeleteResource(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
-		case "force-delete":
-			err = mutator.DeleteResourceForced(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
-		case "flux-suspend", "flux-resume":
-			err = mutator.SetFluxSuspend(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
-				action.Scope.ResourceName, action.Scope.Verb == "flux-suspend")
-		case "job-retry":
-			err = mutator.RetryJob(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.NewName)
-		case "job-suspend", "job-resume":
-			err = mutator.SetJobSuspend(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Verb == "job-suspend")
-		case "cronjob-run-now":
-			err = mutator.TriggerCronJob(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.NewName)
-		case "cronjob-suspend", "cronjob-resume":
-			err = mutator.SetCronJobSuspend(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Verb == "cronjob-suspend")
-		case "cronjob-set-schedule":
-			err = mutator.SetCronJobSchedule(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Schedule)
-		case "flux-reconcile":
-			// §30b's with-source reconcile stamps the source first: asking a
-			// reconciler to sync against an artifact that is still stale
-			// just re-applies what it already has.
-			if action.Scope.FluxSourceName != "" {
-				err = mutator.RequestFluxReconcile(context.Background(),
-					kube.ResourceKind(action.Scope.FluxSourceKind), action.Scope.FluxSourceNamespace, action.Scope.FluxSourceName)
-			}
-			if err == nil {
-				err = mutator.RequestFluxReconcile(context.Background(),
-					kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
-			}
-		case "argo-refresh":
-			err = mutator.RequestArgoRefresh(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
-		case "argo-sync":
-			err = mutator.RequestArgoSync(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace,
-				action.Scope.ResourceName, action.Scope.ArgoSyncRevision)
-		case "rollout-restart":
-			err = mutator.RolloutRestart(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName)
-		case "cert-renew":
-			err = mutator.RenewCertificate(context.Background(), action.Scope.Namespace, action.Scope.ResourceName)
-		case "cordon":
-			err = mutator.Cordon(context.Background(), action.Scope.ResourceName, true)
-		case "uncordon":
-			err = mutator.Cordon(context.Background(), action.Scope.ResourceName, false)
-		case "drain":
-			_, err = mutator.Drain(context.Background(), action.Scope.ResourceName)
-		case "rollback":
-			err = mutator.HelmRollback(context.Background(), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Revision)
-		case "rollout-undo":
-			err = mutator.RolloutUndo(context.Background(), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Revision)
-		case "scale":
-			err = mutator.Scale(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Replicas)
-		case "set-image":
-			err = mutator.SetImage(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Container, action.Scope.Image)
-		case "set-resources":
-			err = mutator.SetResources(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName, action.Scope.Container, *action.Scope.Resources, false)
-		case "set-meta":
-			err = mutator.PatchMeta(context.Background(),
-				kube.ResourceKind(action.Scope.ResourceKind), action.Scope.Namespace, action.Scope.ResourceName,
-				action.Scope.MetaIsAnnotation, action.Scope.MetaKey, action.Scope.MetaValue, action.Scope.MetaRemove)
-		case "secret-data":
-			err = mutator.PatchSecretData(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.SecretKey, action.Scope.SecretValue, action.Scope.SecretRemove)
-		case "configmap-data":
-			err = mutator.PatchConfigMapData(context.Background(),
-				action.Scope.Namespace, action.Scope.ResourceName, action.Scope.ConfigMapKey, action.Scope.ConfigMapValue, action.Scope.ConfigMapRemove)
-			if err == nil && action.Scope.ConfigMapRestartConsumers {
-				var errs []error
-				for _, c := range action.Scope.ConfigMapConsumers {
-					if rerr := mutator.RolloutRestart(context.Background(), c.Kind, action.Scope.Namespace, c.Name); rerr != nil {
-						errs = append(errs, rerr)
-					}
-				}
-				err = errors.Join(errs...)
-			}
-		default:
-			err = fmt.Errorf("unsupported verb %q", action.Scope.Verb)
-		}
-		return ResultMsg{ActionID: action.ID, Label: action.Label, Err: err}
+
+	if len(action.Scope.BulkTargets) > 0 {
+		return executeBulk(mutator, action)
 	}
+
+	// cronjob-set-schedule is handled outside executeScope because its
+	// mutator method returns a value (kube.CronJobScheduleResult) that has
+	// to reach ResultMsg — every other verb's execution collapses to a
+	// plain error, which executeScope's shared switch returns.
+	if action.Scope.Verb == "cronjob-set-schedule" {
+		return func() tea.Msg {
+			result, err := mutator.SetCronJobSchedule(context.Background(),
+				action.Scope.Namespace, action.Scope.ResourceName, scheduleEdit(action.Scope))
+			msg := ResultMsg{ActionID: action.ID, Label: action.Label, Err: err}
+			if err == nil {
+				msg.CronJobSchedule = &result
+			}
+			return msg
+		}
+	}
+
+	return func() tea.Msg {
+		return ResultMsg{ActionID: action.ID, Label: action.Label, Err: executeScope(mutator, action.Scope)}
+	}
+}
+
+// executeBulk runs action.Scope.Verb once per action.Scope.BulkTargets entry
+// (0.8.0 plan Phase 2 task 11), substituting each target's own Namespace/
+// ResourceName/CronJobResourceVersion/CronJobGeneration onto a copy of the
+// shared Scope. Every other Scope field (Verb, TriggerCreator, StagedAt, …)
+// stays common across every target — only the fields a per-target
+// precondition can differ on are overridden.
+func executeBulk(mutator kube.Mutator, action tui.TaskAction) tea.Cmd {
+	targets := append([]tui.BulkTarget(nil), action.Scope.BulkTargets...)
+	baseScope := action.Scope
+	baseScope.BulkTargets = nil
+	return func() tea.Msg {
+		results := make([]TargetResult, 0, len(targets))
+		for _, target := range targets {
+			scope := baseScope
+			scope.Namespace = target.Namespace
+			scope.ResourceName = target.ResourceName
+			scope.CronJobResourceVersion = target.ResourceVersion
+			scope.CronJobGeneration = target.Generation
+			results = append(results, TargetResult{
+				Namespace:    target.Namespace,
+				ResourceName: target.ResourceName,
+				Err:          executeScope(mutator, scope),
+			})
+		}
+		return BulkResultMsg{ActionID: action.ID, Label: action.Label, Results: results}
+	}
+}
+
+// scheduleEdit builds a kube.CronJobScheduleEdit from a "cronjob-set-
+// schedule" Scope — the single place that translation happens, so the
+// single-target and (a future bulk-capable, per Plan §4/Phase 3) schedule
+// path can never drift.
+func scheduleEdit(scope tui.TaskScope) kube.CronJobScheduleEdit {
+	var timezone *string
+	if scope.CronJobTimeZone != nil {
+		tz := *scope.CronJobTimeZone
+		timezone = &tz
+	}
+	return kube.CronJobScheduleEdit{
+		Schedule:        scope.Schedule,
+		TimeZone:        timezone,
+		ResourceVersion: scope.CronJobResourceVersion,
+	}
+}
+
+// executeScope runs one action's mutation and returns its error — the
+// shared body both execute()'s single-target path and executeBulk's
+// per-target loop call, so a bulk-capable verb (§36c's marked-set suspend/
+// resume) executes through exactly the same dispatch a single Enter would.
+// Takes mutator explicitly rather than a *Controller receiver so a bulk
+// action's per-target loop (running on a tea.Cmd goroutine) never touches
+// shared controller state.
+func executeScope(mutator kube.Mutator, scope tui.TaskScope) error {
+	var err error
+	switch scope.Verb {
+	case "delete":
+		err = mutator.DeleteResource(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+	case "force-delete":
+		err = mutator.DeleteResourceForced(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+	case "flux-suspend", "flux-resume":
+		err = mutator.SetFluxSuspend(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace,
+			scope.ResourceName, scope.Verb == "flux-suspend")
+	case "job-retry":
+		err = mutator.RetryJob(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.NewName)
+	case "job-suspend", "job-resume":
+		err = mutator.SetJobSuspend(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.Verb == "job-suspend")
+	case "cronjob-run-now":
+		err = mutator.TriggerCronJob(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.NewName, scope.TriggerCreator, scope.StagedAt)
+	case "cronjob-suspend", "cronjob-resume":
+		err = mutator.SetCronJobSuspend(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.Verb == "cronjob-suspend",
+			scope.CronJobResourceVersion, scope.CronJobGeneration, scope.StagedAt)
+	case "cronjob-set-schedule":
+		// Only reached from executeBulk (execute()'s single-target path
+		// intercepts this verb before ever calling executeScope, since it
+		// needs the mutator's returned CronJobScheduleResult). Schedule
+		// isn't bulk-capable today, but keeping this branch means a future
+		// caller that does mark a bulk schedule edit still executes
+		// correctly, just without a per-target CronJobScheduleResult.
+		_, err = mutator.SetCronJobSchedule(context.Background(), scope.Namespace, scope.ResourceName, scheduleEdit(scope))
+	case "flux-reconcile":
+		// §30b's with-source reconcile stamps the source first: asking a
+		// reconciler to sync against an artifact that is still stale
+		// just re-applies what it already has.
+		if scope.FluxSourceName != "" {
+			err = mutator.RequestFluxReconcile(context.Background(),
+				kube.ResourceKind(scope.FluxSourceKind), scope.FluxSourceNamespace, scope.FluxSourceName)
+		}
+		if err == nil {
+			err = mutator.RequestFluxReconcile(context.Background(),
+				kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+		}
+	case "argo-refresh":
+		err = mutator.RequestArgoRefresh(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+	case "argo-sync":
+		err = mutator.RequestArgoSync(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace,
+			scope.ResourceName, scope.ArgoSyncRevision)
+	case "rollout-restart":
+		err = mutator.RolloutRestart(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
+	case "cert-renew":
+		err = mutator.RenewCertificate(context.Background(), scope.Namespace, scope.ResourceName)
+	case "cordon":
+		err = mutator.Cordon(context.Background(), scope.ResourceName, true)
+	case "uncordon":
+		err = mutator.Cordon(context.Background(), scope.ResourceName, false)
+	case "drain":
+		_, err = mutator.Drain(context.Background(), scope.ResourceName)
+	case "rollback":
+		err = mutator.HelmRollback(context.Background(), scope.Namespace, scope.ResourceName, scope.Revision)
+	case "rollout-undo":
+		err = mutator.RolloutUndo(context.Background(), scope.Namespace, scope.ResourceName, scope.Revision)
+	case "scale":
+		err = mutator.Scale(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Replicas)
+	case "set-image":
+		err = mutator.SetImage(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Container, scope.Image)
+	case "set-resources":
+		err = mutator.SetResources(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Container, *scope.Resources, false)
+	case "set-meta":
+		err = mutator.PatchMeta(context.Background(),
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName,
+			scope.MetaIsAnnotation, scope.MetaKey, scope.MetaValue, scope.MetaRemove)
+	case "secret-data":
+		err = mutator.PatchSecretData(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.SecretKey, scope.SecretValue, scope.SecretRemove)
+	case "configmap-data":
+		err = mutator.PatchConfigMapData(context.Background(),
+			scope.Namespace, scope.ResourceName, scope.ConfigMapKey, scope.ConfigMapValue, scope.ConfigMapRemove)
+		if err == nil && scope.ConfigMapRestartConsumers {
+			var errs []error
+			for _, ref := range scope.ConfigMapConsumers {
+				if rerr := mutator.RolloutRestart(context.Background(), ref.Kind, scope.Namespace, ref.Name); rerr != nil {
+					errs = append(errs, rerr)
+				}
+			}
+			err = errors.Join(errs...)
+		}
+	default:
+		err = fmt.Errorf("unsupported verb %q", scope.Verb)
+	}
+	return err
 }
 
 func (c *Controller) fail(message string) {
