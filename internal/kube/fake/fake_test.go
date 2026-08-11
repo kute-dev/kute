@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 )
 
 func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
@@ -610,8 +611,8 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	ctx := context.Background()
 
 	pods, err := c.ListRaw(ctx, kube.KindPod, "")
-	if err != nil || len(pods) != 14 {
-		t.Fatalf("ListRaw(Pod) = %d, %v, want 14 fixture pods", len(pods), err)
+	if err != nil || len(pods) != 15 {
+		t.Fatalf("ListRaw(Pod) = %d, %v, want 15 fixture pods", len(pods), err)
 	}
 	if pod, ok := findPod(pods, "api-7d9f6c8-abcde"); !ok || len(pod.Spec.Containers) < 2 {
 		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)
@@ -653,6 +654,97 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	}
 	if _, err := c.StreamPodLogs(ctx, kube.LogStreamRequest{Namespace: "default", PodName: "worker-0"}); err != nil {
 		t.Fatalf("StreamPodLogs: %v", err)
+	}
+}
+
+// TestNewDemoCoversEveryCronJobOutcome pins 0.8.0 plan Phase 8 task 7: five
+// CronJobs, each exercising one scenario §36a-§36e need real data for. It
+// asserts through resources.BuildCronJobSummaries — the same aggregation
+// browse/cronjobdetail call — rather than re-deriving the outcomes by hand,
+// so a fixture regression here is exactly the join a real screen would get
+// wrong.
+func TestNewDemoCoversEveryCronJobOutcome(t *testing.T) {
+	t.Parallel()
+	c := NewDemo()
+	ctx := context.Background()
+
+	cronJobs, err := c.ListRaw(ctx, kube.KindCronJob, "")
+	if err != nil || len(cronJobs) != 5 {
+		t.Fatalf("ListRaw(CronJob) = %d, %v, want 5 fixture cronjobs", len(cronJobs), err)
+	}
+	jobs, err := c.ListRaw(ctx, kube.KindJob, "")
+	if err != nil {
+		t.Fatalf("ListRaw(Job): %v", err)
+	}
+	pods, err := c.ListRaw(ctx, kube.KindPod, "")
+	if err != nil {
+		t.Fatalf("ListRaw(Pod): %v", err)
+	}
+
+	summaries := resources.BuildCronJobSummaries(cronJobs, jobs, pods)
+	byName := map[string]resources.CronJobSummary{}
+	for _, s := range summaries {
+		byName[s.Object.Name] = s
+	}
+
+	// nightly-backup: successful latest run, plus the manual/unrelated/
+	// stale-owner Jobs must resolve to exactly the two real scheduled runs
+	// — never 5 (which would mean the unrelated or stale-owner Job leaked
+	// in) and never 3 (which would mean the manual Job's annotation-based
+	// association was missed).
+	nb := byName["nightly-backup"]
+	if len(nb.Runs) != 3 {
+		t.Fatalf("nightly-backup Runs = %d, want 3 (2 scheduled + 1 manual)", len(nb.Runs))
+	}
+	if nb.LastTerminal == nil || !nb.LastTerminal.Succeeded || nb.LastTerminal.Name != "nightly-backup-29070200" {
+		t.Fatalf("nightly-backup LastTerminal = %+v, want the newer succeeded run", nb.LastTerminal)
+	}
+	var sawManual bool
+	for _, r := range nb.Runs {
+		if r.Source == resources.JobSourceManual {
+			sawManual = true
+			if r.Name != "nightly-backup-manual-1430" {
+				t.Fatalf("unexpected manual run %q", r.Name)
+			}
+		}
+	}
+	if !sawManual {
+		t.Fatal("expected nightly-backup's manual annotated Job to associate")
+	}
+
+	// hourly-report: suspended by Kute, with a trustworthy SuspendedAt.
+	hr := byName["hourly-report"]
+	if hr.SuspendedAt == nil {
+		t.Fatal("hourly-report: expected a validated SuspendedAt (Kute-stamped annotations, unchanged generation)")
+	}
+
+	// nightly-cleanup: failed latest run, Job condition authoritative,
+	// exit code supplied by the associated Pod.
+	nc := byName["nightly-cleanup"]
+	if nc.LastTerminal == nil || !nc.LastTerminal.Failed || nc.LastTerminal.Reason != "BackoffLimitExceeded" {
+		t.Fatalf("nightly-cleanup LastTerminal = %+v, want a Failed run with the Job's own reason", nc.LastTerminal)
+	}
+	if nc.LastTerminal.ExitCode == nil || *nc.LastTerminal.ExitCode != 1 {
+		t.Fatalf("nightly-cleanup LastTerminal.ExitCode = %v, want 1 from the associated Pod", nc.LastTerminal.ExitCode)
+	}
+
+	// metrics-rollup: an active run alongside a prior succeeded terminal
+	// run — LAST RUN must still name the terminal run, not the active one.
+	mr := byName["metrics-rollup"]
+	if len(mr.ActiveRuns) != 1 {
+		t.Fatalf("metrics-rollup ActiveRuns = %d, want 1", len(mr.ActiveRuns))
+	}
+	if mr.LastTerminal == nil || !mr.LastTerminal.Succeeded || mr.LastTerminal.Name != "metrics-rollup-29071315" {
+		t.Fatalf("metrics-rollup LastTerminal = %+v, want the prior succeeded run despite the active one", mr.LastTerminal)
+	}
+
+	// weekly-digest: an explicit timezone and no retained runs at all.
+	wd := byName["weekly-digest"]
+	if wd.Object.Spec.TimeZone == nil || *wd.Object.Spec.TimeZone != "America/New_York" {
+		t.Fatalf("weekly-digest Spec.TimeZone = %v, want America/New_York", wd.Object.Spec.TimeZone)
+	}
+	if len(wd.Runs) != 0 {
+		t.Fatalf("weekly-digest Runs = %d, want 0 (the no-retained-runs exemplar)", len(wd.Runs))
 	}
 }
 

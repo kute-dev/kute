@@ -112,14 +112,93 @@ func NewDemo() *Cluster {
 	c.Seed(kube.KindService, demoService("api", "default", map[string]string{"app": "api"}, age(30*24*time.Hour)))
 	c.Seed(kube.KindIngress, demoIngress("api", "default", "api", "api.demo.local", age(30*24*time.Hour)))
 
-	// §36a: two CronJobs so --demo mode can exercise run-now/suspend/resume/
-	// edit-schedule live. "hourly-report" starts suspended, so 's' exercises
-	// resume first rather than every CronJob needing an extra keypress to
-	// reach that state; the two different schedules give the NEXT RUN column
-	// something real to differ on.
-	c.Seed(kube.KindCronJob,
-		demoCronJob("nightly-backup", "default", "0 2 * * *", false, age(60*24*time.Hour)),
-		demoCronJob("hourly-report", "default", "0 * * * *", true, age(20*24*time.Hour)),
+	// §36a-§36e (0.8.0 plan Phase 8 task 7): five CronJobs, each pinned to
+	// one of the outcomes the list/detail screens need to render for real.
+	// §36a deliberately keeps CronJobs in fixed name order (never a
+	// health-first sort), so ordering these by scenario rather than by
+	// severity costs nothing.
+	nightlyBackup := demoCronJob("nightly-backup", "default", "0 2 * * *", false, age(60*24*time.Hour))
+	nightlyBackup.Spec.ConcurrencyPolicy = batchv1.ForbidConcurrent
+	nightlyBackup.Spec.SuccessfulJobsHistoryLimit = int32Val(3)
+	nightlyBackup.Spec.FailedJobsHistoryLimit = int32Val(1)
+
+	// hourlyReport starts suspended *by Kute*: SuspendedAt/
+	// SuspendedGeneration validate against its own (unchanged) Generation,
+	// so §36c's resume preflight computes a real suspended-duration and
+	// missed-schedule count instead of falling back to "start unknown"
+	// (§3.3) — the more interesting demo case than an externally-suspended
+	// CronJob, and 's' still exercises resume first rather than every
+	// CronJob needing an extra keypress to reach that state.
+	hourlyReport := demoCronJob("hourly-report", "default", "0 * * * *", true, age(20*24*time.Hour))
+	hourlyReport.Annotations = map[string]string{
+		kube.AnnotationSuspendedAt:         age(3 * time.Hour).Time.UTC().Format(time.RFC3339),
+		kube.AnnotationSuspendedGeneration: "1", // matches hourlyReport.Generation, set by demoCronJob
+	}
+
+	nightlyCleanup := demoCronJob("nightly-cleanup", "default", "30 3 * * *", false, age(45*24*time.Hour))
+	nightlyCleanup.Spec.SuccessfulJobsHistoryLimit = int32Val(3)
+	nightlyCleanup.Spec.FailedJobsHistoryLimit = int32Val(1)
+
+	// metricsRollup keeps an active run alive (below) with ForbidConcurrent,
+	// so §36b's ctrl-r run-now demonstrates a real overlap warning rather
+	// than the no-conflict path.
+	metricsRollup := demoCronJob("metrics-rollup", "default", "*/15 * * * *", false, age(10*24*time.Hour))
+	metricsRollup.Spec.ConcurrencyPolicy = batchv1.ForbidConcurrent
+
+	// weeklyDigest is §3.8/§3.9's timezone exemplar: an explicit
+	// spec.timeZone lets §36a compute an exact NEXT (rather than
+	// "controller local") and lets §36d's editor exercise a populated
+	// timezone field. It carries no retained Jobs — §36a/§36e's "no
+	// retained runs" neutral state, distinct from every other CronJob here.
+	weeklyDigest := demoCronJob("weekly-digest", "default", "0 9 * * 1", false, age(90*24*time.Hour))
+	weeklyTZ := "America/New_York"
+	weeklyDigest.Spec.TimeZone = &weeklyTZ
+
+	c.Seed(kube.KindCronJob, nightlyBackup, hourlyReport, nightlyCleanup, metricsRollup, weeklyDigest)
+
+	failedCleanupRun := demoScheduledFailedJob("nightly-cleanup-29070330", "default", nightlyCleanup.Name, nightlyCleanup.UID,
+		age(2*time.Hour), "BackoffLimitExceeded", "Job has reached the specified backoff limit")
+
+	c.Seed(kube.KindJob,
+		// nightly-backup: two retained succeeded runs (§36a "successful
+		// latest run" — the newer is LAST RUN), a manual annotated
+		// standalone Job (§36b run-now, ownerless per §3.4), an unrelated
+		// same-name-prefix Job that must never associate by name alone
+		// (§4.2), and a controller-owned Job whose owner UID predates
+		// nightly-backup's current one — the "delete/recreate must not
+		// inherit stale history" rejection (§4.2, Phase 1 test 3).
+		demoScheduledSucceededJob("nightly-backup-29070200", "default", nightlyBackup.Name, nightlyBackup.UID,
+			age(22*time.Hour), age(22*time.Hour-5*time.Minute)),
+		demoScheduledSucceededJob("nightly-backup-29060200", "default", nightlyBackup.Name, nightlyBackup.UID,
+			age(46*time.Hour), age(46*time.Hour-5*time.Minute)),
+		// Older than both scheduled runs (task 9's "latest run" story stays
+		// the scheduled 29070200 Job, not this one-off).
+		demoManualJob("nightly-backup-manual-1430", "default", nightlyBackup.Name, nightlyBackup.UID, c.userName,
+			age(30*time.Hour), age(30*time.Hour), age(30*time.Hour-4*time.Minute)),
+		demoUnrelatedJob("nightly-backup-migration", "default", age(5*24*time.Hour)),
+		demoScheduledSucceededJob("nightly-backup-28060200", "default", nightlyBackup.Name,
+			types.UID("demo-cronjob-default-nightly-backup-stale"), age(70*24*time.Hour), age(70*24*time.Hour)),
+
+		// hourly-report: one succeeded run before Kute suspended it.
+		demoScheduledSucceededJob("hourly-report-29071200", "default", hourlyReport.Name, hourlyReport.UID,
+			age(4*time.Hour), age(4*time.Hour-2*time.Minute)),
+
+		// nightly-cleanup: §3.5's failed-latest-run exemplar — the Job's
+		// own Failed condition is authoritative; its Pod (seeded below)
+		// only adds an exit code/reason, never overrides it.
+		failedCleanupRun,
+
+		// metrics-rollup: a prior succeeded run plus a currently active one
+		// — §4.3's "2m ago check while ACT says 1" case, where LAST RUN
+		// must keep naming the newest *terminal* run, not the active one.
+		demoScheduledSucceededJob("metrics-rollup-29071315", "default", metricsRollup.Name, metricsRollup.UID,
+			age(20*time.Minute), age(17*time.Minute)),
+		demoScheduledActiveJob("metrics-rollup-29071330", "default", metricsRollup.Name, metricsRollup.UID, age(2*time.Minute)),
+	)
+
+	c.Seed(kube.KindPod,
+		demoFailedJobPod("nightly-cleanup-29070330-x7z2p", "default", age(2*time.Hour-90*time.Second),
+			failedCleanupRun.Name, failedCleanupRun.UID),
 	)
 
 	// A production-like cluster has many namespaces beyond the one an
@@ -1078,6 +1157,130 @@ func demoCronJob(name, ns, schedule string, suspend bool, created metav1.Time) *
 		cj.Spec.Suspend = &suspend
 	}
 	return cj
+}
+
+// int32Val is the pointer-int32 constructor batchv1's Completions/
+// BackoffLimit/history-limit fields all need — a tiny local helper rather
+// than a `v := int32(n); &v` pair repeated at every call site.
+func int32Val(v int32) *int32 { return &v }
+
+// demoJobBase is every demo Job's shared skeleton — UID/ResourceVersion
+// stable and derived from name (Plan Phase 8 task 9), matching
+// demoCronJob's own reasoning: resources.BuildCronJobSummaries joins on
+// these, so a zero-value UID would make every association below resolve by
+// the sparse-fixture namespace/name fallback instead of the UID path
+// real clusters actually use.
+func demoJobBase(name, ns string, created metav1.Time) *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns, CreationTimestamp: created,
+			UID: types.UID("demo-job-" + ns + "-" + name), ResourceVersion: "1",
+		},
+		Spec: batchv1.JobSpec{Completions: int32Val(1), BackoffLimit: int32Val(2)},
+	}
+}
+
+// jobOwnerRef builds the controller owner reference
+// resources.controllerOwnerRef looks for (§4.2 rule 1) — Kind read from
+// kube.KindCronJob.APIKind() by every real caller in this file, never a
+// bare string literal, matching the invariant the association code itself
+// documents.
+func jobOwnerRef(cronJobName string, cronJobUID types.UID) metav1.OwnerReference {
+	isController := true
+	return metav1.OwnerReference{
+		APIVersion: "batch/v1", Kind: kube.KindCronJob.APIKind(),
+		Name: cronJobName, UID: cronJobUID, Controller: &isController,
+	}
+}
+
+// demoScheduledSucceededJob is one CronJob-controller-owned Job (§4.2 rule
+// 1) that ran to completion — §36a's "successful latest run" exemplar, and
+// (passed a stale cronJobUID) also the "current and stale same-name owner
+// UID" exclusion fixture, since the association is keyed on UID, not name.
+func demoScheduledSucceededJob(name, ns, cronJobName string, cronJobUID types.UID, started, completed metav1.Time) *batchv1.Job {
+	j := demoJobBase(name, ns, started)
+	j.OwnerReferences = []metav1.OwnerReference{jobOwnerRef(cronJobName, cronJobUID)}
+	j.Status = batchv1.JobStatus{
+		Succeeded: 1, StartTime: &started, CompletionTime: &completed,
+		Conditions: []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue, LastTransitionTime: completed}},
+	}
+	return j
+}
+
+// demoScheduledFailedJob is §3.5's failed-latest-run exemplar: a Failed
+// condition with a real reason/message, no CompletionTime (the API never
+// sets one on failure) — the stable, authoritative source
+// resources.jobTerminalOutcome reads, which demoFailedJobPod's Pod
+// termination only supplements.
+func demoScheduledFailedJob(name, ns, cronJobName string, cronJobUID types.UID, started metav1.Time, reason, message string) *batchv1.Job {
+	j := demoJobBase(name, ns, started)
+	j.OwnerReferences = []metav1.OwnerReference{jobOwnerRef(cronJobName, cronJobUID)}
+	failedAt := metav1.NewTime(started.Add(90 * time.Second))
+	j.Status = batchv1.JobStatus{
+		Failed: 1, StartTime: &started,
+		Conditions: []batchv1.JobCondition{{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: reason, Message: message, LastTransitionTime: failedAt}},
+	}
+	return j
+}
+
+// demoScheduledActiveJob is a CronJob-controller-owned Job still running —
+// §4.3's "ACT shows 1" case, paired with a prior demoScheduledSucceededJob
+// so the CronJob's own LAST RUN keeps naming the newest *terminal* run
+// rather than this one.
+func demoScheduledActiveJob(name, ns, cronJobName string, cronJobUID types.UID, started metav1.Time) *batchv1.Job {
+	j := demoJobBase(name, ns, started)
+	j.OwnerReferences = []metav1.OwnerReference{jobOwnerRef(cronJobName, cronJobUID)}
+	j.Status = batchv1.JobStatus{Active: 1, StartTime: &started}
+	return j
+}
+
+// demoManualJob is §36b's run-now exemplar: ownerless (§3.4 — Kute never
+// fakes an owner reference for a manual run, so CronJob history GC can't
+// delete it) and associated purely through Kute's own
+// AnnotationCronJobName/AnnotationCronJobUID annotations (§4.2 rule 2),
+// matching kube.Cluster.TriggerCronJob/fake.Cluster.TriggerCronJob's own
+// annotation set.
+func demoManualJob(name, ns, cronJobName string, cronJobUID types.UID, creator string, triggeredAt, started, completed metav1.Time) *batchv1.Job {
+	j := demoJobBase(name, ns, triggeredAt)
+	j.Annotations = map[string]string{
+		"cronjob.kubernetes.io/instantiate": "manual",
+		kube.AnnotationCronJobName:          cronJobName,
+		kube.AnnotationCronJobUID:           string(cronJobUID),
+		kube.AnnotationTriggeredBy:          creator,
+		kube.AnnotationTriggeredAt:          triggeredAt.Time.UTC().Format(time.RFC3339),
+	}
+	j.Status = batchv1.JobStatus{
+		Succeeded: 1, StartTime: &started, CompletionTime: &completed,
+		Conditions: []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue, LastTransitionTime: completed}},
+	}
+	return j
+}
+
+// demoUnrelatedJob carries neither a CronJob-kind owner reference nor
+// either Kute annotation — §4.2's "never associate by name prefix" proof:
+// its own name deliberately collides with nightlyBackup's, and
+// cronJobAssociation must still return ok=false for it.
+func demoUnrelatedJob(name, ns string, created metav1.Time) *batchv1.Job {
+	j := demoJobBase(name, ns, created)
+	completed := metav1.NewTime(created.Add(3 * time.Minute))
+	j.Status = batchv1.JobStatus{
+		Succeeded: 1, StartTime: &created, CompletionTime: &completed,
+		Conditions: []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: corev1.ConditionTrue, LastTransitionTime: completed}},
+	}
+	return j
+}
+
+// demoFailedJobPod is §3.5 point 2's Pod-termination supplement: a Job-
+// owned Pod whose own terminated container carries the exit code/reason
+// the owning Job's condition alone can't (a Job condition has no exit
+// code). Association is by Job controller owner reference, the same
+// indexPodsByJob reads for every real cluster's Pods.
+func demoFailedJobPod(name, ns string, created metav1.Time, jobName string, jobUID types.UID) *corev1.Pod {
+	p := demoPod(name, ns, created, corev1.PodFailed, corev1.PodQOSBurstable, "node-a", false, 0,
+		&corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error", Message: "backoff limit exceeded", FinishedAt: metav1.NewTime(created.Add(90 * time.Second))})
+	isController := true
+	p.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: kube.KindJob.APIKind(), Name: jobName, UID: jobUID, Controller: &isController}}
+	return p
 }
 
 // demoControllerRevision is a StatefulSet/DaemonSet ControllerRevision
