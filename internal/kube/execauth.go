@@ -160,18 +160,45 @@ func (s *stderrCapture) capture(fn func()) {
 // draining goroutine is necessarily scheduled. The wait only ever happens on
 // a path that has already decided a credential error occurred, and never on
 // the render goroutine.
+//
+// Once the ring is non-empty it keeps polling until a short quiet window
+// passes with no further growth, rather than returning on the first peek.
+// getCreds never caches a failed mint (exec.go's Authenticator only caches
+// success), so a caller that makes two requests against a still-broken
+// credential before ever reading the output — as the health loop's retry
+// does — can have a second plugin run still landing on the pipe when the
+// buffer is first seen non-empty. Returning immediately there would clear
+// the first write and strand the second to surface stale on the *next*
+// take(), the exact bug this function's clearing exists to prevent.
 func (s *stderrCapture) take() string {
+	const quiet = 20 * time.Millisecond
 	deadline := time.Now().Add(100 * time.Millisecond)
+	lastLen := -1
 	for {
 		s.mu.Lock()
-		out := string(s.buf)
-		s.buf = nil
+		n := len(s.buf)
 		s.mu.Unlock()
-		if out != "" || time.Now().After(deadline) {
-			return out
+
+		if n > 0 {
+			if n != lastLen {
+				// Grew since the last look: push the deadline out so a
+				// second write already in flight has room to land too.
+				deadline = time.Now().Add(quiet)
+			} else if time.Now().After(deadline) {
+				break // held steady for a full quiet window
+			}
+		} else if time.Now().After(deadline) {
+			break // never got anything
 		}
+		lastLen = n
 		time.Sleep(5 * time.Millisecond)
 	}
+
+	s.mu.Lock()
+	out := string(s.buf)
+	s.buf = nil
+	s.mu.Unlock()
+	return out
 }
 
 // CredentialPluginOutput returns and clears whatever the exec credential
