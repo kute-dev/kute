@@ -31,6 +31,12 @@ func (m Model) Keybar() tui.Keybar {
 			RightNote: m.stopAllForwardsPrompt(),
 		}
 	}
+	if m.pendingCronJobRun != nil {
+		return m.cronJobRunKeybar()
+	}
+	if m.pendingCronJobResume != nil {
+		return m.cronJobResumeKeybar()
+	}
 	if m.pendingScale != nil {
 		kb := tui.Keybar{
 			Pill:     tui.ModeBrowse,
@@ -234,21 +240,28 @@ func (m Model) Keybar() tui.Keybar {
 					// (unconfirmed, TierNone) execFeedback line, just rendered
 					// through the confirm note since this one is TierInline.
 					note = jobSuspendWillRunLine(pending.Scope)
-				case "cronjob-run-now":
-					// the exact "will run: kubectl create job ...
-					// --from=cronjob/..." line, same idiom as job-retry above.
-					note = cronJobRunNowWillRunLine(pending.Scope)
 				case "cronjob-suspend":
 					// only reached outside PROD — verbs.TierForCronJobSuspend
 					// escalates suspend to TierModal in PROD instead (routed to
 					// delete.go's typeNameConfirmModal via
-					// actions.RequiresTypedName's "cronjob-suspend" entry).
-					// cronjob-resume never appears here, fixed TierNone (staged,
-					// reversible, immediate), exactly like cordon/flux-suspend's
-					// own absence. cronjob-set-schedule is likewise absent now —
-					// its apply is unconditionally TierNone (0.8.0 plan §3
-					// decision 10).
+					// actions.RequiresTypedName's "cronjob-suspend" entry, single-
+					// target only — a marked-set confirm routes to
+					// cronjob_bulk.go's own bulk count modal instead, Body()'s
+					// dispatch). cronjob-run-now no longer reaches here at all
+					// (0.8.0 plan §36b: staged in screen state, TierNone,
+					// cronjob_actions.go's own Keybar() case further up).
+					// cronjob-resume never appears here either, fixed TierNone
+					// (staged, reversible, immediate) the same way. cronjob-set-
+					// schedule is likewise absent — its apply is unconditionally
+					// TierNone (0.8.0 plan §3 decision 10).
+					if len(pending.Scope.BulkTargets) > 0 {
+						note = bulkCronJobSuspendWillRunLine(pending.Scope)
+						break
+					}
 					note = cronJobSuspendWillRunLine(pending.Scope)
+					if summary, ok := m.cronJobSummaryFor(pending.Scope.Namespace, pending.Scope.ResourceName); ok {
+						note += "   " + cronJobSuspendDangerNote(summary, m.now)
+					}
 				case "set-meta":
 					// 26a: the panel itself stays open under this confirm
 					// (meta.go's own doc comment) and already renders the full

@@ -129,6 +129,12 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// isn't listed here any more — it's pure navigation now (Mutating:
 		// false), so it never reaches this loop's condition at all.
 		"cronjob-suspend": true,
+		// §36b. CronJobRunNow is TierNone for the same reason: the run-now
+		// preflight browse stages before ever calling Begin (cronjob_actions.go's
+		// pendingCronJobRun — overlap warning, generated name) is itself the
+		// confirmation, so there's nothing left for actions.Controller's own
+		// TierInline/TierModal to add by the time Begin executes.
+		"cronjob-run-now": true,
 		// §36d. CronJobScheduleUndo is itself "an ordinary reversible
 		// mutation through the same registry" (docs/design README.md §36d) —
 		// applying the previous accepted schedule/timezone pair is exactly as

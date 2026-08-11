@@ -3,6 +3,7 @@ package browse
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	batchv1 "k8s.io/api/batch/v1"
@@ -356,9 +357,12 @@ func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
 	}
 }
 
-// TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY mirrors
-// TestCtrlRShowsConfirmThenRetriesJobOnY for CronJob's own run-now.
-func TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY(t *testing.T) {
+// TestCtrlRStagesRunNowThenTriggersOnEnter pins 0.8.0 §36b's staged
+// contract: ctrl-r stages a preview in screen state (not an
+// actions.Controller confirm — no inline y/N, no modal), ↵ executes through
+// the reversible TierNone tier, and the generated Job name is readable
+// (§36b: "-manual-HHMM" in UTC) rather than the old Unix-timestamp name.
+func TestCtrlRStagesRunNowThenTriggersOnEnter(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {cronJobObj("default", "nightly")},
 	}}
@@ -370,30 +374,72 @@ func TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY(t *testing.T) {
 	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
-	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
+	if m.pendingCronJobRun == nil {
+		t.Fatalf("expected ctrl+r to stage the run-now preview")
+	}
+	if m.actions.Active() {
+		t.Fatalf("expected no actions.Controller confirm state while staged (staging is itself the confirmation)")
 	}
 	kb := m.Keybar()
 	if !strings.Contains(kb.RightNote, "kubectl create job") || !strings.Contains(kb.RightNote, "--from=cronjob/nightly") {
-		t.Fatalf("expected the will-run line in the confirm, got %q", kb.RightNote)
+		t.Fatalf("expected the will-run line in the keybar, got %q", kb.RightNote)
 	}
 	if len(mut.triggeredCronJobs) != 0 {
-		t.Fatalf("expected no trigger before 'y', got %v", mut.triggeredCronJobs)
+		t.Fatalf("expected no trigger before enter, got %v", mut.triggeredCronJobs)
 	}
 
+	// 'y' copies rather than triggering — only enter executes.
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.triggeredCronJobs) != 0 {
+		t.Fatalf("expected 'y' to copy, not trigger: %v", mut.triggeredCronJobs)
+	}
+	if m.pendingCronJobRun == nil {
+		t.Fatalf("expected 'y' to leave the preview open")
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if m.pendingCronJobRun != nil {
+		t.Fatalf("expected enter to clear the staged preview")
+	}
 	if len(mut.triggeredCronJobs) != 1 {
 		t.Fatalf("triggeredCronJobs = %v, want one entry", mut.triggeredCronJobs)
 	}
 	if !strings.HasPrefix(mut.triggeredCronJobs[0], "default/nightly->nightly-manual-") {
-		t.Fatalf("triggeredCronJobs[0] = %q, want a default/nightly->nightly-manual-<ts> entry", mut.triggeredCronJobs[0])
+		t.Fatalf("triggeredCronJobs[0] = %q, want a default/nightly->nightly-manual-<HHMM> entry", mut.triggeredCronJobs[0])
 	}
 }
 
-// TestCronJobRunNowStaysInlineEvenInProd mirrors TestJobRetryStaysInlineEvenInProd:
-// CronJobRunNow is a clone into a new object, not destructive, so it never
-// escalates past the plain inline y/N even in a PROD context.
-func TestCronJobRunNowStaysInlineEvenInProd(t *testing.T) {
+// TestCronJobRunNowEscCancelsWithoutTriggering pins the staged preview's
+// esc-cancels contract (§36b: "esc cancels").
+func TestCronJobRunNowEscCancelsWithoutTriggering(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	if m.pendingCronJobRun == nil {
+		t.Fatalf("expected ctrl+r to stage the run-now preview")
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
+	if m.pendingCronJobRun != nil {
+		t.Fatalf("expected esc to clear the staged preview")
+	}
+	if len(mut.triggeredCronJobs) != 0 {
+		t.Fatalf("expected no trigger after esc, got %v", mut.triggeredCronJobs)
+	}
+}
+
+// TestCronJobRunNowStaysStagedEvenInProd mirrors
+// TestJobRetryStaysInlineEvenInProd: CronJobRunNow is a clone into a new
+// object, not destructive, so it never escalates to a PROD-only confirm —
+// staging is the same in every context.
+func TestCronJobRunNowStaysStagedEvenInProd(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {cronJobObj("default", "nightly")},
 	}}
@@ -403,16 +449,80 @@ func TestCronJobRunNowStaysInlineEvenInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
+	m = step(t, m, m.load()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
-	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected ctrl+r to stay TierInline even in a prod context, tier=%v", m.actions.Tier())
+	if m.pendingCronJobRun == nil || m.actions.Active() {
+		t.Fatalf("expected ctrl+r to stage the preview with no actions.Controller confirm, even in PROD")
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
 	if len(mut.triggeredCronJobs) != 1 {
-		t.Fatalf("expected a plain 'y' to trigger immediately, got %v", mut.triggeredCronJobs)
+		t.Fatalf("expected enter to trigger immediately, got %v", mut.triggeredCronJobs)
+	}
+}
+
+// TestCronJobRunNowOverlapWarningNamesActiveJobs pins §36b's overlap card:
+// an active associated Job under a Forbid concurrencyPolicy renders a
+// warning naming it, and the run still executes (a manual run bypasses the
+// policy rather than being blocked by it).
+func TestCronJobRunNowOverlapWarningNamesActiveJobs(t *testing.T) {
+	cj := cronJobObj("default", "sync")
+	cj.Spec.ConcurrencyPolicy = batchv1.ForbidConcurrent
+	active := jobObj("default", "sync-29310612")
+	active.OwnerReferences = []metav1.OwnerReference{controllerRefFor(cj)}
+	active.Status = batchv1.JobStatus{Active: 1, StartTime: &metav1.Time{Time: time.Now().Add(-2 * time.Minute)}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cj},
+		kube.KindJob:     {active},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(160, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightWarnNote, "sync-29310612") || !strings.Contains(kb.RightWarnNote, "Forbid") {
+		t.Fatalf("expected the overlap warning to name the active job and policy, got %q", kb.RightWarnNote)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if len(mut.triggeredCronJobs) != 1 {
+		t.Fatalf("expected the manual run to execute despite the overlap, got %v", mut.triggeredCronJobs)
+	}
+}
+
+// TestCronJobRunNowNoOverlapChromeWhenNoActiveRun pins "a complete Job view
+// with no overlap renders zero warning chrome — just the will-run line."
+func TestCronJobRunNowNoOverlapChromeWhenNoActiveRun(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+		kube.KindJob:     {},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	kb := m.Keybar()
+	if kb.RightWarnNote != "" {
+		t.Fatalf("expected no warning chrome with no active run, got %q", kb.RightWarnNote)
+	}
+}
+
+// controllerRefFor builds a controller=true owner reference for cj — the
+// "scheduled" association rule cronJobAssociation (resources/cronjobs.go)
+// requires for an active Job to be counted as one of the CronJob's own
+// ActiveRuns.
+func controllerRefFor(cj *batchv1.CronJob) metav1.OwnerReference {
+	t := true
+	return metav1.OwnerReference{
+		APIVersion: "batch/v1", Kind: "CronJob", Name: cj.Name, UID: cj.UID, Controller: &t,
 	}
 }
 
@@ -529,11 +639,109 @@ func TestSKeyOnCronJobSuspendResumeStaysTierNone(t *testing.T) {
 		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
 	}
 	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
+	if m2.pendingCronJobResume == nil {
+		t.Fatalf("expected 's' to stage the resume preview")
+	}
 	if m2.actions.Active() {
-		t.Fatalf("expected resume to execute immediately with no confirm state, even in PROD")
+		t.Fatalf("expected no actions.Controller confirm state while staged, even in PROD")
+	}
+	if len(mut2.cronJobSuspends) != 0 {
+		t.Fatalf("expected no resume call before enter, got %v", mut2.cronJobSuspends)
+	}
+
+	m2 = step(t, m2, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if m2.pendingCronJobResume != nil {
+		t.Fatalf("expected enter to clear the staged preview")
 	}
 	if len(mut2.cronJobSuspends) != 1 || mut2.cronJobSuspends[0] != "default/nightly=false" {
 		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.cronJobSuspends)
+	}
+}
+
+// TestCronJobResumeEscCancelsWithoutResuming pins the staged resume
+// preview's esc-cancels contract, mirroring run-now's own.
+func TestCronJobResumeEscCancelsWithoutResuming(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {suspendedCronJobObj("default", "nightly", true)},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	if m.pendingCronJobResume == nil {
+		t.Fatalf("expected 's' to stage the resume preview")
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
+	if m.pendingCronJobResume != nil {
+		t.Fatalf("expected esc to clear the staged preview")
+	}
+	if len(mut.cronJobSuspends) != 0 {
+		t.Fatalf("expected no resume call after esc, got %v", mut.cronJobSuspends)
+	}
+}
+
+// TestCronJobResumePreviewShowsMissedRunsAndNext pins §3.3's truthful
+// missed-schedule copy and §36c's next-run preview, computed from a Kute
+// suspend annotation whose generation still matches the CronJob's current
+// one.
+func TestCronJobResumePreviewShowsMissedRunsAndNext(t *testing.T) {
+	cj := suspendedCronJobObj("default", "warm-cache", true)
+	cj.Spec.Schedule = "*/5 * * * *"
+	tz := "UTC"
+	cj.Spec.TimeZone = &tz
+	cj.Generation = 3
+	suspendedAt := time.Now().Add(-20 * time.Minute)
+	cj.Annotations = map[string]string{
+		kube.AnnotationSuspendedAt:         suspendedAt.UTC().Format(time.RFC3339),
+		kube.AnnotationSuspendedGeneration: "3",
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cj},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(160, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "schedule") || !strings.Contains(kb.RightNote, "missed") {
+		t.Fatalf("expected a missed-schedule count in the preview, got %q", kb.RightNote)
+	}
+	if !strings.Contains(kb.RightNote, "next") {
+		t.Fatalf("expected a next-run preview, got %q", kb.RightNote)
+	}
+	if strings.Contains(kb.RightNote, "start unknown") {
+		t.Fatalf("expected a known suspended duration (valid generation marker), got %q", kb.RightNote)
+	}
+}
+
+// TestCronJobResumePreviewUnknownStartOmitsSkippedCount pins §3.3: an
+// externally-suspended CronJob (no Kute annotation) renders "start unknown"
+// and omits a fabricated skipped count.
+func TestCronJobResumePreviewUnknownStartOmitsSkippedCount(t *testing.T) {
+	cj := suspendedCronJobObj("default", "warm-cache", true) // no suspended-at annotation
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cj},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(160, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "s"})
+	kb := m.Keybar()
+	if !strings.Contains(kb.RightNote, "start unknown") {
+		t.Fatalf("expected 'start unknown' for an externally suspended cronjob, got %q", kb.RightNote)
+	}
+	if !strings.Contains(kb.RightNote, "suspension start unknown") {
+		t.Fatalf("expected the missed-run reason to explain the unknown start, got %q", kb.RightNote)
 	}
 }
 

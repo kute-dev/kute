@@ -128,9 +128,12 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 		case pending.Scope.Verb == "rollout-restart":
 			actionVerb = "restart"
 			detail = rolloutRestartWillRunLine(pending.Scope)
-		case pending.Scope.Verb == "cronjob-suspend":
+		case pending.Scope.Verb == "cronjob-suspend" && len(pending.Scope.BulkTargets) == 0:
 			// PROD escalation only — cronjob-resume never reaches TierModal
-			// (verbs.TierForCronJobSuspend), so this branch is suspend-only.
+			// (verbs.TierForCronJobSuspend), so this branch is single-target
+			// suspend only; a marked-set PROD suspend routes to
+			// cronjob_bulk.go's own type-the-count modal instead (Body()'s
+			// dispatch, pendingBulkCronJobSuspend).
 			actionVerb = "suspend"
 			detail = cronJobSuspendWillRunLine(pending.Scope)
 		case isDeleteVerb(pending.Scope.Verb):

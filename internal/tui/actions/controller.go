@@ -159,7 +159,13 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 		c.fail("Mutations are not configured.")
 		return nil
 	}
-	if action.Scope.ResourceKind == "" || action.Scope.ResourceName == "" || action.Scope.Verb == "" {
+	// A bulk action (Scope.BulkTargets non-empty) carries no single
+	// ResourceName on Scope itself — every target's own name lives in
+	// BulkTargets, substituted in per-target by executeBulk — so the empty-
+	// ResourceName guard is skipped for it; ResourceKind/Verb are still
+	// required either way.
+	if action.Scope.ResourceKind == "" || action.Scope.Verb == "" ||
+		(action.Scope.ResourceName == "" && len(action.Scope.BulkTargets) == 0) {
 		c.fail("Cannot run " + action.Label + ": missing target metadata.")
 		return nil
 	}
@@ -182,11 +188,19 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 // y/N confirm even at TierModal: only delete's PROD escalation gets the
 // type-the-name treatment (mvp-tasks.md's Phase 5/8b exit notes: "Cordon/
 // Drain... left exactly as Phase 9 built them").
+//
+// The typed-name gate is skipped outright when BulkTargets is non-empty: a
+// marked-set "cronjob-suspend" PROD confirm has no single ResourceName to
+// type (0.8.0 plan §3 Phase 5 task 8: "In PROD, use the existing
+// type-the-count bulk grammar") — the caller (browse's own bulk-count
+// modal/key routing, not this predicate) gates Confirm on the typed digit
+// count matching len(BulkTargets) before ever calling this method.
 func (c *Controller) Confirm() tea.Cmd {
 	if c.state != tui.TaskStateConfirming || c.pending == nil {
 		return nil
 	}
-	if c.tier == TierModal && RequiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
+	if c.tier == TierModal && len(c.pending.Scope.BulkTargets) == 0 &&
+		RequiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
 		return nil
 	}
 	if c.forceArmed {

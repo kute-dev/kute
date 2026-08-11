@@ -604,20 +604,22 @@ func cronJobStatusGlyph(suspended, active bool, status StatusClass) (glyph strin
 	}
 }
 
-// cronJobNextCell renders ProjectCronJob's NEXT cell: "—" for a suspended
-// CronJob or one whose schedule fails to parse/whose timezone string is
-// invalid, "controller local" for one with no explicit spec.timeZone
-// (§3.9 — Kute cannot discover the kube-controller-manager process's own
-// local zone), otherwise shortEta's "in 4m"/"in 2h" reading.
-func cronJobNextCell(cj *batchv1.CronJob, suspended bool, now time.Time) string {
-	if suspended {
-		return "—"
-	}
+// NextRunLabel renders the same "in 4m"/"controller local"/"—" text
+// ProjectCronJob's NEXT cell shows for a running (non-suspended) CronJob —
+// factored out of cronJobNextCell so §36c's resume preview (0.8.0 plan
+// Phase 5, cronjob_actions.go) can compute the *post-resume* NEXT off a
+// still-suspended CronJob's own spec without duplicating NextCronRuns/
+// shortEta's error handling. "—" for a schedule that fails to parse or a
+// timezone string that's invalid, "controller local" for one with no
+// explicit spec.timeZone (§3.9 — Kute cannot discover the
+// kube-controller-manager process's own local zone), otherwise shortEta's
+// "in 4m"/"in 2h" reading.
+func NextRunLabel(spec batchv1.CronJobSpec, now time.Time) string {
 	tz := ""
-	if cj.Spec.TimeZone != nil {
-		tz = *cj.Spec.TimeZone
+	if spec.TimeZone != nil {
+		tz = *spec.TimeZone
 	}
-	runs, err := NextCronRuns(cj.Spec.Schedule, tz, now, 1)
+	runs, err := NextCronRuns(spec.Schedule, tz, now, 1)
 	switch {
 	case errors.Is(err, ErrTimeZoneUnset):
 		return "controller local"
@@ -626,6 +628,15 @@ func cronJobNextCell(cj *batchv1.CronJob, suspended bool, now time.Time) string 
 	default:
 		return shortEta(runs[0].Sub(now))
 	}
+}
+
+// cronJobNextCell renders ProjectCronJob's NEXT cell: "—" for a suspended
+// CronJob, otherwise NextRunLabel.
+func cronJobNextCell(cj *batchv1.CronJob, suspended bool, now time.Time) string {
+	if suspended {
+		return "—"
+	}
+	return NextRunLabel(cj.Spec, now)
 }
 
 // ProjectCronJob turns summary into 36a's list Row — NAME · SCHEDULE ·

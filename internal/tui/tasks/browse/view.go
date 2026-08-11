@@ -509,6 +509,13 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 // rows, or the cursor rests on a group/fold line) so stripLineCount's
 // reserved height stays correct either way.
 func (m Model) cronJobBehaviorStripLine(theme tui.Theme, width int) string {
+	if line, ok := m.cronJobRunOverlapBannerLine(theme, width); ok {
+		// §36b's amber overlap-warning banner (cronjob_actions.go) swaps into
+		// this strip's own reserved slot while a genuine Forbid/Replace
+		// conflict is staged — reusing stripLineCount's existing +1 for
+		// KindCronJob rather than growing the reserved height further.
+		return line
+	}
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	value := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	sep := lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(" │ ")
@@ -657,6 +664,12 @@ func (m Model) Body(width, height int) string {
 		return m.bulkDeleteConfirmModal(width, height)
 	}
 	if m.actions.Active() && m.actions.Tier() == actions.TierModal {
+		if m.pendingBulkCronJobSuspend() {
+			// A marked-set suspend has no single ResourceName for
+			// typeNameConfirmModal's grammar — cronjob_bulk.go's own
+			// type-the-count modal instead (0.8.0 plan §3 Phase 5 task 8).
+			return m.bulkCronJobSuspendConfirmModal(width, height)
+		}
 		if pending := m.actions.Pending(); pending != nil && actions.RequiresTypedName(pending.Scope.Verb) {
 			return m.typeNameConfirmModal(width, height)
 		}

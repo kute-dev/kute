@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,9 +27,14 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 		if !m.typingConfirmName() {
 			return nil // inline y/N confirm: nothing to paste into
 		}
+		if m.pendingBulkCronJobSuspend() {
+			return m.bulkCronJobSuspendPasteTarget()
+		}
 		return m.actions.PasteTarget()
 	case m.pendingEdit != nil, m.pendingStopAllForwards:
 		return nil
+	case m.pendingCronJobRun != nil, m.pendingCronJobResume != nil:
+		return nil // enter/y/esc only — no text buffer to paste into
 	case m.pendingScale != nil:
 		return m.scalePasteTarget()
 	case m.pendingSetImage != nil:
@@ -216,6 +222,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.marks = nil
 		}
 		return m, m.load()
+	case actions.BulkResultMsg:
+		// 0.8.0 plan §3 Phase 2 task 11: "let the caller retain only failed
+		// marks" — a marked-set suspend/resume (cronjob_actions.go's
+		// beginCronJobSuspendBulk/commitCronJobResume) is the one bulk verb
+		// routed through actions.Controller's own structured payload rather
+		// than bulkDeleteResultMsg's simpler joined-error shape, so its
+		// per-target detail is handled here instead.
+		m.actions.HandleBulkResult(msg)
+		failed := msg.Failed()
+		if len(failed) == 0 {
+			m.marks = nil
+			m.execFeedback = fmt.Sprintf("✓ %s (%d)", msg.Label, len(msg.Results))
+		} else {
+			retained := make(map[string]bool, len(failed))
+			for _, f := range failed {
+				retained[markKey(f.Namespace, f.ResourceName)] = true
+			}
+			m.marks = retained
+			if len(failed) == len(msg.Results) {
+				m.execFeedback = fmt.Sprintf("%s: all %d targets failed — %v", msg.Label, len(failed), failed[0].Err)
+			} else {
+				m.execFeedback = fmt.Sprintf("%s: %d of %d targets failed", msg.Label, len(failed), len(msg.Results))
+			}
+		}
+		return m, m.load()
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
 		if isMetaActionID(msg.ActionID) && m.pendingMeta != nil {
@@ -254,6 +285,38 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmd, m.load())
 			}
 			return m, cmd
+		}
+		if strings.HasPrefix(msg.ActionID, "cronjob-run-now-") {
+			// §36b: "On success, remain on the list, show the created name" —
+			// the Job watch event (auxKinds' KindJob reload) adds it to
+			// history/ACT on its own; this only supplies the transient
+			// confirmation text. errors.Is(ErrManualJobNameConflict) names
+			// the one race worth a distinct message: the generated name lost
+			// to a Job created between staging and commit — pressing ctrl-r
+			// again restages against the now-current Job list rather than
+			// silently picking a different name (0.8.0 plan §3 Phase 2 task
+			// 14).
+			switch {
+			case errors.Is(msg.Err, kube.ErrManualJobNameConflict):
+				m.execFeedback = "job name taken since staging — press ctrl-r to restage"
+			case msg.Err != nil:
+				m.execFeedback = "run now failed: " + msg.Err.Error()
+			default:
+				m.execFeedback = "✓ job created · " + m.lastCronJobRunName
+			}
+			return m, m.load()
+		}
+		if strings.HasPrefix(msg.ActionID, "cronjob-resume-") {
+			if msg.Err != nil {
+				m.execFeedback = "resume failed: " + msg.Err.Error()
+			}
+			return m, m.load()
+		}
+		if strings.HasPrefix(msg.ActionID, "cronjob-suspend-") {
+			if msg.Err != nil {
+				m.execFeedback = "suspend failed: " + msg.Err.Error()
+			}
+			return m, m.load()
 		}
 		if msg.Err == nil {
 			return m, m.load()
@@ -423,6 +486,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingScale != nil {
 		return m.updateScaleKey(msg)
 	}
+	if m.pendingCronJobRun != nil {
+		return m.updateCronJobRunKey(msg)
+	}
+	if m.pendingCronJobResume != nil {
+		return m.updateCronJobResumeKey(msg)
+	}
 	if m.pendingSetImage != nil {
 		return m.updateSetImageKey(msg)
 	}
@@ -586,7 +655,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
-				return m, m.beginCronJobRunNow(row)
+				m.beginCronJobRunNow(row)
+				return m, nil
 			}
 		}
 	case "r":
@@ -701,10 +771,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
-			// A CronJob's own suspend/resume. Never contends with Job's own
-			// 's' above (disjoint Kinds) or NodeShell's below (Node-only).
+			// A CronJob's own suspend/resume — direction chosen per-row, or
+			// (with a marked set) from the cursor row, per
+			// beginCronJobSuspendOrResume's own doc comment. Never contends
+			// with Job's own 's' above (disjoint Kinds) or NodeShell's below
+			// (Node-only).
 			if row, ok := m.selectedRow(); ok {
-				return m, m.beginCronJobSuspend(row)
+				return m, m.beginCronJobSuspendOrResume(row)
 			}
 		}
 		// Same gate as 'x' above, and a stronger reason for it: kubectl debug
@@ -906,15 +979,30 @@ func isSetImageActionID(id string) bool {
 // only once Controller.NameMatches ("↵ stays dead until the typed name
 // matches"), backspace/typing edit the buffer, ctrl-k escalates a pending
 // Pod delete to force-delete, esc cancels.
+//
+// A marked-set "cronjob-suspend" confirm (pendingBulkCronJobSuspend,
+// cronjob_bulk.go) reuses this same routing but against the count grammar
+// instead: enter gates on the typed digits equalling the marked count
+// (bulkCronJobSuspendCountMatches) rather than Controller.NameMatches (which
+// has no single ResourceName to compare against a bulk action), and typing
+// is digit-filtered the same way updateBulkDeleteKey filters its own local
+// buffer.
 func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	bulk := m.pendingBulkCronJobSuspend()
 	switch msg.String() {
 	case "esc":
 		m.actions.Cancel()
 	case "enter":
+		if bulk && !m.bulkCronJobSuspendCountMatches() {
+			return m, nil
+		}
 		return m, m.actions.Confirm()
 	case "ctrl+k":
 		m.actions.Escalate()
 	default:
+		if bulk && msg.Text != "" && !bulkCronJobSuspendKeyIsDigit(msg) {
+			return m, nil
+		}
 		return m, m.actions.HandleTypeKey(msg)
 	}
 	return m, nil

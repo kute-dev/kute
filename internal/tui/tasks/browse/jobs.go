@@ -17,6 +17,7 @@ package browse
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,7 +25,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
-	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -77,18 +77,27 @@ func (m Model) openSelectedCronJobDetail() (tea.Model, tea.Cmd, bool) {
 // selectedCronJobSummary returns the full aggregated resources.CronJobSummary
 // behind the selected row — view.go's behavior strip and cronJobLogsTarget
 // below both need spec/Job-history fields Row's own display Cells don't
-// carry. Resolved by namespace/name against m.cronJobSummaries rather than
-// assumed position-aligned with m.visible/m.display: sort/filter never
-// reorder m.rows for this kind (sort.go), but a defensive lookup costs
-// nothing at this list's realistic size and stays correct regardless.
+// carry.
 func (m Model) selectedCronJobSummary() (resources.CronJobSummary, bool) {
 	row, ok := m.selectedRow()
 	if !ok {
 		return resources.CronJobSummary{}, false
 	}
+	return m.cronJobSummaryFor(row.Namespace, row.Name)
+}
+
+// cronJobSummaryFor resolves any row's full aggregated
+// resources.CronJobSummary by namespace/name against m.cronJobSummaries —
+// selectedCronJobSummary's own lookup, generalized for cronjob_actions.go's
+// preflights, which (for a marked-set bulk action) need every marked row's
+// summary, not just the selected one. Resolved by namespace/name rather than
+// assumed position-aligned with m.visible/m.display: sort/filter never
+// reorder m.rows for this kind (sort.go), but a defensive lookup costs
+// nothing at this list's realistic size and stays correct regardless.
+func (m Model) cronJobSummaryFor(namespace, name string) (resources.CronJobSummary, bool) {
 	for i := range m.cronJobSummaries {
 		obj := m.cronJobSummaries[i].Object
-		if obj != nil && obj.Namespace == row.Namespace && obj.Name == row.Name {
+		if obj != nil && obj.Namespace == namespace && obj.Name == name {
 			return m.cronJobSummaries[i], true
 		}
 	}
@@ -216,78 +225,79 @@ func (m Model) jobKeybarGroup() []tui.KeyHint {
 	}
 }
 
-// beginCronJobRunNow starts verbs.CronJobRunNow (ctrl-r): triggers a new,
-// standalone Job named "<name>-manual-<unix-timestamp>" from the CronJob's
-// own jobTemplate, computed once here so the will-run line
-// (cronJobRunNowWillRunLine) and the actual TriggerCronJob call agree —
-// exactly beginJobRetry's shape above. Deliberately always TierInline with
-// no TierFor/isProd escalation, for the identical reason beginJobRetry
-// gives: this is a clone into a new object (the CronJob itself, its
-// schedule, its own Job history are all untouched), not a delete+recreate,
-// so it doesn't belong in components.TypeNameModal.
-func (m *Model) beginCronJobRunNow(row resources.Row) tea.Cmd {
-	newName := fmt.Sprintf("%s-manual-%d", row.Name, time.Now().Unix())
-	return m.actions.Begin(verbs.CronJobRunNow.Tier, tui.TaskAction{
-		ID:    "cronjob-run-now-" + row.Namespace + "/" + row.Name,
-		Label: fmt.Sprintf("Run %s now?", row.Name),
-		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindCronJob), ResourceName: row.Name,
-			Namespace: row.Namespace, Verb: "cronjob-run-now", IsMutating: true,
-			NewName: newName,
-		},
-	})
-}
+// CronJobRunNow (ctrl-r) and CronJobSuspend's resume direction both stage a
+// screen-owned preview before ever calling actions.Begin(TierNone, …) —
+// 0.8.0 plan §36b/§36c/Phase 5. Their staging/commit/render logic lives in
+// cronjob_actions.go, big enough on its own (overlap detection, missed-run
+// math, bulk marked-set support) to outgrow this file's "navigation plus a
+// kind's mutating verbs" scope. beginCronJobSuspend below now only ever
+// handles the *suspend* direction — the dangerous half that still goes
+// through actions.Controller's ordinary TierInline/TierModal confirm — with
+// direction/marked-set routing itself living in
+// cronjob_actions.go's beginCronJobSuspendOrResume, update.go's 's' dispatch
+// target.
 
-// cronJobRunNowWillRunLine is the confirm's "will run: ..." line — same
-// idiom as jobRetryWillRunLine above.
-func cronJobRunNowWillRunLine(scope tui.TaskScope) string {
-	return "will run: " + kube.CronJobTriggerCommandString(scope.Namespace, scope.ResourceName, scope.NewName)
-}
-
-// beginCronJobSuspend starts verbs.CronJobSuspend ('s'): one verb, two
-// directions, but — unlike beginFluxSuspend/beginCordon — the two directions
-// now resolve to different tiers (0.8.0 plan §36c/§3 task 2): resume passes
-// verbs.TierForCronJobSuspend(false, …) straight through, always TierNone,
-// so it executes immediately exactly like beginFluxSuspend/beginCordon do;
-// suspend passes verbs.TierForCronJobSuspend(true, m.isProd()) instead,
-// which is TierInline outside PROD and TierModal inside it — the ordinary
-// Controller-driven inline y/N / type-the-name modal every other tiered verb
-// already gets, rendered generically (keys.go's "cronjob-suspend" case,
-// delete.go's typeNameConfirmModal). m.execFeedback is set only for the
-// TierNone (resume) path — a TierInline/TierModal confirm renders its own
-// will-run line (cronJobSuspendWillRunLine) instead, the same split
-// beginJobSuspend's TierInline-only shape doesn't need to make.
-//
-// TODO(0.8.0 Phase 4/5): CronJobResourceVersion/CronJobGeneration/StagedAt
-// stay zero-valued here — resources.Row carries no resourceVersion/
-// generation yet (that's Phase 4's cache-local CronJob+Job aggregation).
-// SetCronJobSuspend's precondition and expected-generation stamp are both
-// no-ops until that data reaches this Scope.
+// beginCronJobSuspend starts verbs.CronJobSuspend's suspend direction only:
+// TierInline outside PROD, TierModal (the type-the-name modal,
+// actions.RequiresTypedName's "cronjob-suspend" entry) inside one — the
+// ordinary Controller-driven confirm every other tiered verb gets, rendered
+// generically (keys.go's "cronjob-suspend" case, delete.go's
+// typeNameConfirmModal). CronJobResourceVersion/CronJobGeneration are the
+// precondition/expected-generation values SetCronJobSuspend needs (§3.3) —
+// resolved from the cache-local summary now that Phase 4's aggregation
+// exists, closing out the TODO this function used to carry.
 func (m *Model) beginCronJobSuspend(row resources.Row) tea.Cmd {
-	verb, label := "cronjob-suspend", fmt.Sprintf("Suspend %s?", row.Name)
-	suspending := !row.Suspended
-	if row.Suspended {
-		verb, label = "cronjob-resume", fmt.Sprintf("Resume %s?", row.Name)
+	summary, _ := m.cronJobSummaryFor(row.Namespace, row.Name)
+	var resourceVersion string
+	var generation int64
+	if summary.Object != nil {
+		resourceVersion = summary.Object.ResourceVersion
+		generation = summary.Object.Generation
 	}
-	tier := verbs.TierForCronJobSuspend(suspending, m.isProd())
-	if tier == actions.TierNone {
-		m.execFeedback = kube.CronJobSuspendCommandString(row.Namespace, row.Name, suspending)
-	}
+	tier := verbs.TierForCronJobSuspend(true, m.isProd())
 	return m.actions.Begin(tier, tui.TaskAction{
-		ID:    verb + "-" + row.Name,
-		Label: label,
+		ID:    "cronjob-suspend-" + row.Namespace + "/" + row.Name,
+		Label: fmt.Sprintf("Suspend %s?", row.Name),
 		Scope: tui.TaskScope{
 			ResourceKind: string(kube.KindCronJob), ResourceName: row.Name,
-			Namespace: row.Namespace, Verb: verb, IsMutating: true,
+			Namespace: row.Namespace, Verb: "cronjob-suspend", IsMutating: true,
+			CronJobResourceVersion: resourceVersion,
+			CronJobGeneration:      generation,
+			StagedAt:               m.now,
 		},
 	})
 }
 
 // cronJobSuspendWillRunLine is beginCronJobSuspend's confirm "will run: ..."
-// line for the TierInline/TierModal (suspend) path — same idiom as
-// jobSuspendWillRunLine.
+// line — same idiom as jobSuspendWillRunLine.
 func cronJobSuspendWillRunLine(scope tui.TaskScope) string {
 	return "will run: " + kube.CronJobSuspendCommandString(scope.Namespace, scope.ResourceName, scope.Verb == "cronjob-suspend")
+}
+
+// cronJobSuspendDangerNote supplements beginCronJobSuspend's confirm (docs/
+// design README.md §36c: "the card names any currently-active Jobs and
+// states plainly that they are unaffected: suspend only stops *future*
+// scheduling"). "" when summary is unavailable (falls back to the plain
+// will-run line with no supplement). now drives the same NextRunLabel
+// computation §36a's own NEXT column uses, so the "stops happening" claim
+// names the actual next occurrence rather than a vague "future runs".
+func cronJobSuspendDangerNote(summary resources.CronJobSummary, now time.Time) string {
+	if summary.Object == nil {
+		return ""
+	}
+	next := resources.NextRunLabel(summary.Object.Spec, now)
+	consequence := "future scheduled runs stop"
+	if next != "—" && next != "controller local" {
+		consequence = fmt.Sprintf("the next scheduled run (%s) stops happening", next)
+	}
+	if len(summary.ActiveRuns) == 0 {
+		return "no active jobs right now · " + consequence
+	}
+	names := make([]string, len(summary.ActiveRuns))
+	for i, r := range summary.ActiveRuns {
+		names[i] = r.Name
+	}
+	return "running jobs unaffected · " + strings.Join(names, ", ") + " · " + consequence
 }
 
 // cronJobKeybarGroup mirrors jobKeybarGroup/fluxKeybarGroup: copies the

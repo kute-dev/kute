@@ -275,6 +275,37 @@ func TestBeginRejectsIncompleteScope(t *testing.T) {
 	}
 }
 
+// TestBeginAcceptsBulkActionWithEmptyResourceName pins a real bug the 0.8.0
+// plan's browse-side marked-set suspend/resume caught: a bulk action has no
+// single Scope.ResourceName (every target's name lives in BulkTargets
+// instead), so Begin's incomplete-scope guard must not reject it the same
+// way it rejects a genuinely-empty single-target action.
+func TestBeginAcceptsBulkActionWithEmptyResourceName(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	action := tui.TaskAction{
+		ID:    "cronjob-bulk-suspend",
+		Label: "Suspend 2 cronjobs",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindCronJob), Verb: "cronjob-suspend", IsMutating: true,
+			BulkTargets: []tui.BulkTarget{
+				{Namespace: "default", ResourceName: "a"},
+				{Namespace: "default", ResourceName: "b"},
+			},
+		},
+	}
+	cmd := c.Begin(TierInline, action)
+	if c.State() != tui.TaskStateConfirming {
+		t.Fatalf("state = %q, want confirming (empty ResourceName must not fail a bulk action)", c.State())
+	}
+	if cmd != nil {
+		t.Fatal("TierInline should not execute immediately")
+	}
+	if !c.Active() {
+		t.Fatal("expected the bulk confirm to be active")
+	}
+}
+
 func TestNilMutatorReportsUnconfigured(t *testing.T) {
 	c := New(nil)
 	c.Begin(TierInline, deleteAction())

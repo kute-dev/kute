@@ -245,19 +245,18 @@ var (
 	// JobRetry's own doc comment makes for staying out of RequiresTypedName:
 	// this is a clone into a new object, not a delete+recreate.
 	//
-	// Tier stays TierInline for now — the plain inline y/N Controller
-	// already renders generically (jobs.go's beginCronJobRunNow, keys.go's
-	// "cronjob-run-now" will-run-line case). The 0.8.0 plan's 36b target
-	// replaces this with browse staging the preflight (selected CronJob,
-	// overlap warning, generated name) in screen state *before* ever calling
-	// Begin, then invoking Begin(TierNone, …) once staged — TierNone because
-	// the staging step is itself the confirmation. That staging is Phase 5
-	// work (cronjob_actions.go); flipping this field ahead of it would drop
-	// the only confirmation ctrl-r has today with nothing yet in its place,
-	// so the field and its call site move together, in Phase 5.
+	// Tier is TierNone (0.8.0 plan Phase 5): browse stages the preflight
+	// (selected CronJob, overlap warning, generated name) in screen state —
+	// cronjob_actions.go's pendingCronJobRun — *before* ever calling
+	// Begin(TierNone, …); the staging step is itself the confirmation, so by
+	// the time Begin runs there's nothing left for actions.Controller's own
+	// TierInline/TierModal confirm to add. Never contends with delete/
+	// rollout-restart's own escalation because staging is screen-owned, not
+	// Controller-driven — there's no confirming state at the Controller
+	// level for a PROD context to escalate.
 	CronJobRunNow = Verb{
 		ID: "cronjob-run-now", Key: "ctrl-r", Label: "run now",
-		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
 	}
 	// CronJobSuspend is a CronJob's own 's': one verb, two directions —
 	// Scope.Verb is "cronjob-suspend"/"cronjob-resume" depending on the

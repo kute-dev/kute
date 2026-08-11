@@ -240,6 +240,12 @@ type Config struct {
 	Forwards    *kube.ForwardManager
 	Retrier     ConnRetrier
 	LoadTimeout time.Duration
+	// CurrentUser is who §36b's run-now stamps into kube.AnnotationTriggeredBy
+	// (0.8.0 plan §4.2) — the active context's authenticated identity
+	// (kube.Context.UserName), wired by app.go's composition root (Phase 8).
+	// Empty falls back to a generic "kute" attribution rather than leaving
+	// the annotation blank.
+	CurrentUser string
 	// InitErr is the reason Lister is nil (cluster unreachable at launch) —
 	// surfaced verbatim instead of a generic message when set. Phase 4's
 	// tasks/setup screen replaces this with the real 4c/10b recovery flow.
@@ -279,6 +285,7 @@ type Model struct {
 	forwards           *kube.ForwardManager
 	retrier            ConnRetrier
 	timeout            time.Duration
+	currentUser        string
 	// execFeedback carries a non-zero kubectl-exec exit's message (docs/design
 	// README.md §10a: "exit returns to the same pod with a feedback line on
 	// non-zero exit") — single-container pods exec directly from browse
@@ -323,6 +330,25 @@ type Model struct {
 	// cron.ParseStandard validation) to gather before there's an action to
 	// Begin.
 	pendingCronSchedule *cronScheduleTarget
+	// pendingCronJobRun is non-nil while §36b's ctrl-r run-now preflight is
+	// showing (cronjob_actions.go) — a bespoke gate like pendingScale, since
+	// run-now stages its own preview (overlap warning, generated name)
+	// before ever calling actions.Begin(TierNone, …): the staging step is
+	// itself the confirmation (0.8.0 plan §36b/Phase 5), so there's no
+	// TierInline/TierModal for actions.Controller to render.
+	pendingCronJobRun *cronJobRunTarget
+	// pendingCronJobResume is non-nil while §36c's resume preflight is
+	// showing (cronjob_actions.go) — same "stage first, TierNone commit"
+	// shape as pendingCronJobRun, covering both a single selected row and a
+	// marked set (targets has one entry or many).
+	pendingCronJobResume *cronJobResumeTarget
+	// lastCronJobRunName is the Job name commitCronJobRun just staged for
+	// creation — actions.ResultMsg carries no NewName of its own (Scope
+	// isn't part of the message), so update.go's "cronjob-run-now-" branch
+	// reads this to show "✓ job created · <name>" once the ResultMsg for
+	// that exact action lands (0.8.0 plan §36b: "On success, remain on the
+	// list, show the created name").
+	lastCronJobRunName string
 	// marks is 20a's marked set (bulk.go), keyed by markKey(namespace, name)
 	// so 6b's cross-namespace grouped view can't collide two same-named rows
 	// in different namespaces. nil/empty means no marks — every marks-aware
@@ -686,6 +712,7 @@ func New(cfg Config) Model {
 		forwards:           cfg.Forwards,
 		retrier:            cfg.Retrier,
 		timeout:            cfg.LoadTimeout,
+		currentUser:        cfg.CurrentUser,
 		kind:               kind,
 		namespace:          namespace,
 		desc:               desc,
@@ -1085,6 +1112,8 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.nodePodHealth = nil
 	m.cronJobSummaries = nil
 	m.cronJobJobsErr = nil
+	m.pendingCronJobRun = nil
+	m.pendingCronJobResume = nil
 	// 20a: "marks are per-view and drop on kind/namespace switch."
 	m.marks = nil
 	m.pendingBulkDelete = nil

@@ -52,6 +52,16 @@ type Theme struct {
 	// Error surfaces
 	ErrBannerBg, ErrBannerBorder, ErrCardBg, ErrCardBorder color.Color
 
+	// WarnBanner* backs §36b's run-now overlap card (docs/design README.md
+	// §36b/0.8.0 plan Phase 5 theme requirement 1) — the one non-destructive
+	// filled-background banner in the app, reserved for a genuine
+	// operational warning (an active Job under Forbid/Replace
+	// concurrencyPolicy) rather than the ordinary dim keybar text every
+	// other informational note uses. Never reused for a destructive confirm
+	// — those stay ConfirmBorder/ConfirmHeaderBg's red exclusively (the
+	// invariant "red borders are reserved for destructive confirms").
+	WarnBannerBg, WarnBannerBorder, WarnBannerText, WarnBannerMuted color.Color
+
 	// Bars, YAML syntax, PROD tag, ALL NS pill
 	BarTrack                              color.Color
 	YamlKey, YamlStr, YamlPunct, YamlFold color.Color
@@ -118,6 +128,11 @@ func Dark() Theme {
 		ErrBannerBorder: lipgloss.Color("#4a2228"),
 		ErrCardBg:       lipgloss.Color("#16121a"),
 		ErrCardBorder:   lipgloss.Color("#3a2a30"),
+
+		WarnBannerBg:     lipgloss.Color("#16130b"),
+		WarnBannerBorder: lipgloss.Color("#4a4224"),
+		WarnBannerText:   lipgloss.Color("#f0e0a8"),
+		WarnBannerMuted:  lipgloss.Color("#c9b578"),
 
 		BarTrack: lipgloss.Color("#1c1c2c"),
 
@@ -187,6 +202,11 @@ func Light() Theme {
 		ErrBannerBorder: lipgloss.Color("#e5b7bb"),
 		ErrCardBg:       lipgloss.Color("#f6f1f4"),
 		ErrCardBorder:   lipgloss.Color("#dcc9cd"),
+
+		WarnBannerBg:     lipgloss.Color("#fbf3e0"),
+		WarnBannerBorder: lipgloss.Color("#e8d29a"),
+		WarnBannerText:   lipgloss.Color("#7a5a12"),
+		WarnBannerMuted:  lipgloss.Color("#9a8248"),
 
 		BarTrack: lipgloss.Color("#e2e4ec"),
 
