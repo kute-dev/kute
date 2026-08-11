@@ -43,16 +43,96 @@ func (m *Model) openJobPods(row resources.Row) tea.Cmd {
 	return cmd
 }
 
-// openCronJobPods is openJobPods's CronJob twin, skipping an intermediate
-// Jobs-list step: a CronJob spawns a Job named <cronjob>-<unixtime>, whose
-// own pods are named <cronjob>-<unixtime>-<random> — still prefixed by the
-// CronJob's own name, so the same name-prefix fuzzy filter works directly
-// from CronJob → Pods without ever listing the intermediate Job.
-func (m *Model) openCronJobPods(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
-	m.originKind, m.originName = kube.KindCronJob, row.Name
-	return cmd
+// openSelectedCronJobDetail pushes §36e (tasks/cronjobdetail, wired once
+// Phase 7/8 land) for the selected CronJob row — 0.8.0 plan Phase 4 task
+// 14's replacement for the old openCronJobPods jump-straight-to-Pods
+// shortcut. siblings are every currently visible row's namespace-qualified
+// ref, in order, the same "current list + this row's index" shape
+// openSelectedPodDetail/openSelectedObjectDetail already use for their own
+// `[`/`]` sibling movement — except namespace-qualified, since all-
+// namespaces mode can list two different CronJobs sharing a name (Phase 4
+// test 11). ok is false — and `enter` a no-op — until app.go wires
+// OpenCronJobDetail; nothing regresses, there is simply nowhere to push
+// yet.
+func (m Model) openSelectedCronJobDetail() (tea.Model, tea.Cmd, bool) {
+	if m.openCronJobDetail == nil || m.kind != kube.KindCronJob {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	siblings := make([]CronJobSiblingRef, len(m.visible))
+	index := 0
+	for i, fm := range m.visible {
+		siblings[i] = CronJobSiblingRef{Namespace: fm.row.Namespace, Name: fm.row.Name}
+		if fm.row.Namespace == row.Namespace && fm.row.Name == row.Name {
+			index = i
+		}
+	}
+	task, cmd := m.openCronJobDetail(row.Namespace, row.Name, siblings, index, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// selectedCronJobSummary returns the full aggregated resources.CronJobSummary
+// behind the selected row — view.go's behavior strip and cronJobLogsTarget
+// below both need spec/Job-history fields Row's own display Cells don't
+// carry. Resolved by namespace/name against m.cronJobSummaries rather than
+// assumed position-aligned with m.visible/m.display: sort/filter never
+// reorder m.rows for this kind (sort.go), but a defensive lookup costs
+// nothing at this list's realistic size and stays correct regardless.
+func (m Model) selectedCronJobSummary() (resources.CronJobSummary, bool) {
+	row, ok := m.selectedRow()
+	if !ok {
+		return resources.CronJobSummary{}, false
+	}
+	for i := range m.cronJobSummaries {
+		obj := m.cronJobSummaries[i].Object
+		if obj != nil && obj.Namespace == row.Namespace && obj.Name == row.Name {
+			return m.cronJobSummaries[i], true
+		}
+	}
+	return resources.CronJobSummary{}, false
+}
+
+// cronJobLogsTarget resolves §36a's 'l' (update.go's own case, since it
+// needs a pointer receiver to set m.execFeedback on the "unavailable"
+// path): the newest useful Pod of the selected CronJob's active run, or —
+// failing that — its own newest terminal run when that run failed
+// (verbs.Logs' doc comment: "active or latest-failed Job"). reason names
+// why no pod is available when ok is false; both empty means nothing is
+// selected at all, a silent no-op like every other row-scoped verb.
+func (m Model) cronJobLogsTarget() (pod kube.Pod, reason string, ok bool) {
+	row, rowOK := m.selectedRow()
+	if !rowOK {
+		return kube.Pod{}, "", false
+	}
+	summary, sumOK := m.selectedCronJobSummary()
+	if !sumOK {
+		return kube.Pod{}, "", false
+	}
+	var run *resources.JobSummary
+	switch {
+	case len(summary.ActiveRuns) > 0:
+		// Runs is newest-first (resources.BuildCronJobSummaries) and
+		// ActiveRuns preserves that relative order, so index 0 is the
+		// newest active run.
+		r := summary.ActiveRuns[0]
+		run = &r
+	case summary.LastTerminal != nil && summary.LastTerminal.Failed:
+		run = summary.LastTerminal
+	}
+	if run == nil {
+		return kube.Pod{}, row.Name + " has no active or failed run to show logs for", false
+	}
+	if run.PodName == "" {
+		return kube.Pod{}, row.Name + ": no pod collected for this run yet", false
+	}
+	pod, ok = m.pods[run.PodName]
+	if !ok {
+		pod = kube.Pod{Namespace: row.Namespace, Name: run.PodName}
+	}
+	return pod, "", true
 }
 
 // beginJobRetry starts verbs.JobRetry (ctrl-r): clones row's spec into a new
@@ -218,9 +298,16 @@ func (m Model) cronJobKeybarGroup() []tui.KeyHint {
 	if row, ok := m.selectedRow(); ok && row.Suspended {
 		suspend.Label = "resume"
 	}
-	return []tui.KeyHint{
+	hints := []tui.KeyHint{
 		{Key: verbs.CronJobRunNow.Key, Label: verbs.CronJobRunNow.Label},
 		{Key: suspend.Key, Label: suspend.Label},
 		{Key: verbs.CronJobSetSchedule.Key, Label: verbs.CronJobSetSchedule.Label},
 	}
+	if m.openLogs != nil {
+		// §36a's keybar: "l logs" — verbs.Logs' Kinds already includes
+		// CronJob (verbs.go), same conditional-on-wiring guard Pod's own
+		// keybar group uses for the identical hint.
+		hints = append(hints, verbs.Logs.Hint())
+	}
+	return hints
 }

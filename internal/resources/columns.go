@@ -15,6 +15,9 @@ var RightAlignTitles = map[string]bool{
 	"Age": true, "Data": true, "Replicas": true,
 	"Completions": true, "Active": true, "Capacity": true,
 	"Traffic": true, "Rev": true, "Updated": true, "Next Run": true,
+	// §36a: NEXT reads right-aligned like every other computed-eta column
+	// (mockup 36a's own "text-align: right").
+	"Next": true,
 }
 
 // Columns builds the components.Table column specs for d from its
@@ -117,6 +120,15 @@ var fixedWidths = map[string]int{
 	"Expires": 10,
 	"Renewal": 16,
 	"Issuer":  20,
+	// §36a CronJob columns. SCHEDULE holds an unelided cron expression
+	// ("*/15 * * * *"); LAST RUN and NEXT both hold their widest realistic
+	// reading — "no retained runs" (no history yet) and "controller local"
+	// (no explicit spec.timeZone, §3.9) respectively.
+	"Schedule": 14,
+	"Susp":     6,
+	"Act":      6,
+	"Last Run": 19,
+	"Next":     19,
 }
 
 func minWidthFor(title string) int {

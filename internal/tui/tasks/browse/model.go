@@ -12,6 +12,8 @@ package browse
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
@@ -156,6 +158,25 @@ type OpenFluxDetailFunc func(kind kube.ResourceKind, namespace, name string, wid
 // unlike OpenFluxDetailFunc — the kind is always Certificate.
 type OpenCertChainFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// CronJobSiblingRef names one sibling CronJob row for OpenCronJobDetailFunc's
+// `[`/`]` movement (0.8.0 plan §3.6, tasks/cronjobdetail Phase 7) —
+// namespace-qualified, unlike OpenPodDetailFunc/OpenObjectDetailFunc's plain
+// name lists, because all-namespaces mode can list two different CronJobs
+// sharing a name (Phase 4 test 11: "including all-namespaces mode and
+// duplicate names across namespaces").
+type CronJobSiblingRef struct {
+	Namespace string
+	Name      string
+}
+
+// OpenCronJobDetailFunc pushes tasks/cronjobdetail (§36e) for the named
+// CronJob — siblings/index are the current visible list's ordered
+// namespace-qualified refs + the selected row's position, the same
+// "siblings + index" shape as OpenPodDetailFunc, so `[`/`]` can move between
+// sibling CronJobs without leaving detail. Replaces the pre-0.8.0
+// openCronJobPods jump-to-Pods shortcut (0.8.0 plan §2's "Enter" row).
+type OpenCronJobDetailFunc func(namespace, name string, siblings []CronJobSiblingRef, index, width, height int) (tea.Model, tea.Cmd)
+
 // OpenHelmHistoryFunc pushes tasks/helmhistory (18a's `h`) for a release's
 // full revision rail.
 type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -206,6 +227,7 @@ type Config struct {
 	OpenWhoCan         OpenWhoCanFunc
 	OpenFluxDetail     OpenFluxDetailFunc
 	OpenCertChain      OpenCertChainFunc
+	OpenCronJobDetail  OpenCronJobDetailFunc
 	OpenHelmHistory    OpenHelmHistoryFunc
 	OpenHelmValues     OpenHelmValuesFunc
 	OpenSecretData     OpenSecretDataFunc
@@ -247,6 +269,7 @@ type Model struct {
 	openWhoCan         OpenWhoCanFunc
 	openFluxDetail     OpenFluxDetailFunc
 	openCertChain      OpenCertChainFunc
+	openCronJobDetail  OpenCronJobDetailFunc
 	openHelmHistory    OpenHelmHistoryFunc
 	openHelmValues     OpenHelmValuesFunc
 	openSecretData     OpenSecretDataFunc
@@ -318,6 +341,19 @@ type Model struct {
 
 	rows      []resources.Row
 	fetchedAt time.Time
+	// cronJobSummaries backs §36a (CronJob kind only) — the same cache-local
+	// aggregation m.rows was projected from (resources.BuildCronJobSummaries
+	// + resources.ProjectCronJob), held onto with absolute timestamps so the
+	// one-second UI clock tick (cronJobTick) can re-derive m.rows' relative
+	// cells from a fresh `now` without a lister call. Cleared by
+	// resetAndLoad; nil for every other kind.
+	cronJobSummaries []resources.CronJobSummary
+	// cronJobJobsErr is non-nil when §4.4's Job read failed on the most
+	// recent CronJob load — Job.Status.Active/history stays unavailable
+	// rather than rendering as a fake "no retained runs" (markCronJobHistoryUnavailable),
+	// and it drives the health strip's own inline note. Always nil for
+	// every other kind.
+	cronJobJobsErr error
 	// rowColumns is how many Descriptor columns m.rows were projected with —
 	// resources.Row's contract is that Cells align positionally with the
 	// descriptor's Columns, and a custom kind's descriptor can change shape
@@ -477,7 +513,12 @@ type rowsLoadedMsg struct {
 	clusterPodTotal int
 	nodePodHealth   map[string]resources.HealthCounts
 	chartCacheNote  chartCacheNote
-	err             error
+	// cronJobSummaries/cronJobJobsErr ride along for KindCronJob only —
+	// loadCronJobRows' own aggregation output, applyRowsLoaded stores them
+	// as m.cronJobSummaries/m.cronJobJobsErr.
+	cronJobSummaries []resources.CronJobSummary
+	cronJobJobsErr   error
+	err              error
 }
 
 // emptyHintsMsg carries the 10c ways-out data computed once rows come back
@@ -494,6 +535,42 @@ type reloadDueMsg struct{ epoch int }
 // metricsTickMsg drives the 2s metrics poll loop; epoch guards it the same
 // way reloadDueMsg guards reload debouncing.
 type metricsTickMsg struct{ epoch int }
+
+// cronJobTickMsg drives §36a's one-second UI clock (Phase 4 task 5, §4.5).
+// epoch is m.reloadEpoch at scheduling time — reused rather than a
+// dedicated field, since every path that would need to invalidate a stale
+// tick chain (kind switch, namespace switch, context switch) already bumps
+// reloadEpoch via resetAndLoad, and resetAndLoad itself is what starts the
+// next chain when the new kind is still CronJob.
+type cronJobTickMsg struct{ epoch int }
+
+// scheduleCronJobTick arranges the next §36a clock tick one second out.
+func (m Model) scheduleCronJobTick(epoch int) tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return cronJobTickMsg{epoch: epoch} })
+}
+
+// applyCronJobTick rebuilds m.rows from the stored cronJobSummaries at the
+// current instant (Phase 4 task 5) — no lister call, ever. recomputeVisible
+// re-derives m.visible/m.display from the refreshed rows and preserves
+// filtering/selected identity (task 15); syncCronJobSubLine (its own last
+// step) recomputes the failure continuation line for whatever's selected
+// now that every row's SubLine was just reset by the fresh ProjectCronJob
+// call below. A stale summaries/rows length mismatch (only possible mid-
+// reload, between a kind switch and its first rowsLoadedMsg) is a no-op;
+// the reload in flight settles it.
+func (m *Model) applyCronJobTick(now time.Time) {
+	if len(m.cronJobSummaries) != len(m.rows) {
+		return
+	}
+	for i, s := range m.cronJobSummaries {
+		row := resources.ProjectCronJob(s, now)
+		if m.cronJobJobsErr != nil {
+			markCronJobHistoryUnavailable(&row)
+		}
+		m.rows[i] = row
+	}
+	m.recomputeVisible()
+}
 
 // podMetricsLoadedMsg carries one poll's result. epoch/namespace guard
 // against a reply for a since-superseded namespace/kind.
@@ -599,6 +676,7 @@ func New(cfg Config) Model {
 		openWhoCan:         cfg.OpenWhoCan,
 		openFluxDetail:     cfg.OpenFluxDetail,
 		openCertChain:      cfg.OpenCertChain,
+		openCronJobDetail:  cfg.OpenCronJobDetail,
 		openHelmHistory:    cfg.OpenHelmHistory,
 		openHelmValues:     cfg.OpenHelmValues,
 		openSecretData:     cfg.OpenSecretData,
@@ -669,6 +747,14 @@ func (m Model) pollsMetrics() bool {
 	}
 }
 
+// ticksCronJobClock reports whether the current kind needs §36a's
+// one-second UI clock (Phase 4 task 5, §4.5): NEXT/LAST RUN and the health
+// strip's own UTC clock recompute from m.cronJobSummaries on every tick —
+// never a lister call, metrics poll, or discovery read.
+func (m Model) ticksCronJobClock() bool {
+	return m.kind == kube.KindCronJob
+}
+
 // offline reports whether the 4a treatment applies: the last known
 // connection state is mid-outage (watch/ping failing, with backoff
 // retries under way) rather than a one-shot failure. The table/rows
@@ -684,6 +770,9 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+	}
+	if m.ticksCronJobClock() {
+		cmds = append(cmds, m.scheduleCronJobTick(m.reloadEpoch))
 	}
 	if prefetch := m.prefetchAuxKinds(); prefetch != nil {
 		cmds = append(cmds, prefetch)
@@ -717,6 +806,13 @@ func (m Model) load() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
+		if kind == kube.KindCronJob {
+			// §36a bypasses resources.List/Descriptor.Project entirely
+			// (registry.go's own doc comment on the CronJob entry) — Job-aware
+			// rows need the cache-local CronJob+Job+Pod join Phase 1 built
+			// (resources.BuildCronJobSummaries), never a per-row ListRaw(Job).
+			return loadCronJobRows(ctx, lister, ns, len(desc.Columns))
+		}
 		rows, err := resources.List(ctx, lister, desc, ns)
 		if err != nil {
 			return rowsLoadedMsg{kind: kind, columns: len(desc.Columns), err: err}
@@ -987,6 +1083,8 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.podCountByNode = nil
 	m.clusterPodTotal = 0
 	m.nodePodHealth = nil
+	m.cronJobSummaries = nil
+	m.cronJobJobsErr = nil
 	// 20a: "marks are per-view and drop on kind/namespace switch."
 	m.marks = nil
 	m.pendingBulkDelete = nil
@@ -1020,6 +1118,9 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
 	if m.pollsMetrics() {
 		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+	}
+	if m.ticksCronJobClock() {
+		cmds = append(cmds, m.scheduleCronJobTick(m.reloadEpoch))
 	}
 	if prefetch := m.prefetchAuxKinds(); prefetch != nil {
 		cmds = append(cmds, prefetch)
@@ -1087,4 +1188,68 @@ func helmReleasesByName(ctx context.Context, lister resources.RawLister, namespa
 		}
 	}
 	return out
+}
+
+// loadCronJobRows is §36a's own load() branch (0.8.0 plan Phase 4 task 2):
+// lists CronJobs, Jobs, and best-effort Pods once each, then aggregates
+// client-side via resources.BuildCronJobSummaries + resources.ProjectCronJob
+// — never a ListRaw(Job) call per CronJob row. A CronJob list failure fails
+// the whole load, same as every other kind; a Job list failure does not —
+// §4.4 point 5 requires the already-readable CronJob rows to stay visible,
+// with their history cells marked unavailable (markCronJobHistoryUnavailable)
+// rather than rendering the ordinary, and here false, "no retained runs".
+func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace string, columns int) rowsLoadedMsg {
+	cronJobObjs, err := lister.ListRaw(ctx, kube.KindCronJob, namespace)
+	if err != nil {
+		return rowsLoadedMsg{kind: kube.KindCronJob, columns: columns, err: err}
+	}
+	jobObjs, jobsErr := lister.ListRaw(ctx, kube.KindJob, namespace)
+	// Pods are best-effort (§4.4: "may be read best-effort for exit/log
+	// targeting") — a failed Pod read must never erase a valid Job-level
+	// failure (buildJobSummary already tolerates a nil/partial pods slice),
+	// so its own error is simply discarded here.
+	podObjs, _ := lister.ListRaw(ctx, kube.KindPod, namespace)
+
+	summaries := resources.BuildCronJobSummaries(cronJobObjs, jobObjs, podObjs)
+	// Fixed namespace/name order, always (§36a: "suspended rows stay in
+	// name order") — the same stable sort resources.List itself applies,
+	// since CronJob is deliberately absent from sort.go's workloadKinds/
+	// unhealthyFirst sets (resources/cronjobs.go's own doc comment).
+	sort.SliceStable(summaries, func(i, j int) bool {
+		a, b := summaries[i].Object, summaries[j].Object
+		if a.Namespace != b.Namespace {
+			return a.Namespace < b.Namespace
+		}
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) < 0
+	})
+
+	now := time.Now()
+	rows := make([]resources.Row, len(summaries))
+	for i, s := range summaries {
+		row := resources.ProjectCronJob(s, now)
+		if jobsErr != nil {
+			markCronJobHistoryUnavailable(&row)
+		}
+		rows[i] = row
+	}
+	return rowsLoadedMsg{
+		kind: kube.KindCronJob, columns: columns, rows: rows,
+		cronJobSummaries: summaries, cronJobJobsErr: jobsErr,
+	}
+}
+
+// markCronJobHistoryUnavailable overwrites row's ACT/LAST RUN cells
+// (registry.go's CronJob Columns order: Name, Schedule, Susp, Act, Last
+// Run, Next — indexes 3/4) when the Job cache couldn't be read for this
+// load (§4.4 point 5): a stalled/denied Job list must never render as the
+// ordinary "no retained runs"/"0" a genuinely history-less CronJob gets,
+// since that is a claim about the cluster this load never actually
+// confirmed. SCHEDULE/SUSP/NEXT are CronJob-spec-only (no Job data
+// involved) and stay exactly as ProjectCronJob computed them.
+func markCronJobHistoryUnavailable(row *resources.Row) {
+	if len(row.Cells) > 4 {
+		row.Cells[3] = "–"
+		row.Cells[4] = "unavailable"
+	}
+	row.Active = false
 }

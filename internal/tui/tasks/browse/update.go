@@ -161,6 +161,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.epoch == m.reloadEpoch {
 			return m, m.load()
 		}
+	case cronJobTickMsg:
+		if msg.epoch != m.reloadEpoch || !m.ticksCronJobClock() {
+			// Superseded by a kind/namespace/context switch (or the kind is
+			// no longer CronJob) — let the chain die here rather than
+			// rescheduling a tick nothing needs any more.
+			return m, nil
+		}
+		m.now = time.Now()
+		m.applyCronJobTick(m.now)
+		return m, m.scheduleCronJobTick(m.reloadEpoch)
 	case rowsLoadedMsg:
 		return m.applyRowsLoaded(msg)
 	case spinner.TickMsg:
@@ -321,6 +331,18 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.kind == kube.KindCronJob && !tui.KindsSynced(m.lister, kube.KindCronJob, kube.KindJob) {
+		// §4.4 point 1 / Phase 4 task 3: gate Ready/Empty on *both* required
+		// caches settling, even when msg.rows is already non-empty — a
+		// CronJob row projected before the Job cache has filled would show
+		// "no retained runs"/ACT 0 for a CronJob that may well have history,
+		// which is exactly the false-empty claim KindsSynced exists to
+		// prevent. Stay loading and retry shortly, the same debounced-reload
+		// idiom the generic empty-rows branch below already uses.
+		m.reloadEpoch++
+		return m, m.scheduleReload(m.reloadEpoch)
+	}
+
 	m.rows = msg.rows
 	m.rowColumns = msg.columns
 	m.applySort()
@@ -332,6 +354,8 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.podCountByNode = msg.podCountByNode
 	m.clusterPodTotal = msg.clusterPodTotal
 	m.nodePodHealth = msg.nodePodHealth
+	m.cronJobSummaries = msg.cronJobSummaries
+	m.cronJobJobsErr = msg.cronJobJobsErr
 	m.fetchedAt = time.Now()
 	// Real data has landed — 15a's cached/dimmed loading view (if any) is
 	// superseded either way, whether this resolves to Ready or Empty below.
@@ -466,6 +490,20 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
+		}
+		if m.kind == kube.KindCronJob && m.openLogs != nil {
+			// §36a: the newest useful Pod of the selected row's active or
+			// latest-failed Job (verbs.Logs' own doc comment) — one level of
+			// indirection past openSelectedLogs' Pod-only case above, so a
+			// CronJob row itself is never the log source.
+			if pod, reason, ok := m.cronJobLogsTarget(); ok {
+				task, cmd := m.openLogs(pod, "", m.width, m.height)
+				if task != nil {
+					return task, cmd
+				}
+			} else if reason != "" {
+				m.execFeedback = reason
+			}
 		}
 	case "enter":
 		if task, cmd, ok := m.openSelectedEnter(); ok {
@@ -758,10 +796,8 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 			return m, m.openJobPods(row), true
 		}
 	}
-	if m.kind == kube.KindCronJob {
-		if row, ok := m.selectedRow(); ok {
-			return m, m.openCronJobPods(row), true
-		}
+	if task, cmd, ok := m.openSelectedCronJobDetail(); ok {
+		return task, cmd, true
 	}
 	if m.kind == kube.KindHelmRelease {
 		if row, ok := m.selectedRow(); ok {

@@ -138,78 +138,81 @@ func TestBreadcrumbShowsOriginJobName(t *testing.T) {
 	}
 }
 
-// TestEnterOnCronJobSwitchesToPodsFilteredByNameSkippingIntermediateJob pins
-// that a CronJob's ↵ jumps straight to its pods, filtered by the CronJob's
-// own name, without ever showing an intermediate Jobs list — a CronJob
-// spawns a Job named <cronjob>-<unixtime>, whose own pods are named
-// <cronjob>-<unixtime>-<random>, still prefixed by the CronJob's name.
-func TestEnterOnCronJobSwitchesToPodsFilteredByNameSkippingIntermediateJob(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindCronJob: {cronJobObj("default", "nightly")},
-		kube.KindPod: {
-			pod("default", "nightly-1712345678-x7f2k"),
-			pod("default", "worker-0"),
-		},
-	}}
-	session := newSession()
-	session.Location.Kind = kube.KindCronJob
-	m := New(Config{Session: session, Lister: lister})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod {
-		t.Fatalf("expected kind switched directly to Pod (no intermediate Jobs list), got %s", m.kind)
-	}
-	if m.filterInput.Value() != "nightly" {
-		t.Fatalf("filterQuery = %q, want %q", m.filterInput.Value(), "nightly")
-	}
-	view := plain(m.Render())
-	if !strings.Contains(view, "nightly-1712345678-x7f2k") {
-		t.Fatalf("expected the owned pod to remain visible:\n%s", view)
-	}
-	if strings.Contains(view, "worker-0") {
-		t.Fatalf("expected the unrelated pod to be filtered out:\n%s", view)
-	}
-}
-
-func TestEscFromCronJobPodsReturnsToCronJobAndSelectsRow(t *testing.T) {
+// TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings pins 0.8.0
+// plan Phase 4 task 14: ↵ on a CronJob row pushes tasks/cronjobdetail
+// (stubbed here — the real screen doesn't exist until Phase 7) instead of
+// the pre-0.8.0 jump-straight-to-Pods shortcut, carrying every visible row's
+// namespace-qualified ref plus the selected row's index.
+func TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {
-			cronJobObj("default", "nightly"),
 			cronJobObj("default", "hourly"),
+			cronJobObj("default", "nightly"),
 		},
-		kube.KindPod: {
-			pod("default", "nightly-1712345678-x7f2k"),
-			pod("default", "hourly-1712349999-y8g3l"),
-		},
+		kube.KindJob: {},
 	}}
+	var gotNamespace, gotName string
+	var gotSiblings []CronJobSiblingRef
+	var gotIndex int
 	session := newSession()
 	session.Location.Kind = kube.KindCronJob
-	m := New(Config{Session: session, Lister: lister})
+	m := New(Config{Session: session, Lister: lister, OpenCronJobDetail: func(namespace, name string, siblings []CronJobSiblingRef, index, _, _ int) (tea.Model, tea.Cmd) {
+		gotNamespace, gotName, gotSiblings, gotIndex = namespace, name, siblings, index
+		return stubTask{}, nil
+	}})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	// m.load()() rather than step(m.Init()()): Init's own CronJob branch also
+	// schedules the recurring §36a clock tick (Phase 4 task 5), which step's
+	// synchronous cmd-draining would otherwise follow forever — the same
+	// hazard TestPodMetricsRenderAsBars documents for the metrics poll loop.
+	m = step(t, m, m.load()())
 	m.moveSelection(1)
 	row, ok := m.selectedRow()
 	if !ok || row.Name != "nightly" {
-		t.Fatalf("expected nightly selected before opening its pods, got %+v (ok=%v)", row, ok)
+		t.Fatalf("expected nightly selected before pressing enter, got %+v (ok=%v)", row, ok)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod || m.originName != "nightly" {
-		t.Fatalf("expected Pods filtered by nightly, got kind=%s originName=%q", m.kind, m.originName)
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected enter to push the stub detail task, got %T", updated)
 	}
+	if gotNamespace != "default" || gotName != "nightly" {
+		t.Fatalf("expected OpenCronJobDetail(default, nightly, ...), got (%q, %q)", gotNamespace, gotName)
+	}
+	wantSiblings := []CronJobSiblingRef{{Namespace: "default", Name: "hourly"}, {Namespace: "default", Name: "nightly"}}
+	if len(gotSiblings) != len(wantSiblings) || gotSiblings[0] != wantSiblings[0] || gotSiblings[1] != wantSiblings[1] {
+		t.Fatalf("siblings = %+v, want %+v", gotSiblings, wantSiblings)
+	}
+	if gotIndex != 1 {
+		t.Fatalf("index = %d, want 1 (nightly)", gotIndex)
+	}
+}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
-	if m.kind != kube.KindCronJob {
-		t.Fatalf("expected esc to switch back to CronJobs, got %s", m.kind)
+// TestEnterOnCronJobNoopsWithoutDetailWired pins that pressing enter stays
+// harmless when app.go hasn't wired OpenCronJobDetail yet (true until Phase
+// 7/8 land tasks/cronjobdetail) — the list stays exactly where it was rather
+// than falling through to some other kind's enter routing.
+func TestEnterOnCronJobNoopsWithoutDetailWired(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cronJobObj("default", "nightly")},
+		kube.KindJob:     {},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	next, ok := updated.(*Model)
+	if !ok {
+		t.Fatalf("expected enter to stay on the browse model, got %T", updated)
 	}
-	if m.originName != "" {
-		t.Fatalf("expected originName cleared after esc-back, got %q", m.originName)
+	if cmd != nil {
+		t.Fatalf("expected no command, got one")
 	}
-	selected, ok := m.selectedRow()
-	if !ok || selected.Name != "nightly" {
-		t.Fatalf("expected nightly re-selected on CronJobs, got %+v (ok=%v)", selected, ok)
+	if next.kind != kube.KindCronJob {
+		t.Fatalf("expected kind to stay CronJob, got %s", next.kind)
 	}
 }
 
@@ -364,7 +367,7 @@ func TestCtrlRShowsConfirmThenTriggersCronJobRunNowOnY(t *testing.T) {
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
@@ -400,7 +403,7 @@ func TestCronJobRunNowStaysInlineEvenInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
@@ -432,7 +435,7 @@ func TestSKeyOnCronJobSuspendRequiresConfirmNonProd(t *testing.T) {
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "s"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
@@ -464,7 +467,7 @@ func TestCronJobSuspendEscalatesToModalConfirmInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "s"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
@@ -505,7 +508,7 @@ func TestSKeyOnCronJobSuspendResumeStaysTierNone(t *testing.T) {
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	if !strings.Contains(plain(m.Render()), "suspend") {
 		t.Errorf("keybar should read 'suspend' on an active row:\n%s", plain(m.Render()))
@@ -520,7 +523,7 @@ func TestSKeyOnCronJobSuspendResumeStaysTierNone(t *testing.T) {
 	session2.Config = config.Config{ProdContexts: []string{session2.Location.Context}}
 	m2 := New(Config{Session: session2, Lister: lister2, Mutator: mut2})
 	m2.SetSize(120, 36)
-	m2 = step(t, m2, m2.Init()())
+	m2 = step(t, m2, m2.load()())
 
 	if !strings.Contains(plain(m2.Render()), "resume") {
 		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
@@ -545,7 +548,7 @@ func TestShiftSOpensCronScheduleEditPanelPrefilledWithCurrentSchedule(t *testing
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "S"})
 	if m.pendingCronSchedule == nil {
@@ -568,7 +571,7 @@ func TestCronScheduleEditRejectsInvalidCronExpressionInline(t *testing.T) {
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "S"})
 	m.pendingCronSchedule.input.SetValue("not a cron expression")
@@ -598,7 +601,7 @@ func TestCronScheduleEditCommitsAndPanelStaysOpenShowingResult(t *testing.T) {
 	session.Location.Kind = kube.KindCronJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "S"})
 	m.pendingCronSchedule.input.SetValue("*/15 * * * *")
@@ -641,7 +644,7 @@ func TestCronJobSetScheduleStaysTierNoneInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "S"})
 	m.pendingCronSchedule.input.SetValue("*/15 * * * *")

@@ -237,6 +237,14 @@ func (m *Model) handleSortKey(col int) {
 	if m.grouped() {
 		return
 	}
+	if m.kind == kube.KindCronJob {
+		// §36a: "name order, always" — a manual 1-9 override would let the
+		// user sort a suspended CronJob out of the position it was left in,
+		// exactly what the fixed order exists to prevent. tableBody's own
+		// sortColumn>0 guard is what hides the header's sort arrow, so
+		// simply never setting m.sortColumn here is sufficient.
+		return
+	}
 	if col < 1 || col > len(m.desc.Columns) {
 		return
 	}

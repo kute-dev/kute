@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 )
@@ -19,6 +20,7 @@ func (m *Model) recomputeVisible() {
 	m.visible = applyFilter(m.rows, m.filterInput.Value())
 	m.rebuildDisplay()
 	m.restoreSelection(name)
+	m.syncCronJobSubLine()
 }
 
 // rebuildDisplay recomputes m.display from the current m.visible +
@@ -145,6 +147,7 @@ func (m *Model) moveSelection(delta int) {
 		if selectableStop(m.display[next].kind) {
 			m.selected = next
 			m.clampOffset()
+			m.syncCronJobSubLine()
 			return
 		}
 	}
@@ -176,6 +179,7 @@ func (m *Model) toggleGroup() {
 	name := m.selectedName()
 	m.rebuildDisplay()
 	m.restoreSelection(name)
+	m.syncCronJobSubLine()
 }
 
 // clampOffset keeps the selected line within the table's rendered viewport.
@@ -204,6 +208,75 @@ func (m *Model) clampOffset() {
 func (m Model) tableDataRows() int {
 	body := tui.FrameBodyHeight(m.height, m.stripLineCount())
 	return max(body-3, 1)
+}
+
+// syncCronJobSubLine keeps §36a's failure continuation line under exactly
+// the selected failed CronJob row (0.8.0 plan Phase 4 task 8) — never every
+// failed row at once the way §30a/§33a's always-on Flux/Argo SubLine works.
+// ProjectCronJob never sets Row.SubLine itself (it has no selection to
+// consult), so this is recomputed after every selection-settling path
+// (recomputeVisible, moveSelection, toggleGroup) instead. A no-op for every
+// other kind.
+func (m *Model) syncCronJobSubLine() {
+	if m.kind != kube.KindCronJob {
+		return
+	}
+	name := m.selectedName()
+	if !m.updateCronJobSubLines(name) {
+		return
+	}
+	// SubLine changed composition (a row gained or lost its continuation
+	// line), which changes how many entries buildDisplayRows produces — the
+	// same "rebuild display, re-find the row by name" idiom toggleGroup
+	// already uses when its own fold state changes m.display's shape.
+	m.visible = applyFilter(m.rows, m.filterInput.Value())
+	m.rebuildDisplay()
+	m.restoreSelection(name)
+}
+
+// updateCronJobSubLines sets SubLine on the one row named selectedName —
+// only when its newest terminal run failed — and clears it everywhere
+// else, reporting whether anything actually changed so callers can skip
+// rebuilding m.display/m.visible on a plain cursor move between two
+// non-failed rows.
+func (m *Model) updateCronJobSubLines(selectedName string) bool {
+	changed := false
+	for i := range m.rows {
+		want := ""
+		if selectedName != "" && m.rows[i].Name == selectedName {
+			for _, s := range m.cronJobSummaries {
+				if s.Object == nil || s.Object.Namespace != m.rows[i].Namespace || s.Object.Name != m.rows[i].Name {
+					continue
+				}
+				if s.LastTerminal != nil && s.LastTerminal.Failed {
+					want = cronJobFailureSubLine(*s.LastTerminal)
+				}
+				break
+			}
+		}
+		if m.rows[i].SubLine != want {
+			m.rows[i].SubLine = want
+			changed = true
+		}
+	}
+	return changed
+}
+
+// cronJobFailureSubLine formats §36a's inline failure line: the newest
+// terminal run's own Job condition reason/message, verbatim — the same
+// "prose renders as a continuation line, never paraphrased" rule
+// fluxSubLine/argoSubLine already follow (resources/flux.go, resources/argo.go).
+func cronJobFailureSubLine(s resources.JobSummary) string {
+	switch {
+	case s.Reason != "" && s.Message != "":
+		return s.Reason + " — " + s.Message
+	case s.Reason != "":
+		return s.Reason
+	case s.Message != "":
+		return s.Message
+	default:
+		return "failed — no message retained"
+	}
 }
 
 func clamp(v, lo, hi int) int {

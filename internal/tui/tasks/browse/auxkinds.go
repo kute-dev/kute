@@ -41,6 +41,16 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 	},
 	kube.KindIngress: {kube.KindService, kube.KindPod}, // BACKENDS column
 	kube.KindService: {kube.KindPod},                   // label-join in the meta editor
+	kube.KindCronJob: {
+		// §36a: last outcome, active runs, and history all come from
+		// associated Jobs (0.8.0 plan §4.4) — a Job or Pod watch event
+		// changes what the list should show even though CronJob's own
+		// object didn't change. Job is also what opening CronJobs must
+		// start lazily alongside CronJob itself (§4.4 point 2); Pod is
+		// already eager at connect, listed here only for the reload trigger.
+		kube.KindJob,
+		kube.KindPod,
+	},
 	kube.KindHelmRelease: {
 		// 18a's rollout glyph: a release's workloads settling is a change to
 		// three other kinds and none to the release Secret, so without these

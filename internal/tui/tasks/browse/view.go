@@ -139,6 +139,12 @@ func (m Model) stripLineCount() int {
 		if m.filterActive {
 			n++
 		}
+		if m.kind == kube.KindCronJob && !m.offline() {
+			// §36a's behavior strip (Phase 4 task 9) — reserved unconditionally
+			// so the keybar never gets truncated at 80x24 (task 10), even when
+			// nothing's selected yet.
+			n++
+		}
 		return n
 	default:
 		return 0
@@ -166,6 +172,9 @@ func (m Model) Strips(width int) []string {
 		}
 		if m.filterActive {
 			lines = append(lines, m.filterStripLine(theme, width))
+		}
+		if m.kind == kube.KindCronJob && !m.offline() {
+			lines = append(lines, m.cronJobBehaviorStripLine(theme, width))
 		}
 		return lines
 	default:
@@ -322,6 +331,22 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		parts = append(parts, glyphStyle.Render(tui.GlyphExpiring)+" "+
 			numStyle.Render(strconv.Itoa(counts.ExpiringSoon))+" "+labelStyle.Render("<30d"))
 	}
+	if m.kind == kube.KindCronJob {
+		// §36a/§4.3's own two cross-cutting segments: a CronJob with an
+		// active run (or a currently-suspended one) is already tallied by
+		// its last *terminal* outcome above — resources.cronJobHealth's own
+		// doc comment.
+		if counts.Active > 0 {
+			glyphStyle := lipgloss.NewStyle().Foreground(theme.Warn)
+			parts = append(parts, glyphStyle.Render(tui.GlyphCronActive)+" "+
+				numStyle.Render(strconv.Itoa(counts.Active))+" "+labelStyle.Render("active now"))
+		}
+		if counts.Suspended > 0 {
+			glyphStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+			parts = append(parts, glyphStyle.Render(tui.GlyphCronPaused)+" "+
+				numStyle.Render(strconv.Itoa(counts.Suspended))+" "+labelStyle.Render("suspended"))
+		}
+	}
 	left := strings.Join(parts, "   ")
 	rightText := fmt.Sprintf("%d %s", len(m.rows), lowerDisplay(m.desc.Display))
 	helm := false
@@ -354,6 +379,16 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		rightText = fmt.Sprintf("%d certificates", len(m.rows))
 		if m.sortColumn == 0 {
 			rightText += " · unhealthy + soonest expiry first"
+		}
+	case m.kind == kube.KindCronJob:
+		// §36a: "7 cronjobs · clock 14:02:11 UTC" — the live wall clock the
+		// one-second UI tick (Phase 4 task 5) drives, proof the NEXT column
+		// is actually counting down rather than frozen at load time.
+		rightText = fmt.Sprintf("%d cronjobs · clock %s UTC", len(m.rows), m.now.UTC().Format("15:04:05"))
+		if m.cronJobJobsErr != nil {
+			// §4.4 point 5: a stalled/denied Job read must stay visible —
+			// never silently become the ordinary empty-history reading.
+			rightText += " · job history unavailable: " + m.cronJobJobsErr.Error()
 		}
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
@@ -460,6 +495,64 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
 	}
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
+}
+
+// cronJobBehaviorStripLine renders §36a's selected-row behavior strip
+// (Phase 4 task 9): concurrency policy, starting deadline, configured
+// history limits, timezone, and job-template backoff limit — the one
+// genuinely list-relevant fact the pre-0.8.0 always-docked detail pane
+// carried, now one strip line instead of a 336px side panel (docs/design
+// README.md §36a's own note). Defaults mirror batchv1's own documented
+// zero-value behavior (ConcurrencyPolicy "" == Allow, history limits 3/1,
+// Job's own BackoffLimit 6) rather than rendering a misleading blank.
+// Renders an inset-only line when nothing's selected (filtered to zero
+// rows, or the cursor rests on a group/fold line) so stripLineCount's
+// reserved height stays correct either way.
+func (m Model) cronJobBehaviorStripLine(theme tui.Theme, width int) string {
+	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	value := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	sep := lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(" │ ")
+	field := func(name, text string) string {
+		return label.Render(name+" ") + value.Render(text)
+	}
+
+	summary, ok := m.selectedCronJobSummary()
+	if !ok || summary.Object == nil {
+		return insetStripLine("", width)
+	}
+	spec := summary.Object.Spec
+
+	concurrency := string(spec.ConcurrencyPolicy)
+	if concurrency == "" {
+		concurrency = "Allow"
+	}
+	deadline := "none"
+	if spec.StartingDeadlineSeconds != nil {
+		deadline = fmt.Sprintf("%ds", *spec.StartingDeadlineSeconds)
+	}
+	succLimit, failLimit := int32(3), int32(1)
+	if spec.SuccessfulJobsHistoryLimit != nil {
+		succLimit = *spec.SuccessfulJobsHistoryLimit
+	}
+	if spec.FailedJobsHistoryLimit != nil {
+		failLimit = *spec.FailedJobsHistoryLimit
+	}
+	timezone := "controller local"
+	if spec.TimeZone != nil && *spec.TimeZone != "" {
+		timezone = *spec.TimeZone
+	}
+	backoff := "6"
+	if spec.JobTemplate.Spec.BackoffLimit != nil {
+		backoff = strconv.Itoa(int(*spec.JobTemplate.Spec.BackoffLimit))
+	}
+
+	line := value.Render(summary.Object.Name) + sep +
+		field("concurrency", concurrency) + sep +
+		field("deadline", deadline) + sep +
+		field("history", fmt.Sprintf("%d ok · %d failed", succLimit, failLimit)) + sep +
+		field("tz", timezone) + sep +
+		field("backoff", backoff)
+	return insetStripLine(line, width)
 }
 
 // stripInnerWidth/insetStripLine give the health/filter strips the same
@@ -737,6 +830,13 @@ type rowCellStyles struct {
 	// every other kind's legitimately-neutral rows (Completed pods,
 	// cordoned nodes) keep using.
 	customNeutral lipgloss.Style
+	// faint is §36a's second dim tier: a suspended CronJob row's SCHEDULE/
+	// ACT/LAST RUN/NEXT cells (dim's own name/glyph tier reads brighter,
+	// mockup 36a's own two-step fade). Same TextFaint foreground as
+	// customNeutral, kept as its own field since the two exist for
+	// unrelated reasons and reusing one for the other would read as a
+	// coincidence rather than a shared token.
+	faint lipgloss.Style
 }
 
 // newRowCellStyles resolves the table's per-cell colors from theme, or —
@@ -802,6 +902,7 @@ func newRowCellStyles(theme tui.Theme, selected, muted, marked bool) rowCellStyl
 			resources.StatusNeutral: style(info),
 		},
 		customNeutral: style(theme.TextFaint),
+		faint:         style(theme.TextFaint),
 	}
 }
 
@@ -973,6 +1074,13 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 				// pods, cordoned nodes) uses.
 				cells[i].Style = st.customNeutral
 			}
+			if m.kind == kube.KindCronJob && r.Suspended {
+				// §36a: a suspended row's glyph dims to plain TextDim
+				// rather than StatusNeutral's Info blue — "suspended" isn't
+				// a status class here, ProjectCronJob's own priority order
+				// (§4.3) puts it ahead of last-terminal-outcome entirely.
+				cells[i].Style = st.dim
+			}
 		case m.kind == kube.KindPod && cols[i].Title == "CPU":
 			cells[i] = m.metricCell(r.Name, true, cpuMax, st)
 		case m.kind == kube.KindPod && cols[i].Title == "MEM":
@@ -995,6 +1103,12 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			base := st.name
 			if r.Status == resources.StatusFail {
 				base = st.nameBad
+			}
+			if m.kind == kube.KindCronJob && r.Suspended {
+				// §36a: "suspended rows dimmed with a struck-through NAME"
+				// (Phase 4 task 6) — row-style, not ANSI embedded into the
+				// name string itself.
+				base = st.dim.Strikethrough(true)
 			}
 			text := highlightName(r.Name, matches, st.match, base)
 			if r.NameSuffix != "" {
@@ -1058,6 +1172,39 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			cells[i].Style = st.dim
 			if r.RenewalClass == resources.StatusWarn || r.RenewalClass == resources.StatusFail {
 				cells[i].Style = st.status[r.RenewalClass]
+			}
+		case m.kind == kube.KindCronJob && cols[i].Title == "Schedule":
+			cells[i].Style = st.dim
+			if r.Suspended {
+				cells[i].Style = st.faint
+			}
+		case m.kind == kube.KindCronJob && cols[i].Title == "Susp":
+			cells[i].Style = st.dim
+			if r.Suspended {
+				cells[i].Style = st.status[resources.StatusWarn]
+			}
+		case m.kind == kube.KindCronJob && cols[i].Title == "Act":
+			switch {
+			case r.Suspended:
+				cells[i].Style = st.faint
+			case r.Active:
+				cells[i].Style = st.status[resources.StatusWarn]
+			default:
+				cells[i].Style = st.dim
+			}
+		case m.kind == kube.KindCronJob && cols[i].Title == "Last Run":
+			switch {
+			case r.Suspended:
+				cells[i].Style = st.faint
+			case r.Status == resources.StatusFail:
+				cells[i].Style = st.status[resources.StatusFail]
+			default:
+				cells[i].Style = st.dim
+			}
+		case m.kind == kube.KindCronJob && cols[i].Title == "Next":
+			cells[i].Style = st.dim
+			if r.Suspended {
+				cells[i].Style = st.faint
 			}
 		case cols[i].Title == tui.GlyphRestarts:
 			cells[i].Style = st.restartsHot
