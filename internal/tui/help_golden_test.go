@@ -46,12 +46,20 @@ func (helpBackdropScreen) Body(int, int) string {
 func goldenHelpSession(theme tui.Theme) *tui.Session {
 	sess := &tui.Session{Theme: theme, Styles: tui.NewStyles(theme)}
 	sess.HelpScope = []tui.KeyHint{
-		{Key: "g", Label: "goto"}, {Key: "n", Label: "namespace"}, {Key: "c", Label: "context"},
-		{Key: "a", Label: "all namespaces"}, {Key: "↵", Label: "toggles last"},
+		{Key: "g", Label: "goto"}, {Key: "n", Label: "namespace"},
+		{Key: "a", Label: "all namespaces"}, {Key: "c", Label: "context"},
 	}
-	sess.HelpGlobal = []tui.KeyHint{
-		{Key: "↑↓ jk", Label: "move"}, {Key: "↵", Label: "open"}, {Key: "esc", Label: "back"},
-		{Key: "U", Label: "what's new"}, {Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"},
+	sess.HelpList = []tui.KeyHint{
+		{Key: "/", Label: "filter"}, {Key: "1-9", Label: "sort column"},
+		{Key: "↑↓ jk", Label: "move"}, {Key: "space", Label: "mark"}, {Key: "↵", Label: "open"},
+	}
+	sess.HelpResource = []tui.KeyHint{
+		{Key: "y", Label: "yaml"}, {Key: "E", Label: "edit"}, {Key: "e", Label: "events"},
+		{Key: "t", Label: "timeline"}, {Key: "m", Label: "labels/annotations"},
+	}
+	sess.HelpMisc = []tui.KeyHint{
+		{Key: "U", Label: "what's new"}, {Key: "?", Label: "help"},
+		{Key: "esc", Label: "back"}, {Key: "ctrl+q", Label: "quit"},
 	}
 	return sess
 }

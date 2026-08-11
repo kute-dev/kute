@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -11,9 +12,12 @@ import (
 )
 
 // This file renders the 7b help overlay (docs/design README.md §7b): a
-// floating ~79%-width panel over the dimmed table, three columns — the
+// floating ~79%-width panel over the dimmed table, four columns — the
 // active screen's own keybar groups (so it always matches what's on
-// screen, mvp-plan.md §0.4), plus the fixed SCOPE and GLOBAL columns.
+// screen, mvp-plan.md §0.4), plus the fixed SCOPE, LIST, and RESOURCE
+// columns — followed by a horizontal MISC footer row for the handful of
+// shell-level odds and ends (what's-new/help/back/quit) that don't belong
+// in a vertical column of their own.
 
 // helpWidth is the panel's outer width: ~79% of the screen, floored/capped
 // like palette.Width.
@@ -30,10 +34,12 @@ func flattenHints(groups [][]KeyHint) []KeyHint {
 	return out
 }
 
-// renderHelp draws the 7b panel for the currently active Screen. scope/global
-// are Session.HelpScope/HelpGlobal (built at the composition root from the
-// verbs registry — see session.go's doc comment on those fields).
-func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth int) string {
+// renderHelp draws the 7b panel for the currently active Screen. scope/list/
+// resource are Session.HelpScope/HelpList/HelpResource (built at the
+// composition root from the verbs registry — see session.go's doc comment
+// on those fields); misc is Session.HelpMisc, rendered as a horizontal
+// footer row rather than a fifth column.
+func renderHelp(theme Theme, view Screen, scope, list, resource, misc []KeyHint, screenWidth int) string {
 	width := helpWidth(screenWidth)
 	frameWidth := max(width-2, 20)
 
@@ -52,6 +58,7 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	if viewTitle == "" {
 		viewTitle = "VIEW"
 	}
+	viewHints := flattenHints(kb.Groups)
 
 	title := accent.Render("? help") + "  " + faint.Render(fmt.Sprintf("keys for %s view · globals below", viewTitle))
 	// TextGhost, not BorderSubtle — matches chrome.go's own band rules and
@@ -59,17 +66,30 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	// background fill behind it (BgPalette's the empty lipgloss.Color).
 	rule := fg(theme.TextGhost).Render(strings.Repeat("─", frameWidth))
 
-	colGap := 3
-	// innerWidth is the row's real budget: helpInset reserves a 1-cell
-	// margin on each side, so columns sized against frameWidth itself came
-	// out two cells too wide and got truncated with a stray "…" (7b: help.go
-	// docs/design README.md §7b).
+	// colGap shrinks from 7b's old 3-column value (3) to 2: one more column
+	// now shares the same panel width, and the extra cell is worth more as
+	// column budget than as visual air between four columns instead of
+	// three. innerWidth is the row's real budget: helpInset reserves a
+	// 1-cell margin on each side, so columns sized against frameWidth itself
+	// came out two cells too wide and got truncated with a stray "…" (7b:
+	// help.go docs/design README.md §7b).
+	const colGap = 2
+	const colFloor = 8
 	innerWidth := frameWidth - 2
-	colWidth := max((innerWidth-2*colGap)/3, 12)
+
+	natural := [4]int{
+		helpColumnNaturalWidth(viewTitle+" VIEW", viewHints),
+		helpColumnNaturalWidth("SCOPE", scope),
+		helpColumnNaturalWidth("LIST", list),
+		helpColumnNaturalWidth("RESOURCE", resource),
+	}
+	widths := helpColumnWidths(natural, innerWidth-3*colGap, colFloor)
+
 	cols := [][]string{
-		helpColumn(viewTitle+" VIEW", flattenHints(kb.Groups), headStyle, keyStyle, labelStyle, fill, colWidth),
-		helpColumn("SCOPE", scope, headStyle, keyStyle, labelStyle, fill, colWidth),
-		helpColumn("GLOBAL", global, headStyle, keyStyle, labelStyle, fill, colWidth),
+		helpColumn(viewTitle+" VIEW", viewHints, headStyle, keyStyle, labelStyle, fill, widths[0]),
+		helpColumn("SCOPE", scope, headStyle, keyStyle, labelStyle, fill, widths[1]),
+		helpColumn("LIST", list, headStyle, keyStyle, labelStyle, fill, widths[2]),
+		helpColumn("RESOURCE", resource, headStyle, keyStyle, labelStyle, fill, widths[3]),
 	}
 	rows := 0
 	for _, c := range cols {
@@ -77,7 +97,7 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	}
 	for i, c := range cols {
 		for len(c) < rows {
-			c = append(c, helpFill(fill, colWidth))
+			c = append(c, helpFill(fill, widths[i]))
 		}
 		cols[i] = c
 	}
@@ -85,7 +105,11 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	gap := helpFill(fill, colGap)
 	lines := []string{helpInset(title, frameWidth, fill), rule}
 	for r := range rows {
-		lines = append(lines, helpInset(cols[0][r]+gap+cols[1][r]+gap+cols[2][r], frameWidth, fill))
+		lines = append(lines, helpInset(cols[0][r]+gap+cols[1][r]+gap+cols[2][r]+gap+cols[3][r], frameWidth, fill))
+	}
+	lines = append(lines, rule)
+	for _, l := range helpMiscLines(misc, headStyle, keyStyle, labelStyle, fill, innerWidth) {
+		lines = append(lines, helpInset(l, frameWidth, fill))
 	}
 	lines = append(lines, rule)
 	closeHint := keyStyle.Render("esc") + labelStyle.Render(" close")
@@ -104,19 +128,102 @@ func renderHelp(theme Theme, view Screen, scope, global []KeyHint, screenWidth i
 	return frame.Render(strings.Join(lines, "\n"))
 }
 
+// helpColumnGutter is the display width of the widest key in hints — the
+// left-aligned column every row's label starts after, within this column
+// only. Computed independently per column, so a wide key in one column
+// (e.g. LIST's "↑↓ jk") never shifts labels in another (e.g. SCOPE's "g").
+func helpColumnGutter(hints []KeyHint) int {
+	g := 0
+	for _, h := range hints {
+		g = max(g, lipgloss.Width(h.Key))
+	}
+	return g
+}
+
+// helpColumnNaturalWidth is the column's ideal, untruncated width: the
+// uppercase heading vs. every "gutter + 1 space + label" row, whichever is
+// widest.
+func helpColumnNaturalWidth(heading string, hints []KeyHint) int {
+	w := lipgloss.Width(strings.ToUpper(heading))
+	gutter := helpColumnGutter(hints)
+	for _, h := range hints {
+		w = max(w, gutter+1+lipgloss.Width(h.Label))
+	}
+	return w
+}
+
+// helpColumnWidths distributes available cells across the four main columns.
+// When every column's natural width already fits, it's returned unchanged —
+// helpInset's own trailing fill absorbs any width left over. Otherwise it
+// shrinks smallest-need-first down to floor: a column whose natural width
+// barely exceeds floor is topped up to its full natural width before a
+// column with a much larger appetite (typically CURRENT VIEW, which varies
+// per screen) gets anything beyond floor, protecting the three fixed,
+// memorized-vocabulary columns from truncating first.
+func helpColumnWidths(natural [4]int, available, floor int) [4]int {
+	total := natural[0] + natural[1] + natural[2] + natural[3]
+	if total <= available {
+		return natural
+	}
+	widths := [4]int{floor, floor, floor, floor}
+	budget := available - floor*4
+	if budget <= 0 {
+		return widths // pathologically narrow terminal; Truncate saves every cell
+	}
+	order := []int{0, 1, 2, 3}
+	slices.SortFunc(order, func(a, b int) int { return natural[a] - natural[b] })
+	for _, i := range order {
+		need := natural[i] - floor
+		if need <= 0 {
+			continue
+		}
+		grant := min(need, budget)
+		widths[i] += grant
+		budget -= grant
+		if budget == 0 {
+			break
+		}
+	}
+	return widths
+}
+
 // helpColumn renders one 7b column: an uppercase heading followed by up to
 // one row per hint, each padded to width so every column in a row lines up.
+// Keys are left-padded to the column's own gutter so labels start at a
+// consistent offset regardless of key width (g vs ↑↓ jk vs ctrl+q).
 func helpColumn(heading string, hints []KeyHint, headStyle, keyStyle, labelStyle, fill lipgloss.Style, width int) []string {
+	gutter := helpColumnGutter(hints)
 	lines := []string{helpPad(headStyle.Render(strings.ToUpper(heading)), width, fill)}
 	for _, h := range hints {
 		style := keyStyle
 		if h.Disabled {
 			style = labelStyle
 		}
-		line := style.Render(h.Key) + labelStyle.Render(" "+h.Label)
+		key := h.Key + strings.Repeat(" ", gutter-lipgloss.Width(h.Key))
+		line := style.Render(key) + labelStyle.Render(" "+h.Label)
 		lines = append(lines, helpPad(line, width, fill))
 	}
 	return lines
+}
+
+// helpMiscLines renders the MISC footer row: "MISC" in the same heading
+// style as the four main columns, followed by every hint's key+label pair
+// on one line — joined the same way the app's own on-screen keybar joins
+// hint pairs (chrome.go's renderHints). When that doesn't fit width, it
+// wraps onto a second line (heading alone, then the joined items) rather
+// than shrinking the four columns above.
+func helpMiscLines(hints []KeyHint, headStyle, keyStyle, labelStyle, fill lipgloss.Style, width int) []string {
+	head := headStyle.Render("MISC")
+	items := make([]string, 0, len(hints))
+	for _, h := range hints {
+		items = append(items, keyStyle.Render(h.Key)+labelStyle.Render(" "+h.Label))
+	}
+	joined := strings.Join(items, "  ")
+	oneLine := head + strings.Repeat(" ", 3) + joined
+	if lipgloss.Width(oneLine) <= width {
+		return []string{helpPad(oneLine, width, fill)}
+	}
+	return []string{helpPad(head, width, fill), helpPad(joined, width, fill)}
 }
 
 func helpFill(fill lipgloss.Style, n int) string {

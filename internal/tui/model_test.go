@@ -282,23 +282,29 @@ func TestRootModelInputCapturingTaskGetsQ(t *testing.T) {
 	}
 }
 
-// TestRootModelHelpOverlayRendersScopeGlobalAndViewColumns covers 7b: the
-// active screen's own Keybar() groups become the current-view column, and
-// the fixed SCOPE/GLOBAL columns come from Session.HelpScope/HelpGlobal
-// (built at the composition root from the verbs registry — session.go).
-func TestRootModelHelpOverlayRendersScopeGlobalAndViewColumns(t *testing.T) {
+// TestRootModelHelpOverlayRendersFourColumnsAndMisc covers 7b: the active
+// screen's own Keybar() groups become the current-view column, and the
+// fixed SCOPE/LIST/RESOURCE columns plus the MISC footer row come from
+// Session.HelpScope/HelpList/HelpResource/HelpMisc (built at the
+// composition root from the verbs registry — session.go).
+func TestRootModelHelpOverlayRendersFourColumnsAndMisc(t *testing.T) {
 	t.Parallel()
 
 	task := &screenTask{name: "browse"}
 	sess := testSession()
 	sess.HelpScope = []tui.KeyHint{{Key: "g", Label: "jump anywhere"}}
-	sess.HelpGlobal = []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}}
+	sess.HelpList = []tui.KeyHint{{Key: "/", Label: "filter"}}
+	sess.HelpResource = []tui.KeyHint{{Key: "y", Label: "yaml"}}
+	sess.HelpMisc = []tui.KeyHint{{Key: "ctrl+q", Label: "quit"}}
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "?"})
 	view := updated.(tui.Model).View().Content
 
-	for _, want := range []string{"? help", "SCOPE", "GLOBAL", "jump anywhere", "quit", "esc", "close"} {
+	for _, want := range []string{
+		"? help", "SCOPE", "LIST", "RESOURCE", "MISC",
+		"jump anywhere", "filter", "yaml", "quit", "esc", "close",
+	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected %q in the help overlay:\n%s", want, view)
 		}

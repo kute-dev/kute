@@ -32,16 +32,18 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 	theme := selectTheme(cfg.Theme, userConfig.Theme)
 
 	sess = &tui.Session{
-		Charts:     helmrepo.NewCache(helmrepo.Loader{}),
-		Registry:   resources.DefaultRegistry(),
-		Groups:     resources.DefaultGroups(),
-		State:      sessionState,
-		Config:     userConfig,
-		Theme:      theme,
-		Styles:     tui.NewStyles(theme),
-		Version:    sessionVersion(cfg.Version),
-		HelpScope:  helpScopeKeys(),
-		HelpGlobal: helpGlobalKeys(),
+		Charts:       helmrepo.NewCache(helmrepo.Loader{}),
+		Registry:     resources.DefaultRegistry(),
+		Groups:       resources.DefaultGroups(),
+		State:        sessionState,
+		Config:       userConfig,
+		Theme:        theme,
+		Styles:       tui.NewStyles(theme),
+		Version:      sessionVersion(cfg.Version),
+		HelpScope:    helpScopeKeys(),
+		HelpList:     helpListKeys(),
+		HelpResource: helpResourceKeys(),
+		HelpMisc:     helpMiscKeys(),
 	}
 
 	if cfg.Demo {
@@ -99,42 +101,58 @@ func startupContext(cfg Config, sessionState state.State) string {
 }
 
 // helpScopeKeys is the 7b help overlay's fixed SCOPE column (docs/design
-// README.md §7b): the registered navigation verbs. The alt-tab bare-Enter
-// toggle (model.go's mostRecentOther) isn't listed here — it's a modifier on
-// the palette's own pre-selection, not a distinct action, and the palette's
-// own footer (recentPickHint) already surfaces it in context.
+// README.md §7b): the registered navigation verbs, in the order the panel
+// shows them — all-namespaces before context, matching the reorganized
+// SCOPE/LIST/RESOURCE/MISC layout. The alt-tab bare-Enter toggle (model.go's
+// mostRecentOther) isn't listed here — it's a modifier on the palette's own
+// pre-selection, not a distinct action, and the palette's own footer
+// (recentPickHint) already surfaces it in context.
 func helpScopeKeys() []tui.KeyHint {
 	return []tui.KeyHint{
 		verbs.Goto.Hint(),
 		verbs.Namespace.Hint(),
-		verbs.Context.Hint(),
 		verbs.AllNamespaces.Hint(),
+		verbs.Context.Hint(),
 	}
 }
 
-// helpGlobalKeys is 7b's fixed GLOBAL column, trimmed to bindings that
-// actually exist today — the mockup's "p pause sync"/"r reconnect" aren't
-// implemented yet (Phase 4), so listing them would document a lie.
-//
-// v.0.3.0.dc.html §29a moved the "identical on every screen" verbs (open,
-// filter, mark, yaml, edit, events, timeline, meta — goto/namespace/context/
-// all-namespaces already live in helpScopeKeys) out of every screen's own
-// keybar; this column is their one remaining home so they stay discoverable.
-func helpGlobalKeys() []tui.KeyHint {
+// helpListKeys is 7b's fixed LIST column: generic list-row actions,
+// identical on every screen (v.0.3.0.dc.html §29a). ↵ open lands here rather
+// than in its own column or RESOURCE — it doesn't belong to any other fixed
+// group, and per-screen Keybar() Groups must never carry it (every screen's
+// own keybar omits it by convention, so this column is its one remaining
+// home).
+func helpListKeys() []tui.KeyHint {
 	return []tui.KeyHint{
-		{Key: "↑↓ jk", Label: "move"},
-		verbs.Open.Hint(),
-		{Key: "1-9", Label: "sort column"},
 		verbs.Filter.Hint(),
+		{Key: "1-9", Label: "sort column"},
+		{Key: "↑↓ jk", Label: "move"},
 		verbs.Mark.Hint(),
+		verbs.Open.Hint(),
+	}
+}
+
+// helpResourceKeys is 7b's fixed RESOURCE column: per-object actions,
+// identical on every screen (v.0.3.0.dc.html §29a).
+func helpResourceKeys() []tui.KeyHint {
+	return []tui.KeyHint{
 		verbs.YAML.Hint(),
 		verbs.Edit.Hint(),
 		verbs.Events.Hint(),
 		verbs.Timeline.Hint(),
 		verbs.Meta.Hint(),
-		{Key: "esc", Label: "back"},
+	}
+}
+
+// helpMiscKeys is 7b's horizontal MISC footer row: shell-level actions with
+// no other home, trimmed to bindings that actually exist today — the
+// mockup's "p pause sync"/"r reconnect" aren't implemented yet (Phase 4), so
+// listing them would document a lie.
+func helpMiscKeys() []tui.KeyHint {
+	return []tui.KeyHint{
 		{Key: "U", Label: "what's new"},
 		verbs.Help.Hint(),
+		{Key: "esc", Label: "back"},
 		{Key: "ctrl+q", Label: "quit"},
 	}
 }

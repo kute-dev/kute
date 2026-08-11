@@ -15,8 +15,9 @@ import (
 // *kube.Cluster and *kube/fake.Cluster, the same concrete types
 // browse.MetricsReader accepts. Declared again here rather than reused from
 // browse: tui can't import tasks/browse (browse imports tui — the same
-// import-cycle constraint Session.HelpScope/HelpGlobal already documents),
-// so the composition root wires the same value into both fields.
+// import-cycle constraint Session.HelpScope/HelpList/HelpResource/HelpMisc
+// already documents), so the composition root wires the same value into
+// both fields.
 type MetricsReader interface {
 	PodMetricsByNamespace(ctx context.Context, namespace string) (map[string]kube.PodMetrics, error)
 }
@@ -105,15 +106,20 @@ type Session struct {
 	// design, but the manually-opened panel still needs a way out). Cleared
 	// back to nil by a later successful check.
 	UpdateCheckErr error
-	// HelpScope and HelpGlobal are the 7b help overlay's two fixed columns,
-	// pre-built at the composition root (internal/app.BuildSession) from the
-	// verbs registry: tui itself can't import verbs (verbs depends on tui,
-	// directly and via actions), so the registry lookup happens where the
-	// import direction allows it and the result is threaded through Session
-	// like everything else cross-screen. Keys with no registry entry (pure
-	// movement/exit — ↑↓, esc, q) are literals baked in alongside the
-	// verb-sourced ones at the same call site.
-	HelpScope, HelpGlobal []KeyHint
+	// HelpScope, HelpList, HelpResource, and HelpMisc are the 7b help
+	// overlay's four fixed groups, pre-built at the composition root
+	// (internal/app.BuildSession) from the verbs registry: tui itself can't
+	// import verbs (verbs depends on tui, directly and via actions), so the
+	// registry lookup happens where the import direction allows it and the
+	// result is threaded through Session like everything else cross-screen.
+	// HelpScope is the navigation-scope verbs (goto/namespace/all-namespaces/
+	// context); HelpList is generic list-row actions (filter/sort/move/mark/
+	// open); HelpResource is per-object actions (yaml/edit/events/timeline/
+	// meta); HelpMisc is the horizontal footer row (what's-new/help/back/
+	// quit). Keys with no registry entry (pure movement/exit — ↑↓, 1-9, esc)
+	// are literals baked in alongside the verb-sourced ones at the same call
+	// site.
+	HelpScope, HelpList, HelpResource, HelpMisc []KeyHint
 }
 
 // SyncLocationToPerContext snapshots s.Location's namespace/kind/filter into

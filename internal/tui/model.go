@@ -293,7 +293,8 @@ type Model struct {
 	// root shell swaps the active task to tasks/setup (built via buildSetup,
 	// since tui can't import tasks/setup — or tasks/browse for buildBrowse —
 	// without an import cycle, the same constraint Session.HelpScope/
-	// HelpGlobal already documents) and swaps back to a fresh browse task
+	// HelpList/HelpResource/HelpMisc already documents) and swaps back to a
+	// fresh browse task
 	// the moment a Connected state arrives. Once any Connected state has
 	// been observed, neverConnected latches false for good — a later
 	// mid-session drop is 4a (handled entirely inside browse), not this.
@@ -1300,7 +1301,7 @@ func (m Model) View() tea.View {
 			if !ok {
 				return view
 			}
-			panel = renderHelp(theme, screen, m.session.HelpScope, m.session.HelpGlobal, width)
+			panel = renderHelp(theme, screen, m.session.HelpScope, m.session.HelpList, m.session.HelpResource, m.session.HelpMisc, width)
 		}
 		view.Content = components.Compose(view.Content, panel, width, height, paletteTop, dim)
 

@@ -32,10 +32,12 @@ func TestRenderHelpDoesNotTruncateColumns(t *testing.T) {
 		}},
 	}}
 	scope := []KeyHint{{Key: "g", Label: "goto"}, {Key: "n", Label: "namespace"}}
-	global := []KeyHint{{Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"}}
+	list := []KeyHint{{Key: "/", Label: "filter"}, {Key: "↑↓ jk", Label: "move"}}
+	resource := []KeyHint{{Key: "y", Label: "yaml"}, {Key: "m", Label: "labels/annotations"}}
+	misc := []KeyHint{{Key: "?", Label: "help"}, {Key: "ctrl+q", Label: "quit"}}
 
 	for _, width := range []int{80, 100, 120, 160, 220} {
-		panel := renderHelp(Dark(), view, scope, global, width)
+		panel := renderHelp(Dark(), view, scope, list, resource, misc, width)
 		plain := ansi.Strip(panel)
 		if strings.Contains(plain, "…") {
 			t.Errorf("width %d: rendered help panel truncated a column with '…':\n%s", width, plain)

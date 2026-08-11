@@ -91,8 +91,9 @@ type TaskActionMsg struct {
 // screen's successful reconnect (mvp-plan.md Phase 4). tui can't construct
 // a tasks/setup or tasks/browse task itself (both import tui; tui importing
 // either back would cycle — the same constraint Session.HelpScope/
-// HelpGlobal already documents), so the composition root (internal/app,
-// which imports all three) builds the replacement Task and sends it here.
+// HelpList/HelpResource/HelpMisc already documents), so the composition
+// root (internal/app, which imports all three) builds the replacement Task
+// and sends it here.
 // Events/Conn, when non-nil, are the freshly (re)built cluster's channels —
 // WatchCluster starts forwarding them into the program without needing a
 // *tea.Program handle (app.RunWithConfig's own forwardEvents goroutine only

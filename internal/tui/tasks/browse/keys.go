@@ -352,8 +352,9 @@ func (m Model) Keybar() tui.Keybar {
 	// v.0.3.0.dc.html §29a: goto/filter/mark/yaml/edit/events/timeline/meta/
 	// namespace/context/all-namespaces are identical on every screen, so they
 	// never render here — they're taught once, in the ? overlay's SCOPE/
-	// GLOBAL columns (app.helpScopeKeys/helpGlobalKeys). Only what's actually
-	// different about this kind's row goes in the bar below.
+	// LIST/RESOURCE columns (app.helpScopeKeys/helpListKeys/
+	// helpResourceKeys). Only what's actually different about this kind's
+	// row goes in the bar below.
 	groups := [][]tui.KeyHint{}
 	if m.kind == kube.KindPod {
 		podGroup := []tui.KeyHint{}

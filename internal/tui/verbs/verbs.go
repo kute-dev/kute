@@ -40,7 +40,8 @@ type Verb struct {
 	// (docs/design v.0.3.0.dc.html §29a: "the bar shows what's different
 	// here, grammar lives in ?"). A Global verb's Hint never renders in a
 	// screen's own Keybar() Groups; it's taught exactly once, in the ?
-	// overlay's SCOPE/GLOBAL columns (helpScopeKeys/helpGlobalKeys).
+	// overlay's SCOPE/LIST/RESOURCE columns (helpScopeKeys/helpListKeys/
+	// helpResourceKeys).
 	Global bool
 }
 
@@ -588,8 +589,9 @@ func ByID(id string) (Verb, bool) {
 // This lives here rather than on actions.Controller because verbs already
 // imports actions (for the Tier type on Verb.Tier); actions importing verbs
 // back for this function would cycle (mvp-tasks.md's Phase 5/8b exit notes
-// have the full explanation — the same class of problem Session.HelpScope/
-// HelpGlobal already solves for the root shell).
+// have the full explanation — the same class of problem
+// Session.HelpScope/HelpList/HelpResource/HelpMisc already solves for the
+// root shell).
 func TierFor(v Verb, isProd bool) actions.Tier {
 	if v.Tier == actions.TierInline && isProd {
 		return actions.TierModal
