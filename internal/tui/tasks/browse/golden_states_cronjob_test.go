@@ -168,7 +168,11 @@ func goldenCronJobResumeModel(t *testing.T, width, height int) Model {
 	// A schedule boundary two minutes in the past: suspended right at the
 	// boundary, "now" two minutes into the current window, so no */5
 	// occurrence has been missed and the next one is three minutes out.
-	boundary := time.Now().Truncate(5 * time.Minute)
+	// Pinned to a fixed instant rather than time.Now() — this feeds
+	// directly into the rendered "clock HH:MM:SS UTC" header text (view.go's
+	// m.now), so a real wall-clock read here made the fixture non-
+	// deterministic across CI runs at different times of day.
+	boundary := time.Date(2024, 1, 1, 12, 10, 0, 0, time.UTC)
 	current := boundary.Add(2 * time.Minute)
 
 	backup := suspendedCronJobObj("default", "backup", true)
