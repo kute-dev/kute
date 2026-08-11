@@ -391,11 +391,52 @@ func TestCronJobLogsOpensActiveRunsPod(t *testing.T) {
 	if gotPod.Name != "sync-inventory-2-x7f2k" {
 		t.Fatalf("expected logs opened for sync-inventory-2-x7f2k, got %q", gotPod.Name)
 	}
+	if len(gotPod.Containers) == 0 {
+		t.Fatalf("expected gotPod to carry its container names (podlogs can't stream without them), got none")
+	}
+}
+
+// TestCronJobLogsOpensSucceededRunsPod pins the request that 'l' open logs
+// for the latest job run regardless of outcome: no active run, and the last
+// terminal run succeeded rather than failed — still a valid log target,
+// since summary.Runs (newest-first, every state) is what cronJobLogsTarget
+// reads now, not the old active-or-failed-only filter.
+func TestCronJobLogsOpensSucceededRunsPod(t *testing.T) {
+	cj := cronJobObj("default", "sync-inventory")
+	cj.UID = "cj-1"
+	owner := cronJobOwnerRef(cj)
+	job := succeededOwnedJob("default", "sync-inventory-2", owner, time.Now())
+	podOwnerController := true
+	podOwner := metav1.OwnerReference{Kind: "Job", Name: job.Name, UID: job.UID, Controller: &podOwnerController}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindCronJob: {cj},
+		kube.KindJob:     {job},
+		kube.KindPod:     {podWithOwner("default", "sync-inventory-2-x7f2k", podOwner)},
+	}}
+	var gotPod kube.Pod
+	m := New(Config{Session: cronJobBrowseSession(), Lister: lister, OpenLogs: func(pod kube.Pod, _ string, _, _ int) (tea.Model, tea.Cmd) {
+		gotPod = pod
+		return stubTask{}, nil
+	}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "l"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected 'l' to push the stub log task for a succeeded run, got %T", updated)
+	}
+	if gotPod.Name != "sync-inventory-2-x7f2k" {
+		t.Fatalf("expected logs opened for sync-inventory-2-x7f2k, got %q", gotPod.Name)
+	}
+	if len(gotPod.Containers) == 0 {
+		t.Fatalf("expected gotPod to carry its container names (podlogs can't stream without them), got none")
+	}
 }
 
 // TestCronJobLogsReportsWhenNoRunToShow pins the "reports why it cannot"
-// half of Phase 4 test 12: no active or failed run leaves nothing for 'l' to
-// open, and browse says so inline instead of silently doing nothing.
+// half of Phase 4 test 12: a CronJob with no associated Jobs at all leaves
+// nothing for 'l' to open, and browse says so inline instead of silently
+// doing nothing.
 func TestCronJobLogsReportsWhenNoRunToShow(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindCronJob: {cronJobObj("default", "nightly")},
@@ -408,7 +449,7 @@ func TestCronJobLogsReportsWhenNoRunToShow(t *testing.T) {
 	m = step(t, m, m.load()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "l"})
-	if !strings.Contains(m.execFeedback, "no active or failed run") {
+	if !strings.Contains(m.execFeedback, "no runs") {
 		t.Fatalf("execFeedback = %q, want an explanation that nothing is available", m.execFeedback)
 	}
 }

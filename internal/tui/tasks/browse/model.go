@@ -20,6 +20,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -425,9 +426,10 @@ type Model struct {
 	// bars until then); it's namespace-scoped like rows, so pod names alone
 	// key it safely.
 	podMetrics map[string]kube.PodMetrics
-	// pods is the fuller kube.PodFromObject projection (Pod kind only) —
-	// Row only carries display Cells, but the 'l' logs verb needs each
-	// pod's container names.
+	// pods is the fuller kube.PodFromObject projection (Pod and CronJob
+	// kinds only — the CronJob branch reuses its own best-effort Pod read,
+	// see loadCronJobRows) — Row only carries display Cells, but the 'l'
+	// logs verb needs each pod's container names.
 	pods map[string]kube.Pod
 	// helmReleases is the fuller decoded kube.HelmRelease (HelmRelease kind
 	// only), keyed by release name — Row only carries display Cells, but
@@ -1199,6 +1201,15 @@ func podsByName(ctx context.Context, lister resources.RawLister, namespace strin
 	if err != nil {
 		return nil
 	}
+	return podsFromObjs(objs)
+}
+
+// podsFromObjs indexes an already-fetched Pod slice by name — the same
+// projection podsByName builds from its own ListRaw, split out so
+// loadCronJobRows can reuse the Pod read it already does for
+// resources.BuildCronJobSummaries instead of listing Pods twice (mirrors
+// cronjobdetail/load.go's own podsByName(podObjs []runtime.Object)).
+func podsFromObjs(objs []runtime.Object) map[string]kube.Pod {
 	out := make(map[string]kube.Pod, len(objs))
 	for _, obj := range objs {
 		if p, ok := obj.(*corev1.Pod); ok {
@@ -1233,7 +1244,12 @@ func helmReleasesByName(ctx context.Context, lister resources.RawLister, namespa
 // the whole load, same as every other kind; a Job list failure does not —
 // §4.4 point 5 requires the already-readable CronJob rows to stay visible,
 // with their history cells marked unavailable (markCronJobHistoryUnavailable)
-// rather than rendering the ordinary, and here false, "no retained runs".
+// rather than rendering the ordinary, and here false, "no retained runs". The
+// same Pod read also backs cronJobLogsTarget's 'l' lookup (jobs.go) — it's
+// indexed into rowsLoadedMsg.pods via podsFromObjs below, exactly like
+// cronjobdetail's own load() does with its identical Pod read, so 'l' finds
+// a real kube.Pod (with Containers) instead of falling back to a bare
+// Namespace/Name stub podlogs can't stream anything from.
 func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace string, columns int) rowsLoadedMsg {
 	cronJobObjs, err := lister.ListRaw(ctx, kube.KindCronJob, namespace)
 	if err != nil {
@@ -1271,7 +1287,7 @@ func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace 
 		rows[i] = row
 	}
 	return rowsLoadedMsg{
-		kind: kube.KindCronJob, columns: columns, rows: rows,
+		kind: kube.KindCronJob, columns: columns, rows: rows, pods: podsFromObjs(podObjs),
 		cronJobSummaries: summaries, cronJobJobsErr: jobsErr,
 	}
 }

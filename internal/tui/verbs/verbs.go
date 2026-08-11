@@ -76,11 +76,12 @@ var (
 	Filter = Verb{ID: "filter", Key: "/", Label: "filter", Global: true}
 	Open   = Verb{ID: "open", Key: "↵", Label: "open"}
 	// Logs' Kinds includes CronJob as well as Pod (0.8.0 plan §36a: "l opens
-	// logs for the newest useful Pod of the selected row's active or
-	// latest-failed Job") — a CronJob row is never itself the log source,
-	// browse resolves an actual Pod target first and only then reaches this
-	// verb, the same one-level-of-indirection Timeline's object-scoped 't'
-	// already does for a non-Pod kind.
+	// logs for the newest useful Pod of the selected row's most recent
+	// associated Job — active or terminal, succeeded or failed") — a
+	// CronJob row is never itself the log source, browse resolves an actual
+	// Pod target first and only then reaches this verb, the same
+	// one-level-of-indirection Timeline's object-scoped 't' already does for
+	// a non-Pod kind.
 	Logs = Verb{ID: "logs", Key: "l", Label: "logs", Kinds: []kube.ResourceKind{kube.KindPod, kube.KindCronJob}}
 	YAML = Verb{ID: "yaml", Key: "y", Label: "yaml"}
 	// Exec is 'x' on a pod — an interactive shell inside a container, handed

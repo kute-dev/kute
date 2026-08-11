@@ -544,10 +544,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 		if m.kind == kube.KindCronJob && m.openLogs != nil {
-			// §36a: the newest useful Pod of the selected row's active or
-			// latest-failed Job (verbs.Logs' own doc comment) — one level of
-			// indirection past openSelectedLogs' Pod-only case above, so a
-			// CronJob row itself is never the log source.
+			// §36a: the newest useful Pod of the selected row's most recent
+			// associated Job, active or terminal, succeeded or failed
+			// (verbs.Logs' own doc comment) — one level of indirection past
+			// openSelectedLogs' Pod-only case above, so a CronJob row itself
+			// is never the log source.
 			if pod, reason, ok := m.cronJobLogsTarget(); ok {
 				task, cmd := m.openLogs(pod, "", m.width, m.height)
 				if task != nil {

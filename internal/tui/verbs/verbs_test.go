@@ -377,8 +377,8 @@ func TestCronJobScheduleModeVerbsRegistered(t *testing.T) {
 }
 
 // TestLogsAppliesToCronJob pins task 9: Logs' Kinds now includes CronJob
-// (§36a: "l opens logs for the newest useful Pod of the selected row's
-// active or latest-failed Job"), alongside its original Pod applicability.
+// (§36a: "l opens logs for the newest useful Pod of the selected row's most
+// recent associated Job"), alongside its original Pod applicability.
 func TestLogsAppliesToCronJob(t *testing.T) {
 	t.Parallel()
 

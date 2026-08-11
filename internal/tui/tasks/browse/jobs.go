@@ -123,11 +123,14 @@ func (m Model) cronJobSummaryFor(namespace, name string) (resources.CronJobSumma
 
 // cronJobLogsTarget resolves §36a's 'l' (update.go's own case, since it
 // needs a pointer receiver to set m.execFeedback on the "unavailable"
-// path): the newest useful Pod of the selected CronJob's active run, or —
-// failing that — its own newest terminal run when that run failed
-// (verbs.Logs' doc comment: "active or latest-failed Job"). reason names
-// why no pod is available when ok is false; both empty means nothing is
-// selected at all, a silent no-op like every other row-scoped verb.
+// path): the newest useful Pod of the selected CronJob's most recent
+// associated Job, active or terminal, succeeded or failed — Runs is
+// newest-first by runTimestamp and already includes every run regardless of
+// state (resources.CronJobSummary's own doc comment), so index 0 is exactly
+// "the latest job run" with no success/failure filtering (verbs.Logs' doc
+// comment). reason names why no pod is available when ok is false; both
+// empty means nothing is selected at all, a silent no-op like every other
+// row-scoped verb.
 func (m Model) cronJobLogsTarget() (pod kube.Pod, reason string, ok bool) {
 	row, rowOK := m.selectedRow()
 	if !rowOK {
@@ -137,20 +140,10 @@ func (m Model) cronJobLogsTarget() (pod kube.Pod, reason string, ok bool) {
 	if !sumOK {
 		return kube.Pod{}, "", false
 	}
-	var run *resources.JobSummary
-	switch {
-	case len(summary.ActiveRuns) > 0:
-		// Runs is newest-first (resources.BuildCronJobSummaries) and
-		// ActiveRuns preserves that relative order, so index 0 is the
-		// newest active run.
-		r := summary.ActiveRuns[0]
-		run = &r
-	case summary.LastTerminal != nil && summary.LastTerminal.Failed:
-		run = summary.LastTerminal
+	if len(summary.Runs) == 0 {
+		return kube.Pod{}, row.Name + " has no runs to show logs for", false
 	}
-	if run == nil {
-		return kube.Pod{}, row.Name + " has no active or failed run to show logs for", false
-	}
+	run := summary.Runs[0]
 	if run.PodName == "" {
 		return kube.Pod{}, row.Name + ": no pod collected for this run yet", false
 	}
