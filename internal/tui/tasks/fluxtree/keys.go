@@ -34,7 +34,7 @@ func (m Model) Keybar() tui.Keybar {
 		// with-source, which the will-run line spells out in full.
 		reconcile := verbs.FluxReconcile
 		if !row.isSource && row.sourceName != "" {
-			reconcile.Label = "reconcile with source"
+			reconcile.Label = "reconcile"
 		}
 		suspend := verbs.FluxSuspend
 		if row.suspended {
