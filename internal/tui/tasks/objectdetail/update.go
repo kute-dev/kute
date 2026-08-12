@@ -132,7 +132,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "ctrl+d":
+	case "D":
 		return m, m.beginDelete()
 	}
 	return m, nil

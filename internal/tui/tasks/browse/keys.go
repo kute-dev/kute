@@ -72,7 +72,7 @@ func (m Model) Keybar() tui.Keybar {
 		if len(t.containers) > 1 {
 			hints = append(hints, tui.KeyHint{Key: tui.GlyphTab, Label: "container"})
 		}
-		hints = append(hints, tui.KeyHint{Key: "ctrl-u", Label: "full ref"}, tui.KeyHint{Key: "esc", Label: "cancel"})
+		hints = append(hints, tui.KeyHint{Key: "ctrl-e", Label: "full ref"}, tui.KeyHint{Key: "esc", Label: "cancel"})
 		return tui.Keybar{
 			Pill:      tui.ModeBrowse,
 			PillText:  "SET IMAGE",
@@ -119,7 +119,7 @@ func (m Model) Keybar() tui.Keybar {
 			hints = []tui.KeyHint{
 				{Key: "↑↓", Label: "row"}, {Key: tui.GlyphTab, Label: "switch grid"},
 				{Key: "↵", Label: "edit"}, {Key: "a/insert", Label: "add"},
-				{Key: "ctrl-d", Label: "remove key · y/N"}, {Key: "y", Label: "copy key=value"},
+				{Key: "D", Label: "remove key · y/N"}, {Key: "y", Label: "copy key=value"},
 			}
 		}
 		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}

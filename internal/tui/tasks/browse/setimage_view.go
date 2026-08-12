@@ -163,7 +163,7 @@ func (m Model) setImageFieldLine(t *setImageTarget, theme tui.Theme, width int) 
 	// §24a's "same image" message belongs to the will-run strip below (the
 	// surface that normally names the exact kubectl command) — this field
 	// row's own right note always names the editing mode.
-	note := "editing tag · ctrl-u edit full ref"
+	note := "editing tag · ctrl-e edit full ref"
 	if t.fullRef {
 		note = "editing full ref"
 	}

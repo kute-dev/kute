@@ -597,7 +597,7 @@ func TestDeleteConfirmExecuteAndCancel(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() {
 		t.Fatal("expected ctrl+d to open a delete confirmation")
 	}
@@ -632,7 +632,7 @@ func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
 	if m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected force-delete to stay staged at TierInline, got %v", m.actions.Tier())
@@ -681,7 +681,7 @@ func TestDeleteInProdRequiresTypedName(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected ctrl+d in a prod context to open the type-the-name modal, tier=%v", m.actions.Tier())
 	}
@@ -703,7 +703,7 @@ func TestDeleteInProdRequiresTypedName(t *testing.T) {
 	}
 
 	// Re-open and this time escalate to force-delete via ctrl-k.
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
 	for _, r := range "api-0" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})

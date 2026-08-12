@@ -398,7 +398,7 @@ func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {
 	mut := &fakeMutator{cm: cm}
 	m := newModel(t, newSession(), cm, mut, nil) // non-prod
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() {
 		t.Fatal("expected removal to always require an inline y/N, even outside PROD")
 	}

@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   KUSTOMIZATIONS  r reconcile  s suspend  o source │ ctrl-d delete     ? help  
+   KUSTOMIZATIONS  r reconcile  s suspend  o source │ D delete          ? help  

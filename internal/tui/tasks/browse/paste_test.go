@@ -164,7 +164,7 @@ func TestPasteIntoProdDeleteConfirm(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected the type-the-name modal, tier=%v", m.actions.Tier())
 	}
@@ -192,7 +192,7 @@ func TestPasteIntoInlineConfirmIsIgnored(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter}) // commit, list focused
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected the inline y/N confirm, tier=%v", m.actions.Tier())
 	}
@@ -269,7 +269,7 @@ func TestPasteIntoBulkDeleteCountIsDigitGated(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "*"})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.pendingBulkDelete == nil || m.pendingBulkDelete.tier != actions.TierModal {
 		t.Fatalf("expected the PROD type-the-count modal, got %+v", m.pendingBulkDelete)
 	}

@@ -153,6 +153,53 @@ func (m *Model) moveSelection(delta int) {
 	m.clampOffset()
 }
 
+func (m *Model) moveHalfPage(direction int) {
+	if len(m.display) == 0 {
+		m.selected, m.offset = 0, 0
+		return
+	}
+	step := max(1, m.tableDataRows()/2)
+	if direction < 0 {
+		step = -step
+	}
+	next := m.selected
+	for moved := 0; moved < abs(step); {
+		candidate := clamp(next+sign(step), 0, len(m.display)-1)
+		if candidate == next {
+			break
+		}
+		next = candidate
+		if selectableStop(m.display[next].kind) {
+			moved++
+		}
+	}
+	m.selected = next
+	m.clampOffset()
+	// Move the window with the cursor, then apply the normal visibility clamp.
+	rows := m.tableDataRows()
+	if direction > 0 {
+		m.offset = min(m.offset+abs(step), max(len(m.display)-rows, 0))
+	} else {
+		m.offset = max(m.offset-abs(step), 0)
+	}
+	m.snapPastHeader()
+	m.clampOffset()
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func sign(v int) int {
+	if v < 0 {
+		return -1
+	}
+	return 1
+}
+
 // toggleGroup flips the expand state of the namespace group the cursor is
 // currently in (6b's "tab") — works whether the cursor is on a real row, a
 // fold line, or a collapsed-summary line, since every displayRow kind

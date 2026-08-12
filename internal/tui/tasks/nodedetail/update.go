@@ -11,6 +11,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -180,6 +181,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	case "/":
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
@@ -231,7 +236,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.nodeShellCmd()
 	case "C":
 		return m, m.beginCordon()
-	case "D":
+	case "X":
 		return m, m.beginDrain()
 	case "E":
 		// kubectl edit applies whatever the user saves, so it's gated with
@@ -284,6 +289,10 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	default:
 		var cmd tea.Cmd
 		m.filterInput, cmd = m.filterInput.Update(msg)
@@ -300,6 +309,11 @@ func (m *Model) moveSelection(delta int) {
 	}
 	m.selected = clamp(m.selected+delta, 0, len(m.pods)-1)
 	m.clampOffset()
+}
+
+func (m *Model) moveHalfPage(direction int) {
+	position := components.MoveHalfPage(m.selected, m.offset, m.tableDataRows(), len(m.pods), direction)
+	m.selected, m.offset = position.Selected, position.Offset
 }
 
 // clampOffset keeps the selected pod row within the table's rendered

@@ -341,7 +341,7 @@ func TestFoldLineVerbNoOp(t *testing.T) {
 	if _, ok := m.selectedRow(); ok {
 		t.Fatalf("expected the collapsed summary line selected, not a data row")
 	}
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Active() {
 		t.Fatalf("expected ctrl-d to no-op while a fold/summary line is selected")
 	}

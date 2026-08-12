@@ -241,6 +241,10 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "alt+j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveSelection(1)
+	case "ctrl+u":
+		m.moveSelection(-1)
 	default:
 		var cmd tea.Cmd
 		m.filterInput, cmd = m.filterInput.Update(msg)

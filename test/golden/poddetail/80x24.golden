@@ -21,4 +21,4 @@ CONTAINERS                                                │
 CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 2…  │                     
 ────────────────────────────────────────────────────────  │                     
 ────────────────────────────────────────────────────────────────────────────────
-   POD  l logs  x exec  1 related │ ctrl-d delete │ [/] next/prev       ? help  
+   POD  l logs  x exec  1 related │ D delete │ [/] next/prev            ? help  

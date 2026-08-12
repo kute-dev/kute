@@ -28,7 +28,7 @@ func TestPasteIntoProdDeleteConfirm(t *testing.T) {
 	updated, _ := step(t, &m, m.load()())
 	got := updated.(*Model)
 
-	updated, _ = step(t, got, tea.KeyPressMsg{Text: "ctrl+d"})
+	updated, _ = step(t, got, tea.KeyPressMsg{Text: "D"})
 	got = updated.(*Model)
 	if got.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected the type-the-name modal, tier=%v", got.actions.Tier())

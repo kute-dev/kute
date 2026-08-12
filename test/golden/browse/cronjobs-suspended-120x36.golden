@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   CRONJOBS  ctrl-r run now  s resume  S edit schedule │ ctrl-d delete                                          ? help  
+   CRONJOBS  ctrl-r run now  s resume  S edit schedule │ D delete                                               ? help  

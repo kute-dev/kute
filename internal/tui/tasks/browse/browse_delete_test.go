@@ -39,7 +39,7 @@ func TestCtrlDShowsConcreteGracePeriod(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	view := plain(m.Render())
 	if !strings.Contains(view, "grace period 45s applies") {
 		t.Fatalf("expected the concrete grace period in the modal:\n%s", view)
@@ -61,7 +61,7 @@ func TestCtrlDNonProdShowsInlinePromptAndDeletesOnY(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected ctrl+d in a non-prod context to open the inline prompt, tier=%v", m.actions.Tier())
 	}
@@ -99,7 +99,7 @@ func TestCtrlDNoOpsWhileOffline(t *testing.T) {
 		t.Fatal("expected offline() = true after a Reconnecting ConnStateMsg")
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Active() {
 		t.Fatal("ctrl+d must not open a confirm prompt while offline")
 	}
@@ -108,7 +108,7 @@ func TestCtrlDNoOpsWhileOffline(t *testing.T) {
 	}
 
 	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() {
 		t.Fatal("expected ctrl+d to work again once back online")
 	}
@@ -127,7 +127,7 @@ func TestCtrlDProdOpensTypeNameModal(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected ctrl+d in a prod context to open the type-the-name modal, tier=%v", m.actions.Tier())
 	}
@@ -162,7 +162,7 @@ func TestCtrlKEscalatesToForceDelete(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
 	for _, r := range "api-0" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
@@ -191,7 +191,7 @@ func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	kb := m.Keybar()
 	if !strings.Contains(kb.RightNote, "kubectl delete pod api-0") || strings.Contains(kb.RightNote, "--force") {
 		t.Fatalf("expected the plain delete will-run line before arming, got %q", kb.RightNote)
@@ -256,7 +256,7 @@ func TestEscArmedForceDeleteCancelsOutright(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
 	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
 	if m.actions.Active() {

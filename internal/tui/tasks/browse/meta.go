@@ -508,7 +508,7 @@ func (m *Model) updateMetaKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		r.setBuffer(r.current)
 		r.input.Focus()
 		t.editing = true
-	case "ctrl+d":
+	case "D":
 		r := t.selectedRow()
 		if r == nil || r.readOnly {
 			return m, nil

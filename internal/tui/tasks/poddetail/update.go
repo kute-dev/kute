@@ -7,6 +7,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -150,6 +151,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveContainerSelection(-1)
 	case "down", "j":
 		m.moveContainerSelection(1)
+	case "ctrl+d":
+		m.moveContainerHalfPage(1)
+	case "ctrl+u":
+		m.moveContainerHalfPage(-1)
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
@@ -197,7 +202,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
-	case "ctrl+d":
+	case "D":
 		return m, m.beginDelete()
 	}
 	return m, nil
@@ -309,6 +314,11 @@ func (m *Model) moveContainerSelection(delta int) {
 		next = n - 1
 	}
 	m.selectedContainer = next
+}
+
+func (m *Model) moveContainerHalfPage(direction int) {
+	position := components.MoveHalfPage(m.selectedContainer, 0, max(len(m.pod.ContainerInfos), 1), len(m.pod.ContainerInfos), direction)
+	m.selectedContainer = position.Selected
 }
 
 // openSelectedLogs pushes the log-stream screen for the loaded pod — same

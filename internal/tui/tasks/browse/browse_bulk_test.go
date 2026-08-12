@@ -139,7 +139,7 @@ func TestBulkDeleteNonProdShowsInlinePromptAndDeletesMarkedSet(t *testing.T) {
 	deleteHintFound := false
 	for _, g := range m.Keybar().Groups {
 		for _, h := range g {
-			if h.Key == "ctrl-d" && h.Label == "delete 2" {
+			if h.Key == "D" && h.Label == "delete 2" {
 				deleteHintFound = true
 			}
 		}
@@ -148,7 +148,7 @@ func TestBulkDeleteNonProdShowsInlinePromptAndDeletesMarkedSet(t *testing.T) {
 		t.Fatalf("expected the ctrl-d hint to read 'delete 2', groups=%v", m.Keybar().Groups)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.pendingBulkDelete == nil {
 		t.Fatal("expected ctrl-d with marks active to open the bulk delete confirm")
 	}
@@ -188,7 +188,7 @@ func TestBulkDeleteProdOpensTypeCountModal(t *testing.T) {
 		t.Fatalf("marks = %d, want 2", len(m.marks))
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.pendingBulkDelete == nil || m.pendingBulkDelete.tier != actions.TierModal {
 		t.Fatalf("expected the PROD type-the-count modal, got %+v", m.pendingBulkDelete)
 	}

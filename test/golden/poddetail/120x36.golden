@@ -33,4 +33,4 @@ Normal    Pulled            4m      Image already present on machine            
                                                                                         │                               
                                                                                         │                               
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   POD  l logs  x exec  1 related │ ctrl-d delete │ [/] next/prev                                               ? help  
+   POD  l logs  x exec  1 related │ D delete │ [/] next/prev                                                    ? help  

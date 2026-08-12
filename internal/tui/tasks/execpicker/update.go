@@ -56,6 +56,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveSelection(max(1, m.height/2))
+	case "ctrl+u":
+		m.moveSelection(-max(1, m.height/2))
 	case "enter":
 		// Exec is Mutating, so it's refused while offline (docs/design
 		// README.md §52). Unlike the list screens this one can't lean on a

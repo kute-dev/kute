@@ -153,7 +153,7 @@ var (
 // Tier + actions.Controller (mvp-plan.md §0.4, §8b).
 var (
 	Delete = Verb{
-		ID: "delete", Key: "ctrl-d", Label: "delete",
+		ID: "delete", Key: "D", Label: "delete",
 		Tier: actions.TierInline, Mutating: true, Bulk: true,
 	}
 	ForceDelete = Verb{
@@ -387,7 +387,7 @@ var (
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	Drain = Verb{
-		ID: "drain", Key: "D", Label: "drain",
+		ID: "drain", Key: "X", Label: "drain",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	// Rollback is 18a's 'R' on a Helm release — "inherits 8b friction":
@@ -457,14 +457,14 @@ var (
 		ID: "add-secret-key", Key: "a", Label: "add key",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindSecret}, Mutating: true,
 	}
-	// RemoveSecretKey is 27b's ctrl-d removal of an existing Data-view key —
+	// RemoveSecretKey is 27b's D removal of an existing Data-view key —
 	// always TierInline regardless of PROD, the same "removal always
 	// confirms inline, never the type-the-name modal" shape 26a's Meta
 	// removal uses (docs/design README.md §27b: "removing a key keeps the
 	// y/N too" — recoverable only if the old value exists elsewhere, so the
 	// prompt says so, not destructive enough for 8b's modal tier).
 	RemoveSecretKey = Verb{
-		ID: "remove-secret-key", Key: "ctrl-d", Label: "remove key",
+		ID: "remove-secret-key", Key: "D", Label: "remove key",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindSecret}, Mutating: true,
 	}
 	// AddConfigMapKey is 27a's 'a' line-insert add on a ConfigMap's Data
@@ -474,11 +474,11 @@ var (
 		ID: "add-configmap-key", Key: "a", Label: "add key",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
-	// RemoveConfigMapKey is 27a's ctrl-d removal of an existing Data-view
+	// RemoveConfigMapKey is 27a's D removal of an existing Data-view
 	// key — always TierInline regardless of PROD, the same "removal always
 	// confirms inline" policy RemoveSecretKey uses.
 	RemoveConfigMapKey = Verb{
-		ID: "remove-configmap-key", Key: "ctrl-d", Label: "remove key",
+		ID: "remove-configmap-key", Key: "D", Label: "remove key",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
 	// RestartConfigMapConsumers is 27a's ctrl-r — chains a value apply with

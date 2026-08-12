@@ -239,6 +239,18 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.moveSelection(1)
 		}
+	case "ctrl+d":
+		if m.railFocused {
+			m.moveRailSelection(1)
+		} else {
+			m.moveSelection(1)
+		}
+	case "ctrl+u":
+		if m.railFocused {
+			m.moveRailSelection(-1)
+		} else {
+			m.moveSelection(-1)
+		}
 	case "tab":
 		if len(m.rail) > 0 {
 			m.railFocused = !m.railFocused

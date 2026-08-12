@@ -596,7 +596,7 @@ func goldenConfirmInlineModel(t *testing.T, width, height int) Model {
 	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	return m
 }
 
@@ -620,7 +620,7 @@ func goldenConfirmModalModel(t *testing.T, width, height int) Model {
 	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	// Type a partial name so the modal's "N/M" progress indicator and
 	// partial-match text both render, rather than an empty input row.
 	for _, r := range "nva-worker" {

@@ -193,7 +193,7 @@ func TestEnterCommitsFilterForKindWithNoDestination(t *testing.T) {
 		t.Fatalf("expected the filter strip's typing cursor gone once committed (GlyphSelBar is reused as the table's row-selection marker elsewhere, so check it's not glued to the query):\n%s", view)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() {
 		t.Fatalf("expected ctrl-d to open the inline delete confirm while list-focused, got actions.Active()=false")
 	}

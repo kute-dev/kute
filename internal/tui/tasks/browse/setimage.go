@@ -58,8 +58,8 @@ type setImageTarget struct {
 	// non-fullRef mode.
 	repo string
 	// input is the type-ahead value: just the tag outside fullRef mode, the
-	// whole repo:tag ref once ctrl-u unlocks it. Every wholesale buffer
-	// replacement (container switch, ctrl-u toggle, a history pick) parks
+	// whole repo:tag ref once ctrl-e unlocks it. Every wholesale buffer
+	// replacement (container switch, ctrl-e toggle, a history pick) parks
 	// the cursor at the end via setBuffer, same as scale.go's prompt always
 	// leaving the cursor ready to append/backspace.
 	input      textinput.Model
@@ -91,7 +91,7 @@ type setImagePendingCommit struct {
 
 // setBuffer replaces t.input's value wholesale and parks the cursor at its
 // end — the shared tail of every place buffer changes as a whole rather than
-// by a single keystroke (selectSetImageContainer, ctrl-u, a history pick).
+// by a single keystroke (selectSetImageContainer, ctrl-e, a history pick).
 func (t *setImageTarget) setBuffer(s string) {
 	t.input.SetValue(s)
 	t.input.CursorEnd()
@@ -243,7 +243,7 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(t.containers) > 1 {
 			m.selectSetImageContainer((t.containerIdx + 1) % len(t.containers))
 		}
-	case "ctrl+u":
+	case "ctrl+e":
 		if t.fullRef {
 			repo := imageRepo(t.input.Value())
 			tag := tagOf(t.input.Value())

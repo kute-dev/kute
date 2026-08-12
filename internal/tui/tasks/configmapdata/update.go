@@ -11,6 +11,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -140,6 +141,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	case "a", "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
@@ -167,7 +172,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.multiline = newMultilineEditState(row.key, row.value, m.Theme())
 			}
 		}
-	case "ctrl+d":
+	case "D":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {
 				return m, m.beginRemove(row)
@@ -289,6 +294,11 @@ func (m *Model) moveSelection(delta int) {
 		return
 	}
 	m.selected = clamp(m.selected+delta, 0, len(m.keys)-1)
+}
+
+func (m *Model) moveHalfPage(direction int) {
+	position := components.MoveHalfPage(m.selected, 0, 8, len(m.keys), direction)
+	m.selected = position.Selected
 }
 
 // beginCommit runs the shared "figure out the tier, hand it to

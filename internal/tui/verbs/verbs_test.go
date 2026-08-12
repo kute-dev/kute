@@ -11,7 +11,7 @@ import (
 func TestHint(t *testing.T) {
 	t.Parallel()
 	got := Delete.Hint()
-	want := tui.KeyHint{Key: "ctrl-d", Label: "delete"}
+	want := tui.KeyHint{Key: "D", Label: "delete"}
 	if got != want {
 		t.Fatalf("Hint() = %+v, want %+v", got, want)
 	}

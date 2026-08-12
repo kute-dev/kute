@@ -123,6 +123,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveSelection(max(1, m.tableDataRows()/2))
+	case "ctrl+u":
+		m.moveSelection(-max(1, m.tableDataRows()/2))
 	case "R":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if rev, ok := m.selectedRevision(); ok {

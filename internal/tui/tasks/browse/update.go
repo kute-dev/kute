@@ -529,6 +529,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if m.state == tui.TaskStateReady {
 			m.handleSortKey(int(msg.String()[0] - '0'))
@@ -575,12 +579,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.kind == kube.KindNode {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginCordon(row)
-			}
-		}
-	case "D":
-		if m.kind == kube.KindNode {
-			if row, ok := m.selectedRow(); ok {
-				return m, m.beginDrain(row)
 			}
 		}
 	case "S":
@@ -740,6 +738,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.kind == kube.KindForward && m.state == tui.TaskStateReady {
 			m.beginStopAllForwards()
 		}
+		if m.kind == kube.KindNode {
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginDrain(row)
+			}
+		}
 	case "s":
 		if m.fluxVerbsApply() {
 			// §30a's suspend/resume. NodeShell's own 's' below is Node-only,
@@ -792,7 +795,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
-	case "ctrl+d":
+	case "D":
 		if m.state == tui.TaskStateReady && m.mutator != nil && m.kind != kube.KindForward && m.kind != kube.KindHelmRelease {
 			if verbs.Delete.Bulk && len(m.marks) > 0 {
 				return m, m.beginBulkDelete()
@@ -1021,6 +1024,10 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "alt+j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	case "*":
 		// 20a: "filter-then-mark is the bulk grammar" — '*' marks every row
 		// the live query currently matches without leaving filter mode.

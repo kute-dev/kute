@@ -178,6 +178,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveSelection(max(1, m.height/2))
+	case "ctrl+u":
+		m.moveSelection(-max(1, m.height/2))
 	case "enter":
 		if task, cmd, ok := m.openSelectedBinding(); ok {
 			return task, cmd

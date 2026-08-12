@@ -157,13 +157,13 @@ func TestCtrlUTogglesFullRefEditing(t *testing.T) {
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+e"})
 	t2 := m.pendingSetImage
 	if !t2.fullRef || t2.input.Value() != "registry.nva.dev/nva-worker:3.4.1" {
 		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.nva.dev/nva-worker:3.4.1", t2.fullRef, t2.input.Value())
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+u"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+e"})
 	t2 = m.pendingSetImage
 	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.nva.dev/nva-worker" {
 		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.nva.dev/nva-worker", t2.fullRef, t2.input.Value(), t2.repo)

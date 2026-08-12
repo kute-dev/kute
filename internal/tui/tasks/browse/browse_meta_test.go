@@ -137,7 +137,7 @@ func TestImmutableSelectorLabelIsReadOnlyAndBlocksEdits(t *testing.T) {
 	if m2.pendingMeta.editing {
 		t.Error("↵ on a read-only row should not enter editing mode")
 	}
-	updated, cmd := m2.updateMetaKey(tea.KeyPressMsg{Text: "ctrl+d"})
+	updated, cmd := m2.updateMetaKey(tea.KeyPressMsg{Text: "D"})
 	if cmd != nil {
 		t.Error("ctrl+d on a read-only row should be a no-op, got a cmd")
 	}
@@ -344,7 +344,7 @@ func TestRemoveKeyRequiresConfirmThenApplies(t *testing.T) {
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if !m.actions.Active() {
 		t.Fatal("removing a key should always require inline confirmation")
 	}
@@ -382,7 +382,7 @@ func TestCancellingRemoveConfirmKeepsPanelOpen(t *testing.T) {
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "n"})
 
 	if m.actions.Active() {
@@ -682,7 +682,7 @@ func TestFailedRemoveRestoresRowWithError(t *testing.T) {
 	m := newMetaModel(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
 	m.beginMeta()
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	m = step(t, m, tea.KeyPressMsg{Text: "y"}) // confirm -> executes and fails
 
 	if m.pendingMeta == nil {

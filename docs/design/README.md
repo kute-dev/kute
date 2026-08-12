@@ -121,7 +121,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **Noise folded by default:** `managedFields` and verbose status blocks collapse to one dim line — `▸ managedFields (212 lines folded)` in `#44445c`. `↹` fold/unfold at cursor, `f` show all.
 - Cursor line highlighted (bg `#1d1633` across gutter + content). Read-only in MVP; `Y` copies full YAML to clipboard; `/` searches. Keybar pill `YAML`.
 
-### 8b — Destructive-action confirm (`ctrl-d` delete)
+### 8b — Destructive-action confirm (`D` delete)
 - **Two tiers of friction:** non-prod contexts = inline `y/N` prompt in the keybar (no modal). PROD contexts (tag from 7a) = centered modal with **type-the-name confirmation**; `↵` stays dead until the typed name matches (show `7/16` progress in `#44445c`).
 - Modal: **the only red-bordered surface in the app** (border `#5c2a2a`; header bg `#1a1014`, title `✕ delete pod` red bold, `PROD CONTEXT` tag right).
 - Body answers "what actually happens": owner (`Deployment/nva-worker — will be recreated` in green), grace period (`30s`), and the harder chord for force delete (`ctrl-k`, grace 0).
@@ -159,13 +159,13 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 11a — Nodes list (cluster-scoped)
 - Namespace segment **drops out of the breadcrumb** (`… cluster › Nodes` + small `cluster-scoped` tag). Summary strip: `● 3 ready · ▲ 1 pressure · ◈ 1 cordoned` + right `5 nodes · 125 pods · cluster cpu 46% · mem 71%`.
 - Columns: glyph · NAME (control-plane role tagged inline) · STATUS (`Ready` dim, `MemPressure` yellow, `cordoned` blue `◈`) · HEALTH (inline colored glyph counts of that node's own pods, e.g. `●12 ▲1 ✕1` — same glyphs/order as the namespace palette's HEALTH column, scaled to one node) · PODS `62/110` · CPU bar+pct · MEM bar+pct · VERSION · AGE. Bars are block glyphs (`▮▮▮▮▯▯`), colored yellow only when hot (mem 91%). Version skew flagged with a quiet yellow `▲`.
-- Keys: `↵` node detail · `C` cordon/uncordon (reversible, no confirm) · `D` drain (evicts workloads → routes through the 8b confirm, showing how many pods will be evicted) · `y` yaml. Keybar pill `NODES`.
+- Keys: `↵` node detail · `C` cordon/uncordon (reversible, no confirm) · `X` drain (evicts workloads → routes through the 8b confirm, showing how many pods will be evicted) · `y` yaml. Keybar pill `NODES`.
 
 ### 11b — Node detail (↵ from nodes list)
 - Same detail recipe as 5a: facts panel · related-objects table · keybar.
 - **Top half, two columns:** CONDITIONS — each line leads with a status glyph (`●` healthy/inactive-pressure, `▲` active pressure, `✕` NotReady); label text dims even when its glyph is green (Ready, inactive pressure) — only an *active* problem (pressure true, NotReady) colors the label itself too. No `true` word is ever shown; inactive conditions show a dim `false`. Active pressure appends kubelet message + age in a dimmer tone than the yellow label. │ ALLOCATED/ALLOCATABLE (cpu/mem/pods as bar + `used / total` text, hot values yellow) + TAINTS.
 - **Bottom half: the node's pods** — 2a's own Pods-list table widget (same per-status glyph/color derivation, live CPU/MEM mini-bars, RDY ratio, restart/crashloop tinting, and header-rule divider), filtered to this node and **sorted unhealthy-first then name**, the same order 2a's own Pods list uses. Columns: glyph · NAME · RDY · STATUS · ↺ restarts · CPU · MEM · NAMESPACE · AGE — NODE is dropped (every row is already this node) in favor of NAMESPACE, since a node's pods span namespaces. A health-strip line (2a's own "● N running · ▲ M pending · ✕ K crashloop" shape, tallying just this node's pods) sits directly above the table, its own horizontal rule separating it from both the facts panel above and the column headers below — the same strip/table rule treatment 2a uses. **Footer:** 2a's own `1–N of M` + scrollbar-glyph pagination line under the table. `↵` opens the pod (5a) — node → culprit → detail is three keys.
-- Keys: `↵ open pod · C cordon · D drain · e node events · esc back`. Keybar pill `NODE`.
+- Keys: `↵ open pod · C cordon · X drain · e node events · esc back`. Keybar pill `NODE`.
 
 
 ### 12a — Goto palette on open (alias letters)
@@ -303,11 +303,11 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 24a — Set image / set tag (`i` on a workload row)
 - Same inline tier as scale (17b) — no modal. Panel opens under the row (bg `#101018`, border `#3b3b58`); container tabs across the top (`↹` switches container, sidecars labeled dim).
-- **Tag-first editing:** the `image ›` field pre-fills the current ref with the cursor on the tag, repo prefix dim — the 95% case is "bump the tag." `ctrl-u` unlocks the full ref for the rename case. One verb, two depths, no separate "set tag" screen.
+- **Tag-first editing:** the `image ›` field pre-fills the current ref with the cursor on the tag, repo prefix dim — the 95% case is "bump the tag." `ctrl-e` unlocks the full ref for the rename case. One verb, two depths, no separate "set tag" screen.
 - **History from the watch cache, never a registry call:** a TAG · SEEN · FROM table lists this workload's own ReplicaSet revision history (rollback targets, labeled by revision) plus the same image tag seen on other workloads/namespaces (`3.4.2 · seen 40m ago · nva-prod` — the "promote what prod runs" case).
 - Re-entering the current tag flips the strip to `same image — apply is a no-op; use rollout restart` and `↵` does nothing.
 - `will run` line: `kubectl set image deploy/nva-worker worker=registry.nva.dev/nva-worker:3.4.2 -n nva-stage`, right-aligned `applying rolls out 4 pods`. Multi-container workloads cycle with `↹`; the will-run line always names the container.
-- Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-u full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
+- Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-e full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
 
 ### 25a — Resources — set limits next to live usage (`R` on a workload)
 - **Key conflict resolved (0.2.0):** `R` here collided with 9a's already-shipped `R` = rollout-restart on the same Deployments-list row. Resolved in favor of this screen — rollout-restart moved off `R`, then later off bare `r` too (onto `ctrl-r`, with an inline `y/N` confirm — see 9a); `R` now opens the resources editor on Deployment/StatefulSet/DaemonSet rows.

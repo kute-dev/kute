@@ -25,7 +25,7 @@ func TestPasteIntoProdDeleteConfirm(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected the type-the-name modal, tier=%v", m.actions.Tier())
 	}
@@ -73,7 +73,7 @@ func TestPasteIntoInlineConfirmIsIgnored(t *testing.T) {
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
 	if m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected the inline y/N confirm, tier=%v", m.actions.Tier())
 	}
