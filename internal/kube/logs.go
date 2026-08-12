@@ -16,6 +16,7 @@ type LogStreamRequest struct {
 	Namespace  string
 	PodName    string
 	Container  string
+	Follow     bool
 	Timestamps bool
 	TailLines  int64
 	// SinceSeconds limits the stream to lines newer than this many seconds
@@ -41,7 +42,7 @@ func (s ClientPodLogStreamer) StreamPodLogs(ctx context.Context, req LogStreamRe
 
 	options := &corev1.PodLogOptions{
 		Container:  req.Container,
-		Follow:     true,
+		Follow:     req.Follow,
 		Timestamps: req.Timestamps,
 	}
 	if req.TailLines > 0 {

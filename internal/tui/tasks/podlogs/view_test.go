@@ -13,7 +13,7 @@ func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
 	model := testModel()
 	model.stream = StreamLoading
 	model.feedback = "Loading logs..."
-	if view := model.Render(); !strings.Contains(view, "Loading logs") {
+	if view := ansi.Strip(model.Render()); !strings.Contains(view, "loading logs for app") || !strings.Contains(view, "history loads before follow starts") || !strings.Contains(view, "waiting for log history") {
 		t.Fatalf("loading view missing feedback:\n%s", view)
 	}
 

@@ -77,7 +77,7 @@ func TestStreamContainerEmitsLinesThenReconnectsWithBoundary(t *testing.T) {
 	t.Parallel()
 
 	streamer := &fakeStreamer{connects: map[string][]string{
-		"app": {"first\nsecond\n", "third\n"},
+		"app": {"first\nsecond\n", "", "third\n"},
 	}}
 	model := testModel()
 	model.streamer = streamer
@@ -109,14 +109,68 @@ func TestStreamContainerEmitsLinesThenReconnectsWithBoundary(t *testing.T) {
 		t.Fatalf("post-reconnect entry = %+v", entries[3])
 	}
 
-	if len(streamer.requests) != 2 {
+	if len(streamer.requests) != 3 {
 		t.Fatalf("requests = %+v", streamer.requests)
 	}
-	if streamer.requests[0].TailLines != DefaultTailLines || streamer.requests[0].SinceSeconds == 0 {
+	if streamer.requests[0].TailLines != DefaultTailLines || streamer.requests[0].SinceSeconds == 0 || streamer.requests[0].Follow {
 		t.Fatalf("first request missing history window: %+v", streamer.requests[0])
 	}
-	if streamer.requests[1].TailLines != 0 || streamer.requests[1].SinceSeconds != 0 {
-		t.Fatalf("reconnect request should not replay history: %+v", streamer.requests[1])
+	if streamer.requests[1].TailLines != 0 || streamer.requests[1].SinceSeconds != 1 || !streamer.requests[1].Follow {
+		t.Fatalf("follow request should not replay history: %+v", streamer.requests[1])
+	}
+	if streamer.requests[2].TailLines != 0 || streamer.requests[2].SinceSeconds != 0 || !streamer.requests[2].Follow {
+		t.Fatalf("reconnect request should not include history: %+v", streamer.requests[2])
+	}
+}
+
+func TestStreamContainerFallsBackToRecentHistoryWhenSinceWindowIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	streamer := &fakeStreamer{connects: map[string][]string{
+		"app": {"", "older line\n"},
+	}}
+	model := testModel()
+	model.streamer = streamer
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var entries []LogEntry
+	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
+		entries = append(entries, e)
+		cancel()
+		return false
+	})
+	if err != nil {
+		t.Fatalf("streamContainer error = %v", err)
+	}
+	if len(entries) != 1 || entries[0].Message != "older line" {
+		t.Fatalf("entries = %+v, want one fallback line", entries)
+	}
+	if len(streamer.requests) != 2 {
+		t.Fatalf("requests = %+v, want initial and fallback requests", streamer.requests)
+	}
+	if streamer.requests[0].SinceSeconds != 900 || streamer.requests[0].TailLines != DefaultTailLines {
+		t.Fatalf("initial request = %+v, want since=15m", streamer.requests[0])
+	}
+	if streamer.requests[1].SinceSeconds != 0 || streamer.requests[1].TailLines != DefaultTailLines {
+		t.Fatalf("fallback request = %+v, want one recent page", streamer.requests[1])
+	}
+	if streamer.requests[1].Follow {
+		t.Fatalf("fallback request should be finite: %+v", streamer.requests[1])
+	}
+}
+
+func TestStreamContainerStopsAfterEmptyRecentHistoryFallback(t *testing.T) {
+	t.Parallel()
+
+	streamer := &fakeStreamer{connects: map[string][]string{"app": {"", ""}}}
+	model := testModel()
+	model.streamer = streamer
+	if err := model.streamContainer(context.Background(), "app", func(LogEntry) bool { return true }); err != nil {
+		t.Fatalf("streamContainer error = %v", err)
+	}
+	if len(streamer.requests) != 2 {
+		t.Fatalf("requests = %+v, want exactly one fallback", streamer.requests)
 	}
 }
 
@@ -132,7 +186,7 @@ func TestStreamContainerWaitsForActualRestartBeforeReconnecting(t *testing.T) {
 	t.Parallel()
 
 	streamer := &fakeStreamer{connects: map[string][]string{
-		"app": {"first\n", "second\n"},
+		"app": {"first\n", "", "second\n"},
 	}}
 	model := testModel()
 	model.streamer = streamer
@@ -152,7 +206,7 @@ func TestStreamContainerWaitsForActualRestartBeforeReconnecting(t *testing.T) {
 	if len(entries) != 1 || entries[0].Message != "first" {
 		t.Fatalf("entries = %+v, want only the first connect's line while restart count is unchanged", entries)
 	}
-	if len(streamer.requests) != 1 {
+	if len(streamer.requests) != 2 {
 		t.Fatalf("requests = %+v, want exactly one connect attempt while restart count is unchanged", streamer.requests)
 	}
 }
@@ -164,7 +218,7 @@ func TestStreamContainerReconnectsAfterActualRestartDetected(t *testing.T) {
 	t.Parallel()
 
 	streamer := &fakeStreamer{connects: map[string][]string{
-		"app": {"first\n", "second\n"},
+		"app": {"first\n", "", "second\n"},
 	}}
 	lister := &fakeRestartLister{podName: "api", container: "app", restarts: 3}
 	model := testModel()

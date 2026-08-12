@@ -132,24 +132,41 @@ func (m Model) runStream(ctx context.Context, streamID int, ch chan<- tea.Msg) {
 // is no "since" continuity with what came before.
 func (m Model) streamContainer(ctx context.Context, container string, emit func(LogEntry) bool) error {
 	first := true
+	fallbackAttempted := false
+	liveStarted := false
 	lastRestarts, tracking := m.containerRestartCount(ctx, container)
 	for {
+		initialRequest := first
+		fallbackConnection := fallbackAttempted
+		historyConnection := initialRequest || fallbackConnection
+		reconnect := liveStarted && !historyConnection
 		req := kube.LogStreamRequest{
 			Namespace:  m.pod.Namespace,
 			PodName:    m.pod.Name,
 			Container:  container,
+			Follow:     !historyConnection,
 			Timestamps: true,
 		}
-		if first {
+		if initialRequest {
 			req.TailLines = m.tailLines
 			req.SinceSeconds = m.sinceSeconds()
+		} else if fallbackAttempted {
+			// A one-page historical read is the explicit fallback for an empty
+			// since-window. It must not be repeated as a live reconnect request.
+			req.TailLines = m.tailLines
+		} else if !liveStarted {
+			// The history request is finite; follow from just after it so the
+			// viewer does not wait forever for an empty since-window. A one-second
+			// overlap avoids missing lines emitted between the two requests.
+			req.SinceSeconds = 1
 		}
+		fallbackAttempted = false
 		reader, err := m.streamer.StreamPodLogs(ctx, req)
 		if err != nil {
 			return err
 		}
 
-		if !first {
+		if reconnect {
 			restarts := lastRestarts
 			if !tracking {
 				restarts = m.currentRestartCount(ctx)
@@ -159,15 +176,20 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 				return nil
 			}
 		}
+		if !historyConnection {
+			liveStarted = true
+		}
 		first = false
 
 		var unretrievable string
+		connectionEntries := 0
 		scanErr := kube.ScanLogLines(ctx, reader, func(line string) bool {
 			ts, msg := splitTimestamp(line)
 			if isUnretrievableLogsLine(msg) {
 				unretrievable = msg
 				return false
 			}
+			connectionEntries++
 			return emit(LogEntry{Container: container, Timestamp: ts, Message: msg, Severity: parseSeverity(msg)})
 		})
 		_ = reader.Close()
@@ -190,6 +212,16 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 			// stream failure — reporting it would put an error banner on a
 			// screen the user just left.
 			return nil
+		}
+		if initialRequest && connectionEntries == 0 && m.sinceSeconds() > 0 {
+			fallbackAttempted = true
+			continue
+		}
+		if historyConnection {
+			if connectionEntries == 0 {
+				return nil
+			}
+			continue
 		}
 
 		if tracking {

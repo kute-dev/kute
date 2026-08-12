@@ -54,6 +54,9 @@ func (m Model) Header() tui.HeaderState {
 // wrap + timestamps on the left, severity-in-view counts on the right —
 // plus, while filtering, a second line mirroring browse's filter strip.
 func (m Model) Strips(width int) []string {
+	if m.taskState() == tui.TaskStateLoading {
+		return []string{m.loadingStripLine(width)}
+	}
 	if m.taskState() != tui.TaskStateReady {
 		return nil
 	}
@@ -62,6 +65,17 @@ func (m Model) Strips(width int) []string {
 		lines = append(lines, m.filterStripLine(width))
 	}
 	return lines
+}
+
+func (m Model) loadingStripLine(width int) string {
+	theme := m.Theme()
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	container, _ := m.activeContainer()
+	left := lipgloss.NewStyle().Foreground(theme.Warn).Render(m.spinner.View()) + " " +
+		dim.Render("loading logs for "+container+"…")
+	right := faint.Render("history loads before follow starts")
+	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 
 func (m Model) toolbarLine(width int) string {
@@ -112,8 +126,7 @@ func (m Model) filterStripLine(width int) string {
 func (m Model) Body(width, height int) string {
 	if state := m.taskState(); state != tui.TaskStateReady {
 		if state == tui.TaskStateLoading {
-			style := lipgloss.NewStyle().Foreground(m.Theme().Accent)
-			return components.LoadingBody(m.spinner, style, m.feedback, width, height)
+			return m.loadingBody(width, height)
 		}
 		return components.CenterLines([]string{m.feedback}, width, height)
 	}
@@ -140,6 +153,24 @@ func (m Model) Body(width, height int) string {
 		lines = append(lines, "")
 	}
 	lines = append(lines, m.statusLine(theme, width))
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) loadingBody(width, height int) string {
+	theme := m.Theme()
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	rows := max(height-2, 1)
+	lines := make([]string, 0, rows+1)
+	for i := 0; i < rows; i++ {
+		bar := strings.Repeat("━", max(width/3-(i%3)*2, 8))
+		style := faint
+		if i == 0 {
+			style = dim
+		}
+		lines = append(lines, style.Render(bar))
+	}
+	lines = append(lines, faint.Render("since "+m.sinceLabel()+" · waiting for log history…"))
 	return strings.Join(lines, "\n")
 }
 
