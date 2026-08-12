@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +85,13 @@ func TestForwardNoOpWithoutOpenForward(t *testing.T) {
 func seedForward(t *testing.T, mgr *kube.ForwardManager, name string) kube.ForwardSession {
 	t.Helper()
 	target := kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: name}
-	session := mgr.Start(fake.NewForwardDialer(), fake.NewPodResolver(fake.New("default", "test")), target, name, 18080, 80, "")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve local port: %v", err)
+	}
+	localPort := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+	session := mgr.Start(fake.NewForwardDialer(), fake.NewPodResolver(fake.New("default", "test")), target, name, localPort, 80, "")
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		for _, s := range mgr.List() {
