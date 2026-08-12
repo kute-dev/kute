@@ -190,7 +190,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "ctrl+y":
+	case "Y":
 		if m.mutator != nil && !m.conn.Offline() {
 			return m, editCmd(m.namespace, m.name)
 		}

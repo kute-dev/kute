@@ -278,7 +278,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "ctrl+r":
+	case "R":
 		if verbs.CronJobRunNow.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}

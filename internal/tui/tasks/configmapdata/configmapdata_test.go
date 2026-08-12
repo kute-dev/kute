@@ -371,7 +371,7 @@ func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
 	for _, r := range "debug" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 
 	if cm.Data["LOG_LEVEL"] != "debug" {
 		t.Fatalf("expected the edit applied, cm.Data = %+v", cm.Data)

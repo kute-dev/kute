@@ -230,7 +230,7 @@ func TestCtrlRShowsConfirmThenRetriesJobOnY(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
 	}
@@ -269,7 +269,7 @@ func TestJobRetryStaysInlineEvenInProd(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected ctrl+r to stay TierInline even in a prod context, tier=%v", m.actions.Tier())
 	}
@@ -373,7 +373,7 @@ func TestCtrlRStagesRunNowThenTriggersOnEnter(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()()) // see TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if m.pendingCronJobRun == nil {
 		t.Fatalf("expected ctrl+r to stage the run-now preview")
 	}
@@ -422,7 +422,7 @@ func TestCronJobRunNowEscCancelsWithoutTriggering(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if m.pendingCronJobRun == nil {
 		t.Fatalf("expected ctrl+r to stage the run-now preview")
 	}
@@ -451,7 +451,7 @@ func TestCronJobRunNowStaysStagedEvenInProd(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if m.pendingCronJobRun == nil || m.actions.Active() {
 		t.Fatalf("expected ctrl+r to stage the preview with no actions.Controller confirm, even in PROD")
 	}
@@ -483,7 +483,7 @@ func TestCronJobRunNowOverlapWarningNamesActiveJobs(t *testing.T) {
 	m.SetSize(160, 36)
 	m = step(t, m, m.load()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	kb := m.Keybar()
 	if !strings.Contains(kb.RightWarnNote, "sync-29310612") || !strings.Contains(kb.RightWarnNote, "Forbid") {
 		t.Fatalf("expected the overlap warning to name the active job and policy, got %q", kb.RightWarnNote)
@@ -508,7 +508,7 @@ func TestCronJobRunNowNoOverlapChromeWhenNoActiveRun(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	kb := m.Keybar()
 	if kb.RightWarnNote != "" {
 		t.Fatalf("expected no warning chrome with no active run, got %q", kb.RightWarnNote)

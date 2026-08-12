@@ -155,7 +155,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.filterInput.Prompt = ""
 			m.filterInput.Focus()
 		}
-	case "ctrl+y":
+	case "Y":
 		return m, tea.SetClipboard(m.visibleViewText())
 	}
 	m.clampOffsets()

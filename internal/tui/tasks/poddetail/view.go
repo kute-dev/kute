@@ -566,7 +566,7 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		if pending.Scope.Verb == "force-delete" {
 			detail = "grace period 0 — force delete, immediate"
 		} else {
-			detail = "default grace period applies · ctrl-k force delete (immediate)"
+			detail = "default grace period applies · C force delete (immediate)"
 		}
 	}
 

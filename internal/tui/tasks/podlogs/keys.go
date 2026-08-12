@@ -27,7 +27,7 @@ func (m Model) Keybar() tui.Keybar {
 	if len(m.pod.Containers) > 1 {
 		nav = append(nav, tui.KeyHint{Key: "tab", Label: "cycle container"})
 	}
-	nav = append(nav, tui.KeyHint{Key: "ctrl-y", Label: "copy view"})
+	nav = append(nav, tui.KeyHint{Key: "Y", Label: "copy view"})
 	groups = append(groups, nav)
 
 	return tui.Keybar{

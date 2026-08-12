@@ -369,7 +369,7 @@ func TestCtrlXTogglesMaskAndPlainXStaysTypeable(t *testing.T) {
 	if m.adding.masked || m.adding.valueInput.Value() != "x" {
 		t.Fatalf("expected 'x' on the value buffer to type literally too, got value=%q masked=%v", m.adding.valueInput.Value(), m.adding.masked)
 	}
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+x"})
+	m = step(t, m, tea.KeyPressMsg{Text: "M"})
 	if !m.adding.masked {
 		t.Fatal("expected ctrl-x on the value buffer to toggle the mask")
 	}

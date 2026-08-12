@@ -671,7 +671,7 @@ func goldenSetImageModel(t *testing.T, width, height int) Model {
 	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
-	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "I"})
 	return m
 }
 

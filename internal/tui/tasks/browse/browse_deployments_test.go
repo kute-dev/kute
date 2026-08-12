@@ -102,7 +102,7 @@ func TestCtrlRShowsConfirmThenRestartsRolloutOnY(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
 	}
@@ -137,7 +137,7 @@ func TestCtrlRProdOpensTypeNameModal(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected ctrl+r in a prod context to open the type-the-name modal, tier=%v", m.actions.Tier())
 	}

@@ -118,7 +118,7 @@ func (e editKeyState) changed() bool { return e.valueInput.Value() != e.original
 // gutter replace what used to be this package's hand-rolled lines/row/col +
 // scrollWindow. ctrl+o applies (moved off ctrl+s, which is the terminal's
 // own XOFF flow-control key in some environments and can read as a frozen
-// app), ctrl+r applies and restarts every consumer, esc cancels back to
+// app), R applies and restarts every consumer, esc cancels back to
 // navigation without applying.
 type multilineEditState struct {
 	key      string

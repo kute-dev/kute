@@ -54,7 +54,7 @@ func TestOpenCronJobDetailFuncDemoRunNowStampsTheWiredCreator(t *testing.T) {
 		t.Fatalf("ListRaw(Job) before run-now: %v", err)
 	}
 
-	updated, _ := task.Update(tea.KeyPressMsg{Text: "ctrl+r"})
+	updated, _ := task.Update(tea.KeyPressMsg{Text: "R"})
 	updated, cmd := updated.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("expected Enter to return the run-now mutation command")

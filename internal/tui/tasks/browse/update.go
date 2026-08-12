@@ -566,15 +566,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedEnter(); ok {
 			return task, cmd
 		}
-	case "R":
-		if resourceEditable(m.kind) && m.mutator != nil {
-			m.beginSetResources()
-		}
-		if m.kind == kube.KindHelmRelease && m.mutator != nil {
-			if row, ok := m.selectedRow(); ok {
-				return m, m.beginRollback(row)
-			}
-		}
 	case "C":
 		if m.kind == kube.KindNode {
 			if row, ok := m.selectedRow(); ok {
@@ -598,7 +589,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "-":
 		m.beginScale(-1)
 	case "i":
-		m.beginSetImage()
+		// Keep lowercase i available as ordinary unsupported input; Set Image is I.
+	case "V":
+		if resourceEditable(m.kind) && m.mutator != nil {
+			m.beginSetResources()
+		}
 	case "m":
 		if metaEditable(m.kind) && m.mutator != nil {
 			m.beginMeta()
@@ -626,7 +621,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, cmd
 			}
 		}
-	case "ctrl+r":
+	case "R":
 		if m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginRolloutRestart(row)
@@ -643,8 +638,17 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if m.kind == kube.KindHelmRelease && m.mutator != nil {
+			if row, ok := m.selectedRow(); ok {
+				return m, m.beginRollback(row)
+			}
+		}
+	case "I":
+		m.beginSetImage()
 	case "r":
 		switch {
+		case resourceEditable(m.kind) && m.state == tui.TaskStateReady && m.mutator != nil:
+			m.beginSetResources()
 		case m.fluxVerbsApply():
 			// §30a's reconcile. Ahead of the retry cases below because a
 			// Flux list in TaskStateReady is by definition not in the
@@ -906,7 +910,7 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "ctrl+k":
+	case "C":
 		m.actions.ArmForceDelete()
 	case "n":
 		if m.actions.ForceArmed() {
@@ -986,7 +990,7 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			return m, nil
 		}
 		return m, m.actions.Confirm()
-	case "ctrl+k":
+	case "C":
 		m.actions.Escalate()
 	default:
 		if bulk && msg.Text != "" && !bulkCronJobSuspendKeyIsDigit(msg) {

@@ -75,7 +75,7 @@ func TestRolloutRestartStaysOnScreen(t *testing.T) {
 	a.WaitForAll(Settle, "api", "worker")
 
 	a.filterTo(t, "api")
-	a.Press("ctrl+r")
+	a.Press("R")
 
 	// TierInline: an inline y/N on the keybar, never the red type-the-name
 	// modal, because this context is not marked prod.

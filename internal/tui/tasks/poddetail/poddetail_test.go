@@ -633,15 +633,15 @@ func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "D"})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "C"})
 	if m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected force-delete to stay staged at TierInline, got %v", m.actions.Tier())
 	}
 	if !m.actions.ForceArmed() {
-		t.Fatal("expected ctrl+k to arm force-delete")
+		t.Fatal("expected C to arm force-delete")
 	}
 	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
-		t.Fatalf("expected ctrl+k alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+		t.Fatalf("expected C alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
 	}
 	kb := m.Keybar()
 	if kb.PillText != "FORCE DELETE" {
@@ -656,7 +656,7 @@ func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
 		t.Fatalf("expected n to disarm back to the plain prompt, not cancel: active=%v armed=%v", m.actions.Active(), m.actions.ForceArmed())
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "C"})
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "api-0" {
 		t.Fatalf("forceDeleted = %v, want [api-0]", mut.forceDeleted)
@@ -704,7 +704,7 @@ func TestDeleteInProdRequiresTypedName(t *testing.T) {
 
 	// Re-open and this time escalate to force-delete via ctrl-k.
 	m = step(t, m, tea.KeyPressMsg{Text: "D"})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+k"})
+	m = step(t, m, tea.KeyPressMsg{Text: "C"})
 	for _, r := range "api-0" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}

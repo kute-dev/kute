@@ -103,7 +103,7 @@ func TestPasteIntoSetImageRematchesHistory(t *testing.T) {
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 
-	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "I"})
 	if m.pendingSetImage == nil {
 		t.Fatal("expected 'i' to open the set-image panel")
 	}

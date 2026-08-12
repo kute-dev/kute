@@ -3,7 +3,7 @@
 // sole source of PROD status (mvp-plan.md §Decisions already made #2) — a
 // deliberate deviation from the design handoff's kubeconfig-annotation
 // approach, and never a name heuristic. SetProd is the one write path (7a's
-// ctrl+p mark/unmark-prod key); everything else only ever reads it.
+// P mark/unmark-prod key); everything else only ever reads it.
 package config
 
 import (
@@ -79,7 +79,7 @@ func (c Config) IsProd(contextName string) bool {
 
 // SetProd adds or removes contextName from ProdContexts and persists the
 // result to Path() — the write-side counterpart to IsProd, backing 7a's
-// ctrl+p mark/unmark-prod key (docs/design README.md §7a). A no-op (no
+// P mark/unmark-prod key (docs/design README.md §7a). A no-op (no
 // write) when the context's status already matches prod. Every other kute
 // session reads the same file, so this is the one place that status can
 // change short of hand-editing the YAML.

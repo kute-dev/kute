@@ -805,7 +805,7 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 // handlePaletteKey drives the open palette: linear navigation, typing/
 // backspace re-filtering, Enter's navigation dispatch (per-scope:
 // gotoDispatch/namespaceDispatch/contextDispatch), "r" re-probing and
-// "ctrl+p" mark/unmark-prod on the context palette. Every scope shares one
+// "P" mark/unmark-prod on the context palette. Every scope shares one
 // alt-tab grammar (docs/design
 // README.md §2b/§6a/§7a): opening the palette pre-selects the most recent
 // *other* entry (mostRecentOther), so a bare open+Enter with no typing toggles
@@ -873,12 +873,11 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 			return true, m, m.startContextProbe()
 		}
 		return true, m, m.typeKey(msg)
-	case "ctrl+p":
-		// Ctrl-chorded (like browse's ctrl-d/ctrl-k) rather than a bare
-		// letter: "p"/"P" are common leading characters for prod context
-		// names ("prod-eks") and must keep reaching the fuzzy query.
+	case "P":
 		if m.palette.Scope == palette.ScopeContext {
 			m.toggleSelectedContextProd()
+		} else {
+			return true, m, m.typeKey(msg)
 		}
 	default:
 		return true, m, m.typeKey(msg)

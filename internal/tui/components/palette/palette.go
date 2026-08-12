@@ -871,15 +871,15 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 		// (palette.Item.RecentNum) — the row IS the legend.
 		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}}
 	case m.Scope == ScopeContext:
-		// 7a: "↵ switch · ↑↓ move · 1-9 recent · r re-probe · ctrl+p mark
+		// 7a: "↵ switch · ↑↓ move · 1-9 recent · r re-probe · P mark
 		// prod · esc close" — same no-tab-complete/1-9-recent reasoning as
 		// ScopeNamespace, plus the real re-probe key (docs/design
-		// README.md §7a: "Key r re-probes") and the PROD-tag toggle (ctrl+p,
+		// README.md §7a: "Key r re-probes") and the PROD-tag toggle (P,
 		// not a bare letter — "p"/"P" are common leading characters for prod
 		// context names and must keep reaching the fuzzy query) in place of
 		// the generic default's phantom "tab complete" (nothing in this
 		// package implements tab-completion for any scope today).
-		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}, {"r", "re-probe"}, {"ctrl+p", "mark prod"}}
+		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}, {"r", "re-probe"}, {"P", "mark prod"}}
 	case m.Scope == ScopeVerb || m.Scope == ScopeResource:
 		// 22a's v/k slot edits: "↵ set · ↑↓ move · esc close" — no
 		// tab-complete hint, same reasoning as ScopeNamespace above.

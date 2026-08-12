@@ -224,7 +224,7 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "ctrl+k":
+	case "C":
 		m.actions.ArmForceDelete()
 	case "n":
 		if m.actions.ForceArmed() {
@@ -248,7 +248,7 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.actions.Cancel()
 	case "enter":
 		return m, m.actions.Confirm()
-	case "ctrl+k":
+	case "C":
 		m.actions.Escalate()
 	default:
 		return m, m.actions.HandleTypeKey(msg)

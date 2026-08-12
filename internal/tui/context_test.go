@@ -110,7 +110,7 @@ func TestRootModelCOpensContextPaletteWithProdTagAndCurrent(t *testing.T) {
 	}
 }
 
-// TestRootModelContextCtrlPTogglesProdAndPersists drives ctrl+p end to end
+// TestRootModelContextPTogglesProdAndPersists drives P end to end
 // (docs/design README.md §7a): toggling a non-prod context on shows PROD in
 // the view and persists it via config.SetProd (so a reload of the same
 // config.Path() sees it), and a second ctrl+p removes it again. The palette
@@ -130,7 +130,7 @@ func TestRootModelContextCtrlPTogglesProdAndPersists(t *testing.T) {
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "c"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyDown}) // land on prod-eks
-	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "ctrl+p"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "P"})
 	m := updated.(tui.Model)
 
 	if !m.PaletteOpen() {
@@ -143,7 +143,7 @@ func TestRootModelContextCtrlPTogglesProdAndPersists(t *testing.T) {
 		t.Fatalf("expected prod-eks persisted via config.SetProd, got %+v", reloaded)
 	}
 
-	updated, _ = m.Update(tea.KeyPressMsg{Text: "ctrl+p"})
+	updated, _ = m.Update(tea.KeyPressMsg{Text: "P"})
 	m = updated.(tui.Model)
 	if view := m.View().Content; strings.Contains(view, "PROD") {
 		t.Fatalf("expected PROD tag gone after a second ctrl+p:\n%s", view)

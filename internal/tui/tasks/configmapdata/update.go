@@ -230,8 +230,13 @@ func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.keyInput.Focus()
 	case "enter":
 		return m, m.commitAdd(false)
-	case "ctrl+r":
-		return m, m.commitAdd(true)
+	case "R":
+		if a.onValue {
+			return m, m.commitAdd(true)
+		}
+		var cmd tea.Cmd
+		a.keyInput, cmd = a.keyInput.Update(msg)
+		return m, cmd
 	default:
 		var cmd tea.Cmd
 		input := a.focusedInput()
@@ -253,7 +258,7 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.editing = nil
 	case "enter":
 		return m, m.commitEdit(false)
-	case "ctrl+r":
+	case "R":
 		return m, m.commitEdit(true)
 	default:
 		var cmd tea.Cmd
@@ -278,7 +283,7 @@ func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.multiline = nil
 	case "ctrl+o":
 		return m, m.commitMultiline(false)
-	case "ctrl+r":
+	case "R":
 		return m, m.commitMultiline(true)
 	default:
 		var cmd tea.Cmd

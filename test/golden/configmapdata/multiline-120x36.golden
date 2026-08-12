@@ -33,4 +33,4 @@ nginx.conf  ctrl-o apply · ctrl-r apply + restart consumers · esc discard
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   BUFFER EDITOR  ctrl-o apply  ctrl-r apply + restart consumers  esc discard                                           
+   BUFFER EDITOR  ctrl-o apply  R apply + restart consumers  esc discard                                                

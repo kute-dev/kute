@@ -126,7 +126,7 @@ func goldenCronJobRunNowModel(t *testing.T, width, height int) Model {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+r"})
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	return m
 }
 

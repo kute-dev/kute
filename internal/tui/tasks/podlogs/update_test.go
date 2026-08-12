@@ -313,7 +313,7 @@ func TestCopyVisibleViewSetsClipboard(t *testing.T) {
 
 	model := testModel()
 	model.buffer.Append(LogEntry{Message: "hello"})
-	_, cmd := model.Update(tea.KeyPressMsg{Text: "ctrl+y"})
+	_, cmd := model.Update(tea.KeyPressMsg{Text: "Y"})
 	if cmd == nil {
 		t.Fatalf("ctrl+y did not return a command")
 	}

@@ -119,7 +119,7 @@ func TestSecretUnmaskAddAndRemoveKey(t *testing.T) {
 	a.WaitForAll(Settle, "KUTE-E2E-SECRET-VALUE", "ctrl-x")
 	// ctrl-x re-masks whatever buffer is open. Plain x has to stay typeable,
 	// which is why the toggle is a control key at all.
-	a.Press("ctrl+x")
+	a.Press("M")
 	a.WaitGone("KUTE-E2E-SECRET-VALUE", Settle)
 	a.Esc()
 

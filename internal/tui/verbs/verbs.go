@@ -157,25 +157,11 @@ var (
 		Tier: actions.TierInline, Mutating: true, Bulk: true,
 	}
 	ForceDelete = Verb{
-		ID: "force-delete", Key: "ctrl-k", Label: "force delete",
+		ID: "force-delete", Key: "C", Label: "force delete",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindPod}, Mutating: true,
 	}
-	// RolloutRestart's key moved off 'R' (was 9a's original binding) to make
-	// room for 25a's SetResources, which the design doc spec'd as 'R' on the
-	// same Deployment row — resolved in favor of SetResources since it's the
-	// literal key the design doc names for 25a. It moved a second time, off
-	// bare 'r' onto 'ctrl-r': plain 'r' already meant retry/re-probe
-	// everywhere else in the app (offline banner, permission-denied card,
-	// Forward's own restart), so a bare keypress here both fought that
-	// meaning and fired an unconfirmed pod restart across a whole
-	// Deployment — the only TierNone mutating verb bound to a single
-	// unmodified letter with zero friction. TierInline now gives it the same
-	// will-run y/N (escalating to the type-the-name modal in PROD via
-	// TierFor) every other single-target mutation gets; the deliberate
-	// two-key chord plus that confirm makes an accidental fire meaningfully
-	// harder, not just documented against.
 	RolloutRestart = Verb{
-		ID: "rollout-restart", Key: "ctrl-r", Label: "restart",
+		ID: "rollout-restart", Key: "R", Label: "restart",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
 	// JobRetry clones a Job's spec into a brand-new Job — not a delete+
@@ -188,7 +174,7 @@ var (
 	// would repeat the exact mistake RolloutRestart's own doc comment
 	// describes moving off of.
 	JobRetry = Verb{
-		ID: "job-retry", Key: "ctrl-r", Label: "retry",
+		ID: "job-retry", Key: "R", Label: "retry",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
 	}
 	// FluxReconcile is §30a's 'r' on a Flux row: a fresh
@@ -237,7 +223,7 @@ var (
 		ID: "job-suspend", Key: "s", Label: "suspend",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
 	}
-	// CronJobRunNow is 'ctrl-r' on a CronJob row — the exact
+	// CronJobRunNow is 'R' on a CronJob row — the exact
 	// `kubectl create job --from=cronjob/<name>` recipe JobRetry already
 	// gives Jobs, one level up: it creates a brand-new, standalone Job from
 	// the CronJob's own jobTemplate, so the CronJob object itself (its
@@ -257,7 +243,7 @@ var (
 	// Controller-driven — there's no confirming state at the Controller
 	// level for a PROD context to escalate.
 	CronJobRunNow = Verb{
-		ID: "cronjob-run-now", Key: "ctrl-r", Label: "run now",
+		ID: "cronjob-run-now", Key: "R", Label: "run now",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindCronJob}, Mutating: true,
 	}
 	// CronJobSuspend is a CronJob's own 's': one verb, two directions —
@@ -315,7 +301,7 @@ var (
 	// schedule/timezone pair is exactly as reversible as the apply it
 	// undoes.
 	CronJobScheduleUndo = Verb{ID: "cronjob-schedule-undo", Key: "u", Label: "undo", Mutating: true}
-	// CronJobScheduleFullEdit is 36d's 'ctrl-y' escape hatch to the full
+	// CronJobScheduleFullEdit is 36d's 'Y' escape hatch to the full
 	// kubectl-edit subprocess (17a's existing tty-handoff machinery) for
 	// anything the schedule editor doesn't cover — concurrency, deadlines,
 	// history limits. Same tty-handoff shape as Edit/Exec/NodeShell: Mutating
@@ -323,7 +309,7 @@ var (
 	// owns the session once kute suspends. A dedicated key rather than
 	// reusing the global Edit verb's 'E' — 'E' would just be ordinary typed
 	// input while a schedule/timezone buffer is focused.
-	CronJobScheduleFullEdit = Verb{ID: "cronjob-schedule-full-edit", Key: "ctrl-y", Label: "full yaml edit", Mutating: true}
+	CronJobScheduleFullEdit = Verb{ID: "cronjob-schedule-full-edit", Key: "Y", Label: "full yaml edit", Mutating: true}
 	// FluxSource is §30a's 'o': jump to the object this one reconciles
 	// from. Read-only navigation, so no tier and not mutating.
 	FluxSource = Verb{
@@ -426,15 +412,16 @@ var (
 	// escalates TierInline→TierModal, not TierNone→TierInline (mirrors
 	// TierForEdit's own doc comment on this same constraint).
 	SetImage = Verb{
-		ID: "set-image", Key: "i", Label: "set image",
+		ID: "set-image", Key: "I", Label: "set image",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
 	}
-	// SetResources is 25a's 'R' on a Deployment/StatefulSet/DaemonSet row —
+	// SetResources is 'r' on a Deployment/StatefulSet/DaemonSet row. Deployment
+	// rollout restart owns uppercase R; lowercase r remains distinct by case.
 	// same TierNone-nominal/TierForSetResources-resolves-the-real-tier shape
 	// as SetImage above (see SetImage's own doc comment for why TierNone here
 	// is nominal rather than final).
 	SetResources = Verb{
-		ID: "set-resources", Key: "R", Label: "resources",
+		ID: "set-resources", Key: "r", Label: "resources",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
 	}
 	// Meta is 26a's 'm' on any row, any kind (CRDs included) — the
@@ -481,13 +468,13 @@ var (
 		ID: "remove-configmap-key", Key: "D", Label: "remove key",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
-	// RestartConfigMapConsumers is 27a's ctrl-r — chains a value apply with
+	// RestartConfigMapConsumers is 27a's R — chains a value apply with
 	// `kubectl rollout restart` for every workload that consumes the
 	// ConfigMap. TierNone here is nominal like AddConfigMapKey/SetImage/etc:
 	// the real tier is TierForConfigMapData, the same PROD gate the plain
 	// apply uses (it's the same patch, plus extra restarts).
 	RestartConfigMapConsumers = Verb{
-		ID: "restart-configmap-consumers", Key: "ctrl-r", Label: "apply + restart consumers",
+		ID: "restart-configmap-consumers", Key: "R", Label: "apply + restart consumers",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
 )

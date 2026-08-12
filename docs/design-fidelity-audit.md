@@ -69,7 +69,7 @@ Confirmed correct: numbered-recents digit grammar, alt-tab preselection, the "al
 - **[gap]** The PROD tag renders as bold text only — the spec's bordered-chip treatment is never applied. A bordered `Prod` style exists in the theme but is dead code, referenced nowhere.
   spec `README.md:106`, tokens `377` · code `internal/tui/palette_styles.go:62`
 
-Confirmed correct — and worth calling out: the PROD tag genuinely comes only from `~/.config/kute/config.yaml`'s `prodContexts` list, never a name heuristic — live-proved against a context literally named `kwok-prod-sim`, which renders with no PROD tag until explicitly configured. `ctrl+p` is correctly chorded so bare `p` still reaches the query.
+Confirmed correct — and worth calling out: the PROD tag genuinely comes only from `~/.config/kute/config.yaml`'s `prodContexts` list, never a name heuristic — live-proved against a context literally named `kwok-prod-sim`, which renders with no PROD tag until explicitly configured. `P` toggles PROD only in the Context palette; other palettes route it to the query.
 
 ---
 

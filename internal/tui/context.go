@@ -235,7 +235,7 @@ func contextRecentFooter(target string) []palette.FooterSpan {
 }
 
 // toggleSelectedContextProd flips the selected row's PROD status (7a's
-// ctrl+p key) via config.Config.SetProd, best-effort (a write failure — e.g.
+// P key) via config.Config.SetProd, best-effort (a write failure — e.g.
 // an unwritable ~/.config — leaves the in-memory tag exactly where SetProd
 // left it, which is untouched on error). Unlike startContextProbe/
 // refreshContextPalette (which reset Sel to the alt-tab target on every
