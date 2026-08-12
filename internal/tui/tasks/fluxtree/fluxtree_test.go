@@ -26,6 +26,71 @@ func demoModel(t *testing.T) *Model {
 	return upd.(*Model)
 }
 
+type syncLister struct {
+	resources.RawLister
+	synced bool
+}
+
+func (l syncLister) KindSynced(kube.ResourceKind) bool { return l.synced }
+
+func TestLoadingStateShowsWhatFluxIsListing(t *testing.T) {
+	c := fake.NewDemo()
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups}
+	m := New(Config{Session: sess, Lister: syncLister{RawLister: c, synced: false}})
+	m.SetSize(120, 36)
+
+	view := plain(m.Render())
+	for _, want := range []string{
+		"loading Flux",
+		"listing Flux sources and reconcilers…",
+		"watch starts when the lists land",
+		"SOURCE / RECONCILER",
+		"KIND",
+		"REVISION",
+		"RECONCILED",
+		"– of –",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("loading view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestPartialFluxTreeStaysLoadingUntilAllCachesSync(t *testing.T) {
+	c := fake.NewDemo()
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups}
+	lister := syncLister{RawLister: c, synced: false}
+	m := New(Config{Session: sess, Lister: lister})
+	m.SetSize(120, 36)
+
+	loaded, cmd := m.Update(m.load()())
+	if cmd == nil {
+		t.Fatal("expected a cache-sync retry while Flux caches are filling")
+	}
+	got := loaded.(*Model)
+	if got.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading", got.state)
+	}
+	if len(got.groups) != 0 {
+		t.Fatalf("partial groups were published while loading: %d", len(got.groups))
+	}
+
+	lister.synced = true
+	got.lister = lister
+	loaded, cmd = got.Update(got.load()())
+	if cmd != nil {
+		t.Fatal("fully synced Flux caches should not schedule another retry")
+	}
+	if got = loaded.(*Model); got.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after all caches sync", got.state)
+	}
+	if len(got.groups) == 0 {
+		t.Fatal("expected the complete Flux tree after synchronization")
+	}
+}
+
 func plain(s string) string {
 	var b strings.Builder
 	skip := false

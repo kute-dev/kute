@@ -46,7 +46,7 @@ func (m Model) Header() tui.HeaderState {
 		return tui.HeaderState{
 			Crumbs: crumbs,
 			Conn: tui.ConnBadge{
-				Text:  fmt.Sprintf("%s reading Flux kinds · %.1fs", m.spinner.View(), elapsed.Seconds()),
+				Text:  fmt.Sprintf("%s loading Flux · %.1fs", m.spinner.View(), elapsed.Seconds()),
 				Style: lipgloss.NewStyle().Foreground(theme.Warn),
 			},
 		}
@@ -67,7 +67,7 @@ func (m Model) Header() tui.HeaderState {
 // stripLineCount mirrors Strips so bodyRowCount can budget the table.
 func (m Model) stripLineCount() int {
 	n := 0
-	if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
+	if m.state == tui.TaskStateLoading || m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
 		n++
 	}
 	if m.execFeedback != "" {
@@ -79,6 +79,9 @@ func (m Model) stripLineCount() int {
 func (m Model) Strips(width int) []string {
 	theme := m.Theme()
 	var out []string
+	if m.state == tui.TaskStateLoading {
+		return []string{insetStripLine(m.loadingStripLine(theme, width), width)}
+	}
 	if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
 		out = append(out, insetStripLine(m.healthLine(theme, width), width))
 	}
@@ -167,9 +170,7 @@ func (m Model) Body(width, height int) string {
 	theme := m.Theme()
 	switch m.state {
 	case tui.TaskStateLoading:
-		return components.CenterLines([]string{
-			lipgloss.NewStyle().Foreground(theme.Accent).Render(m.spinner.View() + " reading Flux sources and reconcilers…"),
-		}, width, height)
+		return m.loadingBody(width, height)
 	case tui.TaskStateError:
 		return components.CenterLines([]string{
 			statusStyle(theme, resources.StatusFail).Render(tui.GlyphFailed + " " + m.feedback),

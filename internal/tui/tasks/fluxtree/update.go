@@ -63,6 +63,18 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 		m.feedback = msg.err.Error()
 		return nil
 	}
+	if !tui.KindsSynced(m.lister, msg.kinds...) {
+		// A non-empty join can still be partial while one of the Flux caches is
+		// filling. Do not publish it as ready: the tree would silently miss
+		// sources or reconcilers until the next watch event.
+		m.state = tui.TaskStateLoading
+		return tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+	}
+	if err := tui.KindsError(m.lister, msg.kinds...); err != nil {
+		m.state = tui.TaskStateError
+		m.feedback = fmt.Sprintf("couldn't read Flux objects: %v — retrying", err)
+		return nil
+	}
 	m.groups = msg.groups
 	m.recomputeVisible()
 	m.state = tui.TaskStateReady
@@ -76,11 +88,6 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 		if !tui.KindsSynced(m.lister, msg.kinds...) {
 			m.state = tui.TaskStateLoading
 			return tui.ScheduleCacheSyncRetry(m.reloadEpoch)
-		}
-		if err := tui.KindsError(m.lister, msg.kinds...); err != nil {
-			m.state = tui.TaskStateError
-			m.feedback = fmt.Sprintf("couldn't read Flux objects: %v — retrying", err)
-			return nil
 		}
 		m.state = tui.TaskStateEmpty
 	}
