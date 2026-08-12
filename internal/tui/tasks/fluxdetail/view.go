@@ -63,7 +63,7 @@ func (m Model) Strips(width int) []string { return nil }
 func (m Model) Body(width, height int) string {
 	switch m.state {
 	case tui.TaskStateReady:
-		return m.readyBody(width)
+		return m.readyBody(width, height)
 	case tui.TaskStateLoading:
 		style := lipgloss.NewStyle().Foreground(m.Theme().Accent)
 		return components.LoadingBody(m.spinner, style, m.feedback, width, height)
@@ -75,14 +75,14 @@ func (m Model) Body(width, height int) string {
 // readyBody stacks §31a's three bands in the design's order: failure card,
 // chain, inventory. 5a's promotion rule — the reason it is broken outranks
 // everything else on the screen.
-func (m Model) readyBody(width int) string {
+func (m Model) readyBody(width, height int) string {
 	var b strings.Builder
 	if card := m.failureCard(width); card != "" {
 		b.WriteString(card)
 		b.WriteString("\n\n")
 	}
 	b.WriteString(m.chainGrid(width))
-	if inv := m.inventoryBlock(width); inv != "" {
+	if inv := m.inventoryBlock(width, height-lipgloss.Height(b.String())-1); inv != "" {
 		b.WriteString("\n")
 		b.WriteString(inv)
 	}
@@ -237,7 +237,27 @@ func (m Model) chainGrid(width int) string {
 
 // inventoryBlock is §31a's third band: what this reconciler manages,
 // unhealthy first with the healthy tail folded.
-func (m Model) inventoryBlock(width int) string {
+// inventoryViewportRows is the number of selectable inventory rows that fit
+// after the failure card and chain grid have been rendered.
+func (m Model) inventoryViewportRows() int {
+	if m.height <= 0 {
+		return 1
+	}
+	bodyHeight := tui.FrameBodyHeight(m.height, 0)
+	var prefix strings.Builder
+	if card := m.failureCard(m.width); card != "" {
+		prefix.WriteString(card)
+		prefix.WriteString("\n\n")
+	}
+	prefix.WriteString(m.chainGrid(m.width))
+	rows := bodyHeight - lipgloss.Height(prefix.String()) - 3 // separator + header + summary
+	if m.foldedCount() > 0 {
+		rows-- // folded-tail affordance
+	}
+	return max(rows, 1)
+}
+
+func (m Model) inventoryBlock(width, height int) string {
 	theme := m.Theme()
 	label := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
@@ -261,12 +281,20 @@ func (m Model) inventoryBlock(width int) string {
 	}
 
 	lines := []string{label.Render(head)}
-	for i, it := range m.visibleInventory() {
-		lines = append(lines, m.inventoryRow(it, i == m.selected))
+	items := m.visibleInventory()
+	rows := max(height-2, 1)
+	if folded := m.foldedCount(); folded > 0 {
+		rows = max(rows-1, 0)
+	}
+	offset := min(max(m.offset, 0), max(len(items)-rows, 0))
+	end := min(offset+rows, len(items))
+	for i := offset; i < end; i++ {
+		lines = append(lines, m.inventoryRow(items[i], i == m.selected))
 	}
 	if folded := m.foldedCount(); folded > 0 {
 		lines = append(lines, faint.Render(fmt.Sprintf("  + %d ready · %s expand", folded, tui.GlyphTab)))
 	}
+	lines = append(lines, faint.Render(fmt.Sprintf("%d–%d of %d", offset+1, end, len(m.inventory))))
 	return strings.Join(lines, "\n")
 }
 

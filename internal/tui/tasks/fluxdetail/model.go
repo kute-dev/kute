@@ -125,6 +125,7 @@ type Model struct {
 	// invExpanded controls §31a's healthy-tail fold, same idiom as 30a's.
 	invExpanded bool
 	selected    int
+	offset      int
 
 	width, height int
 	// now is the clock read the retry countdown renders from, refreshed on
@@ -225,6 +226,40 @@ func (m Model) visibleInventory() []inventoryItem {
 // foldedCount is how many healthy inventory entries the fold hides.
 func (m Model) foldedCount() int {
 	return len(m.inventory) - len(m.visibleInventory())
+}
+
+// clampOffset keeps the selected inventory item inside the rendered viewport.
+func (m *Model) clampOffset(rows int) {
+	items := len(m.visibleInventory())
+	if items == 0 {
+		m.selected, m.offset = 0, 0
+		return
+	}
+	if rows < 1 {
+		rows = 1
+	}
+	if m.selected < 0 {
+		m.selected = 0
+	}
+	if m.selected >= items {
+		m.selected = items - 1
+	}
+	if m.selected < m.offset {
+		m.offset = m.selected
+	}
+	if m.selected >= m.offset+rows {
+		m.offset = m.selected - rows + 1
+	}
+	maxOffset := items - rows
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.offset > maxOffset {
+		m.offset = maxOffset
+	}
+	if m.offset < 0 {
+		m.offset = 0
+	}
 }
 
 func isUnhealthy(c resources.StatusClass) bool {

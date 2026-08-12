@@ -10,6 +10,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -78,9 +79,7 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 	if strings.HasPrefix(m.feedback, "loading ") {
 		m.feedback = ""
 	}
-	if n := len(m.visibleInventory()); m.selected >= n {
-		m.selected = max(0, n-1)
-	}
+	m.clampOffset(m.inventoryViewportRows())
 	return nil
 }
 
@@ -92,11 +91,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
+	case "ctrl+d":
+		m.moveHalfPage(1)
+	case "ctrl+u":
+		m.moveHalfPage(-1)
 	case "tab":
 		m.invExpanded = !m.invExpanded
-		if n := len(m.visibleInventory()); m.selected >= n {
-			m.selected = max(0, n-1)
-		}
+		m.clampOffset(m.inventoryViewportRows())
 	case "enter":
 		// ↵ lands on the object the cursor is on, which after the sort is
 		// the failing one by default — §31a's "zero digs".
@@ -139,4 +140,13 @@ func (m *Model) moveSelection(delta int) {
 		return
 	}
 	m.selected = min(max(0, m.selected+delta), n-1)
+	m.clampOffset(m.inventoryViewportRows())
+}
+
+func (m *Model) moveHalfPage(direction int) {
+	position := components.MoveHalfPage(
+		m.selected, m.offset, m.inventoryViewportRows(),
+		len(m.visibleInventory()), direction,
+	)
+	m.selected, m.offset = position.Selected, position.Offset
 }

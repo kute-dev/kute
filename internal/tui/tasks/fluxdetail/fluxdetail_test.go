@@ -1,6 +1,7 @@
 package fluxdetail
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -140,6 +141,57 @@ func TestInventoryFoldsHealthyTailAndOpensTheCulprit(t *testing.T) {
 	m3, _ := m2.Update(tea.KeyPressMsg{Text: "tab"})
 	if !strings.Contains(plain(m3.(*Model).Render()), "nebula-worker-config") {
 		t.Errorf("tab should expand the healthy tail")
+	}
+}
+
+func TestInventoryScrollsAndSupportsHalfPageKeys(t *testing.T) {
+	m := demoModel(t, "nebula-workers")
+	m.invExpanded = true
+	m.inventory = make([]inventoryItem, 20)
+	for i := range m.inventory {
+		m.inventory[i] = inventoryItem{
+			Kind:   kube.KindDeployment,
+			Name:   fmt.Sprintf("managed-%02d", i),
+			Ready:  "1/1",
+			Status: resources.StatusOK,
+			Glyph:  tui.GlyphRunning,
+		}
+	}
+	m.selected, m.offset = 0, 0
+
+	rows := m.inventoryViewportRows()
+	if rows >= len(m.inventory) {
+		t.Fatalf("inventory viewport rows = %d, want less than %d", rows, len(m.inventory))
+	}
+	if view := plain(m.Render()); !strings.Contains(view, fmt.Sprintf("1–%d of %d", rows, len(m.inventory))) {
+		t.Fatalf("initial inventory page summary missing:\n%s", view)
+	}
+
+	for i := 0; i < len(m.inventory)-1; i++ {
+		m.Update(tea.KeyPressMsg{Text: "j"})
+	}
+	if m.selected != len(m.inventory)-1 {
+		t.Fatalf("selected = %d, want last inventory item", m.selected)
+	}
+	if m.offset == 0 {
+		t.Fatal("offset stayed at zero while moving to the last inventory item")
+	}
+	if view := plain(m.Render()); !strings.Contains(view, "managed-19") {
+		t.Fatalf("last inventory item is not rendered after scrolling:\n%s", view)
+	}
+	if view := plain(m.Render()); !strings.Contains(view, fmt.Sprintf("%d–%d of %d", len(m.inventory)-rows+1, len(m.inventory), len(m.inventory))) {
+		t.Fatalf("scrolled inventory page summary missing:\n%s", view)
+	}
+
+	before := m.selected
+	m.Update(tea.KeyPressMsg{Text: "ctrl+u"})
+	if m.selected >= before {
+		t.Fatalf("ctrl+u selected = %d, want less than %d", m.selected, before)
+	}
+	before = m.selected
+	m.Update(tea.KeyPressMsg{Text: "ctrl+d"})
+	if m.selected <= before {
+		t.Fatalf("ctrl+d selected = %d, want greater than %d", m.selected, before)
 	}
 }
 
