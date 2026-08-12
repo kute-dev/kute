@@ -620,7 +620,11 @@ func encodeKey(key string) (string, bool) {
 	case "end":
 		return "\x1b[F", false
 	}
-	if name, ok := strings.CutPrefix(key, "ctrl+"); ok && len(name) == 1 {
+	name, ok := strings.CutPrefix(key, "ctrl+")
+	if !ok {
+		name, ok = strings.CutPrefix(key, "ctrl-")
+	}
+	if ok && len(name) == 1 {
 		c := name[0]
 		if c >= 'a' && c <= 'z' {
 			return string([]byte{c - 'a' + 1}), false

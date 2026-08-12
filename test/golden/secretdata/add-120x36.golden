@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   ADD KEY  ↵ apply  M re-mask input  ctrl-v paste (never echoed)  esc discard                                          
+   ADD KEY  ↵ apply  ctrl-x re-mask input  ctrl-v paste (never echoed)  esc discard                                     

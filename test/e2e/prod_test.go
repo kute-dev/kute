@@ -25,7 +25,7 @@ func TestProdDeleteRequiresTheTypedName(t *testing.T) {
 	a.WaitFor("api-", Connect)
 
 	pod := a.selectAPIPod(t)
-	a.Press("ctrl+d")
+	a.Press("D")
 
 	// The modal, not the inline card: the name has to be typed, and the
 	// context is called out as PROD.
@@ -56,7 +56,7 @@ func TestNonProdDeleteIsInline(t *testing.T) {
 	a.WaitFor("api-", Connect)
 
 	pod := a.selectAPIPod(t)
-	a.Press("ctrl+d")
+	a.Press("D")
 
 	a.WaitFor("CONFIRM", Settle)
 	frame := a.Frame()

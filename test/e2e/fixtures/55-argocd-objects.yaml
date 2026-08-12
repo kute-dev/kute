@@ -120,8 +120,6 @@ reason: OperationCompleted
 type: Normal
 message: "application synced successfully"
 count: 1
-firstTimestamp: "2026-08-02T09:36:31Z"
-lastTimestamp: "2026-08-02T09:36:31Z"
 ---
 # OutOfSync but Healthy — drift, nothing broken.
 apiVersion: argoproj.io/v1alpha1

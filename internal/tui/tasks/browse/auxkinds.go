@@ -60,6 +60,7 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 		kube.KindStatefulSet,
 		kube.KindDaemonSet,
 	},
+	kube.ResourceKind("Application"): {kube.KindConfigMap, kube.KindEvent},
 }
 
 // Deliberately absent: KindSecret under KindHelmRelease. Releases used to be
