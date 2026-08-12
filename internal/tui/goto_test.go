@@ -533,14 +533,14 @@ func TestRootModelGotoFromPushedScreenPushesFreshBrowseAndPreservesHistory(t *te
 	}
 }
 
-// TestRootModelGAltJKNavigateRankedListWithoutTyping covers the alt-modified
-// vim keys added alongside the arrow keys: since an alt-modified press never
+// TestRootModelGCtrlJKNavigateRankedListWithoutTyping covers the ctrl-modified
+// vim keys added alongside the arrow keys: since a ctrl-modified press never
 // carries Key.Text, it can move the 12a ranked list's selection without also
 // being typeable into the "type to narrow" query (unlike plain j/k, which
 // must stay reserved for typing — see handlePaletteKey's comment in
-// model.go). Round-trips alt+j/alt+k down the ranked list (Pods ->
+// model.go). Round-trips ctrl+j/ctrl+k down the ranked list (Pods ->
 // Deployments -> back to Pods).
-func TestRootModelGAltJKNavigateRankedListWithoutTyping(t *testing.T) {
+func TestRootModelGCtrlJKNavigateRankedListWithoutTyping(t *testing.T) {
 	t.Parallel()
 	sess := gotoTestSession(gotoFakeLister{})
 
@@ -557,21 +557,21 @@ func TestRootModelGAltJKNavigateRankedListWithoutTyping(t *testing.T) {
 		t.Fatalf("expected Pods pre-selected after 'g':\n%s", view)
 	}
 
-	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m := updated.(tui.Model)
 	view = ansi.Strip(m.View().Content)
 	if !isSelectedLine(view, "Deployments") {
-		t.Fatalf("expected alt+j to move selection to Deployments:\n%s", view)
+		t.Fatalf("expected ctrl+j to move selection to Deployments:\n%s", view)
 	}
 	if !m.PaletteOpen() {
-		t.Fatalf("palette should still be open — alt+j must not have been typed into the query")
+		t.Fatalf("palette should still be open — ctrl+j must not have been typed into the query")
 	}
 
-	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 	view = ansi.Strip(m.View().Content)
 	if !isSelectedLine(view, "Pods") {
-		t.Fatalf("expected alt+k to move selection back to Pods:\n%s", view)
+		t.Fatalf("expected ctrl+k to move selection back to Pods:\n%s", view)
 	}
 }
 

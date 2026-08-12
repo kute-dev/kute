@@ -1020,13 +1020,13 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// opens the selected row's destination same as it always has.
 		m.filterListFocused = true
 		m.filterInput.Blur()
-	// Only the arrow keys (plus alt+j/alt+k, which never carry Text) move
+	// Only the arrow keys (plus ctrl+j/ctrl+k, which never carry Text) move
 	// selection while filtering — plain "j"/"k" must stay typeable into the
 	// query (mvp-plan.md's "j/k ≡ ↑↓ everywhere" is for browse mode; a live
 	// filter input takes every character).
-	case "up", "alt+k":
+	case "up", "ctrl+k":
 		m.moveSelection(-1)
-	case "down", "alt+j":
+	case "down", "ctrl+j":
 		m.moveSelection(1)
 	case "ctrl+d":
 		m.moveHalfPage(1)

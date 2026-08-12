@@ -844,12 +844,12 @@ type keyHint struct{ key, label string }
 // keys Accent, labels TextDim, pairs gap-separated (no · dots, unlike the
 // app keybar), "esc close" right-aligned, all on the BgPalette band.
 func (m Model) renderKeyRow(styles Styles, width int) string {
-	// alt+jk is advertised only for goto/namespace — they have room for it,
+	// ctrl+jk is advertised only for goto/namespace — they have room for it,
 	// and the context picker's row stays uncluttered (it's already carrying
 	// reachability-probing/PROD-tag concerns the other two scopes don't).
 	moveKey := "↑↓"
 	if m.Scope == ScopeGoto || m.Scope == ScopeNamespace {
-		moveKey = "↑↓ alt+jk"
+		moveKey = "↑↓ ctrl+jk"
 	}
 	hints := []keyHint{{"↵", "jump"}, {"tab", "complete"}, {moveKey, "move"}}
 	switch {

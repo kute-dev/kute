@@ -234,12 +234,12 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.filterInput.SetValue("")
 		m.filterInput.Blur()
 		m.recomputeVisible()
-	// alt+j/alt+k are safe alongside plain j/k typing into the query — an
-	// alt-modified key never carries Text (charm.land/bubbletea/v2's
+	// ctrl+j/ctrl+k are safe alongside plain j/k typing into the query — a
+	// control-modified key never carries Text (charm.land/bubbletea/v2's
 	// Key.Text doc), so it can't reach the default typing branch below.
-	case "up", "alt+k":
+	case "up", "ctrl+k":
 		m.moveSelection(-1)
-	case "down", "alt+j":
+	case "down", "ctrl+j":
 		m.moveSelection(1)
 	case "ctrl+d":
 		m.moveSelection(1)

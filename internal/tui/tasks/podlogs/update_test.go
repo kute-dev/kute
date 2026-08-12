@@ -272,7 +272,7 @@ func TestFilterOpensNarrowsAndClears(t *testing.T) {
 	}
 }
 
-func TestFilterAltJKHLMoveWithoutTyping(t *testing.T) {
+func TestFilterCtrlJKAltHLMoveWithoutTyping(t *testing.T) {
 	t.Parallel()
 
 	model := testModel()
@@ -287,13 +287,13 @@ func TestFilterAltJKHLMoveWithoutTyping(t *testing.T) {
 		t.Fatalf("expected / to activate the filter")
 	}
 
-	_, _ = model.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
+	_, _ = model.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	if model.view.VerticalOffset != 1 {
-		t.Fatalf("VerticalOffset = %d, want 1 after alt+j", model.view.VerticalOffset)
+		t.Fatalf("VerticalOffset = %d, want 1 after ctrl+j", model.view.VerticalOffset)
 	}
-	_, _ = model.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
+	_, _ = model.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	if model.view.VerticalOffset != 0 {
-		t.Fatalf("VerticalOffset = %d, want 0 after alt+k", model.view.VerticalOffset)
+		t.Fatalf("VerticalOffset = %d, want 0 after ctrl+k", model.view.VerticalOffset)
 	}
 	_, _ = model.Update(tea.KeyPressMsg{Code: 'l', Mod: tea.ModAlt})
 	if model.view.HorizontalOffset != 1 {
@@ -304,7 +304,7 @@ func TestFilterAltJKHLMoveWithoutTyping(t *testing.T) {
 		t.Fatalf("HorizontalOffset = %d, want 0 after alt+h", model.view.HorizontalOffset)
 	}
 	if model.filterInput.Value() != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j/k/h/l must move, not type)", model.filterInput.Value())
+		t.Fatalf("filterQuery = %q, want empty (ctrl+j/k/alt+h/l must move, not type)", model.filterInput.Value())
 	}
 }
 

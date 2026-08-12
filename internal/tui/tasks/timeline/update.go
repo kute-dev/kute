@@ -430,11 +430,11 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.filterInput.SetValue("")
 		m.filterInput.Blur()
 		m.recomputeVisible()
-	// alt+j/alt+k are safe alongside plain j/k typing into the query, same
+	// ctrl+j/ctrl+k are safe alongside plain j/k typing into the query, same
 	// reasoning as tasks/events' own filter handler.
-	case "up", "alt+k":
+	case "up", "ctrl+k":
 		m.moveSelection(-1)
-	case "down", "alt+j":
+	case "down", "ctrl+j":
 		m.moveSelection(1)
 	default:
 		var cmd tea.Cmd

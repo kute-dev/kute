@@ -13,7 +13,7 @@ browse
             │─────────────────────────────────────────────────────│             
             │ ↵ jumps to Deployments in default — namespace and … │             
             │─────────────────────────────────────────────────────│             
-            │ ↵ jump  ↑↓ alt+jk move  type to keep narrowing      │             
+            │ ↵ jump  ↑↓ ctrl+jk move  type to keep narrowing     │             
             ╰─────────────────────────────────────────────────────╯             
                                                                                 
                                                                                 

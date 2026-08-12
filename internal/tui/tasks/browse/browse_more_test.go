@@ -117,7 +117,7 @@ func TestFilterTypingAcceptsJAndK(t *testing.T) {
 	}
 }
 
-func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
+func TestFilterCtrlJKMovesSelectionWithoutTyping(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {pod("default", "api-1"), pod("default", "api-2")},
 	}}
@@ -131,22 +131,22 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 		t.Fatalf("selected = %d, want 0 before moving", m.selected)
 	}
 
-	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = *updated.(*Model)
 	if m.selected != 1 {
-		t.Fatalf("selected = %d, want 1 after alt+j", m.selected)
+		t.Fatalf("selected = %d, want 1 after ctrl+j", m.selected)
 	}
 	if m.filterInput.Value() != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterInput.Value())
+		t.Fatalf("filterQuery = %q, want empty (ctrl+j must move, not type)", m.filterInput.Value())
 	}
 
-	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	m = *updated.(*Model)
 	if m.selected != 0 {
-		t.Fatalf("selected = %d, want 0 after alt+k", m.selected)
+		t.Fatalf("selected = %d, want 0 after ctrl+k", m.selected)
 	}
 	if m.filterInput.Value() != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterInput.Value())
+		t.Fatalf("filterQuery = %q, want empty (ctrl+k must move, not type)", m.filterInput.Value())
 	}
 }
 

@@ -19,6 +19,6 @@ browse
             │─────────────────────────────────────────────────────│             
             │ alias — colored first letter · typing it pins that… │             
             │─────────────────────────────────────────────────────│             
-            │ type to narrow  ↑↓ alt+jk move  ↵ jump    esc close │             
+            │ type to narrow  ↑↓ ctrl+jk move  ↵ jump   esc close │             
             ╰─────────────────────────────────────────────────────╯             
    GOTO                      jump to any kind, resource, namespace, or context  

@@ -363,7 +363,7 @@ func TestFilterQueryNarrowsRows(t *testing.T) {
 	}
 }
 
-func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
+func TestFilterCtrlJKMovesSelectionWithoutTyping(t *testing.T) {
 	events := []kube.Event{
 		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "restarting", Count: 1, LastSeen: time.Now()},
 		{Type: "Warning", Reason: "FailedScheduling", Object: "Pod/cache-0", Message: "insufficient cpu", Count: 1, LastSeen: time.Now()},
@@ -377,20 +377,20 @@ func TestFilterAltJKMovesSelectionWithoutTyping(t *testing.T) {
 		t.Fatalf("selected = %d, want 0 before moving", m.selected)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
+	m = step(t, m, tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	if m.selected != 1 {
-		t.Fatalf("selected = %d, want 1 after alt+j", m.selected)
+		t.Fatalf("selected = %d, want 1 after ctrl+j", m.selected)
 	}
 	if m.filterInput.Value() != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+j must move, not type)", m.filterInput.Value())
+		t.Fatalf("filterQuery = %q, want empty (ctrl+j must move, not type)", m.filterInput.Value())
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModAlt})
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	if m.selected != 0 {
-		t.Fatalf("selected = %d, want 0 after alt+k", m.selected)
+		t.Fatalf("selected = %d, want 0 after ctrl+k", m.selected)
 	}
 	if m.filterInput.Value() != "" {
-		t.Fatalf("filterQuery = %q, want empty (alt+k must move, not type)", m.filterInput.Value())
+		t.Fatalf("filterQuery = %q, want empty (ctrl+k must move, not type)", m.filterInput.Value())
 	}
 }
 

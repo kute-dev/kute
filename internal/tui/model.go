@@ -850,13 +850,13 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		}
 	// No plain j/k synonyms here, unlike list screens: the palette is a text
 	// input, and 12a's "type to narrow" must let those letters reach the
-	// query (its keybar advertises ↑↓ accordingly). alt+j/alt+k are safe
-	// additions though — a Key with ModAlt set never carries Text
+	// query (its keybar advertises ↑↓ accordingly). ctrl+j/ctrl+k are safe
+	// additions though — a control-modified key never carries Text
 	// (charm.land/bubbletea/v2's Key.Text doc), so they can't leak into the
 	// query and fall through to typeChar's default case.
-	case "up", "alt+k":
+	case "up", "ctrl+k":
 		m.movePalette(-1)
-	case "down", "alt+j":
+	case "down", "ctrl+j":
 		m.movePalette(1)
 	case "tab":
 		// docs/design README.md §2b: "tab complete" fills the query in to the
