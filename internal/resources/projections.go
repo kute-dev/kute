@@ -475,7 +475,21 @@ func projectService(obj runtime.Object) Row {
 	for _, p := range s.Spec.Ports {
 		ports = append(ports, strconv.Itoa(int(p.Port)))
 	}
-	return Row{Namespace: ns, Name: name, Cells: []string{name, string(s.Spec.Type), s.Spec.ClusterIP, strings.Join(ports, ","), shortAge(age)}, Status: StatusOK}
+	externalAddresses := append([]string(nil), s.Spec.ExternalIPs...)
+	if len(externalAddresses) == 0 {
+		for _, ingress := range s.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				externalAddresses = append(externalAddresses, ingress.IP)
+			} else if ingress.Hostname != "" {
+				externalAddresses = append(externalAddresses, ingress.Hostname)
+			}
+		}
+	}
+	externalIPs := strings.Join(externalAddresses, ",")
+	if externalIPs == "" {
+		externalIPs = "<none>"
+	}
+	return Row{Namespace: ns, Name: name, Cells: []string{name, string(s.Spec.Type), s.Spec.ClusterIP, externalIPs, strings.Join(ports, ","), shortAge(age)}, Status: StatusOK}
 }
 
 // projectIngress renders the docs/design README.md §23a list columns:

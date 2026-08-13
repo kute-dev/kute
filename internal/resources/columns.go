@@ -80,29 +80,30 @@ const MetricColumnWidth = 12
 // glyph (browse/view.go's browseColumns), not as the word.
 // TestFixedWidthsLeaveRoomForSortArrow guards this.
 var fixedWidths = map[string]int{
-	"Rdy":      5,
-	"Status":   16,
-	"Health":   13, // "●12 ▲1 ✕1" — matches the namespace palette's HEALTH width
-	"Restarts": 4,
-	"Node":     9,
-	"Age":      5, // "AGE" + the 2-cell sort-arrow allowance
-	"CPU":      MetricColumnWidth,
-	"MEM":      MetricColumnWidth,
-	"Pods":     9,  // "62/110"
-	"Rollout":  20, // "12m 34s progressing ▸"
-	"Image":    24, // truncates long registry paths
-	"Class":    9,  // ingress class name, e.g. "nginx"
-	"Hosts":    30, // comma-joined rule hosts, e.g. "api.example.com"
-	"Address":  15, // LB IP/hostname, e.g. "203.0.113.10"
-	"Ports":    10, // "80" / "80, 443"
-	"Local":    16, // "localhost:65535"
-	"Uptime":   8,  // "12h34m" + the arrow allowance
-	"Traffic":  22, // "retry 3 · next in 8s" / "idle 12m"
-	"Chart":    20, // "postgresql 12.1.9" — 2 cells narrower than it used to be, given back to STATUS once LATEST joined the row
-	"Latest":   8,  // "12.2.1 ?" — the newest version the local repo cache offers, "?" when two repos disagree
-	"App Ver":  10, // "15.4.0"
-	"Rev":      5,  // revision number, right-aligned ("REV" + the arrow allowance)
-	"Updated":  10, // "3d ago" / "12m ago"
+	"Rdy":        5,
+	"Status":     16,
+	"Health":     13, // "●12 ▲1 ✕1" — matches the namespace palette's HEALTH width
+	"Restarts":   4,
+	"Node":       9,
+	"Age":        5, // "AGE" + the 2-cell sort-arrow allowance
+	"CPU":        MetricColumnWidth,
+	"MEM":        MetricColumnWidth,
+	"Pods":       9,  // "62/110"
+	"Rollout":    20, // "12m 34s progressing ▸"
+	"Image":      24, // truncates long registry paths
+	"Class":      9,  // ingress class name, e.g. "nginx"
+	"Hosts":      30, // comma-joined rule hosts, e.g. "api.example.com"
+	"Address":    15, // LB IP/hostname, e.g. "203.0.113.10"
+	"Ports":      10, // "80" / "80, 443"
+	"ExternalIP": 14, // external address or "<none>"
+	"Local":      16, // "localhost:65535"
+	"Uptime":     8,  // "12h34m" + the arrow allowance
+	"Traffic":    22, // "retry 3 · next in 8s" / "idle 12m"
+	"Chart":      20, // "postgresql 12.1.9" — 2 cells narrower than it used to be, given back to STATUS once LATEST joined the row
+	"Latest":     8,  // "12.2.1 ?" — the newest version the local repo cache offers, "?" when two repos disagree
+	"App Ver":    10, // "15.4.0"
+	"Rev":        5,  // revision number, right-aligned ("REV" + the arrow allowance)
+	"Updated":    10, // "3d ago" / "12m ago"
 	// §33a Argo CD Application columns. SYNC leaves the full "OutOfSync"
 	// visible instead of truncating the status that explains the warning.
 	"Sync": 11,

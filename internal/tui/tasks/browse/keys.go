@@ -462,6 +462,12 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, []tui.KeyHint{deleteHint})
 	}
+	if m.kind == kube.KindService {
+		groups = append(groups,
+			[]tui.KeyHint{verbs.CopyServiceClusterIP.Hint()},
+			[]tui.KeyHint{verbs.CopyServiceExternalIP.Hint()},
+		)
+	}
 	if m.grouped() {
 		// JumpNamespace/ToggleGroup are only meaningful once already in ALL
 		// NS mode, so — unlike Namespace/Context/AllNamespaces themselves —

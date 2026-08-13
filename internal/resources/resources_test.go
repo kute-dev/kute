@@ -45,7 +45,7 @@ func sampleObjects() map[kube.ResourceKind]runtime.Object {
 		kube.KindReplicaSet:            &appsv1.ReplicaSet{ObjectMeta: meta, Spec: appsv1.ReplicaSetSpec{Replicas: ptr32(1)}, Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, Replicas: 1}},
 		kube.KindJob:                   &batchv1.Job{ObjectMeta: meta, Spec: batchv1.JobSpec{Completions: ptr32(1)}, Status: batchv1.JobStatus{Succeeded: 1}},
 		kube.KindCronJob:               &batchv1.CronJob{ObjectMeta: meta, Spec: batchv1.CronJobSpec{Schedule: "*/5 * * * *"}},
-		kube.KindService:               &corev1.Service{ObjectMeta: meta, Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP, ClusterIP: "10.0.0.1", Ports: []corev1.ServicePort{{Port: 80}}}},
+		kube.KindService:               &corev1.Service{ObjectMeta: meta, Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP, ClusterIP: "10.0.0.1", ExternalIPs: []string{"203.0.113.10"}, Ports: []corev1.ServicePort{{Port: 80}}}},
 		kube.KindIngress:               &networkingv1.Ingress{ObjectMeta: meta, Spec: networkingv1.IngressSpec{Rules: []networkingv1.IngressRule{{Host: "sample.local"}}}},
 		kube.KindConfigMap:             &corev1.ConfigMap{ObjectMeta: meta, Data: map[string]string{"a": "b"}},
 		kube.KindSecret:                &corev1.Secret{ObjectMeta: meta, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"a": []byte("b")}},

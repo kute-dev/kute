@@ -30,7 +30,7 @@ func TestKeybarNoDuplicateKeysPerKind(t *testing.T) {
 	openHelmValues := func(kube.HelmRelease, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 	openHelmHistory := func(string, string, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 
-	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
+	svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}, Spec: corev1.ServiceSpec{ClusterIP: "10.0.0.1", ExternalIPs: []string{"203.0.113.10"}, Ports: []corev1.ServicePort{{Port: 80}}}}
 
 	tests := []struct {
 		kind   kube.ResourceKind

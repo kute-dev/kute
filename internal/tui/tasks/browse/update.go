@@ -705,6 +705,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
+	case "alt+c":
+		if m.kind == kube.KindService {
+			return m, m.copySelectedServiceAddress(2)
+		}
+	case "alt+e":
+		if m.kind == kube.KindService {
+			return m, m.copySelectedServiceAddress(3)
+		}
 	case "t":
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd

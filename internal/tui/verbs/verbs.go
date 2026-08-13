@@ -507,6 +507,14 @@ var (
 		ID: "copy-forward-url", Key: "y", Label: "copy url",
 		Kinds: []kube.ResourceKind{kube.KindForward},
 	}
+	CopyServiceClusterIP = Verb{
+		ID: "copy-service-cluster-ip", Key: "alt+c", Label: "copy cluster ip",
+		Kinds: []kube.ResourceKind{kube.KindService},
+	}
+	CopyServiceExternalIP = Verb{
+		ID: "copy-service-external-ip", Key: "alt+e", Label: "copy external ip",
+		Kinds: []kube.ResourceKind{kube.KindService},
+	}
 )
 
 // Routing-table verbs (23a/23b, docs/design README.md), used only inside
@@ -551,7 +559,7 @@ var All = []Verb{
 	Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
-	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL,
+	Forward, StopForward, RestartForward, StopAllForwards, CopyForwardURL, CopyServiceClusterIP, CopyServiceExternalIP,
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 }
 

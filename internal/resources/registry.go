@@ -73,7 +73,7 @@ func DefaultRegistry() Registry {
 		// directly with real Job/Pod data; no future caller should expect
 		// this Project field alone to produce a Job-aware row.
 		{Kind: kube.KindCronJob, Group: GroupWorkloads, Display: "CronJobs", Icon: "◷", Columns: []string{"Name", "Schedule", "Susp", "Act", "Last Run", "Next"}, Describe: "jobs run on a schedule", Project: projectCronJobFallback, Health: cronJobHealth, HealthLabel: cronJobHealthLabel},
-		{Kind: kube.KindService, Group: GroupNetworking, Display: "Services", Icon: "◇", Columns: []string{"Name", "Type", "ClusterIP", "Ports", "Age"}, Describe: "stable network endpoints", Project: projectService},
+		{Kind: kube.KindService, Group: GroupNetworking, Display: "Services", Icon: "◇", Columns: []string{"Name", "Type", "ClusterIP", "ExternalIP", "Ports", "Age"}, Describe: "stable network endpoints", Project: projectService},
 		{Kind: kube.KindIngress, Group: GroupNetworking, Display: "Ingresses", Icon: "◇", Columns: []string{"Name", "Class", "Hosts", "TLS", "Backends", "Age"}, Describe: "external HTTP(S) routing rules", Project: projectIngress(nil)},
 		{Kind: kube.KindConfigMap, Group: GroupConfig, Display: "ConfigMaps", Icon: "⚙", Columns: []string{"Name", "Data", "Age"}, Describe: "non-secret configuration data", Project: projectConfigMap},
 		{Kind: kube.KindSecret, Group: GroupConfig, Display: "Secrets", Icon: "⚙", Columns: []string{"Name", "Type", "Data", "Age"}, Describe: "sensitive configuration data", Project: projectSecret},
