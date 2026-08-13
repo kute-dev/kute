@@ -1476,10 +1476,18 @@ body.editorial-page {
   font-style: italic;
   font-weight: 400;
 }
-.home-page .hero .sub {
+.home-page .hero .sub-lead {
   max-width: 58ch;
   margin-top: 24px;
   font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+.home-page .hero .sub {
+  max-width: 58ch;
+  margin-top: 10px;
+  font-size: 16px;
+  color: var(--text-secondary);
 }
 .os-install-options[hidden] { display: none !important; }
 .home-page .hero-install-options {
