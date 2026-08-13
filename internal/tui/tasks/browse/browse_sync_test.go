@@ -204,6 +204,21 @@ func TestStalledCacheRendersTheErrorNotAnEmptyCluster(t *testing.T) {
 	if cmd != nil {
 		t.Error("no retry should be scheduled here; the informer retries underneath and its change event reloads this list")
 	}
+	view := plain(m.View().Content)
+	for _, want := range []string{
+		"Couldn't load helm releases",
+		"stream error when reading response",
+		"response body",
+		"keep retrying automatically",
+		"retry now",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("rendered error card missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "no helm releases") {
+		t.Errorf("stalled cache rendered the empty-state claim:\n%s", view)
+	}
 }
 
 // TestStalledUnrelatedKindStillRendersEmpty: the stall belongs to the kind

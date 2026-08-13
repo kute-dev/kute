@@ -304,6 +304,14 @@ func (m Model) Keybar() tui.Keybar {
 			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
 		}
 	}
+	if m.state == tui.TaskStateError {
+		return tui.Keybar{
+			Pill:       pill,
+			PillText:   pillText,
+			Groups:     [][]tui.KeyHint{{verbs.Retry.Hint(), verbs.Goto.Hint(), verbs.Context.Hint(), {Key: "y", Label: "copy error"}}},
+			RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
+		}
+	}
 
 	if m.state == tui.TaskStateEmpty {
 		return tui.Keybar{

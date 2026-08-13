@@ -675,8 +675,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case m.offline() && m.retrier != nil:
 			m.retrier.RetryNow()
 		case m.state == tui.TaskStatePermissionDenied || m.state == tui.TaskStateError:
-			// No auto-retry on 4xx (docs/design README.md §4b) — this is the
-			// only retry path for a permission/load error, manual only.
+			// Permission errors need a manual retry because RBAC will not change
+			// during this session; a load error is already being retried by the
+			// informer, but this gives the user an immediate retry path.
 			return m, m.resetAndLoad()
 		}
 	case "w":
@@ -686,7 +687,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "y":
-		if m.state == tui.TaskStatePermissionDenied {
+		if m.state == tui.TaskStatePermissionDenied || m.state == tui.TaskStateError {
 			return m, tea.SetClipboard(m.feedback)
 		}
 		if m.kind == kube.KindForward {

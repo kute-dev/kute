@@ -685,6 +685,8 @@ func (m Model) Body(width, height int) string {
 		return m.tableBody(width, height)
 	case tui.TaskStatePermissionDenied:
 		return m.permissionDeniedBody(width, height)
+	case tui.TaskStateError:
+		return m.loadErrorBody(width, height)
 	case tui.TaskStateLoading:
 		if m.cachedView && len(m.rows) > 0 {
 			// 15a: "revisiting a kind seen this session: cached rows dimmed
@@ -696,6 +698,54 @@ func (m Model) Body(width, height int) string {
 	default:
 		return components.CenterLines([]string{m.feedback}, width, height)
 	}
+}
+
+// loadErrorBody is the retryable counterpart to permissionDeniedBody. The
+// informer continues retrying the initial LIST underneath this screen, so the
+// card explains the failure without presenting it as a permanent outage.
+func (m Model) loadErrorBody(width, height int) string {
+	theme := m.Theme()
+	onCard := func(fg color.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(fg).Background(theme.ErrCardBg)
+	}
+	title := onCard(theme.Bad).Bold(true)
+	meta := onCard(theme.TextFaint)
+	body := onCard(theme.TextSecondary)
+	key := onCard(theme.Accent)
+	label := onCard(theme.TextSecondary)
+	note := onCard(theme.TextFaint)
+	footerNote := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	errBody := body.Width(max(20, min(66, width-14)))
+
+	kind := lowerDisplay(m.desc.Display)
+	errText := m.feedback
+	if errText == "" {
+		errText = "the initial list request failed"
+	} else {
+		errText = strings.TrimPrefix(errText, "couldn't load "+kind+": ")
+		errText = strings.TrimSuffix(errText, " — retrying")
+	}
+	lines := []string{
+		title.Render("Couldn't load "+kind) + meta.Render("  list"),
+		errBody.Render(errText),
+		"",
+		note.Render("The connection will keep retrying automatically."),
+		"",
+		key.Render("r") + label.Render(" retry now"),
+		key.Render("g") + label.Render(" jump to another kind"),
+		key.Render("c") + label.Render(" switch context"),
+		key.Render("y") + label.Render(" copy error"),
+	}
+
+	cardStyle := lipgloss.NewStyle().
+		Foreground(theme.TextSecondary).
+		Background(theme.ErrCardBg).
+		BorderForeground(theme.ErrCardBorder).
+		Padding(1, 2).
+		Width(min(72, max(width-8, 20)))
+	card := components.Card(strings.Join(lines, "\n"), cardStyle, width, height-2)
+	footer := footerNote.Render("last successful list: never · retrying in the background")
+	return card + "\n" + components.Pad(strings.Repeat(" ", max((width-lipgloss.Width(footer))/2, 0))+footer, width)
 }
 
 // quotedEntity matches a "..."-quoted span in an RBAC message ("dev-readonly",
