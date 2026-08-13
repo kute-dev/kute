@@ -369,7 +369,6 @@ p { margin: 0; }
   overflow: hidden;
 }
 .hero-inner { position: relative; z-index: 1; text-align: center; display: flex; flex-direction: column; align-items: center; }
-.hero-inner .eyebrow { margin-bottom: 22px; }
 
 .hero h1 {
   font-size: clamp(38px, 6vw, 68px);
@@ -1479,7 +1478,7 @@ body.editorial-page {
 .home-page .hero .sub-lead {
   max-width: 58ch;
   margin-top: 24px;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text);
 }
@@ -1634,7 +1633,8 @@ body.editorial-page {
   .editorial-page .wrap { padding-inline: 24px; }
   .home-page .hero { padding: 124px 0 20px; }
   .home-page .hero h1 { font-size: clamp(42px, 13vw, 58px); }
-  .home-page .hero .sub { font-size: 17px; }
+  .home-page .hero .sub-lead { font-size: 18px; }
+  .home-page .hero .sub { font-size: 15px; }
   .home-page .hero-shot { margin-top: 38px; }
   .home-page .explore { padding-top: 76px; }
   .home-page .section-head { margin-bottom: 30px; }
