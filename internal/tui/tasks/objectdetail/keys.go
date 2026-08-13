@@ -28,7 +28,7 @@ func (m Model) Keybar() tui.Keybar {
 					RightNote: note,
 				}
 			}
-			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}
+			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
 			if pending := m.actions.Pending(); pending != nil && pending.Scope.Verb == "delete" && pending.Scope.ResourceKind == string(kube.KindPod) {
 				// force-delete is only ever offered for Pods (verbs.ForceDelete's Kinds).
 				hints = append(hints, verbs.ForceDelete.Hint())

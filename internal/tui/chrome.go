@@ -85,7 +85,7 @@ func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnB
 }
 
 // HeaderState is the data a Chrome v2 screen exposes for the shared header
-// band: "kute │ ctx › ns › Kind (+ "(g to jump)" hint)" on the left,
+// band: "kute │ ctx › ns › Kind + navigation hints" on the left,
 // SyncNote + Conn on the right.
 type HeaderState struct {
 	Crumbs   []Crumb

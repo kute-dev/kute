@@ -373,7 +373,7 @@ var (
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	Drain = Verb{
-		ID: "drain", Key: "X", Label: "drain",
+		ID: "drain", Key: "ctrl-d", Label: "drain",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	// Rollback is 18a's 'R' on a Helm release — "inherits 8b friction":
@@ -412,7 +412,7 @@ var (
 	// escalates TierInline→TierModal, not TierNone→TierInline (mirrors
 	// TierForEdit's own doc comment on this same constraint).
 	SetImage = Verb{
-		ID: "set-image", Key: "I", Label: "set image",
+		ID: "set-image", Key: "i", Label: "set image",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
 	}
 	// SetResources is 'r' on a Deployment/StatefulSet/DaemonSet row. Deployment

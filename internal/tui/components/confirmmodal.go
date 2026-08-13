@@ -47,7 +47,7 @@ func ConfirmBox(title, detail string, styles ConfirmStyles) string {
 	if detail != "" {
 		lines = append(lines, styles.Detail.Render(detail))
 	}
-	keyLine := styles.Key.Render("y") + styles.Label.Render(" confirm") + "   " + styles.Key.Render("n") + styles.Label.Render(" cancel")
+	keyLine := styles.Key.Render("y") + styles.Label.Render(" confirm") + "   " + styles.Key.Render("esc") + styles.Label.Render(" cancel")
 	lines = append(lines, styles.Rule.Render(strings.Repeat("─", maxLineWidth(lines, keyLine))), keyLine)
 	content := strings.Join(lines, "\n")
 	return styles.Border.Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(content)

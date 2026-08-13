@@ -494,7 +494,7 @@ func TestMultilineBufferEditorEditsAndAppliesWithCtrlO(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "e"})
 	// Cursor starts at the end of the last line ("b") — append 'c'.
 	m = step(t, m, tea.KeyPressMsg{Text: "c"})
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+o"})
+	m = step(t, m, tea.KeyPressMsg{Text: "alt+a"})
 
 	if m.multiline != nil {
 		t.Fatal("expected the buffer editor to close after a successful apply")

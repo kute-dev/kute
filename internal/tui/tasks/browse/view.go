@@ -90,7 +90,7 @@ func (m Model) Header() tui.HeaderState {
 		// namespace segment is already dropped above.
 		crumbs = append(crumbs, tui.Crumb{Text: "  cluster-scoped", Style: faint})
 	}
-	crumbs = append(crumbs, tui.Crumb{Text: " (g to jump)", Style: faint})
+	crumbs = append(crumbs, tui.Crumb{Text: "  g goto  n namespace  c context", Style: faint})
 
 	if m.state == tui.TaskStateLoading {
 		// 15a: the header's right side is a counting timer instead of the

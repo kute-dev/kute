@@ -93,7 +93,7 @@ func TestIOpensSetImagePrefilledToCurrentTag(t *testing.T) {
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	if m.pendingSetImage == nil {
 		t.Fatal("expected pendingSetImage set after 'i'")
 	}
@@ -113,7 +113,7 @@ func TestTabCyclesContainersAndRecomputesHistory(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
 	t2 := m.pendingSetImage
@@ -136,7 +136,7 @@ func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
 		kube.KindDeployment: {dep},
 		kube.KindReplicaSet: {rsCur, rsOld},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
 	if len(m.pendingSetImage.history) != 2 {
 		t.Fatalf("history = %+v, want 2 entries (current + rollback target)", m.pendingSetImage.history)
@@ -155,15 +155,15 @@ func TestCtrlUTogglesFullRefEditing(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	t2 := m.pendingSetImage
 	if !t2.fullRef || t2.input.Value() != "registry.nva.dev/nva-worker:3.4.1" {
 		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.nva.dev/nva-worker:3.4.1", t2.fullRef, t2.input.Value())
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	t2 = m.pendingSetImage
 	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.nva.dev/nva-worker" {
 		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.nva.dev/nva-worker", t2.fullRef, t2.input.Value(), t2.repo)
@@ -180,7 +180,7 @@ func TestLeftRightMoveCursorForMidBufferEditing(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	if m.pendingSetImage.input.Position() != len("3.4.1") {
 		t.Fatalf("cursor = %d, want prefilled cursor at the end (%d)", m.pendingSetImage.input.Position(), len("3.4.1"))
 	}
@@ -217,7 +217,7 @@ func TestEnterOnUnchangedTagIsNoOp(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 	if m.pendingSetImage == nil {
@@ -233,7 +233,7 @@ func TestEnterCommitsSetImageThroughMutatorNonProd(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
@@ -265,7 +265,7 @@ func TestEnterInProdShowsInlineConfirmBeforeApplying(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, true)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
@@ -309,7 +309,7 @@ func TestFailedNonProdApplyKeepsPanelOpenWithError(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 
@@ -336,7 +336,7 @@ func TestCancellingProdConfirmRevertsBufferAndKeepsPanelOpen(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, true)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "2"})
 	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 	m = step(t, m, tea.KeyPressMsg{Text: "n"})
@@ -360,7 +360,7 @@ func TestEscCancelsSetImagePanel(t *testing.T) {
 	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
 
 	if m.pendingSetImage != nil {
@@ -387,7 +387,7 @@ func TestIAppliesToStatefulSetsAndDaemonSets(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	if m.pendingSetImage == nil || m.pendingSetImage.input.Value() != "15" {
 		t.Fatalf("expected StatefulSet's 'i' to open prefilled to tag 15, got %+v", m.pendingSetImage)
 	}
@@ -430,7 +430,7 @@ func TestStatefulSetHistoryReadsControllerRevisions(t *testing.T) {
 	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
 	h := m.pendingSetImage.history
 	if len(h) != 2 {
@@ -454,7 +454,7 @@ func TestINoOpsWithoutMutator(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "I"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 	if m.pendingSetImage != nil {
 		t.Fatal("expected 'i' to no-op without a mutator wired")
 	}

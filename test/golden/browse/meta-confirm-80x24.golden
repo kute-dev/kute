@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › nva-stage › Deployments (g to jump)  ● connected  
+  ❯ kute │ microk8s-cluster › nva-stage › Deployments  g goto  n namespace  c...
 ────────────────────────────────────────────────────────────────────────────────
   ✕ 1 degraded                                                   1 deployments  
 ────────────────────────────────────────────────────────────────────────────────
@@ -21,4 +21,4 @@
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
 ────────────────────────────────────────────────────────────────────────────────
-   CONFIRM  y confirm  n cancel            detaches 4 pods from svc/nva-worker  
+   CONFIRM  y confirm  esc cancel          detaches 4 pods from svc/nva-worker  

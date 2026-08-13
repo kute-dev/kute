@@ -187,6 +187,11 @@ func TestKeyboardReferenceCoversVerbs(t *testing.T) {
 
 	// Anything deliberately left out belongs here with its reason.
 	omitted := map[string]string{
+		// These service-address copy actions are intentionally available only
+		// in the Services list keybar and are not part of the public guide's
+		// general keyboard reference.
+		"copy-service-cluster-ip":  "service-list-only action",
+		"copy-service-external-ip": "service-list-only action",
 		// 0.8.0 plan Phase 3 registers these ahead of the screen that uses
 		// them (tasks/cronjobschedule, Phase 6) so the registry, not the
 		// screen, is the single source of truth for their key/label from the

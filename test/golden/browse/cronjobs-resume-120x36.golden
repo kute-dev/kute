@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › CronJobs (g to jump)                                               ● connected  
+  ❯ kute │ microk8s-cluster › default › CronJobs  g goto  n namespace  c context                           ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ○ 1 no history   ⏸ 1 suspended                                                       1 cronjobs · clock 12:12:00 UTC  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

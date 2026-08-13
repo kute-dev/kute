@@ -271,17 +271,16 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // updateMultilineKey routes keys while the buffer editor (multiline) is
 // showing — the "simpler solution" this package substitutes for 17a's own
 // shared buffer editor. Arrow keys move the cursor across lines/columns,
-// enter inserts a newline (this screen's own commit key is ctrl+o/ctrl+r,
+// enter inserts a newline (this screen's own commit key is alt+a/ctrl+r,
 // not enter, since enter has to stay available for the buffer's own
-// content — ctrl+o rather than the more conventional-looking ctrl+s since
-// ctrl+s is the terminal's own XOFF flow-control key in some environments),
+// content — alt+a avoids terminal flow-control keys,
 // backspace at column 0 joins with the previous line.
 func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	e := m.multiline
 	switch msg.String() {
 	case "esc":
 		m.multiline = nil
-	case "ctrl+o":
+	case "alt+a":
 		return m, m.commitMultiline(false)
 	case "R":
 		return m, m.commitMultiline(true)

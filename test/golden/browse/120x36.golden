@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › Pods (g to jump)                                   sync 2s  ● connected · 12ms  
+  ❯ kute │ microk8s-cluster › default › Pods  g goto  n namespace  c context               sync 2s  ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 1 running   ▲ 1 pending   ✕ 1 crashloop   ○ 1 completed                                           4 pods · 3 nodes  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

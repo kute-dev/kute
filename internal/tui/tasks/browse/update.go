@@ -529,8 +529,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveHalfPage(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
@@ -589,7 +587,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "-":
 		m.beginScale(-1)
 	case "i":
-		// Keep lowercase i available as ordinary unsupported input; Set Image is I.
+		m.beginSetImage()
 	case "V":
 		if resourceEditable(m.kind) && m.mutator != nil {
 			m.beginSetResources()
@@ -643,8 +641,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.beginRollback(row)
 			}
 		}
-	case "I":
-		m.beginSetImage()
 	case "r":
 		switch {
 		case resourceEditable(m.kind) && m.state == tui.TaskStateReady && m.mutator != nil:
@@ -747,14 +743,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case "X":
-		if m.kind == kube.KindForward && m.state == tui.TaskStateReady {
-			m.beginStopAllForwards()
-		}
+	case "ctrl+d":
 		if m.kind == kube.KindNode {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginDrain(row)
 			}
+		}
+	case "X":
+		if m.kind == kube.KindForward && m.state == tui.TaskStateReady {
+			m.beginStopAllForwards()
 		}
 	case "s":
 		if m.fluxVerbsApply() {

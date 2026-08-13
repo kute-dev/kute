@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › argocd › Applications argoproj.io/v1alpha1 (g to jump)                       ● connected  
+  ❯ kute │ microk8s-cluster › argocd › Applications argoproj.io/v1alpha1  g goto  n namespace  c context   ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 1 healthy   ▲ 1 out of sync   ✕ 1 degraded   ◌ 1 progressing                                        4 applications  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

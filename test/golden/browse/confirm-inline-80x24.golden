@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › nva-stage › Pods (g to jump)         ● connected  
+  ❯ kute │ microk8s-cluster › nva-stage › Pods  g goto  n namespace  c context  
 ────────────────────────────────────────────────────────────────────────────────
   ● 1 running                                                           1 pods  
 ────────────────────────────────────────────────────────────────────────────────
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   CONFIRM  y confirm  n cancel  C force delete                                 
+   CONFIRM  y confirm  esc cancel  C force delete                               

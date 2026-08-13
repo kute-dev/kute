@@ -372,7 +372,7 @@ func (c Controller) Prompt() string {
 	} else {
 		target += " " + s.ResourceName
 	}
-	return fmt.Sprintf("%s %s? (y) confirm  (n) cancel", capitalize(s.Verb), target)
+	return fmt.Sprintf("%s %s? (y) confirm  (esc) cancel", capitalize(s.Verb), target)
 }
 
 func (c *Controller) execute() tea.Cmd {

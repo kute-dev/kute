@@ -19,7 +19,7 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{
 			Pill:      tui.ModeConfirm,
 			PillText:  "CONFIRM",
-			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}},
+			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}},
 			RightNote: m.editConfirmPrompt(),
 		}
 	}
@@ -27,7 +27,7 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{
 			Pill:      tui.ModeConfirm,
 			PillText:  "CONFIRM",
-			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}},
+			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}},
 			RightNote: m.stopAllForwardsPrompt(),
 		}
 	}
@@ -129,7 +129,7 @@ func (m Model) Keybar() tui.Keybar {
 			return tui.Keybar{
 				Pill:      tui.ModeConfirm,
 				PillText:  "CONFIRM",
-				Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}},
+				Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}},
 				RightNote: m.bulkDeleteWillRunLine(),
 			}
 		}
@@ -156,7 +156,7 @@ func (m Model) Keybar() tui.Keybar {
 				}
 			}
 			note := m.actions.Prompt()
-			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}
+			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
 			if pending := m.actions.Pending(); pending != nil {
 				switch pending.Scope.Verb {
 				case "rollback":
@@ -396,7 +396,7 @@ func (m Model) Keybar() tui.Keybar {
 	if m.kind == kube.KindDeployment {
 		deployGroup := []tui.KeyHint{openPodsHint}
 		if m.mutator != nil {
-			deployGroup = append(deployGroup, verbs.RolloutRestart.Hint(), verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
+			deployGroup = append(deployGroup, verbs.Scale.Hint(), verbs.SetImage.Hint(), verbs.SetResources.Hint())
 		}
 		if m.openForward != nil {
 			deployGroup = append(deployGroup, verbs.Forward.Hint())
@@ -467,6 +467,9 @@ func (m Model) Keybar() tui.Keybar {
 			// 20a: "ctrl-d delete 3 · y/N" — the set-applicable verb's
 			// keybar label names the marked count instead of the cursor row.
 			deleteHint.Label = fmt.Sprintf("delete %d", n)
+		}
+		if m.kind == kube.KindDeployment {
+			groups = append(groups, []tui.KeyHint{verbs.RolloutRestart.Hint()})
 		}
 		groups = append(groups, []tui.KeyHint{deleteHint})
 	}

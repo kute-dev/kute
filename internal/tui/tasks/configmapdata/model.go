@@ -116,7 +116,7 @@ func (e editKeyState) changed() bool { return e.valueInput.Value() != e.original
 // textarea.Model scoped to one key's value, opened by 'e' (or '↵') on a row
 // whose value contains a newline — its own soft-wrap/scrolling/line-number
 // gutter replace what used to be this package's hand-rolled lines/row/col +
-// scrollWindow. ctrl+o applies (moved off ctrl+s, which is the terminal's
+// scrollWindow. alt+a applies (moved off ctrl+s, which is the terminal's
 // own XOFF flow-control key in some environments and can read as a frozen
 // app), R applies and restarts every consumer, esc cancels back to
 // navigation without applying.

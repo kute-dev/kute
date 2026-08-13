@@ -494,7 +494,7 @@ func TestDKeyShowsDrainConfirmAndYExecutes(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "X"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
 	if !m.actions.Active() {
 		t.Fatal("expected D to open a drain confirmation")
 	}
@@ -520,7 +520,7 @@ func TestDKeyThenNCancelsWithoutDraining(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "X"})
+	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
 	m = step(t, m, tea.KeyPressMsg{Text: "n"})
 	if m.actions.Active() {
 		t.Fatal("expected n to cancel the drain confirmation")

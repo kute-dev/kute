@@ -181,8 +181,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveHalfPage(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
 	case "/":
@@ -236,7 +234,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.nodeShellCmd()
 	case "C":
 		return m, m.beginCordon()
-	case "X":
+	case "ctrl+d":
 		return m, m.beginDrain()
 	case "E":
 		// kubectl edit applies whatever the user saves, so it's gated with

@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › CustomResourceDefinitions  cluster-scoped (g to jump)                        ● connected  
+  ❯ kute │ microk8s-cluster › CustomResourceDefinitions  cluster-scoped  g goto  n namespace  c context    ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 2 established   ▲ 1 installing                                      3 definitions · 2 API groups · sorted by group  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

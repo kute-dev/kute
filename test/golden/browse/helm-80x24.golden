@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › nva-stage › Helm Releases (g to jump)             
+  ❯ kute │ microk8s-cluster › nva-stage › Helm Releases  g goto  n namespace ...
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated  cache 6d old  
 ────────────────────────────────────────────────────────────────────────────────

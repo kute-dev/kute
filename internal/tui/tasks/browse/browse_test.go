@@ -219,7 +219,7 @@ func TestLoadingStateRender(t *testing.T) {
 	view := plain(m.Render())
 
 	for _, want := range []string{
-		"Pods", "(g to jump)", // shell breadcrumb
+		"Pods", "g goto  n namespace  c context", // shell breadcrumb
 		"loading pods",                                                 // header timer
 		"listing pods in default…", "watch starts when the list lands", // strip
 		"NAME", "RDY", "STATUS", "NODE", "AGE", // real column headers

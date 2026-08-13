@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › Deployments (g to jump)                                            ● connected  
+  ❯ kute │ microk8s-cluster › default › Deployments  g goto  n namespace  c context                        ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 1 stable                                                                                             1 deployments  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

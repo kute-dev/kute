@@ -22,7 +22,7 @@ func (m Model) Keybar() tui.Keybar {
 		return tui.Keybar{
 			Pill:      tui.ModeConfirm,
 			PillText:  "CONFIRM",
-			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "n", Label: "cancel"}}},
+			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}},
 			RightNote: note,
 		}
 	}
@@ -60,7 +60,7 @@ func (m Model) Keybar() tui.Keybar {
 			Pill:     tui.ModeBrowse,
 			PillText: "BUFFER EDITOR",
 			Groups: [][]tui.KeyHint{{
-				{Key: "ctrl-o", Label: "apply"},
+				{Key: "alt+a", Label: "apply"},
 				verbs.RestartConfigMapConsumers.Hint(),
 				{Key: "esc", Label: "discard"},
 			}},
