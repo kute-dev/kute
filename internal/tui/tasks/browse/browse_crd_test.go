@@ -278,7 +278,7 @@ func TestCRDsListSortsByGroup(t *testing.T) {
 		{Name: "bbb-issuer", Cells: []string{"bbb-issuer", "bbb.io", "v1", "Namespaced", "0", "1h"}},
 		{Name: "zzz-widget", Cells: []string{"zzz-widget", "aaa.io", "v1", "Namespaced", "0", "1h"}},
 	}
-	sortForDisplay(kube.KindCustomResourceDefinition, "", rows, false, false, false)
+	sortForDisplay(kube.KindCustomResourceDefinition, "", rows, false, false, false, false)
 	want := []string{"zzz-widget", "aaa-cert", "bbb-issuer"}
 	for i, w := range want {
 		if rows[i].Name != w {

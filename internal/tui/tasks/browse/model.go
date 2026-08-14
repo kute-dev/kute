@@ -178,6 +178,21 @@ type CronJobSiblingRef struct {
 // openCronJobPods jump-to-Pods shortcut (0.8.0 plan §2's "Enter" row).
 type OpenCronJobDetailFunc func(namespace, name string, siblings []CronJobSiblingRef, index, width, height int) (tea.Model, tea.Cmd)
 
+// JobSiblingRef names one sibling Job row for OpenJobAttemptsFunc's `[`/`]`
+// movement — namespace-qualified, same reasoning as CronJobSiblingRef.
+type JobSiblingRef struct {
+	Namespace string
+	Name      string
+}
+
+// OpenJobAttemptsFunc pushes §37b/§37d (tasks/jobattempts) for the named
+// Job — siblings/index are the current visible list's ordered namespace-
+// qualified refs + the selected row's position, same "siblings + index"
+// shape as OpenCronJobDetailFunc. Replaces the pre-v0.9.0 openJobPods
+// jump-to-Pods shortcut (§37a: "↵ opens the attempt ledger, not a describe
+// page").
+type OpenJobAttemptsFunc func(namespace, name string, siblings []JobSiblingRef, index, width, height int) (tea.Model, tea.Cmd)
+
 // OpenCronJobScheduleFunc pushes tasks/cronjobschedule (36d) for the
 // selected CronJob's own schedule editor — replaces Phase 0-5's placeholder
 // beginCronJobSetSchedule inline panel (cronjobschedule.go, deleted by
@@ -237,6 +252,7 @@ type Config struct {
 	OpenCertChain       OpenCertChainFunc
 	OpenCronJobDetail   OpenCronJobDetailFunc
 	OpenCronJobSchedule OpenCronJobScheduleFunc
+	OpenJobAttempts     OpenJobAttemptsFunc
 	OpenHelmHistory     OpenHelmHistoryFunc
 	OpenHelmValues      OpenHelmValuesFunc
 	OpenSecretData      OpenSecretDataFunc
@@ -286,6 +302,7 @@ type Model struct {
 	openCertChain       OpenCertChainFunc
 	openCronJobDetail   OpenCronJobDetailFunc
 	openCronJobSchedule OpenCronJobScheduleFunc
+	openJobAttempts     OpenJobAttemptsFunc
 	openHelmHistory     OpenHelmHistoryFunc
 	openHelmValues      OpenHelmValuesFunc
 	openSecretData      OpenSecretDataFunc
@@ -346,6 +363,13 @@ type Model struct {
 	// shape as pendingCronJobRun, covering both a single selected row and a
 	// marked set (targets has one entry or many).
 	pendingCronJobResume *cronJobResumeTarget
+	// pendingJobRerun is non-nil while §37c's 'R' create-vs-replace
+	// choice is showing (job_actions.go) — a bespoke gate like
+	// pendingCronJobRun, since the choice list stages its own preview
+	// (generated rerun name, amber diagnostic) before either committing
+	// directly (create, TierNone) or handing off to the ordinary
+	// actions.Controller confirm (replace, tiered).
+	pendingJobRerun *jobRerunTarget
 	// lastCronJobRunName is the Job name commitCronJobRun just staged for
 	// creation — actions.ResultMsg carries no NewName of its own (Scope
 	// isn't part of the message), so update.go's "cronjob-run-now-" branch
@@ -384,6 +408,12 @@ type Model struct {
 	// and it drives the health strip's own inline note. Always nil for
 	// every other kind.
 	cronJobJobsErr error
+	// jobListSummaries backs §37a (Job kind only) — same cache-local
+	// aggregation shape as cronJobSummaries: absolute timestamps, held onto
+	// so the one-second UI clock tick can re-derive m.rows' relative
+	// DURATION/AGE cells without a lister call. Cleared by resetAndLoad; nil
+	// for every other kind.
+	jobListSummaries []resources.JobListSummary
 	// rowColumns is how many Descriptor columns m.rows were projected with —
 	// resources.Row's contract is that Cells align positionally with the
 	// descriptor's Columns, and a custom kind's descriptor can change shape
@@ -549,6 +579,9 @@ type rowsLoadedMsg struct {
 	// as m.cronJobSummaries/m.cronJobJobsErr.
 	cronJobSummaries []resources.CronJobSummary
 	cronJobJobsErr   error
+	// jobListSummaries rides along for KindJob only — loadJobRows' own
+	// aggregation output, applyRowsLoaded stores it as m.jobListSummaries.
+	jobListSummaries []resources.JobListSummary
 	err              error
 }
 
@@ -601,6 +634,22 @@ func (m *Model) applyCronJobTick(now time.Time) {
 			markCronJobHistoryUnavailable(&row)
 		}
 		m.rows[i] = row
+	}
+	m.applySort()
+	m.recomputeVisible()
+}
+
+// applyJobTick is applyCronJobTick's own sibling for §37a: DURATION runs
+// live for an active Job (mockup: "DURATION runs live for active jobs"),
+// which needs the same per-second rebuild-from-stored-summary — no lister
+// call, ever. currentUser threads through the same way loadJobRows'
+// ProjectJobList call does.
+func (m *Model) applyJobTick(now time.Time, currentUser string) {
+	if len(m.jobListSummaries) != len(m.rows) {
+		return
+	}
+	for i, s := range m.jobListSummaries {
+		m.rows[i] = resources.ProjectJobList(s, now, currentUser)
 	}
 	m.applySort()
 	m.recomputeVisible()
@@ -712,6 +761,7 @@ func New(cfg Config) Model {
 		openCertChain:       cfg.OpenCertChain,
 		openCronJobDetail:   cfg.OpenCronJobDetail,
 		openCronJobSchedule: cfg.OpenCronJobSchedule,
+		openJobAttempts:     cfg.OpenJobAttempts,
 		openHelmHistory:     cfg.OpenHelmHistory,
 		openHelmValues:      cfg.OpenHelmValues,
 		openSecretData:      cfg.OpenSecretData,
@@ -783,12 +833,14 @@ func (m Model) pollsMetrics() bool {
 	}
 }
 
-// ticksCronJobClock reports whether the current kind needs §36a's
-// one-second UI clock (Phase 4 task 5, §4.5): NEXT/LAST RUN and the health
-// strip's own UTC clock recompute from m.cronJobSummaries on every tick —
-// never a lister call, metrics poll, or discovery read.
+// ticksCronJobClock reports whether the current kind needs the one-second
+// UI clock cronJobTickMsg drives (Phase 4 task 5, §4.5): NEXT/LAST RUN for
+// CronJobs, DURATION for Jobs (§37a) — both recomputed from a stored
+// summary on every tick, never a lister call, metrics poll, or discovery
+// read. Name kept from its CronJob-only origin; the tick itself now serves
+// both kinds via applyJobTick.epoch dispatch (update.go).
 func (m Model) ticksCronJobClock() bool {
-	return m.kind == kube.KindCronJob
+	return m.kind == kube.KindCronJob || m.kind == kube.KindJob
 }
 
 // offline reports whether the 4a treatment applies: the last known
@@ -839,6 +891,7 @@ func (m Model) load() tea.Cmd {
 	kind := m.kind
 	timeout := m.timeout
 	podDesc, _ := m.session.Registry.Descriptor(kube.KindPod)
+	currentUser := m.currentUser
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -848,6 +901,13 @@ func (m Model) load() tea.Cmd {
 			// rows need the cache-local CronJob+Job+Pod join Phase 1 built
 			// (resources.BuildCronJobSummaries), never a per-row ListRaw(Job).
 			return loadCronJobRows(ctx, lister, ns, len(desc.Columns))
+		}
+		if kind == kube.KindJob {
+			// §37a bypasses resources.List/Descriptor.Project entirely
+			// (registry.go's own doc comment on the Job entry), same reasoning
+			// as CronJob above — SOURCE/FAILED/COMPL need the real aggregation,
+			// never the single-object fallback.
+			return loadJobRows(ctx, lister, ns, len(desc.Columns), currentUser)
 		}
 		rows, err := resources.List(ctx, lister, desc, ns)
 		if err != nil {
@@ -1123,6 +1183,8 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.cronJobJobsErr = nil
 	m.pendingCronJobRun = nil
 	m.pendingCronJobResume = nil
+	m.jobListSummaries = nil
+	m.pendingJobRerun = nil
 	// 20a: "marks are per-view and drop on kind/namespace switch."
 	m.marks = nil
 	m.pendingBulkDelete = nil
@@ -1289,6 +1351,45 @@ func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace 
 	return rowsLoadedMsg{
 		kind: kube.KindCronJob, columns: columns, rows: rows, pods: podsFromObjs(podObjs),
 		cronJobSummaries: summaries, cronJobJobsErr: jobsErr,
+	}
+}
+
+// loadJobRows is §37a's own load() branch: lists Jobs (required — a failure
+// fails the whole load, same as any other kind) and best-effort Pods, then
+// aggregates client-side via resources.BuildJobListSummaries +
+// resources.ProjectJobList — never a per-row Pod read. Unlike
+// loadCronJobRows, SOURCE resolution needs nothing beyond the Job object
+// itself (resources/jobs.go's own jobSource) — Pods are read purely for the
+// 'l' key's newest-attempt target (JobListSummary.NewestPodName), so a
+// failed Pod read degrades that one verb, never the list itself.
+func loadJobRows(ctx context.Context, lister resources.RawLister, namespace string, columns int, currentUser string) rowsLoadedMsg {
+	jobObjs, err := lister.ListRaw(ctx, kube.KindJob, namespace)
+	if err != nil {
+		return rowsLoadedMsg{kind: kube.KindJob, columns: columns, err: err}
+	}
+	podObjs, _ := lister.ListRaw(ctx, kube.KindPod, namespace)
+
+	summaries := resources.BuildJobListSummaries(jobObjs, podObjs, nil)
+	// Base stable order (namespace, then name) — applyRowsLoaded's own
+	// applySort call layers §37a's real default (unhealthy-first, then
+	// newest — sort.go's jobRanked/jobAgeTiebreak) on top of this, the same
+	// two-step loadCronJobRows above already uses.
+	sort.SliceStable(summaries, func(i, j int) bool {
+		a, b := summaries[i].Object, summaries[j].Object
+		if a.Namespace != b.Namespace {
+			return a.Namespace < b.Namespace
+		}
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) < 0
+	})
+
+	now := time.Now()
+	rows := make([]resources.Row, len(summaries))
+	for i, s := range summaries {
+		rows[i] = resources.ProjectJobList(s, now, currentUser)
+	}
+	return rowsLoadedMsg{
+		kind: kube.KindJob, columns: columns, rows: rows, pods: podsFromObjs(podObjs),
+		jobListSummaries: summaries,
 	}
 }
 

@@ -434,7 +434,10 @@ func (f *fakeHelmMutator) RequestArgoSync(_ context.Context, kind kube.ResourceK
 func (f *fakeHelmMutator) RenewCertificate(_ context.Context, namespace, name string) error {
 	return nil
 }
-func (f *fakeHelmMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
+func (f *fakeHelmMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error {
+	return nil
+}
+func (f *fakeHelmMutator) ReplaceJob(_ context.Context, namespace, name string) error {
 	return nil
 }
 func (f *fakeHelmMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {

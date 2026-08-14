@@ -57,6 +57,7 @@ type fakeMutator struct {
 	argoSyncs            []string // "namespace/name@revision" of every RequestArgoSync call
 	certRenews           []string // "namespace/name" of every RenewCertificate call
 	retriedJobs          []string // "namespace/name->newName" of every RetryJob call
+	replacedJobs         []string // "namespace/name" of every ReplaceJob call
 	jobSuspends          []string // "namespace/name=true|false" of every SetJobSuspend call
 	triggeredCronJobs    []string // "namespace/name->newJobName" of every TriggerCronJob call
 	cronJobSuspends      []string // "namespace/name=true|false" of every SetCronJobSuspend call
@@ -285,11 +286,19 @@ func (f *fakeMutator) RenewCertificate(_ context.Context, namespace, name string
 	return nil
 }
 
-func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error {
 	if f.err != nil {
 		return f.err
 	}
 	f.retriedJobs = append(f.retriedJobs, namespace+"/"+name+"->"+newName)
+	return nil
+}
+
+func (f *fakeMutator) ReplaceJob(_ context.Context, namespace, name string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.replacedJobs = append(f.replacedJobs, namespace+"/"+name)
 	return nil
 }
 

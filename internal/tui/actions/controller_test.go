@@ -151,7 +151,8 @@ func (f *fakeMutator) RenewCertificate(_ context.Context, namespace, name string
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
-func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName string) error { return nil }
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error { return nil }
+func (f *fakeMutator) ReplaceJob(_ context.Context, namespace, name string) error { return nil }
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil
 }
@@ -1065,19 +1066,22 @@ func TestHandleBulkResultAllFail(t *testing.T) {
 // --- 0.8.0 plan Phase 3: verb registry and action policy ------------------
 
 // TestRequiresTypedName pins the exported predicate's verb set (0.8.0 plan
-// §3 Phase 3 task 11): the delete family, rollout-restart, rollout-undo, and
-// now cronjob-suspend — but never cronjob-resume, which never reaches
-// TierModal at all (verbs.TierForCronJobSuspend), the same way job-suspend/
-// job-resume and drain/rollback stay off this list entirely.
+// §3 Phase 3 task 11, v0.9.0 §37a/§37c additions): the delete family,
+// rollout-restart, rollout-undo, cronjob-suspend, and now job-suspend/
+// job-replace — but never cronjob-resume/job-resume, neither of which ever
+// reaches TierModal at all (verbs.TierForCronJobSuspend/TierForJobSuspend),
+// nor job-retry (a clone, not a delete+recreate — verbs.JobRetry's own doc
+// comment), nor drain/rollback.
 func TestRequiresTypedName(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]bool{
 		"delete": true, "force-delete": true, "rollout-undo": true,
 		"rollout-restart": true, "cronjob-suspend": true,
+		"job-suspend": true, "job-replace": true,
 	}
 	dontWant := []string{
-		"cronjob-resume", "job-suspend", "job-resume", "drain", "rollback",
+		"cronjob-resume", "job-resume", "job-retry", "drain", "rollback",
 		"cordon", "flux-suspend", "cronjob-set-schedule", "set-image",
 	}
 	for verb := range want {

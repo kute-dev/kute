@@ -136,6 +136,18 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 			// dispatch, pendingBulkCronJobSuspend).
 			actionVerb = "suspend"
 			detail = cronJobSuspendWillRunLine(pending.Scope)
+		case pending.Scope.Verb == "job-suspend":
+			// v0.9.0 §37a: PROD escalation only (verbs.TierForJobSuspend never
+			// escalates job-resume) — the same asymmetric shape cronjob-suspend
+			// above has.
+			actionVerb = "suspend"
+			detail = jobSuspendWillRunLine(pending.Scope)
+		case pending.Scope.Verb == "job-replace":
+			// §37c's destructive rerun choice — reaches here every time it's
+			// chosen in PROD (never staged-TierNone the way job-retry's own
+			// "create" path is; see job_actions.go's own doc comment).
+			actionVerb = "replace"
+			detail = jobReplaceWillRunLine(pending.Scope)
 		case isDeleteVerb(pending.Scope.Verb):
 			if pending.Owner != "" {
 				ownerLine = pending.Owner + " — will be recreated"

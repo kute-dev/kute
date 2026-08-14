@@ -164,17 +164,37 @@ var (
 		ID: "rollout-restart", Key: "R", Label: "restart",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindDeployment}, Mutating: true,
 	}
-	// JobRetry clones a Job's spec into a brand-new Job — not a delete+
-	// recreate of the same object, so nothing about the source Job is
-	// destroyed, but it does start a fresh run of the Job's business logic
-	// (which can carry real side effects: emails, charges, writes). Same
-	// physical key as RolloutRestart above (never both applicable to one
-	// row — Kinds is disjoint) and the same TierInline reasoning: a bare
-	// unmodified key firing an unconfirmed run of arbitrary workload code
-	// would repeat the exact mistake RolloutRestart's own doc comment
-	// describes moving off of.
+	// JobRetry is §37c's "create" rerun choice: clones a Job's spec into a
+	// brand-new "<name>-rerun-N" Job — not a delete+recreate of the same
+	// object, so nothing about the source Job is destroyed, but it does
+	// start a fresh run of the Job's business logic (which can carry real
+	// side effects: emails, charges, writes). Same physical key as
+	// RolloutRestart/CronJobRunNow above (never both applicable to one row —
+	// Kinds is disjoint) and the same non-destructive argument JobRetry's
+	// clone semantics make for staying off ctrl- style escalation. Both
+	// browse's Jobs list (§37a) and the pushed jobattempts screen (§37b)
+	// reach this through the same staged create-vs-replace choice
+	// (jobRerunTarget) rather than firing it directly — the staging step is
+	// itself the confirmation for this branch, the same "stage first,
+	// TierNone commit" shape CronJobRunNow's own doc comment describes; Tier
+	// here is the nominal SetImage-style fallback.
 	JobRetry = Verb{
-		ID: "job-retry", Key: "R", Label: "retry",
+		ID: "job-retry", Key: "R", Label: "rerun",
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
+	}
+	// JobReplace is §37c's "replace" choice within the same staged 'R'
+	// list: delete the Job, then recreate it under the same name from its
+	// own spec. Unlike JobRetry's clone, this destroys the original — its
+	// Status, events, and §37b's own attempt history are gone — so choosing
+	// it in the staged list does not itself confirm anything; committing
+	// still routes through actions.Controller's ordinary TierInline/
+	// TierModal confirm (RequiresTypedName's own "job-replace" entry routes
+	// PROD to the type-the-name modal, not Drain/Rollback's plain
+	// ConfirmCard). No dedicated Key: it's reached only from within the
+	// staged choice list (↑↓ to select, enter to commit), never a bare
+	// list-screen keybinding of its own.
+	JobReplace = Verb{
+		ID: "job-replace", Label: "replace",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
 	}
 	// FluxReconcile is §30a's 'r' on a Flux row: a fresh
@@ -209,16 +229,21 @@ var (
 		ID: "flux-suspend", Key: "s", Label: "suspend",
 		Tier: actions.TierNone, Mutating: true,
 	}
-	// JobSuspend is a Job's own 's': one verb, two directions, same shape as
-	// FluxSuspend above — Scope.Verb is "job-suspend" or "job-resume"
-	// depending on the row's own Suspended state. Unlike FluxSuspend this is
-	// TierInline, not TierNone: setting spec.suspend:true on a Job tears
-	// down its currently-active pods immediately, a real visible side
-	// effect Flux's own suspend (which only pauses future reconciliation,
-	// touching nothing already applied) doesn't have. Resume shares the
-	// same Tier for the toggle's symmetry rather than an asymmetric-tier
-	// special case. Never contends with NodeShell's own 's' (Node-only) or
-	// FluxSuspend's (gated on Descriptor.Flux, never true for a Job row).
+	// JobSuspend is a Job's own 's': one verb, two directions — Scope.Verb is
+	// "job-suspend" or "job-resume" depending on the row's own Suspended
+	// state. v0.9.0 §37a makes the two directions asymmetric, the same way
+	// CronJobSuspend's already are (§36c): setting spec.suspend:true on a Job
+	// tears down its currently-active pods immediately, a real destructive
+	// side effect resume doesn't have (resume only lets the Job resume
+	// creating pods toward its existing completion target, restoring exactly
+	// the prior state) — TierForJobSuspend resolves the real per-direction/
+	// PROD tier (resume always TierNone, suspend TierInline outside PROD,
+	// TierModal — the type-the-name modal, RequiresTypedName's own
+	// "job-suspend" entry — inside one). This field's own TierInline is the
+	// nominal fallback (SetImage's own nominal-Tier shape), matching
+	// suspend's non-PROD default. Never contends with NodeShell's own 's'
+	// (Node-only) or FluxSuspend's (gated on Descriptor.Flux, never true for
+	// a Job row).
 	JobSuspend = Verb{
 		ID: "job-suspend", Key: "s", Label: "suspend",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindJob}, Mutating: true,
@@ -553,7 +578,7 @@ var All = []Verb{
 	FluxReconcile, FluxSuspend, FluxSource,
 	ArgoRefresh, ArgoSync, ArgoURL,
 	CertRenew,
-	Delete, ForceDelete, RolloutRestart, JobRetry, JobSuspend,
+	Delete, ForceDelete, RolloutRestart, JobRetry, JobReplace, JobSuspend,
 	CronJobRunNow, CronJobSuspend, CronJobSetSchedule,
 	CronJobCopyCommand, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
 	Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
@@ -636,6 +661,23 @@ func TierForSetImage(isProd bool) actions.Tier {
 // RequiresTypedName's own "cronjob-suspend" entry routes it to the
 // type-the-name modal rather than Drain/Rollback's plain ConfirmCard.
 func TierForCronJobSuspend(suspending, isProd bool) actions.Tier {
+	if !suspending {
+		return actions.TierNone
+	}
+	if isProd {
+		return actions.TierModal
+	}
+	return actions.TierInline
+}
+
+// TierForJobSuspend resolves JobSuspend's confirmation policy — v0.9.0
+// §37a made this asymmetric to match TierForCronJobSuspend exactly (see
+// JobSuspend's own doc comment): resume is TierNone, reversible-and-
+// immediate, restoring exactly the Job's prior state; suspend is the
+// dangerous half — TierInline outside PROD, escalating to TierModal in
+// PROD, where RequiresTypedName's own "job-suspend" entry routes it to the
+// type-the-name modal rather than a plain ConfirmCard.
+func TierForJobSuspend(suspending, isProd bool) actions.Tier {
 	if !suspending {
 		return actions.TierNone
 	}

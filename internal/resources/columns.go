@@ -18,6 +18,10 @@ var RightAlignTitles = map[string]bool{
 	// §36a: NEXT reads right-aligned like every other computed-eta column
 	// (mockup 36a's own "text-align: right").
 	"Next": true,
+	// §37a: only AGE is right-aligned in the mockup's own grid
+	// (`text-align: right` appears solely on the AGE cell) — COMPL/DURATION/
+	// FAILED/SOURCE all read left-aligned there, so none of them join this
+	// set despite COMPL/FAILED being numeric-shaped.
 }
 
 // Columns builds the components.Table column specs for d from its
@@ -109,7 +113,11 @@ var fixedWidths = map[string]int{
 	"Sync": 11,
 	// §30a Flux columns. READY holds the widest word it renders
 	// ("suspended"); REVISION holds "master@efd398b"; SOURCE holds
-	// "helm/prometheus-community", the longest seen on a real cluster.
+	// "helm/prometheus-community", the longest seen on a real cluster. §37a
+	// Job's own SOURCE column (below) shares this width and title — a rare
+	// "helm/<long-release> <hook>" combination past 26ch truncates with an
+	// ellipsis rather than widening a column two existing, pinned Flux
+	// goldens already depend on.
 	"Ready":      10,
 	"Revision":   16,
 	"Source":     26,
@@ -130,6 +138,12 @@ var fixedWidths = map[string]int{
 	"Act":      6,
 	"Last Run": 19,
 	"Next":     19,
+	// §37a Job columns. COMPL holds "N/M"; DURATION holds its widest
+	// realistic reading, "10m00s"; FAILED is a bare digit count. SOURCE
+	// reuses §30a Flux's own entry above.
+	"Compl":    7,
+	"Duration": 10,
+	"Failed":   8,
 }
 
 func minWidthFor(title string) int {

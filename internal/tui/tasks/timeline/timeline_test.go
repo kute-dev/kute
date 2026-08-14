@@ -629,7 +629,10 @@ func (f *fakeRolloutMutator) RequestArgoSync(_ context.Context, kind kube.Resour
 func (f *fakeRolloutMutator) RenewCertificate(_ context.Context, namespace, name string) error {
 	return nil
 }
-func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newName string) error {
+func (f *fakeRolloutMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error {
+	return nil
+}
+func (f *fakeRolloutMutator) ReplaceJob(_ context.Context, namespace, name string) error {
 	return nil
 }
 func (f *fakeRolloutMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {

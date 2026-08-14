@@ -139,7 +139,27 @@ type Mutator interface {
 	// job-name template labels), create. The original Job (its Status,
 	// events, history) is never touched — this isn't a delete+recreate, it's
 	// what `kubectl create job newName --from=job/name` does.
-	RetryJob(ctx context.Context, namespace, name, newName string) error
+	//
+	// §37c: the clone is always a standalone copy, even when name itself was
+	// cronjob-owned/associated — Kute's own AnnotationCronJobUID/
+	// AnnotationCronJobName are stripped from the clone (never carried over
+	// via the cloned annotation map) so it never counts toward that
+	// CronJob's history limits or garbage collection, and creator/at are
+	// stamped as AnnotationTriggeredBy/AnnotationTriggeredAt (the same
+	// attribution TriggerCronJob stamps on a manual run) so
+	// resources.BuildJobListSummaries' SOURCE resolution reads the rerun as
+	// "manual · <creator>", never silently re-inheriting "cronjob/x".
+	RetryJob(ctx context.Context, namespace, name, newName, creator string, at time.Time) error
+	// ReplaceJob is §37c's "replace" choice: delete name, then create a new
+	// Job of the same name from the deleted Job's own spec — unlike RetryJob,
+	// this destroys the original (its Status, events, and §37b's own
+	// attempt-ledger history are gone), which is why it is gated behind
+	// RequiresTypedName/a real Controller-driven confirm rather than
+	// RetryJob's staged-then-TierNone shape. There is no single kubectl
+	// one-liner this is equivalent to (the source is gone once deleted) —
+	// ReplaceCommandString documents the two-step recipe honestly instead of
+	// claiming one.
+	ReplaceJob(ctx context.Context, namespace, name string) error
 	// SetJobSuspend patches spec.suspend on a Job — same JSON body
 	// SetFluxSuspend uses, but through the typed clientset (KindJob has one;
 	// Flux's discovered CRDs don't), matching deleteResource/PatchMeta's
@@ -429,7 +449,7 @@ func CloneJobSpec(src *batchv1.JobSpec) *batchv1.JobSpec {
 // The clone is deliberately detached from any parent (no OwnerReferences),
 // so a manual retry of a CronJob-spawned Job becomes a standalone object
 // rather than something the CronJob's own history limit can silently GC.
-func (c *Cluster) RetryJob(ctx context.Context, namespace, name, newName string) error {
+func (c *Cluster) RetryJob(ctx context.Context, namespace, name, newName, creator string, at time.Time) error {
 	if name == "" || newName == "" {
 		return fmt.Errorf("cannot retry job: empty name")
 	}
@@ -446,8 +466,54 @@ func (c *Cluster) RetryJob(ctx context.Context, namespace, name, newName string)
 		},
 		Spec: *CloneJobSpec(&old.Spec),
 	}
+	if clone.Annotations == nil {
+		clone.Annotations = map[string]string{}
+	}
 	delete(clone.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	// A rerun is always standalone (§37c doc comment on the Mutator
+	// interface) — strip whatever CronJob association the source Job
+	// carried, real or Kute's own, so the clone never inherits history-limit
+	// GC or a stale "cronjob/x" SOURCE reading.
+	delete(clone.Annotations, AnnotationCronJobUID)
+	delete(clone.Annotations, AnnotationCronJobName)
+	clone.Annotations[AnnotationTriggeredBy] = creator
+	clone.Annotations[AnnotationTriggeredAt] = at.UTC().Format(time.RFC3339)
 	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, clone, metav1.CreateOptions{})
+	return err
+}
+
+// ReplaceJob implements the Mutator interface: get, delete, create-under-
+// the-same-name from the deleted Job's own spec. Like CloneJobSpec/RetryJob,
+// Suspend is forced false and the selector/generated template labels are
+// stripped so the API server assigns fresh ones — a replace should actually
+// run, not silently inherit a paused/selector-collision state. Unlike
+// RetryJob's clone, this keeps whatever OwnerReferences/CronJob-association
+// annotations the source carried (a replace is meant to stand in for the
+// exact same object, not detach it) — only Retry's clone is deliberately
+// always standalone.
+func (c *Cluster) ReplaceJob(ctx context.Context, namespace, name string) error {
+	if name == "" {
+		return fmt.Errorf("cannot replace job: empty name")
+	}
+	old, err := c.clientset.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	if err := c.clientset.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+	replacement := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            name,
+			Namespace:       namespace,
+			Labels:          maps.Clone(old.Labels),
+			Annotations:     maps.Clone(old.Annotations),
+			OwnerReferences: old.OwnerReferences,
+		},
+		Spec: *CloneJobSpec(&old.Spec),
+	}
+	delete(replacement.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
+	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, replacement, metav1.CreateOptions{})
 	return err
 }
 
@@ -740,6 +806,14 @@ func JobRetryCommandString(namespace, name, newName string) string {
 // rather than a Flux kind.
 func JobSuspendCommandString(namespace, name string, suspend bool) string {
 	return fmt.Sprintf(`kubectl patch job/%s --type merge -p '{"spec":{"suspend":%t}}' -n %s`, name, suspend, namespace)
+}
+
+// JobReplaceCommandString documents ReplaceJob's two-step recipe honestly
+// rather than inventing a single kubectl line — there is no such one-liner,
+// since the source is gone the moment the delete lands.
+func JobReplaceCommandString(namespace, name string) string {
+	return fmt.Sprintf("kubectl delete job/%s -n %s && kubectl create job %s --from=job/%s -n %s (kute's own recipe — no source remains for the second step by the time it runs)",
+		name, namespace, name, name, namespace)
 }
 
 // CronJobTriggerCommandString renders the kubectl equivalent of

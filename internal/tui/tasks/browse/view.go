@@ -1150,11 +1150,12 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 				// pods, cordoned nodes) uses.
 				cells[i].Style = st.customNeutral
 			}
-			if m.kind == kube.KindCronJob && r.Suspended {
-				// §36a: a suspended row's glyph dims to plain TextDim
+			if (m.kind == kube.KindCronJob || m.kind == kube.KindJob) && r.Suspended {
+				// §36a/§37a: a suspended row's glyph dims to plain TextDim
 				// rather than StatusNeutral's Info blue — "suspended" isn't
-				// a status class here, ProjectCronJob's own priority order
-				// (§4.3) puts it ahead of last-terminal-outcome entirely.
+				// a status class here, ProjectCronJob/ProjectJobList's own
+				// priority order puts it ahead of last-terminal-outcome
+				// entirely. §37a: "same treatment as suspended CronJobs".
 				cells[i].Style = st.dim
 			}
 		case m.kind == kube.KindPod && cols[i].Title == "CPU":
@@ -1180,10 +1181,10 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			if r.Status == resources.StatusFail {
 				base = st.nameBad
 			}
-			if m.kind == kube.KindCronJob && r.Suspended {
-				// §36a: "suspended rows dimmed with a struck-through NAME"
-				// (Phase 4 task 6) — row-style, not ANSI embedded into the
-				// name string itself.
+			if (m.kind == kube.KindCronJob || m.kind == kube.KindJob) && r.Suspended {
+				// §36a/§37a: "suspended rows dimmed with a struck-through
+				// NAME" — row-style, not ANSI embedded into the name string
+				// itself.
 				base = st.dim.Strikethrough(true)
 			}
 			text := highlightName(r.Name, matches, st.match, base)
@@ -1248,6 +1249,15 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 			cells[i].Style = st.dim
 			if r.RenewalClass == resources.StatusWarn || r.RenewalClass == resources.StatusFail {
 				cells[i].Style = st.status[r.RenewalClass]
+			}
+		case m.kind == kube.KindJob && cols[i].Title == "Duration":
+			// §37a: "turns red when it hits activeDeadlineSeconds" —
+			// resources.ProjectJobList's own DurationClass, independent of
+			// the row's own Status (a Job can still be Active/Warn while its
+			// DURATION cell alone has already crossed the deadline).
+			cells[i].Style = st.dim
+			if r.DurationClass == resources.StatusFail {
+				cells[i].Style = st.status[resources.StatusFail]
 			}
 		case m.kind == kube.KindCronJob && cols[i].Title == "Schedule":
 			cells[i].Style = st.dim

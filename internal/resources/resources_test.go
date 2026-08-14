@@ -287,7 +287,7 @@ func TestProjectJobSuspendedIsNeutral(t *testing.T) {
 		Spec:       batchv1.JobSpec{Completions: ptr32(3), Suspend: &suspend},
 		Status:     batchv1.JobStatus{Succeeded: 1}, // incomplete — would be StatusWarn if not suspended
 	}
-	row := projectJob(job)
+	row := projectJobFallback(job)
 	if !row.Suspended {
 		t.Fatalf("expected Row.Suspended = true, got false")
 	}
@@ -297,15 +297,22 @@ func TestProjectJobSuspendedIsNeutral(t *testing.T) {
 }
 
 // TestProjectJobFailedOverridesSuspended guards against Suspended's neutral
-// status masking a real, already-recorded failure.
+// status masking a real, already-recorded failure — the Job's own Failed
+// condition, not the bare Status.Failed attempt counter (§37a: "a running
+// job with 1 failed is retrying and probably fine" — only a real Failed
+// condition, e.g. backoffLimit exceeded, turns the whole row red).
 func TestProjectJobFailedOverridesSuspended(t *testing.T) {
 	suspend := true
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"},
 		Spec:       batchv1.JobSpec{Completions: ptr32(3), Suspend: &suspend},
-		Status:     batchv1.JobStatus{Succeeded: 1, Failed: 1},
+		Status: batchv1.JobStatus{
+			Succeeded:  1,
+			Failed:     1,
+			Conditions: []batchv1.JobCondition{{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: "BackoffLimitExceeded"}},
+		},
 	}
-	row := projectJob(job)
+	row := projectJobFallback(job)
 	if row.Status != StatusFail {
 		t.Fatalf("expected StatusFail to win over Suspended's neutral, got %s", row.Status)
 	}
@@ -317,9 +324,12 @@ func TestProjectJobNotSuspendedLeavesRowUnset(t *testing.T) {
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"},
 		Spec:       batchv1.JobSpec{Completions: ptr32(1)},
-		Status:     batchv1.JobStatus{Succeeded: 1},
+		Status: batchv1.JobStatus{
+			Succeeded:      1,
+			CompletionTime: &metav1.Time{Time: time.Now()},
+		},
 	}
-	row := projectJob(job)
+	row := projectJobFallback(job)
 	if row.Suspended {
 		t.Fatalf("expected Row.Suspended = false for a nil Spec.Suspend")
 	}

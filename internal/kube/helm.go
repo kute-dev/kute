@@ -40,6 +40,19 @@ import (
 // reproduced here rather than pulling in the full Helm SDK for one string).
 const HelmReleaseSecretType corev1.SecretType = "helm.sh/release.v1"
 
+// HelmHookAnnotation is the annotation Helm stamps on a hook resource (e.g.
+// a post-install/post-upgrade Job) naming which hook(s) it runs as —
+// comma-separated when a resource serves more than one. §37a's SOURCE
+// column reads this to render "helm/<release> <hook>" for a Job Helm itself
+// created, distinct from a genuinely standalone one.
+const HelmHookAnnotation = "helm.sh/hook"
+
+// HelmReleaseNameAnnotation is the ownership annotation Helm 3 stamps on
+// every resource it renders as part of a release — including hook
+// resources — naming the release. §37a's SOURCE column reads it alongside
+// HelmHookAnnotation for the "helm/<release> <hook>" label.
+const HelmReleaseNameAnnotation = "meta.helm.sh/release-name"
+
 // HelmRelease is one decoded release revision — either the release's
 // current (highest-revision) state for the 18a list, or one entry in its
 // full history (h).

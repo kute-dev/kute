@@ -299,7 +299,7 @@ func (c *Cluster) RolloutRestart(_ context.Context, kind kube.ResourceKind, name
 // stripping the real implementation uses (so the two never drift), and
 // append the clone rather than mutating anything — the source Job is left
 // untouched.
-func (c *Cluster) RetryJob(_ context.Context, namespace, name, newName string) error {
+func (c *Cluster) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, obj := range c.objects[kube.KindJob] {
@@ -307,16 +307,56 @@ func (c *Cluster) RetryJob(_ context.Context, namespace, name, newName string) e
 		if !ok || job.Name != name || job.Namespace != namespace {
 			continue
 		}
+		annotations := maps.Clone(job.Annotations)
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		// Mirrors kube.Cluster.RetryJob: a rerun is always standalone, never
+		// carrying over a source CronJob's association.
+		delete(annotations, kube.AnnotationCronJobUID)
+		delete(annotations, kube.AnnotationCronJobName)
+		annotations[kube.AnnotationTriggeredBy] = creator
+		annotations[kube.AnnotationTriggeredAt] = at.UTC().Format(time.RFC3339)
 		clone := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        newName,
 				Namespace:   namespace,
 				Labels:      maps.Clone(job.Labels),
-				Annotations: maps.Clone(job.Annotations),
+				Annotations: annotations,
 			},
 			Spec: *kube.CloneJobSpec(&job.Spec),
 		}
 		c.objects[kube.KindJob] = append(c.objects[kube.KindJob], clone)
+		c.notify(kube.KindJob)
+		return nil
+	}
+	return fmt.Errorf("%s %q not found", kube.KindJob, name)
+}
+
+// ReplaceJob mirrors kube.Cluster.ReplaceJob: find, remove, append a
+// same-name replacement built from the removed Job's own spec — keeping
+// OwnerReferences/annotations, unlike RetryJob's deliberately-detached
+// clone.
+func (c *Cluster) ReplaceJob(_ context.Context, namespace, name string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	objs := c.objects[kube.KindJob]
+	for i, obj := range objs {
+		job, ok := obj.(*batchv1.Job)
+		if !ok || job.Name != name || job.Namespace != namespace {
+			continue
+		}
+		replacement := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            name,
+				Namespace:       namespace,
+				Labels:          maps.Clone(job.Labels),
+				Annotations:     maps.Clone(job.Annotations),
+				OwnerReferences: job.OwnerReferences,
+			},
+			Spec: *kube.CloneJobSpec(&job.Spec),
+		}
+		c.objects[kube.KindJob] = append(append(objs[:i:i], objs[i+1:]...), replacement)
 		c.notify(kube.KindJob)
 		return nil
 	}

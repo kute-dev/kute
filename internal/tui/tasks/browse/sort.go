@@ -106,7 +106,25 @@ func argoRank(r resources.Row) int {
 // certRanked adds §35b's own addition on top of the generic rank: "among
 // ready certs, soonest expiry floats up" — a same-rank tiebreak applied
 // before the fallback to name, via certExpiryTiebreak.
-func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst, argoRanked, certRanked bool) {
+// jobAgeTiebreak breaks a same-rank tie between two Job rows newest-first
+// (§37a: "unhealthy first, then newest") — reads the already-rendered AGE
+// cell via parseShortAge (this file's own age-column sort comparator)
+// rather than adding a dedicated timestamp field to Row, since AGE already
+// carries exactly the precision the mockup's own tiebreak needs. AGE is
+// always Job's last column (registry.go's Job Columns).
+func jobAgeTiebreak(a, b resources.Row) int {
+	da, db := parseShortAge(cellAt(a, len(a.Cells)-1)), parseShortAge(cellAt(b, len(b.Cells)-1))
+	switch {
+	case da < db:
+		return -1 // a is newer (smaller age) -> sorts first
+	case da > db:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.Row, unhealthyFirst, argoRanked, certRanked, jobRanked bool) {
 	if kind == kube.KindCustomResourceDefinition {
 		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
 		// own Cells[1] is the CRD's API group; Name breaks ties within a
@@ -143,6 +161,11 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 		}
 		if certRanked {
 			if t := certExpiryTiebreak(rows[i], rows[j]); t != 0 {
+				return t < 0
+			}
+		}
+		if jobRanked {
+			if t := jobAgeTiebreak(rows[i], rows[j]); t != 0 {
 				return t < 0
 			}
 		}
@@ -208,7 +231,8 @@ func (m *Model) applySort() {
 		return
 	}
 	certRanked := m.kind == kube.KindCertificate
-	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux || m.desc.Argo || certRanked, m.desc.Argo, certRanked)
+	jobRanked := m.kind == kube.KindJob
+	sortForDisplay(m.kind, m.namespace, m.rows, m.desc.Flux || m.desc.Argo || certRanked, m.desc.Argo, certRanked, jobRanked)
 }
 
 // applyUserSort stable-sorts rows by m.sortColumn/m.sortAsc — a no-op if

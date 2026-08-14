@@ -58,6 +58,39 @@ func ManualJobName(cronJobName string, at time.Time, taken func(name string) boo
 	return candidate
 }
 
+// nextRerunNameMaxCollisions bounds NextRerunName's numeric-suffix search —
+// same reasoning as manualJobNameMaxCollisions: a pathological taken func
+// that never returns false must not loop forever.
+const nextRerunNameMaxCollisions = 9999
+
+// NextRerunName builds §37c's "create" rerun target name:
+// "<jobName>-rerun-<N>" starting at N=1, DNS-safe truncated the same way
+// ManualJobName is (a rerun name becomes a pod-template "job-name" label
+// value too), with the smallest available N against taken. Unlike
+// ManualJobName's HHMM-keyed suffix, a rerun has no natural time-of-day to
+// key off — the ordinal itself is the whole point (37c's mockup:
+// "migrate-schema-v42-rerun-1") — so this always starts at 1 and increments,
+// rather than trying a bare suffix-less name first.
+//
+// Pure and deterministic for a given (jobName, taken); the caller (browse's
+// ctrl-r preflight and jobattempts' own) resolves the value once during
+// staging and reuses it for both the will-run preview and the actual
+// RetryJob call, so the two can never disagree.
+func NextRerunName(jobName string, taken func(name string) bool) string {
+	if taken == nil {
+		taken = func(string) bool { return false }
+	}
+	var candidate string
+	for n := 1; n <= nextRerunNameMaxCollisions; n++ {
+		suffix := fmt.Sprintf("-rerun-%d", n)
+		candidate = dnsSafeTruncate(jobName, manualJobNameMaxLen-len(suffix)) + suffix
+		if !taken(candidate) {
+			return candidate
+		}
+	}
+	return candidate
+}
+
 // dnsSafeTruncate trims s to at most maxLen runes-as-bytes (Job/CronJob
 // names are already restricted to the DNS-1123 byte-per-char alphabet, so a
 // byte-length truncation never splits a multi-byte rune) and strips any

@@ -5,7 +5,7 @@
 // rollout-restart verb nor any other machinery to share with
 // deployments.go, hence their own file per browse's per-concern split
 // convention (nodes.go/sort.go/grouping.go/delete.go/helm.go). Also holds
-// Job's own two mutating verbs (ctrl-r retry, 's' suspend/resume) and
+// Job's own two mutating verbs ('R' rerun, 's' suspend/resume) and
 // CronJob's own ctrl-r/'s' siblings (run now, suspend/resume — one level up:
 // a CronJob's ctrl-r triggers a Job rather than cloning itself) — kept here
 // alongside the navigation above rather than split out, matching
@@ -28,19 +28,59 @@ import (
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// openJobPods switches kind to Pods with row's name pre-applied as the
-// filter query, exactly like openDeploymentPods (deployments.go): a Job's
-// own pods are named <job>-<random> (assigned directly by the Job
-// controller, no intermediate ReplicaSet), so they too start with the
-// owning Job's name and the existing fuzzy filter reads as an owner match.
-func (m *Model) openJobPods(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
-	// switchKind's resetAndLoad clears originKind/originName along with
-	// filterQuery, so they're set here for the same reason filterQuery is:
-	// still in place once the loaded rows reach recomputeVisible.
-	m.originKind, m.originName = kube.KindJob, row.Name
-	return cmd
+// openSelectedJobAttempts pushes §37b/§37d (tasks/jobattempts) for the
+// selected Job row — §37a's replacement for the pre-v0.9.0 openJobPods
+// jump-straight-to-Pods shortcut ("↵ opens the attempt ledger, not a
+// describe page"). siblings/index mirror openSelectedCronJobDetail's own
+// shape exactly. ok is false — and `enter` a no-op — until app.go wires
+// OpenJobAttempts.
+func (m Model) openSelectedJobAttempts() (tea.Model, tea.Cmd, bool) {
+	if m.openJobAttempts == nil || m.kind != kube.KindJob {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	siblings := make([]JobSiblingRef, len(m.visible))
+	index := 0
+	for i, fm := range m.visible {
+		siblings[i] = JobSiblingRef{Namespace: fm.row.Namespace, Name: fm.row.Name}
+		if fm.row.Namespace == row.Namespace && fm.row.Name == row.Name {
+			index = i
+		}
+	}
+	task, cmd := m.openJobAttempts(row.Namespace, row.Name, siblings, index, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// jobListSummaryFor resolves any row's full aggregated
+// resources.JobListSummary by namespace/name against m.jobListSummaries —
+// mirrors cronJobSummaryFor's own lookup/reasoning.
+func (m Model) jobListSummaryFor(namespace, name string) (resources.JobListSummary, bool) {
+	for i := range m.jobListSummaries {
+		obj := m.jobListSummaries[i].Object
+		if obj != nil && obj.Namespace == namespace && obj.Name == name {
+			return m.jobListSummaries[i], true
+		}
+	}
+	return resources.JobListSummary{}, false
+}
+
+// jobLogsTarget resolves §37a's 'l' (update.go's own case, mirrors
+// cronJobLogsTarget's shape): the newest pod this Job has created,
+// regardless of state (JobListSummary.NewestPodName, resolved once at load
+// time). reason names why no pod is available when ok is false.
+func (m Model) jobLogsTarget(row resources.Row) (pod kube.Pod, reason string, ok bool) {
+	summary, sumOK := m.jobListSummaryFor(row.Namespace, row.Name)
+	if !sumOK || summary.NewestPodName == "" {
+		return kube.Pod{}, row.Name + ": no pod collected for this job yet", false
+	}
+	pod, ok = m.pods[summary.NewestPodName]
+	if !ok {
+		pod = kube.Pod{Namespace: row.Namespace, Name: summary.NewestPodName}
+	}
+	return pod, "", true
 }
 
 // openSelectedCronJobDetail pushes §36e (tasks/cronjobdetail, wired once
@@ -154,57 +194,22 @@ func (m Model) cronJobLogsTarget() (pod kube.Pod, reason string, ok bool) {
 	return pod, "", true
 }
 
-// beginJobRetry starts verbs.JobRetry (ctrl-r): clones row's spec into a new
-// Job named "<name>-retry-<unix-timestamp>", computed once here so the
-// will-run line (jobRetryWillRunLine) and the actual RetryJob call use the
-// identical name. Deliberately always TierInline, with no TierFor/isProd
-// PROD escalation unlike Delete/RolloutUndo: components.TypeNameModal (the
-// PROD escalation surface those verbs share) is documented as "the app's
-// other red-bordered surface" — reserved for destructive confirms — and
-// Retry is explicitly non-destructive (confirmed with the user: it clones
-// into a new object, the source Job is never touched). Escalating to
-// TierModal without also opting into the typed-name gate would render
-// identically to TierInline anyway (Controller.Confirm/view.go's dispatch
-// both key off requiresTypedName, not the tier alone), so skipping the
-// escalation entirely is the honest choice, not just the simpler one.
-func (m *Model) beginJobRetry(row resources.Row) tea.Cmd {
-	newName := fmt.Sprintf("%s-retry-%d", row.Name, time.Now().Unix())
-	return m.actions.Begin(verbs.JobRetry.Tier, tui.TaskAction{
-		ID:    "job-retry-" + row.Namespace + "/" + row.Name,
-		Label: fmt.Sprintf("Retry %s?", row.Name),
-		Scope: tui.TaskScope{
-			ResourceKind: string(kube.KindJob), ResourceName: row.Name,
-			Namespace: row.Namespace, Verb: "job-retry", IsMutating: true,
-			NewName: newName,
-		},
-	})
-}
-
-// jobRetryWillRunLine is the confirm's "will run: ..." line — same idiom as
-// rolloutRestartWillRunLine (deployments.go).
-func jobRetryWillRunLine(scope tui.TaskScope) string {
-	return "will run: " + kube.JobRetryCommandString(scope.Namespace, scope.ResourceName, scope.NewName)
-}
-
 // beginJobSuspend starts verbs.JobSuspend ('s'): one verb, two directions,
 // exactly beginFluxSuspend's (flux.go) shape — Scope.Verb flips between
-// "job-suspend"/"job-resume" based on row.Suspended. Unlike beginJobRetry's
-// deliberate skip of TierFor, this one is routed through it: JobSuspend's own
-// verbs.go doc comment is explicit that suspending a Job tears down its
-// active pods immediately, a real destructive side effect Retry's clone-only
-// semantics don't have, so PROD escalating TierInline to TierModal is not a
-// no-op here — TierModal replaces the table with confirmBody's full
-// ConfirmCard overlay, TierInline stays an inline keybar y/N row with the
-// table still visible. Neither "job-suspend" nor "job-resume" is in
-// requiresTypeNameConfirm/requiresTypedName, so the escalated PROD confirm
-// still renders the plain ConfirmCard, not the typed-name modal — the same
-// treatment Drain and Rollback already get.
+// "job-suspend"/"job-resume" based on row.Suspended. v0.9.0 §37a routes this
+// through verbs.TierForJobSuspend, not the flat verbs.TierFor: resume is
+// always TierNone (reversible, immediate — mirrors CronJob's own resume),
+// suspend is TierInline outside PROD, TierModal (the type-the-name modal,
+// actions.RequiresTypedName's own "job-suspend" entry) inside one — tearing
+// down a Job's active pods immediately is a real destructive side effect
+// Retry's clone-only semantics don't have.
 func (m *Model) beginJobSuspend(row resources.Row) tea.Cmd {
 	verb, label := "job-suspend", fmt.Sprintf("Suspend %s?", row.Name)
-	if row.Suspended {
+	suspending := !row.Suspended
+	if !suspending {
 		verb, label = "job-resume", fmt.Sprintf("Resume %s?", row.Name)
 	}
-	tier := verbs.TierFor(verbs.JobSuspend, m.isProd())
+	tier := verbs.TierForJobSuspend(suspending, m.isProd())
 	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    verb + "-" + row.Name,
 		Label: label,
@@ -223,16 +228,20 @@ func jobSuspendWillRunLine(scope tui.TaskScope) string {
 // jobKeybarGroup mirrors fluxKeybarGroup (flux.go): copies the registry
 // Verb, flips its Label to "resume" when the selected row is already
 // suspended, so the keybar always shows the direction pressing 's' would
-// actually take.
+// actually take. 'R' has no dedicated Hint() rendering here beyond the
+// bare key/label — job_actions.go's staged choice list takes over the
+// keybar entirely once pressed (job_actions.go's jobRerunKeybar).
 func (m Model) jobKeybarGroup() []tui.KeyHint {
 	suspend := verbs.JobSuspend
 	if row, ok := m.selectedRow(); ok && row.Suspended {
 		suspend.Label = "resume"
 	}
-	return []tui.KeyHint{
-		{Key: verbs.JobRetry.Key, Label: verbs.JobRetry.Label},
-		{Key: suspend.Key, Label: suspend.Label},
+	hints := []tui.KeyHint{{Key: verbs.JobRetry.Key, Label: verbs.JobRetry.Label}}
+	if m.openLogs != nil {
+		hints = append(hints, tui.KeyHint{Key: "l", Label: "logs"})
 	}
+	hints = append(hints, tui.KeyHint{Key: suspend.Key, Label: suspend.Label})
+	return hints
 }
 
 // CronJobRunNow (ctrl-r) and CronJobSuspend's resume direction both stage a

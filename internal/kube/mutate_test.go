@@ -123,7 +123,8 @@ func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
 	}
 	c, cs := newTestCluster(job)
 
-	if err := c.RetryJob(context.Background(), "default", "batch-1", "batch-1-retry-123"); err != nil {
+	stagedAt := time.Date(2026, 3, 4, 2, 0, 0, 0, time.UTC)
+	if err := c.RetryJob(context.Background(), "default", "batch-1", "batch-1-retry-123", "operator@example.com", stagedAt); err != nil {
 		t.Fatalf("RetryJob: %v", err)
 	}
 
@@ -163,16 +164,99 @@ func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
 	if _, ok := clone.Annotations["kubectl.kubernetes.io/last-applied-configuration"]; ok {
 		t.Errorf("expected the stale last-applied-configuration annotation dropped, got %+v", clone.Annotations)
 	}
+	if clone.Annotations[AnnotationTriggeredBy] != "operator@example.com" {
+		t.Errorf("AnnotationTriggeredBy = %q, want %q", clone.Annotations[AnnotationTriggeredBy], "operator@example.com")
+	}
+	if clone.Annotations[AnnotationTriggeredAt] != "2026-03-04T02:00:00Z" {
+		t.Errorf("AnnotationTriggeredAt = %q, want %q", clone.Annotations[AnnotationTriggeredAt], "2026-03-04T02:00:00Z")
+	}
+}
+
+// TestRetryJobStripsCronJobAssociation guards §37c: a rerun is always
+// standalone, even when the source Job was itself cronjob-owned (via Kute's
+// own AnnotationCronJobUID/AnnotationCronJobName, the only association
+// mechanism a Job clone with no OwnerReferences could otherwise carry
+// forward).
+func TestRetryJobStripsCronJobAssociation(t *testing.T) {
+	t.Parallel()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "report-nightly-1", Namespace: "default",
+			Annotations: map[string]string{
+				AnnotationCronJobUID:  "cj-uid-1",
+				AnnotationCronJobName: "report-nightly",
+			},
+		},
+	}
+	c, cs := newTestCluster(job)
+	if err := c.RetryJob(context.Background(), "default", "report-nightly-1", "report-nightly-1-rerun-1", "you", time.Now()); err != nil {
+		t.Fatalf("RetryJob: %v", err)
+	}
+	clone, err := cs.BatchV1().Jobs("default").Get(context.Background(), "report-nightly-1-rerun-1", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get clone: %v", err)
+	}
+	if _, ok := clone.Annotations[AnnotationCronJobUID]; ok {
+		t.Errorf("expected AnnotationCronJobUID stripped from the clone, got %+v", clone.Annotations)
+	}
+	if _, ok := clone.Annotations[AnnotationCronJobName]; ok {
+		t.Errorf("expected AnnotationCronJobName stripped from the clone, got %+v", clone.Annotations)
+	}
 }
 
 func TestRetryJobRejectsEmptyNames(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
-	if err := c.RetryJob(context.Background(), "default", "", "batch-1-retry-123"); err == nil {
+	if err := c.RetryJob(context.Background(), "default", "", "batch-1-retry-123", "you", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty source name")
 	}
-	if err := c.RetryJob(context.Background(), "default", "batch-1", ""); err == nil {
+	if err := c.RetryJob(context.Background(), "default", "batch-1", "", "you", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty target name")
+	}
+}
+
+// TestReplaceJobDeletesThenRecreatesUnderSameName pins §37c's "replace"
+// choice: unlike RetryJob's clone, the original object is actually gone —
+// same UID/creationTimestamp cannot survive a delete+create — but the
+// replacement keeps the source's OwnerReferences (a replace stands in for
+// the exact same object, never detaching it the way a rerun clone always
+// does).
+func TestReplaceJobDeletesThenRecreatesUnderSameName(t *testing.T) {
+	t.Parallel()
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "migrate-schema-v42", Namespace: "default",
+			Labels:          map[string]string{"app": "migrate"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "CronJob", Name: "nightly"}},
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
+			},
+		},
+		Status: batchv1.JobStatus{Failed: 1},
+	}
+	c, cs := newTestCluster(job)
+	if err := c.ReplaceJob(context.Background(), "default", "migrate-schema-v42"); err != nil {
+		t.Fatalf("ReplaceJob: %v", err)
+	}
+	replacement, err := cs.BatchV1().Jobs("default").Get(context.Background(), "migrate-schema-v42", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get replacement: %v", err)
+	}
+	if replacement.Status.Failed != 0 {
+		t.Errorf("expected a fresh Status on the replacement, got %+v", replacement.Status)
+	}
+	if len(replacement.OwnerReferences) != 1 || replacement.OwnerReferences[0].Name != "nightly" {
+		t.Errorf("expected OwnerReferences preserved on the replacement, got %+v", replacement.OwnerReferences)
+	}
+}
+
+func TestReplaceJobRejectsEmptyName(t *testing.T) {
+	t.Parallel()
+	c, _ := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
+	if err := c.ReplaceJob(context.Background(), "default", ""); err == nil {
+		t.Fatalf("expected an error for an empty name")
 	}
 }
 

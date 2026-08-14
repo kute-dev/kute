@@ -60,7 +60,14 @@ func DefaultRegistry() Registry {
 		{Kind: kube.KindDaemonSet, Group: GroupWorkloads, Display: "DaemonSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Available", "Age"}, Describe: "one pod per matching node", Project: projectDaemonSet},
 		{Kind: kube.KindStatefulSet, Group: GroupWorkloads, Display: "StatefulSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Age"}, Describe: "stable, ordered pod identities", Project: projectStatefulSet},
 		{Kind: kube.KindReplicaSet, Group: GroupWorkloads, Display: "ReplicaSets", Icon: "◈", Columns: []string{"Name", "Rdy", "Replicas", "Age"}, Describe: "pod replica sets behind a deployment", Project: projectReplicaSet},
-		{Kind: kube.KindJob, Group: GroupWorkloads, Display: "Jobs", Icon: "◈", Columns: []string{"Name", "Completions", "Active", "Age"}, Describe: "run-to-completion pods", Project: projectJob},
+		// Columns/Project/Health per §37a (v0.9.0): NAME / COMPL / DURATION /
+		// FAILED / SOURCE / AGE, Job-specific health semantics (jobHealth/
+		// jobHealthLabel, jobs.go). Project is deliberately Job-list-unaware
+		// of Pod/CronJob join data for the same reason projectCronJobFallback
+		// is — see its own doc comment and jobs.go's package doc comment;
+		// browse's Jobs branch bypasses this entirely and calls
+		// resources.BuildJobListSummaries + resources.ProjectJobList directly.
+		{Kind: kube.KindJob, Group: GroupWorkloads, Display: "Jobs", Icon: "◈", Columns: []string{"Name", "Compl", "Duration", "Failed", "Source", "Age"}, Describe: "run-to-completion pods", Project: projectJobFallback, Health: jobHealth, HealthLabel: jobHealthLabel},
 		// Columns/Project/Health per v0.8.0 plan §4.3 (Phase 1): NAME /
 		// SCHEDULE / SUSP / ACT / LAST RUN / NEXT, CronJob-specific health
 		// semantics (cronJobHealth/cronJobHealthLabel, cronjobs.go).

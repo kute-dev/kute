@@ -118,3 +118,60 @@ func TestManualJobNameExhaustsCollisionsAndReturnsLastCandidate(t *testing.T) {
 		t.Fatalf("ManualJobName = %q, want the exhausted bound %q", got, want)
 	}
 }
+
+// TestNextRerunNameStartsAtOne pins §37c's mockup example exactly:
+// "migrate-schema-v42-rerun-1" for the first rerun of an untaken name.
+func TestNextRerunNameStartsAtOne(t *testing.T) {
+	t.Parallel()
+	got := NextRerunName("migrate-schema-v42", nil)
+	want := "migrate-schema-v42-rerun-1"
+	if got != want {
+		t.Fatalf("NextRerunName = %q, want %q", got, want)
+	}
+}
+
+// TestNextRerunNamePicksSmallestAvailableOrdinal mirrors
+// TestManualJobNamePicksSmallestAvailableSuffix for the rerun scheme.
+func TestNextRerunNamePicksSmallestAvailableOrdinal(t *testing.T) {
+	t.Parallel()
+	existing := map[string]bool{
+		"batch-1-rerun-1": true,
+		"batch-1-rerun-2": true,
+	}
+	taken := func(name string) bool { return existing[name] }
+	got := NextRerunName("batch-1", taken)
+	want := "batch-1-rerun-3"
+	if got != want {
+		t.Fatalf("NextRerunName = %q, want %q", got, want)
+	}
+}
+
+// TestNextRerunNameTruncatesLongJobNames mirrors
+// TestManualJobNameTruncatesLongCronJobNames for the rerun scheme.
+func TestNextRerunNameTruncatesLongJobNames(t *testing.T) {
+	t.Parallel()
+	longName := strings.Repeat("a", 80)
+	got := NextRerunName(longName, nil)
+	if len(got) > 63 {
+		t.Fatalf("NextRerunName length = %d, want <= 63: %q", len(got), got)
+	}
+	if !strings.HasSuffix(got, "-rerun-1") {
+		t.Fatalf("NextRerunName = %q, want a -rerun-1 suffix", got)
+	}
+	if errs := validation.IsDNS1123Label(got); len(errs) != 0 {
+		t.Fatalf("NextRerunName = %q is not a valid DNS-1123 label: %v", got, errs)
+	}
+}
+
+// TestNextRerunNameExhaustsCollisionsAndReturnsLastCandidate mirrors
+// TestManualJobNameExhaustsCollisionsAndReturnsLastCandidate's termination
+// guarantee for the rerun scheme.
+func TestNextRerunNameExhaustsCollisionsAndReturnsLastCandidate(t *testing.T) {
+	t.Parallel()
+	taken := func(string) bool { return true }
+	got := NextRerunName("batch-1", taken)
+	want := fmt.Sprintf("batch-1-rerun-%d", nextRerunNameMaxCollisions)
+	if got != want {
+		t.Fatalf("NextRerunName = %q, want the exhausted bound %q", got, want)
+	}
+}

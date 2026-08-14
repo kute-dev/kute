@@ -51,6 +51,15 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 		kube.KindJob,
 		kube.KindPod,
 	},
+	kube.KindJob: {
+		// §37a: FAILED/COMPL come straight from the Job object itself
+		// (loadJobRows' own doc comment), but the 'l' key's newest-attempt
+		// target and the pushed attempts screen (§37b) both read live Pod
+		// data — a Pod watch event changes what 'l' would open even though
+		// the Job row's own cells didn't change. Pod is already eager at
+		// connect, listed here only for the reload trigger.
+		kube.KindPod,
+	},
 	kube.KindHelmRelease: {
 		// 18a's rollout glyph: a release's workloads settling is a change to
 		// three other kinds and none to the release Secret, so without these

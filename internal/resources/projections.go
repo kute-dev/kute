@@ -386,32 +386,35 @@ func projectReplicaSet(obj runtime.Object) Row {
 	return Row{Namespace: ns, Name: name, Cells: []string{name, readyLabel, strconv.Itoa(int(r.Status.Replicas)), shortAge(age)}, Status: status}
 }
 
-func projectJob(obj runtime.Object) Row {
+// projectJobFallback is the Job descriptor's Descriptor.Project —
+// deliberately a conservative, Pod/CronJob-unaware single-object fallback
+// (v0.9.0 §37a), mirroring projectCronJobFallback's own reasoning (see its
+// doc comment and jobs.go's package doc comment): it exists for the generic
+// single-object callers Descriptor.Project must keep serving, and calls
+// BuildJobListSummaries with a nil Pods/CronJobs slice, so the resulting
+// row's SOURCE always reads what the Job's own annotations/owner refs say
+// (still correct) but NEWEST-POD-driven verbs have nothing to target.
+//
+// browse's Jobs branch bypasses resources.List/Descriptor.Project entirely:
+// it lists Jobs, Pods, and CronJobs itself and calls
+// resources.BuildJobListSummaries + resources.ProjectJobList directly, so
+// its rows are Pod/CronJob-aware. No future caller should assume
+// Descriptor.Project alone carries that data.
+//
+// time.Now() is read here, not in jobs.go, for the same reason
+// projectCronJobFallback reads it rather than cronjobs.go: Descriptor.
+// Project's fixed signature has no `now` parameter to receive a
+// caller-supplied clock through.
+func projectJobFallback(obj runtime.Object) Row {
 	j, ok := obj.(*batchv1.Job)
 	if !ok {
 		return metaRow(obj)
 	}
-	ns, name, age := metaOf(obj)
-	want := int32ptr(j.Spec.Completions)
-	completions := fmt.Sprintf("%d/%d", j.Status.Succeeded, want)
-	suspended := j.Spec.Suspend != nil && *j.Spec.Suspend
-	status := StatusWarn
-	if want > 0 && j.Status.Succeeded >= want {
-		status = StatusOK
+	summaries := BuildJobListSummaries([]runtime.Object{j}, nil, nil)
+	if len(summaries) == 0 {
+		return metaRow(obj)
 	}
-	// A deliberately-paused Job (browse's 's' verb, or set directly) isn't
-	// warning-worthy — same "parked, benign, nothing to see" neutral the
-	// pod detail screen's own Completed status uses. The Failed check below
-	// still runs last and wins even over Neutral, so a suspended Job that
-	// already recorded a real failure before being paused keeps reading as
-	// a genuine problem, not a parked one.
-	if suspended {
-		status = StatusNeutral
-	}
-	if j.Status.Failed > 0 {
-		status = StatusFail
-	}
-	return Row{Namespace: ns, Name: name, Suspended: suspended, Cells: []string{name, completions, strconv.Itoa(int(j.Status.Active)), shortAge(age)}, Status: status}
+	return ProjectJobList(summaries[0], time.Now(), "")
 }
 
 // projectCronJobFallback is the CronJob descriptor's Descriptor.Project —

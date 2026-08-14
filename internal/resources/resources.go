@@ -126,6 +126,13 @@ type Row struct {
 	ExpiresAt    time.Time
 	ExpiresClass StatusClass
 	RenewalClass StatusClass
+
+	// DurationClass recolors §37a's DURATION cell independently of the row's
+	// own Status — StatusFail when the Job hit spec.activeDeadlineSeconds,
+	// StatusNeutral otherwise. Unset (StatusNeutral's zero value force) for
+	// every other kind. Same "a cell can disagree with the row" idiom
+	// ExpiresClass/RenewalClass already establish for Certificate.
+	DurationClass StatusClass
 }
 
 // HealthCounts tallies a kind's rows by StatusClass, for the browse

@@ -151,6 +151,16 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		// listed here — it's TierInline, a real change to what's deployed
 		// (see ArgoSync's own doc comment).
 		"argo-refresh": true,
+		// v0.9.0 §37c. JobRetry ("rerun"'s create path) is CronJobRunNow's
+		// exact shape one level down: the staged choice browse/jobattempts
+		// both gather (job_actions.go/rerun.go's pendingJobRerun/
+		// pendingRerun — generated name, amber diagnostic) is itself the
+		// confirmation, so there's nothing left for actions.Controller's own
+		// TierInline/TierModal to add by the time Begin executes. JobReplace
+		// (the same staged choice's destructive alternative) is deliberately
+		// NOT listed here — it stays TierInline/TierModal, reached every
+		// time it's chosen (see JobReplace's own doc comment).
+		"job-retry": true,
 	}
 	for _, v := range All {
 		if v.Mutating && v.Tier == actions.TierNone && !untiered[v.ID] {

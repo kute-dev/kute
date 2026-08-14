@@ -37,6 +37,9 @@ func (m Model) Keybar() tui.Keybar {
 	if m.pendingCronJobResume != nil {
 		return m.cronJobResumeKeybar()
 	}
+	if m.pendingJobRerun != nil {
+		return m.jobRerunKeybar()
+	}
 	if m.pendingScale != nil {
 		kb := tui.Keybar{
 			Pill:     tui.ModeBrowse,
@@ -199,9 +202,19 @@ func (m Model) Keybar() tui.Keybar {
 					// TierNone, same as flux-reconcile's own absence.
 					note = argoSyncWillRunLine(pending.Scope)
 				case "job-retry":
-					// the exact "will run: kubectl create job ... --from=job/..."
-					// line, same idiom as rollout-restart above.
+					// Only reached here for a job-retry action that skipped
+					// browse's own staged 'R' preflight (never happens from
+					// this screen — commitJobRerun always stages first — but
+					// kept for the same defensive-completeness reason every
+					// other verb's case exists). Same idiom as rollout-restart.
 					note = jobRetryWillRunLine(pending.Scope)
+				case "job-replace":
+					// §37c's "replace" choice — genuinely destructive, so
+					// (unlike job-retry) this really does reach the ordinary
+					// Controller confirm every time: staging only offers the
+					// choice, it doesn't confirm it (job_actions.go's own doc
+					// comment).
+					note = jobReplaceWillRunLine(pending.Scope)
 				case "job-suspend", "job-resume":
 					// the exact "will run: kubectl patch job/... --type merge
 					// ..." line, same idiom as flux-suspend/flux-resume's own
@@ -516,5 +529,5 @@ func singularDisplay(plural string) string {
 func (m Model) CapturingInput() bool {
 	return (m.filterActive && !m.filterListFocused) || m.actions.Active() || m.pendingEdit != nil || m.pendingStopAllForwards ||
 		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
-		m.pendingBulkDelete != nil
+		m.pendingBulkDelete != nil || m.pendingJobRerun != nil
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/fluxtree"
 	"github.com/kute-dev/kute/internal/tui/tasks/forwardpicker"
 	"github.com/kute-dev/kute/internal/tui/tasks/helmhistory"
+	"github.com/kute-dev/kute/internal/tui/tasks/jobattempts"
 	"github.com/kute-dev/kute/internal/tui/tasks/nodedetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/objectdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/overview"
@@ -602,6 +603,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenConfigMapData:   openConfigMapDataFunc(sess, cluster),
 		OpenCronJobSchedule: openCronJobSchedule,
 		OpenCronJobDetail:   openCronJobDetailFunc(sess, cluster, openLogs, openYAML, openCronJobSchedule, cluster.Context.UserName),
+		OpenJobAttempts:     openJobAttemptsFunc(sess, cluster, openLogs, openYAML, cluster.Context.UserName),
 		OpenOverview:        openOverviewFunc(sess, lister, cluster, openNodeDetail, openTimeline, openEvents),
 		Forwards:            sess.Forwards,
 		Retrier:             cluster,
@@ -685,6 +687,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenConfigMapData:   openConfigMapDataFunc(sess, demoCluster),
 		OpenCronJobSchedule: openCronJobSchedule,
 		OpenCronJobDetail:   openCronJobDetailFunc(sess, demoCluster, openLogs, openYAML, openCronJobSchedule, demoCluster.CurrentUser()),
+		OpenJobAttempts:     openJobAttemptsFunc(sess, demoCluster, openLogs, openYAML, demoCluster.CurrentUser()),
 		OpenOverview:        openOverviewFunc(sess, lister, demoCluster, openNodeDetail, openTimeline, openEvents),
 		Forwards:            sess.Forwards,
 		Retrier:             demoCluster,
@@ -1139,6 +1142,37 @@ func openCronJobDetailFunc(sess *tui.Session, active seams, openLogs browse.Open
 		})
 		cd.SetSize(width, height)
 		return &cd, cd.Init()
+	}
+}
+
+// openJobAttemptsFunc pushes tasks/jobattempts (§37b/§37c/§37d) for a Job
+// row — mirrors openCronJobDetailFunc's own reasoning exactly: active alone
+// satisfies every seam it needs, openLogs/openYAML are the same closures
+// browse itself uses so this screen's `l`/`y` push exactly what browse's
+// own keys do, and currentUser threads through the same identity §37c's
+// rerun "create" path stamps into kube.AnnotationTriggeredBy.
+func openJobAttemptsFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, currentUser string) browse.OpenJobAttemptsFunc {
+	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
+	return func(namespace, name string, siblings []browse.JobSiblingRef, index, width, height int) (tea.Model, tea.Cmd) {
+		refs := make([]jobattempts.SiblingRef, len(siblings))
+		for i, s := range siblings {
+			refs[i] = jobattempts.SiblingRef{Namespace: s.Namespace, Name: s.Name}
+		}
+		ja := jobattempts.New(jobattempts.Config{
+			Session:      sess,
+			Lister:       active,
+			Mutator:      active,
+			OpenLogs:     jobattempts.OpenLogsFunc(openLogs),
+			OpenYAML:     jobattempts.OpenYAMLFunc(openYAML),
+			OpenEvents:   jobattempts.OpenEventsFunc(openObjectEvents),
+			Namespace:    namespace,
+			Name:         name,
+			Siblings:     refs,
+			SiblingIndex: index,
+			CurrentUser:  currentUser,
+		})
+		ja.SetSize(width, height)
+		return &ja, ja.Init()
 	}
 }
 

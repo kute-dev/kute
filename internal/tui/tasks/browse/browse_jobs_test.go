@@ -45,97 +45,79 @@ func suspendedCronJobObj(ns, name string, suspend bool) *batchv1.CronJob {
 	return cj
 }
 
-func TestEnterOnJobSwitchesToPodsFilteredByName(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindJob: {jobObj("default", "batch-1")},
-		kube.KindPod: {
-			pod("default", "batch-1-x7f2k"),
-			pod("default", "worker-0"),
-		},
-	}}
-	session := newSession()
-	session.Location.Kind = kube.KindJob
-	m := New(Config{Session: session, Lister: lister})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod {
-		t.Fatalf("expected kind switched to Pod, got %s", m.kind)
-	}
-	if m.filterInput.Value() != "batch-1" {
-		t.Fatalf("filterQuery = %q, want %q", m.filterInput.Value(), "batch-1")
-	}
-	view := plain(m.Render())
-	if !strings.Contains(view, "batch-1-x7f2k") {
-		t.Fatalf("expected the owned pod to remain visible:\n%s", view)
-	}
-	if strings.Contains(view, "worker-0") {
-		t.Fatalf("expected the unrelated pod to be filtered out:\n%s", view)
-	}
-}
-
-func TestEscFromJobPodsReturnsToJobAndSelectsRow(t *testing.T) {
+// TestEnterOnJobPushesAttemptsWithNamespaceQualifiedSiblings pins §37a: ↵ on
+// a Job row pushes tasks/jobattempts (stubbed here) instead of the pre-
+// v0.9.0 jump-straight-to-Pods shortcut, carrying every visible row's
+// namespace-qualified ref plus the selected row's index — mirrors
+// TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings' shape.
+func TestEnterOnJobPushesAttemptsWithNamespaceQualifiedSiblings(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {
 			jobObj("default", "batch-1"),
 			jobObj("default", "batch-2"),
 		},
-		kube.KindPod: {
-			pod("default", "batch-1-x7f2k"),
-			pod("default", "batch-2-y8g3l"),
-		},
 	}}
+	var gotNamespace, gotName string
+	var gotSiblings []JobSiblingRef
+	var gotIndex int
 	session := newSession()
 	session.Location.Kind = kube.KindJob
-	m := New(Config{Session: session, Lister: lister})
+	m := New(Config{Session: session, Lister: lister, OpenJobAttempts: func(namespace, name string, siblings []JobSiblingRef, index, _, _ int) (tea.Model, tea.Cmd) {
+		gotNamespace, gotName, gotSiblings, gotIndex = namespace, name, siblings, index
+		return stubTask{}, nil
+	}})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	// m.load()() rather than step(m.Init()()): Init's own Job branch also
+	// schedules the recurring §37a clock tick (DURATION), which step's
+	// synchronous cmd-draining would otherwise follow forever — the same
+	// hazard TestEnterOnCronJobPushesDetailWithNamespaceQualifiedSiblings
+	// documents for CronJob's own tick.
+	m = step(t, m, m.load()())
 	m.moveSelection(1)
 	row, ok := m.selectedRow()
 	if !ok || row.Name != "batch-2" {
-		t.Fatalf("expected batch-2 selected before opening its pods, got %+v (ok=%v)", row, ok)
+		t.Fatalf("expected batch-2 selected before pressing enter, got %+v (ok=%v)", row, ok)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod || m.originName != "batch-2" {
-		t.Fatalf("expected Pods filtered by batch-2, got kind=%s originName=%q", m.kind, m.originName)
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected enter to push the stub attempts task, got %T", updated)
 	}
-
-	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
-	if m.kind != kube.KindJob {
-		t.Fatalf("expected esc to switch back to Jobs, got %s", m.kind)
+	if gotNamespace != "default" || gotName != "batch-2" {
+		t.Fatalf("expected OpenJobAttempts(default, batch-2, ...), got (%q, %q)", gotNamespace, gotName)
 	}
-	if m.originName != "" {
-		t.Fatalf("expected originName cleared after esc-back, got %q", m.originName)
+	wantSiblings := []JobSiblingRef{{Namespace: "default", Name: "batch-1"}, {Namespace: "default", Name: "batch-2"}}
+	if len(gotSiblings) != len(wantSiblings) || gotSiblings[0] != wantSiblings[0] || gotSiblings[1] != wantSiblings[1] {
+		t.Fatalf("siblings = %+v, want %+v", gotSiblings, wantSiblings)
 	}
-	selected, ok := m.selectedRow()
-	if !ok || selected.Name != "batch-2" {
-		t.Fatalf("expected batch-2 re-selected on Jobs, got %+v (ok=%v)", selected, ok)
+	if gotIndex != 1 {
+		t.Fatalf("index = %d, want 1 (batch-2)", gotIndex)
 	}
 }
 
-func TestBreadcrumbShowsOriginJobName(t *testing.T) {
+// TestEnterOnJobNoopsWithoutAttemptsWired mirrors
+// TestEnterOnCronJobNoopsWithoutDetailWired: pressing enter stays harmless
+// when app.go hasn't wired OpenJobAttempts.
+func TestEnterOnJobNoopsWithoutAttemptsWired(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {jobObj("default", "batch-1")},
-		kube.KindPod: {pod("default", "batch-1-x7f2k")},
 	}}
 	session := newSession()
 	session.Location.Kind = kube.KindJob
 	m := New(Config{Session: session, Lister: lister})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()())
 
-	header := m.Header()
-	before := crumbText(header)
-	if strings.Contains(before, "batch-1 › Pods") {
-		t.Fatalf("expected no job name in breadcrumb before opening pods:\n%s", before)
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	next, ok := updated.(*Model)
+	if !ok {
+		t.Fatalf("expected enter to stay on the browse model, got %T", updated)
 	}
-
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	after := crumbText(m.Header())
-	if !strings.Contains(after, "batch-1 › Pods") {
-		t.Fatalf("expected breadcrumb to include %q, got:\n%s", "batch-1 › Pods", after)
+	if cmd != nil {
+		t.Fatalf("expected no command, got one")
+	}
+	if next.kind != kube.KindJob {
+		t.Fatalf("expected kind to stay Job, got %s", next.kind)
 	}
 }
 
@@ -217,9 +199,13 @@ func TestEnterOnCronJobNoopsWithoutDetailWired(t *testing.T) {
 	}
 }
 
-// TestCtrlRShowsConfirmThenRetriesJobOnY mirrors
-// TestCtrlRShowsConfirmThenRestartsRolloutOnY's shape for Job's own retry.
-func TestCtrlRShowsConfirmThenRetriesJobOnY(t *testing.T) {
+// TestRStagesJobRerunThenCreatesOnEnter pins §37c's staged contract: 'R'
+// stages a create-vs-replace choice in screen state (mirrors
+// TestCtrlRStagesRunNowThenTriggersOnEnter's shape for CronJob's own
+// run-now), defaulting to "create" — non-destructive, staged-then-TierNone,
+// no y/N needed. The generated name is "<name>-rerun-N", not the old
+// Unix-timestamp/"-retry-" scheme.
+func TestRStagesJobRerunThenCreatesOnEnter(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {jobObj("default", "batch-1")},
 	}}
@@ -228,36 +214,75 @@ func TestCtrlRShowsConfirmThenRetriesJobOnY(t *testing.T) {
 	session.Location.Kind = kube.KindJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()()) // see TestEnterOnJobPushesAttemptsWithNamespaceQualifiedSiblings
 
 	m = step(t, m, tea.KeyPressMsg{Text: "R"})
-	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected ctrl+r to open the inline prompt, tier=%v", m.actions.Tier())
+	if m.pendingJobRerun == nil {
+		t.Fatalf("expected R to stage the rerun preview")
+	}
+	if m.actions.Active() {
+		t.Fatalf("expected no actions.Controller confirm state while staged (staging is itself the confirmation for 'create')")
 	}
 	kb := m.Keybar()
 	if !strings.Contains(kb.RightNote, "kubectl create job") || !strings.Contains(kb.RightNote, "--from=job/batch-1") {
-		t.Fatalf("expected the will-run line in the confirm, got %q", kb.RightNote)
+		t.Fatalf("expected the will-run line in the keybar, got %q", kb.RightNote)
+	}
+	if !strings.Contains(kb.RightNote, "batch-1-rerun-1") {
+		t.Fatalf("expected the generated name to use the -rerun-N scheme, got %q", kb.RightNote)
 	}
 	if len(mut.retriedJobs) != 0 {
-		t.Fatalf("expected no retry before 'y', got %v", mut.retriedJobs)
+		t.Fatalf("expected no retry before enter, got %v", mut.retriedJobs)
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
-	if len(mut.retriedJobs) != 1 {
-		t.Fatalf("retriedJobs = %v, want one entry", mut.retriedJobs)
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if m.pendingJobRerun != nil {
+		t.Fatalf("expected enter to clear the staged preview")
 	}
-	if !strings.HasPrefix(mut.retriedJobs[0], "default/batch-1->batch-1-retry-") {
-		t.Fatalf("retriedJobs[0] = %q, want a default/batch-1->batch-1-retry-<ts> entry", mut.retriedJobs[0])
+	if len(mut.retriedJobs) != 1 || mut.retriedJobs[0] != "default/batch-1->batch-1-rerun-1" {
+		t.Fatalf("retriedJobs = %v, want one default/batch-1->batch-1-rerun-1 entry", mut.retriedJobs)
 	}
 }
 
-// TestJobRetryStaysInlineEvenInProd pins the deliberate choice not to
-// escalate Retry to the type-the-name modal in PROD (browse/jobs.go's
-// beginJobRetry doc comment): components.TypeNameModal is reserved for
-// destructive confirms, and Retry is explicitly non-destructive (a clone,
-// not a delete+recreate) — so a PROD context still gets the same plain
-// inline y/N, just like a non-PROD one.
-func TestJobRetryStaysInlineEvenInProd(t *testing.T) {
+// TestJobRerunReplaceChoiceGoesThroughOrdinaryConfirm pins §37c's other
+// firm decision: staging only ever confirms the "create" branch — toggling
+// to "replace" and pressing enter hands off to actions.Controller's
+// ordinary tiered confirm (still needs 'y') rather than executing directly,
+// because replace is genuinely destructive.
+func TestJobRerunReplaceChoiceGoesThroughOrdinaryConfirm(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindJob: {jobObj("default", "batch-1")},
+	}}
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "R"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if m.pendingJobRerun != nil {
+		t.Fatalf("expected the staged preview cleared once handed to the ordinary confirm")
+	}
+	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
+		t.Fatalf("expected replace to land on the ordinary TierInline confirm, tier=%v", m.actions.Tier())
+	}
+	if len(mut.replacedJobs) != 0 {
+		t.Fatalf("expected no replace before 'y', got %v", mut.replacedJobs)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	if len(mut.replacedJobs) != 1 || mut.replacedJobs[0] != "default/batch-1" {
+		t.Fatalf("replacedJobs = %v, want one default/batch-1 entry", mut.replacedJobs)
+	}
+}
+
+// TestJobRerunStaysStagedEvenInProd mirrors
+// TestCronJobRunNowStaysStagedEvenInProd: the "create" path is a clone into
+// a new object, not destructive, so it never escalates to a PROD-only
+// confirm — staging is the same in every context.
+func TestJobRerunStaysStagedEvenInProd(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {jobObj("default", "batch-1")},
 	}}
@@ -267,28 +292,28 @@ func TestJobRetryStaysInlineEvenInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "R"})
-	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected ctrl+r to stay TierInline even in a prod context, tier=%v", m.actions.Tier())
+	if m.pendingJobRerun == nil || m.actions.Active() {
+		t.Fatalf("expected R to stage the preview with no actions.Controller confirm, even in PROD")
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
 	if len(mut.retriedJobs) != 1 {
-		t.Fatalf("expected a plain 'y' to retry immediately, got %v", mut.retriedJobs)
+		t.Fatalf("expected enter to create immediately, got %v", mut.retriedJobs)
 	}
 }
 
-// TestJobSuspendEscalatesToModalConfirmInProd pins the fix for
-// beginJobSuspend's own broken PROD escalation (the same bug class
-// TestCtrlRProdOpensTypeNameModal pins for rollout-restart): unlike Retry,
-// JobSuspend has a real destructive side effect (tears down the Job's active
-// pods immediately), so a prod-tagged context must escalate 's' from
-// TierInline to TierModal — landing on the plain ConfirmCard (Drain's/
-// Rollback's treatment), not the typed-name modal, since job-suspend isn't
-// in requiresTypeNameConfirm/requiresTypedName.
-func TestJobSuspendEscalatesToModalConfirmInProd(t *testing.T) {
+// TestJobSuspendEscalatesToTypeNameModalConfirmInProd pins §37a's asymmetric
+// tier — mirroring CronJobSuspend's own (36c) rather than the old symmetric
+// TierInline both directions: unlike Retry/rerun-create, JobSuspend has a
+// real destructive side effect (tears down the Job's active pods
+// immediately), so a prod-tagged context escalates 's' from TierInline to
+// TierModal — and, since job-suspend is now in
+// actions.RequiresTypedName (mirroring cronjob-suspend), that lands on the
+// full type-the-name modal, not the plain ConfirmCard.
+func TestJobSuspendEscalatesToTypeNameModalConfirmInProd(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {suspendedJobObj("default", "batch-1", false)},
 	}}
@@ -298,23 +323,37 @@ func TestJobSuspendEscalatesToModalConfirmInProd(t *testing.T) {
 	session.Config = config.Config{ProdContexts: []string{session.Location.Context}}
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "s"})
 	if !m.actions.Active() || m.actions.Tier() != actions.TierModal {
 		t.Fatalf("expected 's' in a prod context to escalate to TierModal, tier=%v", m.actions.Tier())
 	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "PROD CONTEXT") {
+		t.Fatalf("expected the PROD CONTEXT tag in the modal:\n%s", view)
+	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.jobSuspends) != 0 {
+		t.Fatalf("expected enter to no-op before the name matches: %v", mut.jobSuspends)
+	}
+	for _, r := range "batch-1" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
 	if len(mut.jobSuspends) != 1 || mut.jobSuspends[0] != "default/batch-1=true" {
 		t.Fatalf("expected a suspend call, got %v", mut.jobSuspends)
 	}
 }
 
-// TestSKeyTogglesJobSuspendAndResumeLabel mirrors
-// TestFluxSuspendVerbFlipsDirectionWithTheRow, adjusted for TierInline
-// (Job's own suspend needs 'y' after 's', unlike Flux's TierNone).
-func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
+// TestSKeyTogglesJobSuspendLabelResumeExecutesImmediately mirrors
+// TestSKeyOnCronJobSuspendResumeStaysTierNone: suspend still needs 'y'
+// (TierInline outside PROD), but resume is now TierNone — reversible and
+// immediate, the same "restores exactly the prior state" contract Cordon/
+// FluxSuspend's own resume direction already has — so pressing 's' on a
+// suspended row applies the resume with no confirm state at all.
+func TestSKeyTogglesJobSuspendLabelResumeExecutesImmediately(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindJob: {suspendedJobObj("default", "batch-1", false)},
 	}}
@@ -323,7 +362,7 @@ func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
 	session.Location.Kind = kube.KindJob
 	m := New(Config{Session: session, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	m = step(t, m, m.load()())
 
 	if !strings.Contains(plain(m.Render()), "suspend") {
 		t.Errorf("keybar should read 'suspend' on an active row:\n%s", plain(m.Render()))
@@ -345,13 +384,15 @@ func TestSKeyTogglesJobSuspendAndResumeLabel(t *testing.T) {
 	session2.Location.Kind = kube.KindJob
 	m2 := New(Config{Session: session2, Lister: lister2, Mutator: mut2})
 	m2.SetSize(120, 36)
-	m2 = step(t, m2, m2.Init()())
+	m2 = step(t, m2, m2.load()())
 
 	if !strings.Contains(plain(m2.Render()), "resume") {
 		t.Errorf("keybar should read 'resume' on a suspended row:\n%s", plain(m2.Render()))
 	}
 	m2 = step(t, m2, tea.KeyPressMsg{Text: "s"})
-	m2 = step(t, m2, tea.KeyPressMsg{Text: "y"})
+	if m2.actions.Active() {
+		t.Fatalf("expected resume to execute immediately (TierNone), not enter a confirm state")
+	}
 	if len(mut2.jobSuspends) != 1 || mut2.jobSuspends[0] != "default/batch-1=false" {
 		t.Fatalf("expected a resume call on a suspended row, got %v", mut2.jobSuspends)
 	}
@@ -453,7 +494,7 @@ func TestCronJobRunNowStaysStagedEvenInProd(t *testing.T) {
 
 	m = step(t, m, tea.KeyPressMsg{Text: "R"})
 	if m.pendingCronJobRun == nil || m.actions.Active() {
-		t.Fatalf("expected ctrl+r to stage the preview with no actions.Controller confirm, even in PROD")
+		t.Fatalf("expected R to stage the preview with no actions.Controller confirm, even in PROD")
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})

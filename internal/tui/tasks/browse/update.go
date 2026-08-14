@@ -35,6 +35,8 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 		return nil
 	case m.pendingCronJobRun != nil, m.pendingCronJobResume != nil:
 		return nil // enter/y/esc only — no text buffer to paste into
+	case m.pendingJobRerun != nil:
+		return nil // enter/↑↓/esc only — no text buffer to paste into
 	case m.pendingScale != nil:
 		return m.scalePasteTarget()
 	case m.pendingSetImage != nil:
@@ -168,12 +170,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cronJobTickMsg:
 		if msg.epoch != m.reloadEpoch || !m.ticksCronJobClock() {
 			// Superseded by a kind/namespace/context switch (or the kind is
-			// no longer CronJob) — let the chain die here rather than
+			// no longer CronJob/Job) — let the chain die here rather than
 			// rescheduling a tick nothing needs any more.
 			return m, nil
 		}
 		m.now = time.Now()
-		m.applyCronJobTick(m.now)
+		if m.kind == kube.KindJob {
+			m.applyJobTick(m.now, m.currentUser)
+		} else {
+			m.applyCronJobTick(m.now)
+		}
 		return m, m.scheduleCronJobTick(m.reloadEpoch)
 	case rowsLoadedMsg:
 		return m.applyRowsLoaded(msg)
@@ -405,6 +411,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.nodePodHealth = msg.nodePodHealth
 	m.cronJobSummaries = msg.cronJobSummaries
 	m.cronJobJobsErr = msg.cronJobJobsErr
+	m.jobListSummaries = msg.jobListSummaries
 	m.fetchedAt = time.Now()
 	// Real data has landed — 15a's cached/dimmed loading view (if any) is
 	// superseded either way, whether this resolves to Ready or Empty below.
@@ -478,6 +485,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingCronJobResume != nil {
 		return m.updateCronJobResumeKey(msg)
 	}
+	if m.pendingJobRerun != nil {
+		return m.updateJobRerunKey(msg)
+	}
 	if m.pendingSetImage != nil {
 		return m.updateSetImageKey(msg)
 	}
@@ -544,6 +554,19 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
+		}
+		if m.kind == kube.KindJob && m.openLogs != nil {
+			// §37a: tails the newest attempt's pod directly from the list.
+			if row, ok := m.selectedRow(); ok {
+				if pod, reason, ok := m.jobLogsTarget(row); ok {
+					task, cmd := m.openLogs(pod, "", m.width, m.height)
+					if task != nil {
+						return task, cmd
+					}
+				} else if reason != "" {
+					m.execFeedback = reason
+				}
+			}
 		}
 		if m.kind == kube.KindCronJob && m.openLogs != nil {
 			// §36a: the newest useful Pod of the selected row's most recent
@@ -627,7 +650,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.kind == kube.KindJob && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
-				return m, m.beginJobRetry(row)
+				m.beginJobRerun(row)
+				return m, nil
 			}
 		}
 		if m.kind == kube.KindCronJob && m.state == tui.TaskStateReady && m.mutator != nil {
@@ -863,10 +887,8 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 			return m, m.openDaemonSetPods(row), true
 		}
 	}
-	if m.kind == kube.KindJob {
-		if row, ok := m.selectedRow(); ok {
-			return m, m.openJobPods(row), true
-		}
+	if task, cmd, ok := m.openSelectedJobAttempts(); ok {
+		return task, cmd, true
 	}
 	if task, cmd, ok := m.openSelectedCronJobDetail(); ok {
 		return task, cmd, true

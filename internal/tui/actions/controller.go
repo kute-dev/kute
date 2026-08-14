@@ -214,10 +214,16 @@ func (c *Controller) Confirm() tea.Cmd {
 // typed-name match — the delete family, 16b's rollout-undo (docs/design
 // README.md §16b: "type-the-deployment-name modal in PROD"), 9a's
 // rollout-restart (§9a/§419: "delete and rollout restart are both tiered —
-// inline y/N in non-prod, type-the-name modal in PROD contexts"), and 36c's
+// inline y/N in non-prod, type-the-name modal in PROD contexts"), 36c's
 // cronjob-suspend (0.8.0 plan §3 task 2/3: "suspend/PROD: TierModal with
 // typed resource name" — cronjob-resume never reaches TierModal at all, so
-// it's deliberately absent here, the same way job-retry stays absent below).
+// it's deliberately absent here, the same way job-retry stays absent
+// below), and v0.9.0's own two additions: job-suspend (§37a: "same
+// asymmetric confirm as 36c" — job-resume, like cronjob-resume, never
+// reaches TierModal) and job-replace (§37c: unlike job-retry's clone, this
+// deletes the original Job — its Status, events, and §37b's own attempt
+// history — before recreating it, which is exactly delete/rollout-restart's
+// own "this destroys something" bar).
 // Drain's TierModal confirm, and 18a's Helm rollback (a different
 // Scope.Verb, "rollback"), both stay the simple y/N ConfirmCard. Job's own
 // "job-retry" deliberately never reaches TierModal at all (browse/jobs.go's
@@ -231,7 +237,8 @@ func (c *Controller) Confirm() tea.Cmd {
 // action-controller predicate... rather than duplicating verb lists").
 func RequiresTypedName(verb string) bool {
 	return verb == "delete" || verb == "force-delete" || verb == "rollout-undo" ||
-		verb == "rollout-restart" || verb == "cronjob-suspend"
+		verb == "rollout-restart" || verb == "cronjob-suspend" ||
+		verb == "job-suspend" || verb == "job-replace"
 }
 
 // Cancel abandons the pending confirmation.
@@ -473,7 +480,9 @@ func executeScope(mutator kube.Mutator, scope tui.TaskScope) error {
 			scope.ResourceName, scope.Verb == "flux-suspend")
 	case "job-retry":
 		err = mutator.RetryJob(context.Background(),
-			scope.Namespace, scope.ResourceName, scope.NewName)
+			scope.Namespace, scope.ResourceName, scope.NewName, scope.TriggerCreator, scope.StagedAt)
+	case "job-replace":
+		err = mutator.ReplaceJob(context.Background(), scope.Namespace, scope.ResourceName)
 	case "job-suspend", "job-resume":
 		err = mutator.SetJobSuspend(context.Background(),
 			scope.Namespace, scope.ResourceName, scope.Verb == "job-suspend")
