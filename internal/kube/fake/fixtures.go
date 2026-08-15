@@ -138,6 +138,7 @@ func NewDemo() *Cluster {
 	nightlyCleanup := demoCronJob("nightly-cleanup", "default", "30 3 * * *", false, age(45*24*time.Hour))
 	nightlyCleanup.Spec.SuccessfulJobsHistoryLimit = int32Val(3)
 	nightlyCleanup.Spec.FailedJobsHistoryLimit = int32Val(1)
+	nightlyCleanup.Spec.JobTemplate.Spec.BackoffLimit = int32Val(3)
 
 	// metricsRollup keeps an active run alive (below) with ForbidConcurrent,
 	// so §36b's ctrl-r run-now demonstrates a real overlap warning rather
@@ -158,6 +159,8 @@ func NewDemo() *Cluster {
 
 	failedCleanupRun := demoScheduledFailedJob("nightly-cleanup-29070330", "default", nightlyCleanup.Name, nightlyCleanup.UID,
 		age(2*time.Hour), "BackoffLimitExceeded", "Job has reached the specified backoff limit")
+	failedCleanupRun.Spec.BackoffLimit = int32Val(3)
+	failedCleanupRun.Status.Failed = 3
 
 	c.Seed(kube.KindJob,
 		// nightly-backup: two retained succeeded runs (§36a "successful
@@ -184,8 +187,8 @@ func NewDemo() *Cluster {
 			age(4*time.Hour), age(4*time.Hour-2*time.Minute)),
 
 		// nightly-cleanup: §3.5's failed-latest-run exemplar — the Job's
-		// own Failed condition is authoritative; its Pod (seeded below)
-		// only adds an exit code/reason, never overrides it.
+		// own Failed condition is authoritative; its retained Pods (seeded
+		// below) add attempt-level exit codes/durations, never override it.
 		failedCleanupRun,
 
 		// metrics-rollup: a prior succeeded run plus a currently active one
@@ -197,7 +200,11 @@ func NewDemo() *Cluster {
 	)
 
 	c.Seed(kube.KindPod,
-		demoFailedJobPod("nightly-cleanup-29070330-x7z2p", "default", age(2*time.Hour-90*time.Second),
+		demoFailedJobPod("nightly-cleanup-29070330-k2m4p", "default", age(2*time.Hour-time.Minute),
+			failedCleanupRun.Name, failedCleanupRun.UID),
+		demoFailedJobPod("nightly-cleanup-29070330-r5t8w", "default", age(2*time.Hour-4*time.Minute),
+			failedCleanupRun.Name, failedCleanupRun.UID),
+		demoFailedJobPod("nightly-cleanup-29070330-x7z2p", "default", age(2*time.Hour-7*time.Minute),
 			failedCleanupRun.Name, failedCleanupRun.UID),
 	)
 
@@ -1278,6 +1285,7 @@ func demoUnrelatedJob(name, ns string, created metav1.Time) *batchv1.Job {
 func demoFailedJobPod(name, ns string, created metav1.Time, jobName string, jobUID types.UID) *corev1.Pod {
 	p := demoPod(name, ns, created, corev1.PodFailed, corev1.PodQOSBurstable, "node-a", false, 0,
 		&corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error", Message: "backoff limit exceeded", FinishedAt: metav1.NewTime(created.Add(90 * time.Second))})
+	p.Status.StartTime = &created
 	isController := true
 	p.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: kube.KindJob.APIKind(), Name: jobName, UID: jobUID, Controller: &isController}}
 	return p

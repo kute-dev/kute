@@ -14,6 +14,10 @@ Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
+Hide
+Type "mkdir -p ~/.config/kute && printf 'update: {check: false}\n' > ~/.config/kute/config.yaml"
+Enter
+Sleep 200ms
 Type "kute --demo --theme light -n argocd"
 Enter
 Sleep 1000ms
@@ -24,3 +28,4 @@ Sleep 500ms
 Enter
 Wait+Screen@8s "OutOfSync"
 Sleep 700ms
+Show

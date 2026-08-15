@@ -611,8 +611,8 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	ctx := context.Background()
 
 	pods, err := c.ListRaw(ctx, kube.KindPod, "")
-	if err != nil || len(pods) != 15 {
-		t.Fatalf("ListRaw(Pod) = %d, %v, want 15 fixture pods", len(pods), err)
+	if err != nil || len(pods) != 17 {
+		t.Fatalf("ListRaw(Pod) = %d, %v, want 17 fixture pods", len(pods), err)
 	}
 	if pod, ok := findPod(pods, "api-7d9f6c8-abcde"); !ok || len(pod.Spec.Containers) < 2 {
 		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)
@@ -726,6 +726,22 @@ func TestNewDemoCoversEveryCronJobOutcome(t *testing.T) {
 	}
 	if nc.LastTerminal.ExitCode == nil || *nc.LastTerminal.ExitCode != 1 {
 		t.Fatalf("nightly-cleanup LastTerminal.ExitCode = %v, want 1 from the associated Pod", nc.LastTerminal.ExitCode)
+	}
+	var cleanupJob *batchv1.Job
+	for _, obj := range jobs {
+		if job, ok := obj.(*batchv1.Job); ok && job.Name == "nightly-cleanup-29070330" {
+			cleanupJob = job
+			break
+		}
+	}
+	attempts, ok := resources.BuildJobAttempts(cleanupJob, pods)
+	if !ok || len(attempts.Attempts) != 3 {
+		t.Fatalf("nightly-cleanup attempts = %d, ok=%v, want 3 retained attempts", len(attempts.Attempts), ok)
+	}
+	for _, attempt := range attempts.Attempts {
+		if attempt.StartedAt.IsZero() || attempt.EndedAt.IsZero() {
+			t.Fatalf("nightly-cleanup attempt %+v has no duration", attempt)
+		}
 	}
 
 	// metrics-rollup: an active run alongside a prior succeeded terminal

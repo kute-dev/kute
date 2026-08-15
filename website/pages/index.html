@@ -64,6 +64,10 @@
           <span class="explorer-tab-title">Move without losing place</span>
           <span class="explorer-tab-meta">goto, namespace, context</span>
         </button>
+        <button id="explorer-tab-batch" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-batch" tabindex="-1">
+          <span class="explorer-tab-title">Debug batch workloads</span>
+          <span class="explorer-tab-meta">cronjobs and job attempts</span>
+        </button>
         <button id="explorer-tab-routing" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-routing" tabindex="-1">
           <span class="explorer-tab-title">Inspect routing</span>
           <span class="explorer-tab-meta">ingress and httproute</span>
@@ -157,6 +161,31 @@
             </div>
             <a class="explorer-fullsize theme-link-dark" href="/assets/home-navigation-context.png" target="_blank" rel="noopener">Open screenshot full size</a>
             <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-context-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+        </article>
+
+        <article id="explorer-panel-batch" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-batch" tabindex="0" hidden>
+          <div class="explorer-subtabs" role="tablist" aria-label="Batch workload screen">
+            <button id="batch-tab-cronjob" type="button" role="tab" aria-selected="true" aria-controls="batch-panel-cronjob" tabindex="0">CronJob failure</button>
+            <button id="batch-tab-attempts" type="button" role="tab" aria-selected="false" aria-controls="batch-panel-attempts" tabindex="-1">Job attempts</button>
+          </div>
+          <div id="batch-panel-cronjob" class="explorer-subpanel" role="tabpanel" aria-labelledby="batch-tab-cronjob">
+            <p class="explorer-intro">The latest terminal failure sits above scheduled and manual run history, with the controller's own reason and a direct path to the exact Job.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-batch-cronjob.png" width="1632" height="800" loading="lazy" alt="kute CronJob detail promoting the latest failed run above its associated Jobs">
+              <img class="theme-shot theme-shot-light" src="/assets/home-batch-cronjob-light.png" width="1632" height="800" loading="lazy" alt="kute CronJob detail in the light theme promoting the latest failed run above its associated Jobs">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-batch-cronjob.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-batch-cronjob-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="batch-panel-attempts" class="explorer-subpanel" role="tabpanel" aria-labelledby="batch-tab-attempts" hidden>
+            <p class="explorer-intro">Each retained retry keeps its result, exit code, duration and node together; rerun stages a safe copy or an explicit replacement.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-batch-attempts.png" width="1632" height="700" loading="lazy" alt="kute Job attempt ledger showing three failed retries and their exit codes">
+              <img class="theme-shot theme-shot-light" src="/assets/home-batch-attempts-light.png" width="1632" height="700" loading="lazy" alt="kute Job attempt ledger in the light theme showing three failed retries and their exit codes">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-batch-attempts.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-batch-attempts-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
         </article>
 

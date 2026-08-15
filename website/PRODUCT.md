@@ -20,6 +20,7 @@ kute.dev is the marketing/documentation site for kute, a keyboard-driven Kuberne
 
 - Unhealthy-first triage: every list sorts broken workloads to the top; healthy groups collapse to one line.
 - Restart-aware logs and an incident timeline that merges events, container restarts, and rollout revisions newest-first.
+- CronJob failures promote the controller's reason above retained run history; Jobs open an attempt ledger with retry outcomes and exit codes.
 - Termination causes and conditions shown verbatim, never paraphrased.
 - Every mutating action shows the exact command it's about to run before it runs — copyable documentation, not a black box.
 - Tiered destructive-action friction: reversible verbs (cordon) execute immediately; delete/rollout-restart use inline y/N normally and a type-the-name modal only when the kubeconfig context is explicitly tagged production (never guessed from a name); drain always confirms.

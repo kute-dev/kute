@@ -247,7 +247,7 @@ Two radius families cover almost everything: a **pill** (`9999px`) for every but
 - **Mobile treatment:** below `720px` the nav links collapse into a slide-down panel (`chrome` background, full-bleed) toggled by a hamburger icon; the GitHub-star chip is dropped entirely to save width.
 
 ### The Product Explorer (homepage signature)
-- **Structure:** five workflows in a vertical task rail, with one stable media stage. Incident diagnosis nests Cluster triage/Pod diagnosis/Certificates/Timeline; Navigation nests Goto/Namespace/Context; Routing nests Ingress/HTTPRoute; GitOps nests Flux/Argo CD; Safety nests Non-production/Production confirmations.
+- **Structure:** six workflows in a vertical task rail, with one stable media stage. Incident diagnosis nests Cluster triage/Pod diagnosis/Certificates/Timeline; Navigation nests Goto/Namespace/Context; Batch debugging nests CronJob failure/Job attempts; Routing nests Ingress/HTTPRoute; GitOps nests Flux/Argo CD; Safety nests Non-production/Production confirmations.
 - **Visual language:** the selected task quotes the TUI's accent rail and selection wash; the surrounding shell stays quiet so the real terminal capture remains dominant.
 - **Media contract:** every screen opens on paired dark/light deterministic PNGs from `kute --demo`, selected with the website theme. Incident and routing items may replace that still with an explicitly started recording; changing tabs pauses and resets it. Nothing in the explorer autoplays.
 - **Responsive contract:** below `720px` tasks become horizontal tabs. Below `640px` the capture pans inside its own full-width viewport rather than shrinking terminal text into illegibility.
