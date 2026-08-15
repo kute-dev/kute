@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
@@ -40,12 +39,7 @@ func newSession(namespace string) *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "test-cluster", Namespace: namespace}}
 }
 
-func boolPtr(b bool) *bool    { return &b }
 func int32Ptr(v int32) *int32 { return &v }
-
-func controllerRef(kind, name string, uid types.UID) metav1.OwnerReference {
-	return metav1.OwnerReference{Kind: kind, Name: name, UID: uid, Controller: boolPtr(true)}
-}
 
 func newModel(t *testing.T, c *fake.Cluster, namespace, name string) Model {
 	t.Helper()

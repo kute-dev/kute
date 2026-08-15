@@ -15,6 +15,7 @@ package resources
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -303,7 +304,7 @@ func ProjectJobList(summary JobListSummary, now time.Time, currentUser string) R
 // itoa32 is strconv.Itoa for an int32, without importing strconv into this
 // file solely for FAILED's cell.
 func itoa32(n int32) string {
-	return fmt.Sprintf("%d", n)
+	return strconv.Itoa(int(n))
 }
 
 // jobHealth is Job's Health implementation (§37a: "complete/running/failed/

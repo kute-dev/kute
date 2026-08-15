@@ -17,6 +17,7 @@ package resources
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -271,7 +272,7 @@ func attemptResultCell(a JobAttempt) (result, exit string) {
 		result = "Running"
 	}
 	if a.ExitCode != nil {
-		exit = fmt.Sprintf("%d", *a.ExitCode)
+		exit = strconv.Itoa(int(*a.ExitCode))
 	} else {
 		exit = "–"
 	}
@@ -306,7 +307,7 @@ func ProjectJobAttemptTable(summary JobAttemptsSummary, now time.Time) []Row {
 		rows = append(rows, Row{
 			Name:   a.PodName,
 			Status: status,
-			Cells:  []string{fmt.Sprintf("%d", a.Ordinal), a.PodName, result, exit, ran, node, when},
+			Cells:  []string{strconv.Itoa(a.Ordinal), a.PodName, result, exit, ran, node, when},
 		})
 	}
 	return rows

@@ -151,7 +151,9 @@ func (f *fakeMutator) RenewCertificate(_ context.Context, namespace, name string
 func (f *fakeMutator) RequestFluxReconcile(_ context.Context, kind kube.ResourceKind, namespace, name string) error {
 	return nil
 }
-func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error { return nil }
+func (f *fakeMutator) RetryJob(_ context.Context, namespace, name, newName, creator string, at time.Time) error {
+	return nil
+}
 func (f *fakeMutator) ReplaceJob(_ context.Context, namespace, name string) error { return nil }
 func (f *fakeMutator) SetJobSuspend(_ context.Context, namespace, name string, suspend bool) error {
 	return nil

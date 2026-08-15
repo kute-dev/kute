@@ -216,7 +216,7 @@ func NewDemo() *Cluster {
 	// terminatedAt is a tiny local helper for the indexed-pod fixtures
 	// below: a ContainerStateTerminated ending `after` its own pod's start.
 	terminatedAt := func(start metav1.Time, after time.Duration, exitCode int32, reason string) *corev1.ContainerStateTerminated {
-		return &corev1.ContainerStateTerminated{ExitCode: exitCode, Reason: reason, FinishedAt: metav1.NewTime(start.Time.Add(after))}
+		return &corev1.ContainerStateTerminated{ExitCode: exitCode, Reason: reason, FinishedAt: metav1.NewTime(start.Add(after))}
 	}
 	idx0, idx1, idx2 := age(10*time.Minute), age(10*time.Minute), age(10*time.Minute)
 	idx4, idx5, idx6, idx7 := age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second)

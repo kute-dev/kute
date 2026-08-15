@@ -65,7 +65,7 @@ func (m *Model) commitRerun() tea.Cmd {
 	if t.choice == resources.JobRerunCreate {
 		return m.actions.Begin(verbs.JobRetry.Tier, tui.TaskAction{
 			ID:    "job-retry-" + m.namespace + "/" + m.name,
-			Label: fmt.Sprintf("Rerun %s", m.name),
+			Label: "Rerun " + m.name,
 			Scope: tui.TaskScope{
 				ResourceKind: string(kube.KindJob), ResourceName: m.name,
 				Namespace: m.namespace, Verb: "job-retry", IsMutating: true,
