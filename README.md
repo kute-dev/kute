@@ -213,7 +213,9 @@ Prebuilt binaries are published for Linux, macOS, and Windows on amd64/arm64 —
 
 ## Project status
 
-kute is pre-1.0 and under active development. Interfaces, keybindings, and screens may still change between releases.
+kute is production-usable and remains pre-1.0. It is used with production AKS and on-premises MicroK8s clusters; end-to-end tests run against kind on Kubernetes 1.35 and 1.36, with a nightly 5,000-pod KWOK scale test.
+
+Suffixless `0.x` releases are intended for production use, but do not carry a `1.0` compatibility promise. Interfaces, keybindings, and screens may still change between minor releases.
 
 ## License
 
@@ -221,8 +223,6 @@ Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ## Contributing
 
-Contributions are not accepted at this time.
+Thank you for wanting to help. Share experience and early-stage ideas in [GitHub Discussions](https://github.com/kute-dev/kute/discussions), or use [issues](https://github.com/kute-dev/kute/issues/new/choose) to report confirmed bugs and request well-scoped changes.
 
-Use [GitHub Discussions](https://github.com/kute-dev/kute/discussions) for questions, general feedback, and early-stage feature ideas.
-
-Use [issues](https://github.com/kute-dev/kute/issues/new/choose) for confirmed bugs or well-scoped, actionable requests.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) and discuss the scope and approach with the maintainer before starting work on a pull request.
