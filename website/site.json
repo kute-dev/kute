@@ -14,12 +14,12 @@
   "pages": [
     {
       "slug": "index",
-      "title": "kute — the incident console for Kubernetes",
-      "description": "kute makes a cluster's actual state visible without digging — the broken thing sorts to the top, every action shows the command it will run first, and nothing goes blank when the connection drops. Reads Helm releases and Flux CD reconcilers without either binary installed. Try it in one command, no cluster needed.",
+      "title": "kute - Modern Kubernetes TUI",
+      "description": "kute is a modern Kubernetes TUI that makes a cluster's actual state visible without digging — the broken thing sorts to the top, every action shows the command it will run first, and nothing goes blank when the connection drops. Reads Helm releases and Flux CD reconcilers without either binary installed. Try it in one command, no cluster needed.",
       "canonical": "https://kute.dev/",
-      "ogTitle": "kute — the incident console for Kubernetes",
+      "ogTitle": "kute - Modern Kubernetes TUI",
       "ogDescription": "Your cluster, in plain sight. Modern Kubernetes TUI. Try kute --demo — no cluster needed.",
-      "twitterDescription": "Your cluster, in plain sight. Modern Kubernetes TUI.",
+      "twitterDescription": "Modern Kubernetes TUI. Your cluster, in plain sight.",
       "home": true
     },
     {
