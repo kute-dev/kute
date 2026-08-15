@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
 
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/helmrepo"
@@ -170,6 +171,21 @@ func helpMiscKeys() []tui.KeyHint {
 // configTheme (config.yaml's theme: key), then terminal background
 // detection. Any value other than "dark"/"light" falls through (so "auto"
 // and typos both defer to detection rather than erroring).
+//
+// The detection branch only queries the terminal when stdin AND stdout are
+// both real TTYs. lipgloss.HasDarkBackground already skips the query and
+// falls back to its dark-on-error default when that's not the case on
+// Unix — but on Windows, BackgroundColor reopens CONIN$/CONOUT$ whenever
+// stdin/stdout are redirected instead of bailing out, so a non-interactive
+// invocation (a piped/scripted launch, or `go test` itself) still issues a
+// live OSC-11 query. With no terminal emulator on the other end to answer
+// it, that query can block in ReadConsole indefinitely: Windows cancels the
+// read through muesli/cancelreader's fallback implementation, which cannot
+// interrupt an already-blocked ReadConsole syscall, so the query's own 2s
+// timeout never actually fires. That's what turned a single `go test
+// ./...` invocation into a 10-minute hang on windows-latest CI runners —
+// this guard keeps the query from ever being attempted outside a real
+// interactive terminal, matching the fallback HasDarkBackground documents.
 func selectTheme(flagTheme, configTheme string) tui.Theme {
 	for _, v := range []string{flagTheme, configTheme} {
 		switch v {
@@ -178,6 +194,9 @@ func selectTheme(flagTheme, configTheme string) tui.Theme {
 		case "light":
 			return tui.Light()
 		}
+	}
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
+		return tui.Dark()
 	}
 	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 		return tui.Dark()

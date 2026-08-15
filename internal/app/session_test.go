@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -64,6 +65,28 @@ func TestSelectThemeUnrecognizedValuesDeferToDetection(t *testing.T) {
 	got := selectTheme("auto", "also-not-a-theme")
 	if got != tui.Dark() && got != tui.Light() {
 		t.Fatalf("expected a valid detected theme, got %+v", got)
+	}
+}
+
+// TestSelectThemeDetectionSkipsLiveQueryWhenNotATerminal pins a regression:
+// selectTheme's detection fallback must never attempt a live terminal
+// background-color query when stdin/stdout aren't real TTYs (always true
+// under go test). A prior version issued the query unconditionally, which
+// on Windows can block in ReadConsole indefinitely — cancellation goes
+// through a fallback reader that can't interrupt an already-blocked read —
+// turning a single go test invocation into a 10-minute CI hang. This test
+// fails by timing out if that guard is ever removed.
+func TestSelectThemeDetectionSkipsLiveQueryWhenNotATerminal(t *testing.T) {
+	t.Parallel()
+	done := make(chan tui.Theme, 1)
+	go func() { done <- selectTheme("", "") }()
+	select {
+	case got := <-done:
+		if got != tui.Dark() && got != tui.Light() {
+			t.Fatalf("expected a valid detected theme, got %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("selectTheme blocked for over a second — did it attempt a live terminal query?")
 	}
 }
 
