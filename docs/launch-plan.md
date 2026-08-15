@@ -97,32 +97,31 @@ paths have to be visibly different.
 *Acceptance:* a reporter looking at the issue chooser can tell in one read which path is
 theirs — the security link sits above every other option.
 
-## 3. `latest` must mean stable
+## 3. `latest` must mean stable — **done for future releases**
 
-No release is marked prerelease on GitHub — `gh release list` shows `v0.3.0-alpha.8` as
-`Latest`, and `.goreleaser.yaml` sets no `release.prerelease`. Two consequences, both
-currently invisible:
+Releases through `v0.8.0-beta.3` were not marked prerelease on GitHub. That made the
+newest beta the `Latest` release, so it reached both default install paths and the in-app
+update check during the pre-release soak.
 
-- `install.sh` resolves `latest` through `/releases/latest` (`website/install.sh:55-58`),
-  so `curl | sh` on a clean machine installs an alpha.
-- 28a's update chip uses the same endpoint, so every user is prompted to upgrade to
-  alphas.
+Suffixless `0.x` releases are now intended for production use, so the stable-channel
+boundary starts before 1.0. `.goreleaser.yaml` sets `release.prerelease: auto`: a
+hyphenated SemVer tag such as `v0.10.0-beta.1` is marked as a GitHub prerelease, while a
+suffixless tag such as `v0.9.0` is eligible to become `Latest`. GitHub's
+`/releases/latest` endpoint, used by both installers and 28a's update check, excludes
+drafts and prereleases. An explicit `KUTE_VERSION=0.10.0-beta.1` install still works.
 
-**This is fine now and wrong at 1.0.** Pre-1.0, everyone installing kute is an early
-adopter and the behaviour is what gets a beta soaked at all — it is the reason skipping
-RC costs nothing. The moment `1.0.0` exists, `latest` has to mean stable or the version
-number is decoration.
+The historical alpha and beta releases must not be reclassified until the first
+suffixless release is published. They are currently the only releases GitHub can return
+from `/releases/latest`; marking all of them as prereleases first would break a fresh
+default install. After `v0.9.0` is published and confirmed as `Latest`, reclassify the
+historical hyphenated releases through GitHub.
 
-So this is a dated change, not a bug fix: set `release.prerelease: auto` (any hyphenated
-semver tag gets marked) **as part of the 1.0 release, not before it** — doing it earlier
-would silence the beta.
+Once prereleases stop reaching users by default, an opt-in update channel would be needed
+to soak them through the app. No prerelease update channel is currently planned; testers
+can install an exact prerelease with `KUTE_VERSION` instead.
 
-Deciding it now also settles the open question underneath: once prereleases stop
-reaching people by default, an opt-in `update.channel: prerelease` is the only way
-future betas soak. Worth building at the same time, or explicitly declining.
-
-*Acceptance:* after 1.0, a fresh `curl | sh` installs `1.0.0` with a `1.1.0-beta.1`
-published; `KUTE_VERSION=1.1.0-beta.1` still installs it explicitly.
+*Acceptance:* after `v0.9.0`, a fresh `curl | sh` still installs `v0.9.0` with a
+`v0.10.0-beta.1` published; `KUTE_VERSION=0.10.0-beta.1` installs the beta explicitly.
 
 ## 4. Rollback is proven
 
@@ -174,5 +173,6 @@ works on each platform — the one place the diagnostics work is platform-sensit
 2. **During the soak** — §1 trust chain, §2 disclosure path, §5 platform smoke. None of
    these touch app behaviour, so they can land while beta is in the field.
 3. **§4 rollback** once there are two schema-relevant versions to move between.
-4. **`1.0.0`** — §3's prerelease marking and §6's mechanics land *in* the release
-   commit, because §3 changes what every earlier tag means.
+4. **`0.9.0`** — §3's prerelease marking lands before the first suffixless tag. Publish
+   and confirm that stable release before reclassifying the historical alpha/beta tags.
+5. **`1.0.0`** — §6's remaining launch mechanics and compatibility promise.

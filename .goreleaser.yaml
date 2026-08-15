@@ -81,6 +81,10 @@ changelog:
       - "^chore:"
 
 release:
+  # Both installers and the in-app update check use GitHub's latest stable
+  # release. Keep hyphenated tags (alpha, beta, rc) out of that channel while
+  # allowing suffixless tags to become Latest automatically.
+  prerelease: auto
   extra_files:
     - glob: ./.release/changelog.json
 

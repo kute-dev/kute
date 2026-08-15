@@ -45,6 +45,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      # Both installers and the in-app update check follow GitHub's latest
+      # stable release. Assert the metadata after publication so a config or
+      # GoReleaser regression cannot silently put a beta on that channel.
+      - name: Verify the release channel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            *-*) expected=prerelease ;;
+            *) expected=stable ;;
+          esac
+          actual=$(gh release view "${GITHUB_REF_NAME}" --json isPrerelease \
+            --jq 'if .isPrerelease then "prerelease" else "stable" end')
+          if [ "${actual}" != "${expected}" ]; then
+            echo "release channel mismatch: ${GITHUB_REF_NAME} is ${actual}, expected ${expected}" >&2
+            exit 1
+          fi
       # The signing step only runs on a tag — no PR has an OIDC identity, so
       # ci.yml's snapshot build passes `--skip=sign` and cannot catch a
       # cosign invocation that no longer parses. Verifying one archive here,
