@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -37,19 +38,29 @@ type PathCheck struct {
 // paths resolve a kubeconfig (the client, AvailableContexts, KubeconfigPath's
 // palette hint, and 10b's LOOKED IN diagnostics) — a flag one of them missed
 // would silently describe a different file than the one in use.
-var kubeconfigFlagPath string
+var (
+	kubeconfigFlagPathMu sync.RWMutex
+	kubeconfigFlagPath   string
+)
 
 // SetKubeconfigPath pins the kubeconfig file kute reads, taking precedence
 // over $KUBECONFIG (matching kubectl's own --kubeconfig precedence). Call it
 // before building a client; the empty string clears the override.
-func SetKubeconfigPath(path string) { kubeconfigFlagPath = path }
+func SetKubeconfigPath(path string) {
+	kubeconfigFlagPathMu.Lock()
+	kubeconfigFlagPath = path
+	kubeconfigFlagPathMu.Unlock()
+}
 
 // kubeconfigSource resolves which kubeconfig to read and what to call it in
 // user-facing diagnostics. label is "" when neither the flag nor the env var
 // supplied one, leaving the caller on the ~/.kube/config default.
 func kubeconfigSource() (path, label string) {
-	if kubeconfigFlagPath != "" {
-		return kubeconfigFlagPath, "--kubeconfig"
+	kubeconfigFlagPathMu.RLock()
+	flagPath := kubeconfigFlagPath
+	kubeconfigFlagPathMu.RUnlock()
+	if flagPath != "" {
+		return flagPath, "--kubeconfig"
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
 		return env, "$KUBECONFIG"
