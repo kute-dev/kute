@@ -28,6 +28,7 @@ func main() {
 	flag.BoolVar(&cfg.Keycast, "keycast", false, "show a recent-keypresses chip (bottom-right) — for demo recording")
 	flag.StringVar(&cfg.Theme, "theme", "", "override theme selection: dark|light (default: auto-detect)")
 	flag.StringVar(&cfg.LogFile, "log-file", "", "write the error and client-go log stream to this file (for bug reports)")
+	flag.BoolVar(&cfg.NoUpdateCheck, "no-update-check", false, "disable the once-per-24h update check")
 	showVersion := flag.Bool("version", false, "print version information and exit")
 	flag.Parse()
 

@@ -90,6 +90,34 @@ func TestBuildSessionDemoModeHasNoCluster(t *testing.T) {
 	}
 }
 
+// TestBuildSessionNoUpdateCheckFlagDisablesCheck pins --no-update-check as a
+// per-invocation override that beats the loaded config file, mirroring
+// selectTheme's flag-wins precedent.
+func TestBuildSessionNoUpdateCheckFlagDisablesCheck(t *testing.T) {
+	t.Parallel()
+	sess, _, err := BuildSession(Config{AppName: "kute", Demo: true, NoUpdateCheck: true})
+	if err != nil {
+		t.Fatalf("expected no error in demo mode, got %v", err)
+	}
+	if sess.Config.UpdateCheckEnabled() {
+		t.Fatalf("expected --no-update-check to disable the update check")
+	}
+}
+
+// TestBuildSessionUpdateCheckEnabledByDefault pins the unchanged default:
+// omitting the flag leaves the update check enabled (absent any config file
+// disabling it).
+func TestBuildSessionUpdateCheckEnabledByDefault(t *testing.T) {
+	t.Parallel()
+	sess, _, err := BuildSession(Config{AppName: "kute", Demo: true})
+	if err != nil {
+		t.Fatalf("expected no error in demo mode, got %v", err)
+	}
+	if !sess.Config.UpdateCheckEnabled() {
+		t.Fatalf("expected the update check enabled by default")
+	}
+}
+
 func TestStartupContextPrefersMostRecentAvailableContext(t *testing.T) {
 	writeTestKubeconfig(t, "ctx-a")
 	got := startupContext(Config{}, state.State{RecentContexts: []string{"ctx-b", "ctx-a"}})

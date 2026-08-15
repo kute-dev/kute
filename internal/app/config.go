@@ -44,6 +44,11 @@ type Config struct {
 	// $KUBECONFIG and ~/.kube/config. Applied via kube.SetKubeconfigPath
 	// before any client is built.
 	Kubeconfig string
+	// NoUpdateCheck disables the 28a/28b ambient release-feed check for this
+	// invocation only (--no-update-check flag). It overrides the loaded
+	// config file's update.check in memory — see BuildSession — and is
+	// never persisted back to ~/.config/kute/config.yaml.
+	NoUpdateCheck bool
 }
 
 func DefaultConfig() Config {
