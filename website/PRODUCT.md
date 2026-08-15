@@ -23,7 +23,7 @@ kute.dev is the marketing/documentation site for kute, a keyboard-driven Kuberne
 - Termination causes and conditions shown verbatim, never paraphrased.
 - Every mutating action shows the exact command it's about to run before it runs — copyable documentation, not a black box.
 - Tiered destructive-action friction: reversible verbs (cordon) execute immediately; delete/rollout-restart use inline y/N normally and a type-the-name modal only when the kubeconfig context is explicitly tagged production (never guessed from a name); drain always confirms.
-- CRDs and Flux CD reconcilers render correctly with zero configuration — no plugins, no per-CRD setup, no separate binary.
+- CRDs, Flux CD reconcilers, and Argo CD Applications render correctly with zero configuration — no plugins, no per-CRD setup, no separate binary.
 - One palette (`g`) jumps to any resource kind by alias/fuzzy name or a specific object by name; alt-tab recall for the last two namespaces/contexts.
 
 ## Operating Context

@@ -7,8 +7,8 @@
 # The recorded `kute --demo` process runs with isolated HOME and XDG_STATE_HOME
 # so it never reads or writes the real config or session state. Recordings stay
 # reproducible and side-effect-free regardless of what is on the host. The
-# isolated home links only the user's font directory so Betamax can resolve the
-# font family declared by the tape.
+# isolated home links only the user's platform-specific font directories so
+# Betamax can resolve the font family declared by the tape.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -23,6 +23,10 @@ trap 'rm -rf "$tmpdir" "$statedir" "$homedir"' EXIT
 if [[ -d "$HOME/.local/share/fonts" ]]; then
 	mkdir -p "$homedir/.local/share"
 	ln -s "$HOME/.local/share/fonts" "$homedir/.local/share/fonts"
+fi
+if [[ -d "$HOME/Library/Fonts" ]]; then
+	mkdir -p "$homedir/Library"
+	ln -s "$HOME/Library/Fonts" "$homedir/Library/Fonts"
 fi
 
 go build -o "$tmpdir/kute" ./cmd/kute

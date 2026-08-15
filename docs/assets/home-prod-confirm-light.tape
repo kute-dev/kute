@@ -22,7 +22,7 @@ Sleep 200ms
 Type "kute --demo --theme light -n production"
 Enter
 Wait+Screen@8s "web-7c9f8d"
-Ctrl+D
+Type "D"
 Wait+Screen@8s "PROD CONTEXT"
 Type "web-7c9f8d-"
 Sleep 500ms

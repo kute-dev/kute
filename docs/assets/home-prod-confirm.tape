@@ -8,7 +8,7 @@ Set Shell "bash"
 Set FontFamily "JetBrainsMono Nerd Font Mono"
 Set FontSize 24
 Set Width 1632
-Set Height 1100
+Set Height 800
 Set Padding 10
 Set Theme "3024 Night"
 Set LineHeight 1.55
@@ -22,7 +22,7 @@ Sleep 200ms
 Type "kute --demo --theme dark -n production"
 Enter
 Wait+Screen@8s "web-7c9f8d"
-Ctrl+D
+Type "D"
 Wait+Screen@8s "PROD CONTEXT"
 Type "web-7c9f8d-"
 Sleep 500ms

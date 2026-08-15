@@ -51,65 +51,88 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="home-kicker"><span aria-hidden="true"></span>What you open it for</span>
-      <h2>Eight jobs, and the screen that finishes each one.</h2>
+      <h2>Start with the symptom. Open the screen that answers it.</h2>
     </div>
 
     <div class="explorer reveal" data-explorer>
       <div class="explorer-tabs" role="tablist" aria-label="Ways to use kute" aria-orientation="vertical">
-        <button id="explorer-tab-triage" class="explorer-tab" type="button" role="tab" aria-selected="true" aria-controls="explorer-panel-triage" tabindex="0">
-          <span class="explorer-tab-title">Cluster triage</span>
-          <span class="explorer-tab-meta">all namespaces</span>
+        <button id="explorer-tab-incident" class="explorer-tab" type="button" role="tab" aria-selected="true" aria-controls="explorer-panel-incident" tabindex="0">
+          <span class="explorer-tab-title">Diagnose an incident</span>
+          <span class="explorer-tab-meta">cluster, pod, certificates, timeline</span>
         </button>
         <button id="explorer-tab-navigation" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-navigation" tabindex="-1">
           <span class="explorer-tab-title">Move without losing place</span>
           <span class="explorer-tab-meta">goto, namespace, context</span>
         </button>
-        <button id="explorer-tab-pod" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-pod" tabindex="-1">
-          <span class="explorer-tab-title">Diagnose a pod</span>
-          <span class="explorer-tab-meta">detail and logs</span>
-        </button>
-        <button id="explorer-tab-timeline" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-timeline" tabindex="-1">
-          <span class="explorer-tab-title">Understand what changed</span>
-          <span class="explorer-tab-meta">incident timeline</span>
-        </button>
         <button id="explorer-tab-routing" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-routing" tabindex="-1">
           <span class="explorer-tab-title">Inspect routing</span>
           <span class="explorer-tab-meta">ingress and httproute</span>
         </button>
-        <button id="explorer-tab-flux" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-flux" tabindex="-1">
+        <button id="explorer-tab-gitops" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-gitops" tabindex="-1">
           <span class="explorer-tab-title">Review GitOps health</span>
-          <span class="explorer-tab-meta">flux tree</span>
+          <span class="explorer-tab-meta">flux and argo cd</span>
         </button>
         <button id="explorer-tab-safety" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-safety" tabindex="-1">
           <span class="explorer-tab-title">Make a safe change</span>
-          <span class="explorer-tab-meta">tiered confirmations</span>
-        </button>
-        <button id="explorer-tab-failure" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-failure" tabindex="-1">
-          <span class="explorer-tab-title">Follow a failure</span>
-          <span class="explorer-tab-meta">certificate issuance</span>
+          <span class="explorer-tab-meta">non-prod and prod confirms</span>
         </button>
         <p class="explorer-keyhint">Use arrow keys to move between screens.</p>
       </div>
 
       <div class="explorer-stage">
-        <article id="explorer-panel-triage" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-triage" tabindex="0">
-          <p class="explorer-intro">Unhealthy namespaces sort first and healthy ones collapse to a single line - the whole cluster's problems arrive on one screen.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-triage.png" width="1632" height="1100" alt="kute all-namespaces view with unhealthy workloads first">
-            <img class="theme-shot theme-shot-light" src="/assets/home-triage-light.png" width="1632" height="1100" alt="kute all-namespaces view in the light theme with unhealthy workloads first">
+        <article id="explorer-panel-incident" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-incident" tabindex="0">
+          <div class="explorer-subtabs" role="tablist" aria-label="Incident diagnosis screen">
+            <button id="incident-tab-cluster" type="button" role="tab" aria-selected="true" aria-controls="incident-panel-cluster" tabindex="0">Cluster triage</button>
+            <button id="incident-tab-pod" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-pod" tabindex="-1">Pod diagnosis</button>
+            <button id="incident-tab-certificate" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-certificate" tabindex="-1">Certificates</button>
+            <button id="incident-tab-timeline" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-timeline" tabindex="-1">Timeline</button>
           </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-triage.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-triage-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          <div id="incident-panel-cluster" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-cluster">
+            <p class="explorer-intro">Unhealthy namespaces sort first and healthy ones collapse to a single line - the whole cluster's problems arrive on one screen.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-triage.png" width="1632" height="1100" alt="kute all-namespaces view with unhealthy workloads first">
+              <img class="theme-shot theme-shot-light" src="/assets/home-triage-light.png" width="1632" height="1100" alt="kute all-namespaces view in the light theme with unhealthy workloads first">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-triage.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-triage-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="incident-panel-pod" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-pod" hidden>
+            <p class="explorer-intro">The screen opens on the reason, not the metadata - last termination on top, with containers, resource pressure and events in one view.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-pod-detail.png" width="1632" height="1000" loading="lazy" alt="kute pod detail view promoting the last termination reason">
+              <img class="theme-shot theme-shot-light" src="/assets/home-pod-detail-light.png" width="1632" height="1000" loading="lazy" alt="kute pod detail view in the light theme promoting the last termination reason">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-pod-detail.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-pod-detail-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="incident-panel-certificate" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-certificate" hidden>
+            <p class="explorer-intro">Walk Certificate to CertificateRequest to Order to Challenge, with the API's exact failure reason preserved at every step.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-certificate-failure.png" width="1632" height="1100" loading="lazy" alt="kute certificate issuance chain ending in a DNS-01 failure">
+              <img class="theme-shot theme-shot-light" src="/assets/home-certificate-failure-light.png" width="1632" height="1100" loading="lazy" alt="kute certificate issuance chain in the light theme ending in a DNS-01 failure">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-certificate-failure.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-certificate-failure-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="incident-panel-timeline" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-timeline" hidden>
+            <p class="explorer-intro">Warnings, container restarts and rollout revisions share one newest-first clock, so cause and consequence stay together.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-timeline.png" width="1632" height="1100" loading="lazy" alt="kute incident timeline correlating warnings and restarts with rollout revisions">
+              <img class="theme-shot theme-shot-light" src="/assets/home-timeline-light.png" width="1632" height="1100" loading="lazy" alt="kute incident timeline in the light theme correlating warnings and restarts with rollout revisions">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-timeline.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-timeline-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
         </article>
 
         <article id="explorer-panel-navigation" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-navigation" tabindex="0" hidden>
-          <p class="explorer-intro">One fuzzy palette follows <code>g</code>, <code>n</code> and <code>c</code>: jump to an object, switch namespace with live health, or change context after a reachability check. Each opens on the last other place, so key + <code>↵</code> toggles back.</p>
           <div class="explorer-subtabs" role="tablist" aria-label="Navigation palette">
             <button id="navigation-tab-goto" type="button" role="tab" aria-selected="true" aria-controls="navigation-panel-goto" tabindex="0">Goto <code>g</code></button>
             <button id="navigation-tab-namespace" type="button" role="tab" aria-selected="false" aria-controls="navigation-panel-namespace" tabindex="-1">Namespace <code>n</code></button>
             <button id="navigation-tab-context" type="button" role="tab" aria-selected="false" aria-controls="navigation-panel-context" tabindex="-1">Context <code>c</code></button>
           </div>
           <div id="navigation-panel-goto" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-goto">
+            <p class="explorer-intro">Jump to any kind or object through one fuzzy palette, with short aliases for the daily resources you reach most.</p>
             <div class="explorer-frame">
               <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-goto.png" width="1632" height="1100" loading="lazy" alt="kute Goto palette ranking daily resource kinds by alias over the current Pods view">
               <img class="theme-shot theme-shot-light" src="/assets/home-navigation-goto-light.png" width="1632" height="1100" loading="lazy" alt="kute Goto palette in the light theme ranking daily resource kinds by alias over the current Pods view">
@@ -118,6 +141,7 @@
             <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-goto-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
           <div id="navigation-panel-namespace" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-namespace" hidden>
+            <p class="explorer-intro">Switch namespace with live pod health in view. The palette opens on the last other namespace, so <code>n</code> + <code>↵</code> toggles back.</p>
             <div class="explorer-frame">
               <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-namespace.png" width="1632" height="1100" loading="lazy" alt="kute Namespace palette showing live pod health, recent namespaces, and all namespaces">
               <img class="theme-shot theme-shot-light" src="/assets/home-navigation-namespace-light.png" width="1632" height="1100" loading="lazy" alt="kute Namespace palette in the light theme showing live pod health, recent namespaces, and all namespaces">
@@ -126,6 +150,7 @@
             <a class="explorer-fullsize theme-link-light" href="/assets/home-navigation-namespace-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
           <div id="navigation-panel-context" class="explorer-subpanel" role="tabpanel" aria-labelledby="navigation-tab-context" hidden>
+            <p class="explorer-intro">Change context after a reachability check, with each context's namespace and your last other context remembered.</p>
             <div class="explorer-frame">
               <img class="theme-shot theme-shot-dark" src="/assets/home-navigation-context.png" width="1632" height="1100" loading="lazy" alt="kute Context palette showing remembered namespaces, a production tag, and reachability probes">
               <img class="theme-shot theme-shot-light" src="/assets/home-navigation-context-light.png" width="1632" height="1100" loading="lazy" alt="kute Context palette in the light theme showing remembered namespaces, a production tag, and reachability probes">
@@ -135,33 +160,13 @@
           </div>
         </article>
 
-        <article id="explorer-panel-pod" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-pod" tabindex="0" hidden>
-          <p class="explorer-intro">The screen opens on the reason, not the metadata - last termination on top, with containers, resource pressure and events in one view.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-pod-detail.png" width="1632" height="1000" loading="lazy" alt="kute pod detail view promoting the last termination reason">
-            <img class="theme-shot theme-shot-light" src="/assets/home-pod-detail-light.png" width="1632" height="1000" loading="lazy" alt="kute pod detail view in the light theme promoting the last termination reason">
-          </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-pod-detail.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-pod-detail-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
-        </article>
-
-        <article id="explorer-panel-timeline" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-timeline" tabindex="0" hidden>
-          <p class="explorer-intro">Warnings, container restarts and rollout revisions share one newest-first clock, so cause and consequence stay together.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-timeline.png" width="1632" height="1100" loading="lazy" alt="kute incident timeline correlating warnings and restarts with rollout revisions">
-            <img class="theme-shot theme-shot-light" src="/assets/home-timeline-light.png" width="1632" height="1100" loading="lazy" alt="kute incident timeline in the light theme correlating warnings and restarts with rollout revisions">
-          </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-timeline.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-timeline-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
-        </article>
-
         <article id="explorer-panel-routing" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-routing" tabindex="0" hidden>
-          <p class="explorer-intro">Every host and path resolves to the backend that actually answers - endpoint health, canary weight and TLS included.</p>
           <div class="explorer-subtabs" role="tablist" aria-label="Routing resource">
             <button id="routing-tab-ingress" type="button" role="tab" aria-selected="true" aria-controls="routing-panel-ingress" tabindex="0">Ingress</button>
             <button id="routing-tab-http" type="button" role="tab" aria-selected="false" aria-controls="routing-panel-http" tabindex="-1">HTTPRoute</button>
           </div>
           <div id="routing-panel-ingress" class="explorer-subpanel" role="tabpanel" aria-labelledby="routing-tab-ingress">
+            <p class="explorer-intro">Every host and path resolves to the backend that actually answers - endpoint health and TLS included.</p>
             <div class="explorer-frame">
               <img class="theme-shot theme-shot-dark" src="/assets/home-routing-ingress.png" width="1632" height="1100" loading="lazy" alt="kute Ingress routing table resolving backends and endpoint health">
               <img class="theme-shot theme-shot-light" src="/assets/home-routing-ingress-light.png" width="1632" height="1100" loading="lazy" alt="kute Ingress routing table in the light theme resolving backends and endpoint health">
@@ -170,6 +175,7 @@
             <a class="explorer-fullsize theme-link-light" href="/assets/home-routing-ingress-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
           <div id="routing-panel-http" class="explorer-subpanel" role="tabpanel" aria-labelledby="routing-tab-http" hidden>
+            <p class="explorer-intro">See every match, weighted backend and parent Gateway together, with live endpoint health behind each route.</p>
             <div class="explorer-frame">
               <img class="theme-shot theme-shot-dark" src="/assets/home-routing-http.png" width="1632" height="1100" loading="lazy" alt="kute HTTPRoute table showing a weighted canary split and parent Gateway">
               <img class="theme-shot theme-shot-light" src="/assets/home-routing-http-light.png" width="1632" height="1100" loading="lazy" alt="kute HTTPRoute table in the light theme showing a weighted canary split and parent Gateway">
@@ -179,35 +185,56 @@
           </div>
         </article>
 
-        <article id="explorer-panel-flux" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-flux" tabindex="0" hidden>
-          <p class="explorer-intro">Each source keeps the reconcilers it drives underneath it, with failed, suspended, reconciling and source-behind states kept distinct.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-flux.png" width="1632" height="1100" loading="lazy" alt="kute Flux tree showing sources and reconcilers">
-            <img class="theme-shot theme-shot-light" src="/assets/home-flux-light.png" width="1632" height="1100" loading="lazy" alt="kute Flux tree in the light theme showing sources and reconcilers">
+        <article id="explorer-panel-gitops" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-gitops" tabindex="0" hidden>
+          <div class="explorer-subtabs" role="tablist" aria-label="GitOps engine">
+            <button id="gitops-tab-flux" type="button" role="tab" aria-selected="true" aria-controls="gitops-panel-flux" tabindex="0">Flux</button>
+            <button id="gitops-tab-argo" type="button" role="tab" aria-selected="false" aria-controls="gitops-panel-argo" tabindex="-1">Argo CD</button>
           </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-flux.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-flux-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          <div id="gitops-panel-flux" class="explorer-subpanel" role="tabpanel" aria-labelledby="gitops-tab-flux">
+            <p class="explorer-intro">Each source keeps the reconcilers it drives underneath it, with failed, suspended, reconciling and source-behind states kept distinct.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-flux.png" width="1632" height="1100" loading="lazy" alt="kute Flux tree showing sources and reconcilers">
+              <img class="theme-shot theme-shot-light" src="/assets/home-flux-light.png" width="1632" height="1100" loading="lazy" alt="kute Flux tree in the light theme showing sources and reconcilers">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-flux.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-flux-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="gitops-panel-argo" class="explorer-subpanel" role="tabpanel" aria-labelledby="gitops-tab-argo" hidden>
+            <p class="explorer-intro">Argo CD Applications keep sync and workload health separate, with the sickest managed resource's own message directly under a degraded row.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-argo.png" width="1632" height="700" loading="lazy" alt="kute Argo CD Applications list separating sync status from workload health">
+              <img class="theme-shot theme-shot-light" src="/assets/home-argo-light.png" width="1632" height="700" loading="lazy" alt="kute Argo CD Applications list in the light theme separating sync status from workload health">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-argo.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-argo-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
         </article>
 
         <article id="explorer-panel-safety" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-safety" tabindex="0" hidden>
-          <p class="explorer-intro">Reversible actions run immediately, risky changes ask y/N, and delete escalates to typing the full name in contexts you explicitly mark as production.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-prod-confirm.png" width="1632" height="1100" loading="lazy" alt="kute production delete confirmation requiring the full object name">
-            <img class="theme-shot theme-shot-light" src="/assets/home-prod-confirm-light.png" width="1632" height="1100" loading="lazy" alt="kute production delete confirmation in the light theme requiring the full object name">
+          <div class="explorer-subtabs" role="tablist" aria-label="Confirmation tier">
+            <button id="safety-tab-nonprod" type="button" role="tab" aria-selected="true" aria-controls="safety-panel-nonprod" tabindex="0">Non-production</button>
+            <button id="safety-tab-prod" type="button" role="tab" aria-selected="false" aria-controls="safety-panel-prod" tabindex="-1">Production</button>
           </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-prod-confirm.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-prod-confirm-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          <div id="safety-panel-nonprod" class="explorer-subpanel" role="tabpanel" aria-labelledby="safety-tab-nonprod">
+            <p class="explorer-intro">Outside production-tagged contexts, delete stays inline: the table remains visible beside the exact command and a simple y/N confirmation.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-nonprod-confirm.png" width="1632" height="700" loading="lazy" alt="kute non-production delete confirmation showing the exact command inline">
+              <img class="theme-shot theme-shot-light" src="/assets/home-nonprod-confirm-light.png" width="1632" height="700" loading="lazy" alt="kute non-production delete confirmation in the light theme showing the exact command inline">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-nonprod-confirm.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-nonprod-confirm-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="safety-panel-prod" class="explorer-subpanel" role="tabpanel" aria-labelledby="safety-tab-prod" hidden>
+            <p class="explorer-intro">Delete escalates to typing the full name only in contexts you explicitly mark as production - never because their names merely look important.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-prod-confirm.png" width="1632" height="800" loading="lazy" alt="kute production delete confirmation requiring the full object name">
+              <img class="theme-shot theme-shot-light" src="/assets/home-prod-confirm-light.png" width="1632" height="1100" loading="lazy" alt="kute production delete confirmation in the light theme requiring the full object name">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-prod-confirm.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-prod-confirm-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
         </article>
 
-        <article id="explorer-panel-failure" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-failure" tabindex="0" hidden>
-          <p class="explorer-intro">Walk Certificate to CertificateRequest to Order to Challenge, with the API's exact failure reason preserved at every step.</p>
-          <div class="explorer-frame">
-            <img class="theme-shot theme-shot-dark" src="/assets/home-certificate-failure.png" width="1632" height="1100" loading="lazy" alt="kute certificate issuance chain ending in a DNS-01 failure">
-            <img class="theme-shot theme-shot-light" src="/assets/home-certificate-failure-light.png" width="1632" height="1100" loading="lazy" alt="kute certificate issuance chain in the light theme ending in a DNS-01 failure">
-          </div>
-          <a class="explorer-fullsize theme-link-dark" href="/assets/home-certificate-failure.png" target="_blank" rel="noopener">Open screenshot full size</a>
-          <a class="explorer-fullsize theme-link-light" href="/assets/home-certificate-failure-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
-        </article>
       </div>
     </div>
 

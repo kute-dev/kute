@@ -1645,6 +1645,13 @@ body.editorial-page {
     border-radius: 8px;
   }
   .home-page .explorer-tab[aria-selected="true"] { border-color: var(--accent); }
+  .home-page .explorer-subtabs {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .home-page .explorer-subtabs button { flex: 0 0 auto; }
   .explorer-keyhint { display: none; }
   .explorer-intro { min-height: 0; font-size: 15.5px; }
   .home-install { padding: 76px 0 82px; }
