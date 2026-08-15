@@ -208,6 +208,56 @@ func NewDemo() *Cluster {
 			failedCleanupRun.Name, failedCleanupRun.UID),
 	)
 
+	// §37d: a standalone, Indexed-completion-mode Job — see demoIndexedJob's
+	// own doc comment for why this fixture must exist at all.
+	reindexSearch := demoIndexedJob("reindex-search", "default", age(11*time.Minute))
+	c.Seed(kube.KindJob, reindexSearch)
+
+	// terminatedAt is a tiny local helper for the indexed-pod fixtures
+	// below: a ContainerStateTerminated ending `after` its own pod's start.
+	terminatedAt := func(start metav1.Time, after time.Duration, exitCode int32, reason string) *corev1.ContainerStateTerminated {
+		return &corev1.ContainerStateTerminated{ExitCode: exitCode, Reason: reason, FinishedAt: metav1.NewTime(start.Time.Add(after))}
+	}
+	idx0, idx1, idx2 := age(10*time.Minute), age(10*time.Minute), age(10*time.Minute)
+	idx4, idx5, idx6, idx7 := age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second), age(7*time.Minute+50*time.Second)
+	idx3a, idx3b := age(9*time.Minute), age(7*time.Minute)
+	idx8, idx9, idx10 := age(time.Minute+12*time.Second), age(48*time.Second), age(21*time.Second)
+
+	c.Seed(kube.KindPod,
+		// indexes 0-2, 4-7: complete (7 of 12) — §37d's "complete" cell state.
+		demoIndexedJobPod("reindex-search-0-a1b2c", "default", 0, idx0, corev1.PodSucceeded,
+			terminatedAt(idx0, 2*time.Minute+11*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-1-b2c3d", "default", 1, idx1, corev1.PodSucceeded,
+			terminatedAt(idx1, 2*time.Minute+4*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-2-c3d4e", "default", 2, idx2, corev1.PodSucceeded,
+			terminatedAt(idx2, time.Minute+58*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		// index 3: two attempts, both OOMKilled — §37d's "failed index with
+		// >1 attempt" exemplar (mirrors the mockup's own "index 3 · exit
+		// 137 · OOMKilled, both attempts"; pod name w82kq echoes the
+		// mockup's own most-recent-attempt pod name).
+		demoIndexedJobPod("reindex-search-3-k9m2p", "default", 3, idx3a, corev1.PodFailed,
+			terminatedAt(idx3a, 85*time.Second, 137, "OOMKilled"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-3-w82kq", "default", 3, idx3b, corev1.PodFailed,
+			terminatedAt(idx3b, 90*time.Second, 137, "OOMKilled"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-4-d4e5f", "default", 4, idx4, corev1.PodSucceeded,
+			terminatedAt(idx4, 2*time.Minute+22*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-5-e5f6g", "default", 5, idx5, corev1.PodSucceeded,
+			terminatedAt(idx5, 2*time.Minute+9*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-6-f6g7h", "default", 6, idx6, corev1.PodSucceeded,
+			terminatedAt(idx6, 2*time.Minute+31*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-7-g7h8i", "default", 7, idx7, corev1.PodSucceeded,
+			terminatedAt(idx7, 2*time.Minute+3*time.Second, 0, "Completed"), reindexSearch.Name, reindexSearch.UID),
+		// indexes 8-10: still running (no terminated state) — §37d's
+		// "running" cell state, 3 of parallelism 4's slots (the 4th is
+		// consumed by index 3's retry).
+		demoIndexedJobPod("reindex-search-8-h8i9j", "default", 8, idx8, corev1.PodRunning, nil, reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-9-i9j0k", "default", 9, idx9, corev1.PodRunning, nil, reindexSearch.Name, reindexSearch.UID),
+		demoIndexedJobPod("reindex-search-10-j0k1l", "default", 10, idx10, corev1.PodRunning, nil, reindexSearch.Name, reindexSearch.UID),
+		// index 11: deliberately no pod at all — §37d's "queued" cell state
+		// (ProjectJobIndexGrid pads to Completions when no attempt covers
+		// an index yet).
+	)
+
 	// A production-like cluster has many namespaces beyond the one an
 	// operator is actively working in: system/platform namespaces
 	// (kube-system), operator-owned namespaces for the CRD-installing
@@ -1286,6 +1336,50 @@ func demoFailedJobPod(name, ns string, created metav1.Time, jobName string, jobU
 	p := demoPod(name, ns, created, corev1.PodFailed, corev1.PodQOSBurstable, "node-a", false, 0,
 		&corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error", Message: "backoff limit exceeded", FinishedAt: metav1.NewTime(created.Add(90 * time.Second))})
 	p.Status.StartTime = &created
+	isController := true
+	p.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: kube.KindJob.APIKind(), Name: jobName, UID: jobUID, Controller: &isController}}
+	return p
+}
+
+// demoIndexedJob is §37d's own exemplar — the only demo Job with
+// CompletionMode: Indexed, so tasks/jobattempts' completion-map/index-grid
+// widget (resources.ProjectJobIndexGrid) is reachable at all in --demo
+// mode; every other demo Job above leaves CompletionMode nil
+// (NonIndexed), which only ever exercises §37b's flat attempt list.
+// Standalone like demoUnrelatedJob (no CronJob owner) — the design
+// mockup's own "reindex-search" job is ownerless too
+// (docs/design/v.0.9.0.dc.html id="37d": "job/reindex-search"). Stays
+// Active overall (no Complete/Failed condition): only index 3 has
+// retried, well under BackoffLimit, so the Job itself hasn't given up —
+// the mockup's own "◐ Running" header state. Completions/Parallelism
+// mirror the mockup exactly: 12 indexes, parallelism 4.
+func demoIndexedJob(name, ns string, started metav1.Time) *batchv1.Job {
+	j := demoJobBase(name, ns, started)
+	indexed := batchv1.IndexedCompletion
+	j.Spec.CompletionMode = &indexed
+	j.Spec.Completions = int32Val(12)
+	j.Spec.Parallelism = int32Val(4)
+	// 6, not demoJobBase's default 2 — index 3's second OOMKilled attempt
+	// would otherwise read as "about to give up"; 6 keeps it a mid-flight
+	// retry, matching the mockup's own "counts against backoffLimit 6".
+	j.Spec.BackoffLimit = int32Val(6)
+	j.Status = batchv1.JobStatus{Active: 3, Succeeded: 7, Failed: 2, StartTime: &started}
+	return j
+}
+
+// demoIndexedJobPod is §37d's own indexed-pod builder — a Job-owned Pod
+// stamped with the completion-index annotation the Job controller sets on
+// every Indexed job's pods (jobCompletionIndexAnnotation in
+// resources/jobattempts.go — fixtures.go is a different package, so the
+// literal is repeated here rather than imported). Association to the
+// owning Job is by controller owner reference alone, the same as
+// demoFailedJobPod; index association is by annotation alone, the same as
+// resources.jobIndex reads.
+func demoIndexedJobPod(name, ns string, index int32, created metav1.Time, phase corev1.PodPhase, terminated *corev1.ContainerStateTerminated, jobName string, jobUID types.UID) *corev1.Pod {
+	ready := phase != corev1.PodFailed
+	p := demoPod(name, ns, created, phase, corev1.PodQOSBurstable, "node-a", ready, 0, terminated)
+	p.Status.StartTime = &created
+	p.Annotations = map[string]string{"batch.kubernetes.io/job-completion-index": strconv.Itoa(int(index))}
 	isController := true
 	p.OwnerReferences = []metav1.OwnerReference{{APIVersion: "batch/v1", Kind: kube.KindJob.APIKind(), Name: jobName, UID: jobUID, Controller: &isController}}
 	return p
