@@ -63,7 +63,39 @@ write_kubeconfig() {
   log "kubeconfig → ${KUTE_E2E_KUBECONFIG} (context ${CONTEXT})"
 }
 
+# install_proxy_ca_in_nodes mirrors a transparent-proxy CA into every kind
+# node's trust store before fixtures (which pull real images for the api/
+# worker deployments) get applied.
+#
+# Each kind node runs its own containerd inside a fresh rootfs, isolated from
+# the host's trust store. A sandbox that terminates egress TLS at a proxy
+# (this repo's own dev sandbox included: gateway.docker.internal:3128, CA at
+# /usr/local/share/ca-certificates/proxy-ca.crt) injects that CA only on the
+# host — kind's node images never see it, so every image pull fails with
+# "certificate signed by unknown authority" and the error names neither the
+# proxy nor the fix. A real host or a GitHub Actions runner has no such file,
+# so this is a no-op there.
+install_proxy_ca_in_nodes() {
+  local ca=/usr/local/share/ca-certificates/proxy-ca.crt
+  [[ -f "$ca" ]] || return 0
+  [[ -n "${HTTPS_PROXY:-}${https_proxy:-}" ]] || return 0
+  log "sandboxed proxy CA detected — trusting it inside the kind nodes"
+  local node tries
+  for node in $(kind get nodes --name "$CLUSTER_NAME"); do
+    docker cp "$ca" "${node}:/usr/local/share/ca-certificates/proxy-ca.crt" >/dev/null
+    docker exec "$node" update-ca-certificates >/dev/null
+    docker exec "$node" systemctl restart containerd
+    tries=0
+    until docker exec "$node" systemctl is-active --quiet containerd; do
+      tries=$((tries + 1))
+      [[ $tries -lt 30 ]] || die "containerd never came back up on ${node} after trusting the proxy CA"
+      sleep 1
+    done
+  done
+}
+
 apply_fixtures() {
+  install_proxy_ca_in_nodes
   log "applying fixtures to ${NAMESPACE}"
   # A CRD has to be Established before its own custom resources can be
   # applied, so the instance fixtures are deliberately not in the first
@@ -178,11 +210,33 @@ preflight_inotify() {
   log "         or delete the other cluster(s) first."
 }
 
+# preflight_devkmsg avoids a control-plane bootstrap that fails without ever
+# naming its cause.
+#
+# kubelet's OOM watcher opens /dev/kmsg unconditionally at startup; without it
+# kubelet crash-loops before the static pods (etcd, apiserver, ...) ever
+# start, so kubeadm's bootstrap step spends its whole budget retrying against
+# a control plane that was never listening and dies with "client rate limiter
+# Wait returned an error: context deadline exceeded" — a message that points
+# nowhere near a missing device node. Real hosts and CI runners already have
+# it; only some sandboxes strip it from the kernel entirely.
+preflight_devkmsg() {
+  [[ -e /dev/kmsg ]] && return 0
+  log "warning: /dev/kmsg is missing on this host — kubelet will crash-loop without it"
+  if sudo -n mknod /dev/kmsg c 1 11 2>/dev/null && sudo -n chmod 666 /dev/kmsg 2>/dev/null; then
+    log "created /dev/kmsg (mknod c 1 11)"
+  else
+    log "         could not create it automatically; run this yourself and retry:"
+    log "           sudo mknod /dev/kmsg c 1 11 && sudo chmod 666 /dev/kmsg"
+  fi
+}
+
 up() {
   if cluster_exists; then
     log "kind cluster ${CLUSTER_NAME} already exists — topping it up"
   else
     preflight_inotify
+    preflight_devkmsg
     log "creating kind cluster ${CLUSTER_NAME} (k8s ${K8S_VERSION})"
     kind create cluster --config "$KIND_CONFIG" --wait 180s
   fi
