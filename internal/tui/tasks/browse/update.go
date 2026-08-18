@@ -192,7 +192,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.now = time.Now()
 		return m, cmd
 	case emptyHintsMsg:
-		if msg.kind == m.kind && m.state == tui.TaskStateEmpty {
+		if msg.epoch == m.reloadEpoch && msg.namespace == m.namespace && msg.kind == m.kind && m.state == tui.TaskStateEmpty {
 			m.hints = msg.hints
 		}
 	case metricsTickMsg:

@@ -603,10 +603,18 @@ type rowsLoadedMsg struct {
 }
 
 // emptyHintsMsg carries the 10c ways-out data computed once rows come back
-// empty.
+// empty. epoch/namespace guard the same way rowsLoadedMsg's epoch does: kind
+// alone doesn't catch a namespace switch that lands back on the same kind
+// (switching between two empty namespaces of the same kind, say), so a slow
+// reply from the namespace just left can still land after the switch's own
+// faster reply already repopulated m.hints for the new namespace — epoch is
+// bumped by every switch that matters (resetAndLoad), namespace is the
+// belt-and-suspenders check podMetricsLoadedMsg's own guard already uses.
 type emptyHintsMsg struct {
-	kind  kube.ResourceKind
-	hints emptyHints
+	epoch     int
+	namespace string
+	kind      kube.ResourceKind
+	hints     emptyHints
 }
 
 // reloadDueMsg fires reloadDebounce after a ResourceChangedMsg; epoch guards

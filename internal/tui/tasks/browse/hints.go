@@ -47,6 +47,7 @@ func (m Model) loadEmptyHints() tea.Cmd {
 	kind := m.kind
 	namespace := m.namespace
 	timeout := m.timeout
+	epoch := m.reloadEpoch
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -60,7 +61,7 @@ func (m Model) loadEmptyHints() tea.Cmd {
 			hints.allCount = n
 		}
 
-		return emptyHintsMsg{kind: kind, hints: hints}
+		return emptyHintsMsg{epoch: epoch, namespace: namespace, kind: kind, hints: hints}
 	}
 }
 
