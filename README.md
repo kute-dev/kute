@@ -163,6 +163,40 @@ Everything past those three is read on demand, when you first open a screen that
 
 If your cluster already binds the built-in `view` role, a cluster-wide binding of it covers most of this. It does **not** include `nodes`, `secrets` or `customresourcedefinitions`, so the node-derived screens, Helm releases and custom kinds will come up empty or refused until you add them.
 
+### `--namespace-scoped` mode
+
+If you can't get a cluster-wide grant at all — only a `Role` bound in one namespace, nothing bound at cluster scope — launch with `--namespace-scoped <name>` instead. It restricts every namespaced kind's cache to that one namespace, so a plain `Role` is enough to get started; nothing below needs a `ClusterRole`.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kute
+  namespace: my-namespace
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kute
+  namespace: my-namespace
+subjects:
+  - kind: User   # or ServiceAccount/Group, matching your auth
+    name: <your-identity>
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: kute
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Namespaces and Nodes stay cluster-scoped no matter what — they aren't resources a `Role` can grant access to — so kute still attempts a cluster-wide read of both at connect. Without cluster-level access to them it no longer hangs waiting for a cache that can never sync (that's what this mode fixes); it just comes up without a namespace list or node data, so the namespace palette, the Nodes list, node detail and the overview screen have nothing to show. Grant `namespaces`/`nodes` in a `ClusterRole` too if you need those. Switching to all-namespaces (the `a` key) also issues a cluster-wide read for whatever kind is on screen, so it's subject to the same limit.
+
+Everything else — Deployments, Services, ConfigMaps, and so on — follows the same on-demand model as cluster-wide mode, just scoped to the one namespace: add whatever you want to browse to the same `Role`, and no more.
+
 ## Configuration
 
 kute reads `~/.config/kute/config.yaml`. Every key is optional — with no file at all, kute runs with the defaults below.
