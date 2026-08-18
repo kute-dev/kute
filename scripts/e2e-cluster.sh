@@ -225,10 +225,11 @@ preflight_devkmsg() {
   log "warning: /dev/kmsg is missing on this host — kubelet will crash-loop without it"
   if sudo -n mknod /dev/kmsg c 1 11 2>/dev/null && sudo -n chmod 666 /dev/kmsg 2>/dev/null; then
     log "created /dev/kmsg (mknod c 1 11)"
-  else
-    log "         could not create it automatically; run this yourself and retry:"
-    log "           sudo mknod /dev/kmsg c 1 11 && sudo chmod 666 /dev/kmsg"
+    return 0
   fi
+  log "         could not create it automatically; run this yourself and retry:"
+  log "           sudo mknod /dev/kmsg c 1 11 && sudo chmod 666 /dev/kmsg"
+  return 1
 }
 
 up() {
@@ -236,7 +237,7 @@ up() {
     log "kind cluster ${CLUSTER_NAME} already exists — topping it up"
   else
     preflight_inotify
-    preflight_devkmsg
+    preflight_devkmsg || die "/dev/kmsg is unavailable — kubelet would crash-loop; see the message above and retry"
     log "creating kind cluster ${CLUSTER_NAME} (k8s ${K8S_VERSION})"
     kind create cluster --config "$KIND_CONFIG" --wait 180s
   fi
