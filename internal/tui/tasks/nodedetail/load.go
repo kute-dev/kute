@@ -2,6 +2,7 @@ package nodedetail
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,14 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 )
+
+// errNodeNotFound is findNode's sentinel for "this node isn't in the cache
+// right now" — deliberately not enough on its own to conclude the node is
+// gone. applyLoaded checks the Node cache's own sync/error state before
+// believing it: a cache that hasn't finished its initial fill, or one
+// that's Forbidden, looks exactly like a missing node to a scan for one
+// name.
+var errNodeNotFound = errors.New("node not found")
 
 // reloadDebounce is how long a still-syncing retry waits before re-running
 // load() — same value as browse's own reloadDebounce, duplicated per the
@@ -107,7 +116,7 @@ func findNode(ctx context.Context, lister resources.RawLister, name string) (*co
 			return n, nil
 		}
 	}
-	return nil, fmt.Errorf("node %q not found", name)
+	return nil, fmt.Errorf("node %q not found: %w", name, errNodeNotFound)
 }
 
 func nodeAllocatable(n *corev1.Node) allocation {

@@ -415,6 +415,61 @@ func TestNotFoundRendersPermissionDeniedWhenKindIsForbidden(t *testing.T) {
 	}
 }
 
+// forbiddenBackendLister simulates the Service/Pod reflectors coming back
+// Forbidden while the Ingress itself resolves normally — reads still
+// succeed empty (no error), KindSynced reports settled, and KindForbidden
+// carries the reason for Service/Pod only.
+type forbiddenBackendLister struct {
+	lister fakeLister
+	err    error
+}
+
+func (l forbiddenBackendLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l forbiddenBackendLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (l forbiddenBackendLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindService || kind == kube.KindPod {
+		return l.err
+	}
+	return nil
+}
+
+// TestBackendDeniedShowsNoteWhenRowsAlreadyPresent pins §5: the parent
+// Ingress's own rows render regardless of backend-resolution success
+// (routeRowsFromRoute/loadIngress emit a row per rule), so rowCount() > 0
+// took the applyLoaded branch that previously checked Service/Pod's own
+// sync/error state not at all — every backend read the same false ✕ "not
+// found" a genuinely-absent Service gets, with no signal the cache itself
+// was denied.
+func TestBackendDeniedShowsNoteWhenRowsAlreadyPresent(t *testing.T) {
+	lister := forbiddenBackendLister{
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindIngress: {testIngress()},
+		}},
+		err: apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, "", errors.New("nope")),
+	}
+	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindIngress, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — the Ingress itself resolved fine, only the backend caches are denied", m.state)
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("expected rows from the Ingress's own rules regardless of backend resolution")
+	}
+	if m.backendDeniedNote == "" {
+		t.Fatal("expected backendDeniedNote to be set")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "permission denied") {
+		t.Fatalf("expected an inline note naming the denied backend cache:\n%s", view)
+	}
+}
+
 func TestOpenSelectedEnterJumpsToBackendService(t *testing.T) {
 	m := Model{flavor: flavorIngress, rows: []routeRow{{backendNS: "default", backendName: "web"}}}
 	cmd, ok := m.openSelectedEnter()

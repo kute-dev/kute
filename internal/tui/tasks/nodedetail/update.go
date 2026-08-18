@@ -1,6 +1,7 @@
 package nodedetail
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,6 +38,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
+	case kube.ResourceChangedMsg:
+		// Node backs the facts panel, Pod the bottom-pane table — a change to
+		// either changes what this screen shows even though neither is
+		// "the kind on screen" the way browse's own auxKindOf reload guards
+		// against going stale (CLAUDE.md: "a screen reading a kind it
+		// doesn't display must also reload on it").
+		if (msg.Kind == kube.KindNode || msg.Kind == kube.KindPod) && m.lister != nil {
+			m.reloadEpoch++
+			return m, m.scheduleReload(m.reloadEpoch)
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
@@ -100,7 +111,7 @@ type nodeShellResultMsg struct{ err error }
 type editResultMsg struct{ err error }
 
 func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
+	if msg.err != nil && !errors.Is(msg.err, errNodeNotFound) {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
 			m.state = tui.TaskStatePermissionDenied
@@ -108,38 +119,52 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
+
+	// Node and Pod are nodedetail's two required caches, checked
+	// unconditionally — whether findNode's scan came back errNodeNotFound or
+	// the pods list is already non-empty — so a cache that's stalled or
+	// denied is never masked by data already on screen. A context switch or
+	// an RBAC change mid-session can leave stale-but-non-empty data behind
+	// after the cache it came from has since gone bad (CLAUDE.md: "never
+	// gate a loading state on Synced()").
+	if !tui.KindsSynced(m.lister, "", kube.KindNode, kube.KindPod) {
+		// The informer cache is still filling (just after launch, mid a
+		// context switch, or on a very fast node-open) — msg's node/pods
+		// aren't trustworthy yet. Stay loading and retry shortly rather than
+		// flashing "node X not found" or "no pods on this node" before
+		// they've landed.
+		m.reloadEpoch++
+		return m, m.scheduleReload(m.reloadEpoch)
+	}
+	if err := tui.KindsError(m.lister, "", kube.KindNode, kube.KindPod); err != nil {
+		// KindSynced reports settled for a Forbidden cache too — that's the
+		// anti-hang rule, not a claim the node is missing or has no pods.
+		// Without this check a denied cache would fall straight through to
+		// either a bare "not found" or Ready with an empty pods table,
+		// exactly the false claims KindsError exists to prevent (CLAUDE.md's
+		// informer invariants).
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
+		} else {
+			m.state = tui.TaskStateError
+		}
+		m.feedback = err.Error()
+		return m, nil
+	}
+	if msg.err != nil {
+		// errNodeNotFound, and both caches are synced and clean — this
+		// really is a node that no longer exists, not a still-filling or
+		// denied cache masquerading as one.
+		m.state = tui.TaskStateError
+		m.feedback = msg.err.Error()
+		return m, nil
+	}
+
 	m.node = msg.node
 	m.allocated = msg.allocated
 	m.allocatable = msg.allocatable
 	m.allPods = msg.pods
 	m.recomputeFiltered()
-
-	if len(m.allPods) == 0 {
-		if !m.listerSynced() {
-			// The informer cache is still filling (just after launch, mid a
-			// context switch, or on a very fast node-open) — this empty pod
-			// list isn't trustworthy yet. Stay loading and retry shortly
-			// rather than flashing "no pods on this node" before they've
-			// landed.
-			m.reloadEpoch++
-			return m, m.scheduleReload(m.reloadEpoch)
-		}
-		if err := tui.KindsError(m.lister, "", kube.KindPod); err != nil {
-			// listerSynced (KindSynced) reports settled for a Forbidden
-			// cache too — that's the anti-hang rule, not a claim the node
-			// has no pods. Without this check a denied Pod cache would
-			// fall straight through to Ready with an empty pods table,
-			// which is exactly the false "zero pods" claim KindError
-			// exists to prevent (CLAUDE.md's informer invariants).
-			if kube.IsPermissionError(err) {
-				m.state = tui.TaskStatePermissionDenied
-			} else {
-				m.state = tui.TaskStateError
-			}
-			m.feedback = err.Error()
-			return m, nil
-		}
-	}
 
 	m.state = tui.TaskStateReady
 	m.feedback = ""

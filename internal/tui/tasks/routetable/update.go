@@ -77,6 +77,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
+	m.backendDeniedNote = ""
 	m.flavor = msg.flavor
 	m.ingressClass = msg.ingressClass
 	m.ingressHostCount = msg.ingressHostCount
@@ -120,7 +121,35 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.feedback = ""
 	m.selected = clamp(m.selected, 0, m.rowCount()-1)
 	m.clampOffset()
-	return m, nil
+
+	var retry tea.Cmd
+	if m.rowCount() > 0 && m.flavor != flavorGateway {
+		// Service/Pod back the BACKENDS column for Ingress/HTTPRoute
+		// flavors — a row already on screen only proves m.kind's own cache
+		// is good, not that the backend it resolved through is:
+		// resources.ResolveServiceBackend returns the same
+		// BackendState{Exists:false} for "still filling", "denied", and
+		// "genuinely no such Service", so without this a stalled/denied
+		// Service or Pod cache renders every backend as a false ✕ "not
+		// found" instead of surfacing what's actually going on. Gateway
+		// rows never resolve a backend at all (loadGateway never reads
+		// Service/Pod), so this only applies to the other two flavors.
+		switch {
+		case !tui.KindsSynced(m.lister, m.namespace, kube.KindService, kube.KindPod):
+			m.backendDeniedNote = "backend status may be incomplete — still loading"
+			m.syncRetryGen++
+			retry = tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		default:
+			if err := tui.KindsError(m.lister, m.namespace, kube.KindService, kube.KindPod); err != nil {
+				if kube.IsPermissionError(err) {
+					m.backendDeniedNote = "backend status may be incomplete — permission denied: " + err.Error()
+				} else {
+					m.backendDeniedNote = "backend status may be incomplete — " + err.Error()
+				}
+			}
+		}
+	}
+	return m, retry
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

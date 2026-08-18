@@ -425,13 +425,14 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.cachedView = false
 
 	if len(m.rows) == 0 {
-		// kinds is m.kind plus every aux kind its own columns/prompts read
-		// (auxkinds.go) — an aux cache that's still filling can make an
-		// otherwise-correct empty result untrustworthy just as easily as
-		// m.kind's own cache can, so both checks below ask about the same
-		// set.
-		kinds := append([]kube.ResourceKind{m.kind}, auxKinds[m.kind]...)
-		if !tui.KindsSynced(m.lister, m.namespace, kinds...) {
+		// An aux cache that's still filling can make an otherwise-correct
+		// empty result untrustworthy just as easily as m.kind's own cache
+		// can, so both checks below ask about m.kind plus every aux kind its
+		// own columns/prompts read (auxkinds.go) — each aux kind at its own
+		// correct scope (auxScope), since not every aux kind shares the
+		// primary kind's own namespace (Node's Pod aux-kind reads
+		// cluster-wide regardless of m.namespace).
+		if !tui.KindsSynced(m.lister, m.namespace, m.kind) || !m.auxKindsSynced(auxKinds[m.kind]) {
 			// The informer cache is still filling (just after launch or mid
 			// SwitchContext) — this empty result isn't trustworthy yet.
 			// Stay in the loading state and retry shortly rather than
@@ -439,7 +440,11 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			m.reloadEpoch++
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
-		if err := tui.KindsError(m.lister, m.namespace, kinds...); err != nil {
+		err := tui.KindsError(m.lister, m.namespace, m.kind)
+		if err == nil {
+			err = m.auxKindsError(auxKinds[m.kind])
+		}
+		if err != nil {
 			// Settled, but with nothing to show and a reason why. Saying so
 			// beats the two alternatives — a spinner that outlives the
 			// user's patience, or "no <kind>", which is a claim about the
@@ -478,17 +483,32 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.cacheCurrentRows()
 
 	// m.kind's own cache is already known-good (rows are non-empty), so only
-	// the aux kinds its columns/prompts read need asking. A denial here must
-	// not take the whole screen away from what's already correctly on the
-	// table — it surfaces as one extra strip line instead of a blank/wrong
-	// cell (docs/plans/namespace-scoped-final-plan.md §5).
+	// the aux kinds its columns/prompts read need asking. A problem here
+	// must not take the whole screen away from what's already correctly on
+	// the table — it surfaces as one extra strip line instead of a blank/
+	// wrong cell (docs/plans/namespace-scoped-final-plan.md §5).
 	m.auxKindsDeniedNote = ""
+	var auxRetry tea.Cmd
 	if kinds := auxKinds[m.kind]; len(kinds) > 0 {
-		if err := tui.KindsError(m.lister, m.namespace, kinds...); err != nil && kube.IsPermissionError(err) {
-			m.auxKindsDeniedNote = "some columns may be incomplete — permission denied: " + err.Error()
+		switch {
+		case !m.auxKindsSynced(kinds):
+			// Not a permission problem — the aux cache just hasn't finished
+			// its initial fill yet, and a kind with genuinely zero objects
+			// never emits the change event that would otherwise prompt a
+			// reload (kindsync.go). Note it and check again shortly.
+			m.auxKindsDeniedNote = "some columns may be incomplete — still loading"
+			auxRetry = m.scheduleReload(m.reloadEpoch)
+		default:
+			if err := m.auxKindsError(kinds); err != nil {
+				if kube.IsPermissionError(err) {
+					m.auxKindsDeniedNote = "some columns may be incomplete — permission denied: " + err.Error()
+				} else {
+					m.auxKindsDeniedNote = "some columns may be incomplete — " + err.Error()
+				}
+			}
 		}
 	}
-	return m, nil
+	return m, auxRetry
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

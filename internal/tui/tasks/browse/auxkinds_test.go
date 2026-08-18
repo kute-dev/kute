@@ -161,6 +161,82 @@ func TestAuxKindDeniedShowsInlineNoteOnReadyReload(t *testing.T) {
 	}
 }
 
+// TestAuxKindStillLoadingShowsInlineNoteOnReadyReload is
+// TestAuxKindDeniedShowsInlineNoteOnReadyReload's transient half: once the
+// primary kind's rows are already non-empty (Ready), an aux cache that's
+// merely still filling (not yet synced, no error to report) used to go
+// entirely unchecked — tui.KindsSynced was never asked here at all, only
+// KindsError, and only its permission-denied outcome was surfaced. A
+// still-filling aux cache must show a "still loading" note (not silence,
+// and not the "permission denied" wording a real denial gets) and schedule
+// a retry so the note clears once the cache catches up.
+func TestAuxKindStillLoadingShowsInlineNoteOnReadyReload(t *testing.T) {
+	lister := &perKindSyncedLister{
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindDeployment: {deploymentObj("default", "api")},
+		}},
+		unsynced: map[kube.ResourceKind]bool{kube.KindReplicaSet: true},
+	}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	// Deliberately not step(): the aux "still loading" note schedules its
+	// own real tea.Tick retry (m.scheduleReload), and the ReplicaSet cache
+	// in this fixture never becomes synced — draining that chain
+	// recursively would really sleep forever, the same hazard
+	// cronjobdetail_test.go's TestUnsyncedCronJobOrJobCacheStaysLoadingThenRetries
+	// avoids the same way.
+	updated, cmd := m.Update(firstRowsLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — the Deployment cache itself is fine, only an aux cache is still filling", m.state)
+	}
+	if m.auxKindsDeniedNote == "" {
+		t.Fatal("expected auxKindsDeniedNote to be set")
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the aux cache is still filling")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "still loading") {
+		t.Fatalf("expected a 'still loading' note, not silence or a false denial:\n%s", view)
+	}
+	if strings.Contains(view, "permission denied") {
+		t.Fatalf("a still-filling cache is not a denial:\n%s", view)
+	}
+}
+
+// TestAuxScopeUsesClusterWideForNodesPodAux pins §5's scope-correctness
+// half: nodes.go's loadNodeExtras always reads Pod at "" (a node's pods can
+// be in any namespace), regardless of m.namespace — but Pod is not
+// cluster-scoped, so unlike Node's own aux entry (which self-normalizes via
+// *kube.Cluster's cacheScope no matter what's asked), a Pod aux-check that
+// blindly used m.namespace would ask about a cache that was never
+// populated under --namespace-scoped mode.
+func TestAuxScopeUsesClusterWideForNodesPodAux(t *testing.T) {
+	m := Model{kind: kube.KindNode, namespace: "kube-system"}
+	if got := m.auxScope(kube.KindPod); got != "" {
+		t.Fatalf(`auxScope(Pod) under the Nodes view = %q, want "" (cluster-wide, matching nodes.go's own Pod read)`, got)
+	}
+}
+
+func TestAuxScopeUsesPrimaryNamespaceOtherwise(t *testing.T) {
+	m := Model{kind: kube.KindDeployment, namespace: "team-a"}
+	if got := m.auxScope(kube.KindReplicaSet); got != "team-a" {
+		t.Fatalf("auxScope(ReplicaSet) under the Deployments view = %q, want %q", got, "team-a")
+	}
+	// Pod's own Node aux-kind read needs no override: Node self-normalizes
+	// via *kube.Cluster's cacheScope regardless of what's asked, so
+	// auxScope returning m.namespace here (rather than special-casing it
+	// too) is correct, not an oversight.
+	m2 := Model{kind: kube.KindPod, namespace: "team-a"}
+	if got := m2.auxScope(kube.KindNode); got != "team-a" {
+		t.Fatalf("auxScope(Node) under the Pods view = %q, want %q (Node self-normalizes regardless)", got, "team-a")
+	}
+}
+
 // TestPrefetchWarmsAuxCaches: with informers starting on first read, the
 // synchronous prompt handlers (rollout history, the scale prompt) would
 // otherwise hit an empty cache on first keypress and render a plausible

@@ -100,9 +100,20 @@ type Model struct {
 	// applyLoaded), a denial on these must not take over the whole screen —
 	// each flags only the fact/panel it backs
 	// (docs/plans/namespace-scoped-final-plan.md §5).
-	nsDenied      bool
-	helmDenied    bool
-	changesDenied bool
+	//
+	// nsPending/helmPending/changesPending are true when the corresponding
+	// cache hasn't finished its initial fill yet (or has stalled on a
+	// non-permission error) — loadOverview's own reads swallow every error
+	// for these three, so without this flag a merely-still-filling cache
+	// reads no differently from "the cluster truly has none of these",
+	// which is the same false zero/empty claim the Denied flags exist to
+	// prevent, just for the transient case instead of the permanent one.
+	nsDenied       bool
+	nsPending      bool
+	helmDenied     bool
+	helmPending    bool
+	changesDenied  bool
+	changesPending bool
 
 	metricsAvailable          bool
 	capCPUUsed, capCPUTotal   int64

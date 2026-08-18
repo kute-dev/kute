@@ -161,6 +161,15 @@ type Model struct {
 	feedback string
 	spinner  spinner.Model
 
+	// backendDeniedNote is non-empty when the Service/Pod caches backing
+	// the BACKENDS column (flavorIngress/flavorRoute only — Gateway never
+	// resolves a backend) are still filling or came back with an error on
+	// the most recent Ready load with rows already on screen — rendered as
+	// one extra strip line rather than letting every backend read a false
+	// ✕ "not found" (resources.ResolveServiceBackend returns the same
+	// BackendState for "still filling", "denied", and "genuinely absent").
+	backendDeniedNote string
+
 	loadStartedAt time.Time
 
 	// syncRetryGen guards a cache-sync retry against a newer load having

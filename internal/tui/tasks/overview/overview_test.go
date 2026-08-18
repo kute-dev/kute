@@ -365,6 +365,130 @@ func TestDeniedReplicaSetCacheShowsInlineNoteInChangesPanel(t *testing.T) {
 	}
 }
 
+// unsyncedKindLister reports one chosen kind as not-yet-synced (KindSynced
+// false) while every other kind reads normally — mirrors forbiddenKindLister,
+// generalized to the transient (still-filling) case instead of the
+// permanent (Forbidden) one.
+type unsyncedKindLister struct {
+	fakeLister
+	kind kube.ResourceKind
+}
+
+func (l *unsyncedKindLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	return kind != l.kind
+}
+
+// TestPendingNamespaceCacheShowsDashNotZero pins the transient half of §5: a
+// Namespace cache that's still filling (not yet synced, no error to report)
+// used to render as "0 namespaces" — indistinguishable from a genuinely
+// empty cluster — because only Forbidden was checked, never KindsSynced.
+func TestPendingNamespaceCacheShowsDashNotZero(t *testing.T) {
+	lister := &unsyncedKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindNamespace,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	updated, cmd := m.Update(firstOverviewLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — Node/Pod are healthy, a pending Namespace cache must not take over the screen", m.state)
+	}
+	if !m.nsPending {
+		t.Fatal("nsPending = false, want true")
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the Namespace cache is still filling")
+	}
+	view := plain(m.Render())
+	if strings.Contains(view, "0 namespaces") {
+		t.Fatalf("expected a dash, not a false '0 namespaces', while the cache is still filling:\n%s", view)
+	}
+}
+
+// TestPendingHelmCacheShowsLoadingNoteInTroublePanel is
+// TestPendingNamespaceCacheShowsDashNotZero's HelmRelease half: a
+// still-filling cache used to render as if there were simply no outdated
+// releases, identical to a cluster with none.
+func TestPendingHelmCacheShowsLoadingNoteInTroublePanel(t *testing.T) {
+	lister := &unsyncedKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindHelmRelease,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	updated, cmd := m.Update(firstOverviewLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if !m.helmPending {
+		t.Fatal("helmPending = false, want true")
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the HelmRelease cache is still filling")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "outdated releases: loading") {
+		t.Fatalf("expected TROUBLE's inline loading note in view:\n%s", view)
+	}
+}
+
+// TestPendingReplicaSetCacheShowsLoadingNoteInChangesPanel is
+// TestPendingNamespaceCacheShowsDashNotZero's ReplicaSet half: a still-
+// filling cache used to render RECENT CHANGES as the reassuring "no changes
+// in the last 30m", identical to a genuinely quiet cluster.
+func TestPendingReplicaSetCacheShowsLoadingNoteInChangesPanel(t *testing.T) {
+	lister := &unsyncedKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindReplicaSet,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	updated, cmd := m.Update(firstOverviewLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if !m.changesPending {
+		t.Fatal("changesPending = false, want true")
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the ReplicaSet cache is still filling")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "rollout history: loading") {
+		t.Fatalf("expected RECENT CHANGES' inline loading note in view:\n%s", view)
+	}
+}
+
+// firstOverviewLoaded picks the loadedMsg out of Init()'s batch (load +
+// spinner tick) — mirrors nodedetail's own firstLoaded test helper.
+func firstOverviewLoaded(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return msg
+	}
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		if lm, ok := c().(loadedMsg); ok {
+			return lm
+		}
+	}
+	t.Fatal("no loadedMsg found in batch")
+	return nil
+}
+
 func TestAllHealthyRendersGreenAllClear(t *testing.T) {
 	lister := &fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},

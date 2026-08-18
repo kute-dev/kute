@@ -104,14 +104,24 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// (loadOverview's own reads swallow their errors) — a denial here
 	// decorates just the fact/panel it backs rather than promoting to the
 	// full-screen state Node/Pod's denial does above
-	// (docs/plans/namespace-scoped-final-plan.md §5).
-	m.nsDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindNamespace))
-	m.helmDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindHelmRelease))
-	m.changesDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindReplicaSet))
+	// (docs/plans/namespace-scoped-final-plan.md §5). Pending is the same
+	// idea for the transient case: a cache that hasn't finished its initial
+	// fill yet reads as an "unknown right now" dash instead of a false
+	// zero/empty, and self-heals via the retry below rather than waiting on
+	// a change event a genuinely-empty cache would never emit.
+	m.nsPending, m.nsDenied = bestEffort(m.lister, kube.KindNamespace)
+	m.helmPending, m.helmDenied = bestEffort(m.lister, kube.KindHelmRelease)
+	m.changesPending, m.changesDenied = bestEffort(m.lister, kube.KindReplicaSet)
 
 	m.state = tui.TaskStateReady
 	m.feedback = ""
-	return m, nil
+
+	var retry tea.Cmd
+	if m.nsPending || m.helmPending || m.changesPending {
+		m.reloadEpoch++
+		retry = tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+	}
+	return m, retry
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

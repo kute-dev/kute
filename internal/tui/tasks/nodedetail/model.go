@@ -225,38 +225,6 @@ func (m *Model) SetSize(width, height int) {
 	m.width, m.height = size.Width, size.Height
 }
 
-// CacheSyncChecker is optionally implemented by a Lister whose cache
-// populates asynchronously (*kube.Cluster's informers, right after launch or
-// mid SwitchContext) — duplicated from browse's own CacheSyncChecker per the
-// repo's package-local-seam convention, since resources.RawLister itself
-// carries no such method. ListRaw reads the cache regardless of sync state,
-// so a load() landing right after this screen opens can see a truthful-
-// looking empty pod list before the first real objects have arrived;
-// listerSynced tells that apart from the node genuinely having no pods.
-type CacheSyncChecker interface {
-	Synced() bool
-}
-
-// KindSyncChecker is CacheSyncChecker's per-kind refinement — see
-// browse.KindSyncChecker. This screen's list is always Pods read
-// cluster-wide (a node's pods can come from any namespace), so that's the
-// kind and namespace it asks about.
-type KindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind, namespace string) bool
-}
-
-// listerSynced reports whether the Pod cache backing this screen's list has
-// finished its initial fill — true for any lister that opts into neither
-// checker (fakes, test doubles), so this only changes behavior for
-// *kube.Cluster. Mirrors browse.Model.listerSynced.
-func (m Model) listerSynced() bool {
-	if kc, ok := m.lister.(KindSyncChecker); ok {
-		return kc.KindSynced(kube.KindPod, "")
-	}
-	sc, ok := m.lister.(CacheSyncChecker)
-	return !ok || sc.Synced()
-}
-
 func (m Model) selectedPod() (nodePodRow, bool) {
 	if m.selected < 0 || m.selected >= len(m.pods) {
 		return nodePodRow{}, false

@@ -85,7 +85,13 @@ func (m Model) clusterSummaryText() string {
 		version = "–"
 	}
 	nsText := strconv.Itoa(m.nsCount)
-	if m.nsDenied {
+	switch {
+	case m.nsPending:
+		// The Namespace cache hasn't finished its initial fill yet — m.nsCount
+		// is whatever loadOverview's read happened to see mid-fill, not a
+		// trustworthy count.
+		nsText = "–"
+	case m.nsDenied:
 		// A denied Namespace cache reads as zero from loadOverview's own
 		// best-effort read — saying so beats a silent "0 namespaces", which
 		// is a claim about the cluster this screen is in no position to make
@@ -359,11 +365,21 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	// reason (no outdated releases, or denial), so both branches below need
 	// it appended (docs/plans/namespace-scoped-final-plan.md §5).
 	helmNote := func() []string {
-		if !m.helmDenied {
+		switch {
+		case m.helmPending:
+			// Not a permission problem — the outdated-releases read just
+			// hasn't finished its initial fill yet, and may resolve on the
+			// very next reload (helmNote's caller already asks again via
+			// applyLoaded's retry). Dim rather than Warn, since there's
+			// nothing wrong yet to warn about.
+			dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+			return []string{dim.Render("⚠ outdated releases: loading")}
+		case m.helmDenied:
+			warn := lipgloss.NewStyle().Foreground(theme.Warn)
+			return []string{warn.Render("⚠ outdated releases: permission denied")}
+		default:
 			return nil
 		}
-		warn := lipgloss.NewStyle().Foreground(theme.Warn)
-		return []string{warn.Render("⚠ outdated releases: permission denied")}
 	}
 
 	if len(entries) == 0 {
@@ -450,7 +466,12 @@ func (m Model) changesLines(theme tui.Theme, width int) []string {
 	if len(m.changes) == 0 {
 		text := "no changes in the last 30m"
 		style := theme.TextDim
-		if m.changesDenied {
+		switch {
+		case m.changesPending:
+			// The ReplicaSet cache hasn't finished its initial fill yet —
+			// still dim, since this isn't a problem, just not settled.
+			text = "rollout history: loading"
+		case m.changesDenied:
 			// A denied ReplicaSet cache means m.changes is always empty —
 			// say so instead of the reassuring "no changes" reading
 			// (docs/plans/namespace-scoped-final-plan.md §5).

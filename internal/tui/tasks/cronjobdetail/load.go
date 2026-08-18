@@ -11,6 +11,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // reloadDebounce coalesces bursts of watch events into one reload — same
@@ -53,6 +54,20 @@ func (m Model) load() tea.Cmd {
 			return loadedMsg{epoch: epoch, err: err}
 		}
 		jobObjs, jobsErr := lister.ListRaw(ctx, kube.KindJob, namespace)
+		if jobsErr == nil {
+			// ListRaw's own errorless-empty-cache behavior for a Forbidden or
+			// stalled informer (CLAUDE.md: "a Forbidden reflector just leaves
+			// it empty") means a real denial or persistent failure is
+			// otherwise invisible here — ask the cache's real health so it
+			// still marks the Jobs table/history unavailable
+			// (applyLoaded's markCronJobHistoryUnavailable) instead of a
+			// false "no retained runs". Safe to call before Job's own sync
+			// gate (applyLoaded, above this load's call site) has run: a
+			// cache that's merely still filling reports neither Forbidden
+			// nor stalled here (nil), and that gate is what resolves the
+			// ambiguity before this value is ever shown.
+			jobsErr = tui.KindsError(lister, namespace, kube.KindJob)
+		}
 		// Pods are best-effort (§4.4) — a failed Pod read must never erase a
 		// valid Job-level failure (buildJobSummary already tolerates a nil/
 		// partial pods slice), so its own error is simply discarded.

@@ -370,6 +370,60 @@ func TestJobsErrForbiddenShowsPermissionDeniedWording(t *testing.T) {
 	}
 }
 
+// jobCacheForbiddenLister simulates *kube.Cluster's real behavior for a
+// Forbidden Job cache: ListRaw(KindJob, …) returns an empty, error-free
+// slice (CLAUDE.md: "a Forbidden reflector just leaves it empty"), and the
+// denial only surfaces through KindSynced/KindForbidden — unlike
+// jobForbiddenLister above, which returns the error synchronously from
+// ListRaw, a shape a real informer-backed cache never produces.
+type jobCacheForbiddenLister struct {
+	*fake.Cluster
+	err error
+}
+
+func (l jobCacheForbiddenLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if kind == kube.KindJob {
+		return nil, nil
+	}
+	return l.Cluster.ListRaw(ctx, kind, namespace)
+}
+
+func (l jobCacheForbiddenLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (l jobCacheForbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindJob {
+		return l.err
+	}
+	return nil
+}
+
+// TestJobCacheForbiddenViaKindErrorMarksHistoryUnavailable pins the real-
+// cluster shape TestJobsErrForbiddenShowsPermissionDeniedWording's fake
+// doesn't cover: against a real *kube.Cluster, a Forbidden Job cache never
+// returns an error from ListRaw itself — only KindSynced/KindForbidden say
+// so. Without load()'s own tui.KindsError fallback, jobsErr would stay nil
+// and the Jobs table would render a false "no retained runs" instead of
+// "unavailable: permission denied".
+func TestJobCacheForbiddenViaKindErrorMarksHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	c, _ := newFakeCronJob("default", "nightly")
+	lister := jobCacheForbiddenLister{Cluster: c, err: fmt.Errorf("jobs is forbidden: user cannot list")}
+	m := New(Config{Session: newSession("default"), Lister: lister, Mutator: c, Namespace: "default", Name: "nightly"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.load()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %v, want Ready — a denied Job cache must not take over the whole screen when CronJob's own read is healthy", m.state)
+	}
+	if m.jobsErr == nil {
+		t.Fatal("jobsErr = nil, want the Job cache's real Forbidden state carried through via tui.KindsError")
+	}
+	header := m.jobsSectionHeader(m.Theme(), 100)
+	if !strings.Contains(header, "job history unavailable: permission denied") {
+		t.Fatalf("expected permission-denied wording in the JOBS header, got %q", header)
+	}
+}
+
 func TestMoveJobSelectionClampsAndPreservesOnReload(t *testing.T) {
 	t.Parallel()
 	c, cj := newFakeCronJob("default", "nightly")

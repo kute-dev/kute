@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // auxKinds maps a listed kind to the other kinds its rows and prompts read.
@@ -82,6 +83,43 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 // prefetch, the exact read §5.2 removed. On a slow link the two multi-MB
 // LISTs then compete for the same bandwidth and the Helm list is the one
 // left waiting.
+
+// auxScope is the namespace argument a sync/error check on aux kind kind
+// must use for the kind currently on screen. Every aux relationship reads
+// at the primary kind's own namespace except one: Node's Pod aux-kind read
+// (nodes.go's loadNodeExtras) is unconditionally cluster-wide, since a
+// node's pods can come from any namespace — unlike Pod's own Node aux-kind
+// read, which needs no override at all, because Node is cluster-scoped and
+// *kube.Cluster's own cacheScope already normalizes any namespace passed
+// for it to "" (docs/plans/namespace-scoped-final-plan.md §1).
+func (m Model) auxScope(kind kube.ResourceKind) string {
+	if m.kind == kube.KindNode && kind == kube.KindPod {
+		return ""
+	}
+	return m.namespace
+}
+
+// auxKindsSynced reports whether every one of kinds' own caches — each
+// asked about at its own correct scope (auxScope) — is worth believing.
+func (m Model) auxKindsSynced(kinds []kube.ResourceKind) bool {
+	for _, k := range kinds {
+		if !tui.KindsSynced(m.lister, m.auxScope(k), k) {
+			return false
+		}
+	}
+	return true
+}
+
+// auxKindsError returns the first reason any of kinds has nothing to show,
+// each asked about at its own correct scope (auxScope).
+func (m Model) auxKindsError(kinds []kube.ResourceKind) error {
+	for _, k := range kinds {
+		if err := tui.KindsError(m.lister, m.auxScope(k), k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // auxKindOf reports whether changed is one of listed's secondary kinds.
 func auxKindOf(listed, changed kube.ResourceKind) bool {

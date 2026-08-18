@@ -82,6 +82,9 @@ func (m Model) stripLineCount() int {
 	if m.state != tui.TaskStateReady && m.state != tui.TaskStateEmpty {
 		return 0
 	}
+	if m.backendDeniedNote != "" {
+		return 2
+	}
 	return 1
 }
 
@@ -95,9 +98,17 @@ func (m Model) Strips(width int) []string {
 	}
 	switch m.flavor {
 	case flavorIngress:
-		return []string{insetStripLine(m.ingressSummaryLine(theme, width), width)}
+		lines := []string{insetStripLine(m.ingressSummaryLine(theme, width), width)}
+		if m.backendDeniedNote != "" {
+			lines = append(lines, m.backendDeniedNoteLine(theme, width))
+		}
+		return lines
 	case flavorRoute:
-		return []string{insetStripLine(m.routeSummaryLine(theme, width), width)}
+		lines := []string{insetStripLine(m.routeSummaryLine(theme, width), width)}
+		if m.backendDeniedNote != "" {
+			lines = append(lines, m.backendDeniedNoteLine(theme, width))
+		}
+		return lines
 	case flavorGateway:
 		dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 		text := lipgloss.NewStyle().Foreground(theme.Text)
@@ -108,6 +119,14 @@ func (m Model) Strips(width int) []string {
 		return []string{insetStripLine(dim.Render("CLASS ")+text.Render(class), width)}
 	}
 	return nil
+}
+
+// backendDeniedNoteLine renders §5's inline flag when the Service/Pod
+// caches backing the BACKENDS column aren't trustworthy — mirrors browse's
+// own auxKindsDeniedNoteLine.
+func (m Model) backendDeniedNoteLine(theme tui.Theme, width int) string {
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	return insetStripLine(warn.Render("⚠ "+m.backendDeniedNote), width)
 }
 
 // ingressSummaryLine is 23a's top strip: class + host/route counts, then the

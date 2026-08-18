@@ -11,7 +11,31 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
+
+// bestEffort reports the sync/error state of one of overview's secondary
+// caches (Namespace, HelmRelease, ReplicaSet) — loadOverview's own reads for
+// these three swallow every error, so without this a merely-still-filling
+// or genuinely-stalled cache is indistinguishable from "the cluster truly
+// has none of these." pending covers both "hasn't finished its initial fill
+// yet" and "stalled on a non-permission error" — both read the same to the
+// view (an "unknown right now" dash, not a false zero), and both may still
+// resolve on the next reload, unlike denied.
+func bestEffort(lister resources.RawLister, kind kube.ResourceKind) (pending, denied bool) {
+	if !tui.KindsSynced(lister, "", kind) {
+		return true, false
+	}
+	err := tui.KindsError(lister, "", kind)
+	switch {
+	case err == nil:
+		return false, false
+	case kube.IsPermissionError(err):
+		return false, true
+	default:
+		return true, false
+	}
+}
 
 // load fetches every source 19a's panels need — Node/Pod projections (via
 // the registry, so status/glyph derivation never drifts from 11a/2a's own),

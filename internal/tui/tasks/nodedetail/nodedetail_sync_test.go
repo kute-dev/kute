@@ -136,6 +136,111 @@ func TestDeniedPodCacheRendersPermissionDeniedNotEmpty(t *testing.T) {
 	}
 }
 
+// unsyncedNodeLister simulates a Node cache that hasn't finished its initial
+// fill: ListRaw(Node) reads empty (the same "truthful-looking but wrong"
+// shape a real informer returns pre-sync — findNode reads that as "not
+// found"), and KindSynced reports false only for Node.
+type unsyncedNodeLister struct{}
+
+func (unsyncedNodeLister) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
+	return nil, nil
+}
+
+func (unsyncedNodeLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	return kind != kube.KindNode
+}
+
+// TestNodeNotYetSyncedStaysLoadingNotFalseNotFound pins the Node half of
+// §5: before the fix, findNode's "node %q not found" error was treated
+// identically to a real error — an unsynced Node cache (right after launch
+// or mid a context switch) rendered a bare "not found" instead of staying
+// loading and retrying.
+func TestNodeNotYetSyncedStaysLoadingNotFalseNotFound(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: unsyncedNodeLister{}, NodeName: "node-a"})
+	m.SetSize(120, 36)
+
+	before := m.reloadEpoch
+	updated, cmd := m.Update(firstLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading — the Node cache hasn't synced yet, findNode's 'not found' isn't trustworthy", m.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the Node cache is still filling")
+	}
+	if m.reloadEpoch == before {
+		t.Fatal("expected reloadEpoch to advance so the scheduled retry is distinguishable from a stale one")
+	}
+}
+
+// forbiddenNodeLister simulates a genuinely Forbidden Node cache: ListRaw
+// still reads empty and error-free (the real informer-backed behavior), and
+// KindSynced reports settled (the anti-hang rule) while KindForbidden
+// carries the reason.
+type forbiddenNodeLister struct{}
+
+func (forbiddenNodeLister) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
+	return nil, nil
+}
+
+func (forbiddenNodeLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (forbiddenNodeLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindNode {
+		return apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("nope"))
+	}
+	return nil
+}
+
+// TestForbiddenNodeCacheRendersPermissionDeniedNotNotFound is
+// TestNodeNotYetSyncedStaysLoadingNotFalseNotFound's permanent-denial half:
+// there was no tui.KindsError/KindForbidden check for KindNode anywhere in
+// the package, so a denied Node cache rendered a generic "not found" error
+// instead of the permission-denied card.
+func TestForbiddenNodeCacheRendersPermissionDeniedNotNotFound(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: forbiddenNodeLister{}, NodeName: "node-a"})
+	m.SetSize(120, 36)
+
+	updated, _ := m.Update(firstLoaded(t, m.Init()))
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — the Node cache is Forbidden, not genuinely missing", m.state)
+	}
+}
+
+// TestResourceChangedForNodeAndPodSchedulesReload pins the missing-reload
+// half of §5: a Node condition change or a pod added/removed on this node
+// never triggered a reload, because nodedetail had no
+// kube.ResourceChangedMsg handling at all — mirrors browse's own
+// TestAuxKindsReloadTheList.
+func TestResourceChangedForNodeAndPodSchedulesReload(t *testing.T) {
+	for _, kind := range []kube.ResourceKind{kube.KindNode, kube.KindPod} {
+		m := New(Config{Session: newSession(), Lister: fakeLister{}, NodeName: "node-a"})
+		m.SetSize(120, 36)
+
+		before := m.reloadEpoch
+		updated, cmd := m.Update(kube.ResourceChangedMsg{Kind: kind})
+		m = *updated.(*Model)
+		if cmd == nil || m.reloadEpoch == before {
+			t.Fatalf("a %s change must reload node detail — it backs the facts panel/pods table", kind)
+		}
+	}
+}
+
+func TestResourceChangedForUnrelatedKindDoesNotReload(t *testing.T) {
+	m := New(Config{Session: newSession(), Lister: fakeLister{}, NodeName: "node-a"})
+	m.SetSize(120, 36)
+
+	before := m.reloadEpoch
+	updated, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindConfigMap})
+	m = *updated.(*Model)
+	if cmd != nil || m.reloadEpoch != before {
+		t.Fatal("a ConfigMap change has nothing to do with node detail")
+	}
+}
+
 // TestNodeDetailStaysLoadingUntilCacheSynced drives the retry through to
 // completion: once the lister reports synced, nodedetail settles at Ready
 // with the real pods rather than getting stuck showing an empty table. The
