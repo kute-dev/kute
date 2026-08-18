@@ -61,6 +61,21 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 	return nil
 }
 
+// Reload implements tui.Reloader: the root shell calls this on BackMsg when
+// this screen resumes from the stack, since it missed every
+// kube.ResourceChangedMsg for as long as it sat parked underneath whatever
+// it pushed (only the active task's Update sees those — e.g. a delete
+// issued from a pushed poddetail/nodedetail would otherwise leave the
+// deleted row showing here until some unrelated kind change happened to
+// land while this screen was active again). Mirrors this Update's own
+// ResourceChangedMsg case for m.kind/auxKindOf, minus the CRD-columns
+// special case — a genuine column-set change still needs its own
+// ResourceChangedMsg, since Reload has no changed kind to check against.
+func (m *Model) Reload() tea.Cmd {
+	m.reloadEpoch++
+	return m.scheduleReload(m.reloadEpoch)
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
 		return m, cmd

@@ -11,6 +11,21 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
+// Reload implements tui.Reloader — see its doc comment: this screen misses
+// every kube.ResourceChangedMsg while parked in the stack, so BackMsg
+// restoring it asks it to catch up immediately rather than showing stale
+// data until an unrelated RBAC-kind change happens to land while it's
+// active again. Calls m.load() directly rather than the heavier m.reload()
+// (which resets to the loading state and clears the rows) — a resumed
+// screen should refresh quietly, the same way an active one does on its own
+// kube.ResourceChangedMsg case just below.
+func (m *Model) Reload() tea.Cmd {
+	if m.rbac == nil {
+		return nil
+	}
+	return m.load()
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

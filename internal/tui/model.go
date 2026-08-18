@@ -218,6 +218,24 @@ type Task interface {
 	SetSize(width, height int)
 }
 
+// Reloader is implemented by a Task whose rendered rows come from a cache it
+// loaded into its own struct fields, rather than read live on every render
+// (every list/detail screen in internal/tui/tasks — CLAUDE.md's "render
+// functions are pure" means the load happens in Update, not View). Only the
+// active task's Update sees kube.ResourceChangedMsg (see the plain
+// m.task.Update(msg) forward below); a task sitting in m.stack while another
+// is active misses every change event for as long as it's parked, so its
+// cached rows silently drift from the cluster. BackMsg restoring it from the
+// stack is exactly the moment that drift becomes visible, so it asks the
+// resumed task to catch up immediately instead of leaving it to show stale
+// data until some unrelated future change happens to reach it while active
+// again — which, for a quiet kind, can be a very long wait. Reload should
+// do the same thing the task's own kube.ResourceChangedMsg case does, so a
+// resumed screen refreshes exactly like an active one would have.
+type Reloader interface {
+	Reload() tea.Cmd
+}
+
 // BackMsg requests returning to the previous task without quitting the program.
 type BackMsg struct{}
 
@@ -523,6 +541,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.stack) > 0 {
 			m.task = m.stack[len(m.stack)-1]
 			m.stack = m.stack[:len(m.stack)-1]
+			if r, ok := m.task.(Reloader); ok {
+				return m, r.Reload()
+			}
 		}
 		return m, nil
 	case kube.ConnStateMsg:

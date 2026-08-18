@@ -23,6 +23,18 @@ func (m *Model) pasteTarget() tui.PasteTarget {
 	return m.actions.PasteTarget()
 }
 
+// Reload implements tui.Reloader — see its doc comment: this screen misses
+// every kube.ResourceChangedMsg while parked in the stack, so BackMsg
+// restoring it asks it to catch up immediately rather than showing stale
+// data until an unrelated change happens to land while it's active again.
+func (m *Model) Reload() tea.Cmd {
+	if m.lister == nil {
+		return nil
+	}
+	m.reloadEpoch++
+	return m.scheduleReload(m.reloadEpoch)
+}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
 		return m, cmd

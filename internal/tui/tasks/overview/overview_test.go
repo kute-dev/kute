@@ -196,6 +196,48 @@ func TestLoadAggregatesNodesPodsAndRecentChanges(t *testing.T) {
 	}
 }
 
+// TestReloadRefreshesTroublePanelAfterExternalChange exercises tui.Reloader:
+// the root shell calls Reload when BackMsg restores this screen from the
+// stack, because it missed every kube.ResourceChangedMsg while parked
+// underneath whatever it pushed (drilling into a TROUBLE row jumps to
+// browse, which is what actually receives the delete's change event). Without
+// Reload, a pod deleted from that pushed screen keeps showing here until some
+// unrelated kind change happens to land while this screen is active again —
+// which for a quiet cluster can be a long wait, matching the reported bug.
+func TestReloadRefreshesTroublePanelAfterExternalChange(t *testing.T) {
+	lister := baseLister()
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if !strings.Contains(plain(m.Render()), "worker-1") {
+		t.Fatalf("expected worker-1 in the initial TROUBLE panel:\n%s", plain(m.Render()))
+	}
+
+	// The pod is deleted while this screen sits parked in the stack (e.g.
+	// the user drilled into it via TROUBLE's ↵, deleted it from browse, then
+	// pressed esc) — no ResourceChangedMsg reaches this Model in the
+	// meantime, only the lister's cache itself changes underneath it.
+	lister.objects[kube.KindPod] = []runtime.Object{
+		testPod("ns1", "web-1", corev1.PodRunning),
+		testPod("ns2", "cache-1", corev1.PodPending),
+	}
+
+	cmd := m.Reload()
+	if cmd == nil {
+		t.Fatal("Reload returned a nil command with a non-nil lister")
+	}
+	m = step(t, m, cmd())
+
+	view := plain(m.Render())
+	if strings.Contains(view, "worker-1") {
+		t.Fatalf("Reload did not refresh the TROUBLE panel — deleted pod still showing:\n%s", view)
+	}
+	if len(m.podTrouble) != 1 || m.podTrouble[0].Name != "cache-1" {
+		t.Fatalf("podTrouble = %+v, want only cache-1 after reload", m.podTrouble)
+	}
+}
+
 func TestNMetricsSentinelDoesNotCountAsAvailable(t *testing.T) {
 	// kube.NodeMetric{CPU:"n/a"} is the fake cluster's own no-metrics-server
 	// sentinel (kube/fake.Cluster.NodeMetrics) — a non-empty map full of

@@ -37,6 +37,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Reload implements tui.Reloader: the root shell calls this when BackMsg
+// restores this screen from the stack, since it missed every
+// kube.ResourceChangedMsg while parked underneath whatever it pushed (only
+// the active task's Update sees those) — without it, a pod deleted from a
+// screen opened via TROUBLE's ↵ would keep showing up here until some
+// unrelated change happened to land while this screen was active again.
+func (m *Model) Reload() tea.Cmd {
+	if m.lister == nil {
+		return nil
+	}
+	return m.load()
+}
+
 // isOverviewKind reports whether kind's change should trigger a reload —
 // every kind 19a's panels read from (Node/Pod/Namespace/ReplicaSet, plus
 // HelmRelease for the TROUBLE panel's outdated tail), not every possible

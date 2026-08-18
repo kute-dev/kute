@@ -58,6 +58,42 @@ func TestRootModelBackMessageRestoresPreviousTask(t *testing.T) {
 	}
 }
 
+// reloadingTask is a staticTask that also implements tui.Reloader, so it
+// exercises the root shell's BackMsg handling asking a just-restored task to
+// refresh itself.
+type reloadingTask struct {
+	staticTask
+	reloaded int
+}
+
+func (t *reloadingTask) Reload() tea.Cmd {
+	t.reloaded++
+	return nil
+}
+
+func TestRootModelBackMessageReloadsRestoredTask(t *testing.T) {
+	t.Parallel()
+
+	pods := &reloadingTask{staticTask: staticTask{name: "Pods api"}}
+	logs := &staticTask{name: "Logs: api"}
+	pods.next = logs
+	model := tui.New(pods)
+
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "open"})
+	if pods.reloaded != 0 {
+		t.Fatalf("pushing a task must not reload it: got %d calls", pods.reloaded)
+	}
+
+	updated, _ = updated.(tui.Model).Update(tui.BackMsg{})
+	podsView := updated.(tui.Model).View().Content
+	if !strings.Contains(podsView, "Pods api") {
+		t.Fatalf("pods view missing after back:\n%s", podsView)
+	}
+	if pods.reloaded != 1 {
+		t.Fatalf("restoring a Reloader task via BackMsg must call Reload exactly once: got %d calls", pods.reloaded)
+	}
+}
+
 // screenTask implements both tui.Task and tui.Screen (Chrome v2), so it
 // exercises the root shell's overlay/mode routing — staticTask above
 // deliberately does not, to guard the legacy-screen passthrough path.
