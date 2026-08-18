@@ -335,7 +335,16 @@ func TestStalledCacheOnBackgroundReloadKeepsExistingRowsVisible(t *testing.T) {
 	}
 
 	rbac.unsynced = kube.KindRole
-	m = step(t, m, kube.ResourceChangedMsg{Kind: kube.KindRole})
+	// Deliberately not step(): the reload finds KindRole still unsynced (it
+	// never flips back), so applyLoaded keeps returning a real
+	// tui.ScheduleCacheSyncRetry tick — draining that recursively would sleep
+	// 250ms per bounce forever, the same hazard called out above
+	// TestUnsyncedRBACCacheStaysLoadingOnFirstOpen. So run the reload's own
+	// load() once by hand and apply just the resulting loadedMsg, without
+	// touching the retry cmd applyLoaded schedules on top of it.
+	_, reloadCmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindRole})
+	updated, _ := m.Update(reloadCmd())
+	m = *updated.(*Model)
 
 	if m.state != tui.TaskStateReady {
 		t.Fatalf("state = %s, want ready — an already-rendered result must not be discarded by a background stall", m.state)
