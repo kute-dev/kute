@@ -2,6 +2,7 @@ package poddetail
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -58,7 +59,7 @@ func (m Model) load() tea.Cmd {
 		}
 
 		controller := resolveControllerDisplay(ctx, lister, namespace, pod.Owner)
-		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, controller)
+		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, obj.Spec.Volumes, controller)
 
 		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller, related: related}
 	}
@@ -75,34 +76,91 @@ type relatedItem struct {
 	Label string
 }
 
-// resolveRelatedItems resolves RELATED's numbered entries: the owning
-// Deployment/StatefulSet (reusing controller's already-resolved
-// ReplicaSet→Deployment hop — DaemonSet/Job owners and an unresolved
-// ReplicaSet are deliberately excluded, matching the old 'o' shortcut's
-// scope) and the Ingress fronting this pod, if any.
-func resolveRelatedItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string, controller string) []relatedItem {
+// maxRelatedItems caps resolveRelatedItems' output. update.go's openRelated
+// and the digit keys in updateKey ("1"..."9") are single ASCII characters,
+// so this is a hard ceiling on how many numbered entries can ever be jumped
+// to, not a style choice — extra candidates beyond it are simply dropped.
+const maxRelatedItems = 9
+
+// resolveRelatedItems resolves RELATED's numbered entries, in priority
+// order: the resolved parent controller (whatever kube.PodFromObject's
+// owner resolves to — Deployment/StatefulSet/DaemonSet/Job/an unresolved
+// ReplicaSet — reusing controller's already-resolved ReplicaSet→Deployment
+// hop; matches the CONTROLLER field in the meta grid, so if that field
+// shows something, RELATED links to it too), the PersistentVolumeClaims
+// this pod mounts that still exist, the Services whose selector matches
+// this pod, and every Ingress that references one of those Services.
+// Capped at maxRelatedItems.
+func resolveRelatedItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string, volumes []corev1.Volume, controller string) []relatedItem {
 	var items []relatedItem
-	if kind, name, ok := splitOwner(controller); ok && (kind == kube.KindDeployment || kind == kube.KindStatefulSet) {
+	if kind, name, ok := splitOwner(controller); ok {
 		items = append(items, relatedItem{Kind: kind, Name: name, Label: controller})
 	}
 	if lister != nil {
-		if name, ok := resolveIngressName(ctx, lister, namespace, podLabels); ok {
-			items = append(items, relatedItem{Kind: kube.KindIngress, Name: name, Label: string(kube.KindIngress) + "/" + name})
-		}
+		items = append(items, resolvePVCItems(ctx, lister, namespace, volumes)...)
+		services, ingresses := resolveServiceAndIngressItems(ctx, lister, namespace, podLabels)
+		items = append(items, services...)
+		items = append(items, ingresses...)
+	}
+	if len(items) > maxRelatedItems {
+		items = items[:maxRelatedItems]
 	}
 	return items
 }
 
-// resolveIngressName resolves the Ingress that fronts a pod carrying
-// podLabels: the Services whose label selector matches it, then the
-// Ingress whose rules/default backend name one of those Services. ok is
-// false when no Ingress can be resolved (no matching Service, no Ingress
-// referencing it, or several matches — this keeps the numbered jump
-// unambiguous rather than guessing).
-func resolveIngressName(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string) (string, bool) {
+// resolvePVCItems resolves the PersistentVolumeClaim volumes mounted into
+// the pod's spec (order follows spec.volumes), skipping any claim name that
+// no longer exists in the cluster — "don't guess, don't dead-link" mirrors
+// resolveServiceAndIngressItems' own discipline.
+func resolvePVCItems(ctx context.Context, lister resources.RawLister, namespace string, volumes []corev1.Volume) []relatedItem {
+	var claims []string
+	seen := map[string]bool{}
+	for _, v := range volumes {
+		if v.PersistentVolumeClaim == nil || v.PersistentVolumeClaim.ClaimName == "" {
+			continue
+		}
+		name := v.PersistentVolumeClaim.ClaimName
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		claims = append(claims, name)
+	}
+	if len(claims) == 0 {
+		return nil
+	}
+	objs, err := lister.ListRaw(ctx, kube.KindPersistentVolumeClaim, namespace)
+	if err != nil {
+		return nil
+	}
+	existing := map[string]bool{}
+	for _, obj := range objs {
+		if pvc, ok := obj.(*corev1.PersistentVolumeClaim); ok {
+			existing[pvc.Name] = true
+		}
+	}
+	var items []relatedItem
+	for _, name := range claims {
+		if !existing[name] {
+			continue
+		}
+		items = append(items, relatedItem{Kind: kube.KindPersistentVolumeClaim, Name: name, Label: string(kube.KindPersistentVolumeClaim) + "/" + name})
+	}
+	return items
+}
+
+// resolveServiceAndIngressItems resolves every Service in namespace whose
+// label selector matches podLabels, and every Ingress that references one
+// of those Services by name (default backend or a rule path) — RELATED's
+// own numbered entries for both, not just an internal step toward Ingress
+// discovery. Unlike the resolver this replaced, more than one matching
+// Ingress is no longer treated as unresolvable: a numbered list has room
+// for each one. Both results are sorted by name for deterministic output —
+// ListRaw iterates an informer store, not a sorted list.
+func resolveServiceAndIngressItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string) (services, ingresses []relatedItem) {
 	svcObjs, err := lister.ListRaw(ctx, kube.KindService, namespace)
 	if err != nil {
-		return "", false
+		return nil, nil
 	}
 	selector := labels.Set(podLabels)
 	matched := map[string]bool{}
@@ -113,28 +171,27 @@ func resolveIngressName(ctx context.Context, lister resources.RawLister, namespa
 		}
 		if labels.SelectorFromSet(svc.Spec.Selector).Matches(selector) {
 			matched[svc.Name] = true
+			services = append(services, relatedItem{Kind: kube.KindService, Name: svc.Name, Label: string(kube.KindService) + "/" + svc.Name})
 		}
 	}
+	sort.Slice(services, func(i, j int) bool { return services[i].Name < services[j].Name })
 	if len(matched) == 0 {
-		return "", false
+		return services, nil
 	}
 
 	ingObjs, err := lister.ListRaw(ctx, kube.KindIngress, namespace)
 	if err != nil {
-		return "", false
+		return services, nil
 	}
-	name := ""
 	for _, obj := range ingObjs {
 		ing, ok := obj.(*networkingv1.Ingress)
 		if !ok || !ingressReferencesServices(ing, matched) {
 			continue
 		}
-		if name != "" && name != ing.Name {
-			return "", false // ambiguous — more than one Ingress fronts this pod
-		}
-		name = ing.Name
+		ingresses = append(ingresses, relatedItem{Kind: kube.KindIngress, Name: ing.Name, Label: string(kube.KindIngress) + "/" + ing.Name})
 	}
-	return name, name != ""
+	sort.Slice(ingresses, func(i, j int) bool { return ingresses[i].Name < ingresses[j].Name })
+	return services, ingresses
 }
 
 // ingressReferencesServices reports whether ing's default backend or any

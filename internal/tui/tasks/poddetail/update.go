@@ -44,12 +44,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// displaying directly: Events feeds the EVENTS grid; ReplicaSets
 		// resolve the owner hop up to a Deployment for the meta grid and
 		// RELATED's numbered owner entry; Services/Ingresses resolve
-		// RELATED's numbered fronting-Ingress entry (load.go's
-		// resolveRelatedItems) — a kind read but not listed here goes stale
-		// (CLAUDE.md: a screen reading a kind it doesn't display must still
-		// reload on it).
+		// RELATED's numbered Service/Ingress entries;
+		// PersistentVolumeClaims resolve RELATED's numbered PVC entries
+		// (load.go's resolveRelatedItems) — a kind read but not listed here
+		// goes stale (CLAUDE.md: a screen reading a kind it doesn't display
+		// must still reload on it).
 		switch msg.Kind {
-		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet, kube.KindService, kube.KindIngress:
+		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet, kube.KindService, kube.KindIngress, kube.KindPersistentVolumeClaim:
 			if m.lister != nil {
 				return m, m.load()
 			}

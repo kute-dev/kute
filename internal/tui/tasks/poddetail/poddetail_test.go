@@ -3,6 +3,7 @@ package poddetail
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -840,6 +842,168 @@ func TestOpenRelatedJumpsToOwner(t *testing.T) {
 	}
 	if gotoMsg.Kind != kube.KindDeployment || gotoMsg.Namespace != "default" || gotoMsg.Name != "worker" {
 		t.Fatalf("GotoResourceMsg = %+v, want Deployment/default/worker", gotoMsg)
+	}
+}
+
+// jobOwnedPod builds a bare-bones pod owned directly by a Job — no
+// ReplicaSet in between, so resolveControllerDisplay's hop is a no-op and
+// pod.Owner passes straight through as "Job/<name>-job".
+func jobOwnedPod(name, ns string, labels map[string]string, volumes []corev1.Volume) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns,
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Job", Name: name + "-job"}},
+		},
+		Spec:   corev1.PodSpec{Volumes: volumes},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+}
+
+func TestRelatedIncludesJobOwner(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {jobOwnedPod("worker-abc", "default", nil, nil)},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != 1 || m.related[0].Kind != kube.KindJob || m.related[0].Name != "worker-abc-job" {
+		t.Fatalf("related = %+v, want exactly one Job entry (Job/worker-abc-job)", m.related)
+	}
+}
+
+func TestRelatedIncludesDaemonSetOwner(t *testing.T) {
+	pod := jobOwnedPod("agent-abc", "default", nil, nil)
+	pod.OwnerReferences = []metav1.OwnerReference{{Kind: "DaemonSet", Name: "agent"}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "agent-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != 1 || m.related[0].Kind != kube.KindDaemonSet || m.related[0].Name != "agent" {
+		t.Fatalf("related = %+v, want exactly one DaemonSet entry (DaemonSet/agent)", m.related)
+	}
+}
+
+func TestRelatedIncludesExistingPVCsOnly(t *testing.T) {
+	volumes := []corev1.Volume{
+		{Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data-pvc"}}},
+		{Name: "gone", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "deleted-pvc"}}},
+		{Name: "scratch", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+	}
+	pod := jobOwnedPod("worker-abc", "default", nil, volumes)
+	pod.OwnerReferences = nil
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod},
+		kube.KindPersistentVolumeClaim: {&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "data-pvc", Namespace: "default"},
+		}},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != 1 || m.related[0].Kind != kube.KindPersistentVolumeClaim || m.related[0].Name != "data-pvc" {
+		t.Fatalf("related = %+v, want exactly one PVC entry (PersistentVolumeClaim/data-pvc) — deleted-pvc and the non-PVC volume must be skipped", m.related)
+	}
+}
+
+func TestRelatedIncludesMatchingServicesSorted(t *testing.T) {
+	pod := jobOwnedPod("worker-abc", "default", map[string]string{"app": "worker"}, nil)
+	pod.OwnerReferences = nil
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod},
+		kube.KindService: {
+			&corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "worker-b", Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "worker"}},
+			},
+			&corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "worker-a", Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "worker"}},
+			},
+		},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != 2 || m.related[0].Name != "worker-a" || m.related[1].Name != "worker-b" {
+		t.Fatalf("related = %+v, want [Service/worker-a Service/worker-b] sorted by name", m.related)
+	}
+}
+
+func TestRelatedListsEveryMatchingIngress(t *testing.T) {
+	pod := jobOwnedPod("worker-abc", "default", map[string]string{"app": "worker"}, nil)
+	pod.OwnerReferences = nil
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod},
+		kube.KindService: {&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "default"},
+			Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "worker"}},
+		}},
+		kube.KindIngress: {
+			&networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "ingress-b", Namespace: "default"},
+				Spec: networkingv1.IngressSpec{DefaultBackend: &networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{Name: "worker"},
+				}},
+			},
+			&networkingv1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{Name: "ingress-a", Namespace: "default"},
+				Spec: networkingv1.IngressSpec{DefaultBackend: &networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{Name: "worker"},
+				}},
+			},
+		},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	// One Service entry plus both Ingresses, sorted — previously an
+	// ambiguous (>1) Ingress match was dropped entirely.
+	if len(m.related) != 3 {
+		t.Fatalf("related = %+v, want 3 entries (1 Service + 2 Ingresses)", m.related)
+	}
+	if m.related[1].Kind != kube.KindIngress || m.related[1].Name != "ingress-a" {
+		t.Fatalf("related[1] = %+v, want Ingress/ingress-a", m.related[1])
+	}
+	if m.related[2].Kind != kube.KindIngress || m.related[2].Name != "ingress-b" {
+		t.Fatalf("related[2] = %+v, want Ingress/ingress-b", m.related[2])
+	}
+}
+
+func TestRelatedCapsAtMaxItems(t *testing.T) {
+	pod := jobOwnedPod("worker-abc", "default", map[string]string{"app": "worker"}, nil)
+	var services []runtime.Object
+	for i := 0; i < 15; i++ {
+		services = append(services, &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("svc-%02d", i), Namespace: "default"},
+			Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "worker"}},
+		})
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod:     {pod},
+		kube.KindService: services,
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "worker-abc"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	if len(m.related) != maxRelatedItems {
+		t.Fatalf("related has %d entries, want the cap of %d", len(m.related), maxRelatedItems)
+	}
+	// The digit-key mapping (update.go's openRelated) must stay in range for
+	// every entry the cap actually kept.
+	if _, ok := m.openRelated(maxRelatedItems - 1); !ok {
+		t.Fatalf("openRelated(%d) should still resolve at the cap", maxRelatedItems-1)
+	}
+	if _, ok := m.openRelated(maxRelatedItems); ok {
+		t.Fatalf("openRelated(%d) should be out of range past the cap", maxRelatedItems)
 	}
 }
 
