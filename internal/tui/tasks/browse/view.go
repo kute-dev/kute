@@ -391,7 +391,7 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 			// never silently become the ordinary empty-history reading. A
 			// permission denial gets its own wording rather than the raw
 			// client-go error text, distinguishing "will never arrive" from
-			// "still retrying" (docs/plans/namespace-scoped-final-plan.md §5).
+			// "still retrying" (docs/lazy-informers.md §5.6).
 			if kube.IsPermissionError(m.cronJobJobsErr) {
 				rightText += " · job history unavailable: permission denied"
 			} else {
@@ -487,7 +487,7 @@ func distinctCRDGroups(rows []resources.Row) int {
 // the current kind's own columns/prompts read (auxKinds) came back Forbidden,
 // while the primary rows on screen stayed correct and stay showing — this is
 // the one extra line that says so, rather than a blank/wrong cell saying
-// nothing (docs/plans/namespace-scoped-final-plan.md §5).
+// nothing (docs/lazy-informers.md §5.6).
 func (m Model) auxKindsDeniedNoteLine(theme tui.Theme, width int) string {
 	warn := lipgloss.NewStyle().Foreground(theme.Warn)
 	return insetStripLine(warn.Render("⚠ "+m.auxKindsDeniedNote), width)

@@ -1438,7 +1438,7 @@ func (f *forbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error 
 }
 
 // TestPodCacheDeniedPromotesToPermissionDenied pins §5 of
-// docs/plans/namespace-scoped-final-plan.md: Pod backs the merged feed's
+// docs/lazy-informers.md §5.6: Pod backs the merged feed's
 // restarts (isTimelineSource already treats Pod as a source), but the health
 // checks never asked about it — a denied Pod cache used to render silently
 // as a quiet timeline for an object mid-incident, made worse here by the

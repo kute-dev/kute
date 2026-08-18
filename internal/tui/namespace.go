@@ -226,7 +226,7 @@ func namespaceForbidden(sess *Session) error {
 // shortly rather than flashing "no matches" for a cluster that actually has
 // namespaces (mirrors browse's listerSynced retry in applyRowsLoaded).
 //
-// A permanent denial (docs/plans/namespace-scoped-final-plan.md §6 — the
+// A permanent denial (docs/lazy-informers.md §5.6 — the
 // shape a namespace-bound identity actually hits) short-circuits both: it
 // will never sync, so waiting on it would spin forever, and there is
 // nothing to list, so the palette switches to the denied notice + a
@@ -291,7 +291,7 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 		return nil, nil
 	}
 
-	// docs/plans/namespace-scoped-final-plan.md §6: counting every
+	// docs/lazy-informers.md §5.6: counting every
 	// namespace's rows one at a time is exactly the breadth-first read
 	// scoped mode forbids — under it, each of these resources.List calls
 	// would start its own per-namespace informer just to decorate a palette
@@ -405,7 +405,7 @@ func namespaceCols(count int, health resources.HealthCounts) []palette.Cell {
 // namespaceColsUnknown is namespaceCols' scoped-mode counterpart: every cell
 // ghosted, for a namespace whose count genuinely wasn't read rather than one
 // known to be zero (namespaceCols' own count==0 branch above) — the two
-// must render the same way (docs/plans/namespace-scoped-final-plan.md §6:
+// must render the same way (docs/lazy-informers.md §5.6:
 // "Count/HEALTH/CPU render as the existing ghost dash") without namespaceCols
 // itself having to know why.
 func namespaceColsUnknown() []palette.Cell {

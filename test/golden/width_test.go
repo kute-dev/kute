@@ -23,15 +23,15 @@ var dimsInName = regexp.MustCompile(`(\d+)x(\d+)`)
 // wider than the terminal the fixture claims to be.
 //
 // Nothing in the tree violates this today, so it is a regression guard, not
-// a fix. It earns its place because the two decided-but-unbuilt items in
-// beta-plan.md §1 — the ASCII glyph fallback and the minimum-terminal-size
-// guard screen — both change how many cells a rendered row occupies, and
-// §1's acceptance criterion for the glyph fallback is already "no
-// column-width drift, the goldens are the check". That is only true if
-// something checks them: a per-screen golden comparison fails on *any*
-// difference, which means a width regression is indistinguishable from an
-// intended re-render, and the usual response to a failing golden is
-// UPDATE_GOLDEN=1. This test is the one that keeps saying no afterwards.
+// a fix. It earns its place because two decided-but-unbuilt items — the
+// ASCII glyph fallback and the minimum-terminal-size guard screen — both
+// change how many cells a rendered row occupies, and the glyph fallback's
+// acceptance criterion is already "no column-width drift, the goldens are
+// the check". That is only true if something checks them: a per-screen
+// golden comparison fails on *any* difference, which means a width
+// regression is indistinguishable from an intended re-render, and the usual
+// response to a failing golden is UPDATE_GOLDEN=1. This test is the one that
+// keeps saying no afterwards.
 //
 // Display width, not len: the fixtures are full of box-drawing and status
 // glyphs, and the ANSI-carrying themed fixtures need their escapes

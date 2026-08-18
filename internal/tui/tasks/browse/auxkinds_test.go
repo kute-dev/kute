@@ -84,7 +84,7 @@ func TestAuxKindOfIsDirectional(t *testing.T) {
 }
 
 // TestAuxKindSyncGapStaysLoadingNotFalseEmpty pins §5 of
-// docs/plans/namespace-scoped-final-plan.md: before the fix, the empty-rows
+// docs/lazy-informers.md §5.6: before the fix, the empty-rows
 // branch's sync check (m.listerSynced()) only asked about the primary kind,
 // while the error check right below it already covered auxKinds — so an aux
 // cache that was merely still filling (not yet synced, no error to report)

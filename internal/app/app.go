@@ -770,7 +770,7 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 		// A scoped session that reconnects must stay scoped — otherwise a
 		// namespace-bound identity's fresh cluster launches cluster-wide and
 		// every informer goes back to the denied cluster-wide LIST the flag
-		// exists to avoid (docs/plans/namespace-scoped-final-plan.md §4).
+		// exists to avoid (docs/lazy-informers.md §5.6).
 		// Same slot BuildSession gives it, before a single informer starts.
 		if cfg.ScopeNamespace != "" {
 			cluster.SetNamespaceScope(cfg.ScopeNamespace)
@@ -820,7 +820,7 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 			return setup.RetryFailedMsg{Err: err}
 		}
 		// Scoped mode is session-wide and survives a context switch
-		// (docs/plans/namespace-scoped-final-plan.md's Decisions) — this is
+		// (docs/lazy-informers.md §5.6's Decisions) — this is
 		// a brand new *kube.Cluster, so that survival has to be re-applied
 		// explicitly, the same as attemptReconnect just above.
 		if cfg.ScopeNamespace != "" {

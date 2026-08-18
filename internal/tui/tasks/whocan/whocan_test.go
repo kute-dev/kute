@@ -267,7 +267,7 @@ func TestMoveSelectionScrollsOffset(t *testing.T) {
 }
 
 // TestRoleBindingDeniedIsVisibleEvenWithClusterRoleRowsPresent pins §5 of
-// docs/plans/namespace-scoped-final-plan.md: who-can's RBAC health checks
+// docs/lazy-informers.md §5.6: who-can's RBAC health checks
 // used to run only when the merged result was empty, so a denied RoleBinding
 // cache was invisible whenever the ClusterRole/ClusterRoleBinding pair still
 // resolved a non-empty answer — exactly backwards for a security tool. The

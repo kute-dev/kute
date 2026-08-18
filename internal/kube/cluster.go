@@ -59,7 +59,7 @@ type Cluster struct {
 
 	// scoped is set once via SetNamespaceScope, before Start, and never
 	// cleared — a session that launched cluster-wide stays cluster-wide, and
-	// vice versa (docs/plans/namespace-scoped-final-plan.md: "not
+	// vice versa (docs/lazy-informers.md §5.6: "not
 	// persisted... a later launch without the flag is cluster-wide again").
 	// cacheScopeLocked is the single place it's consulted.
 	scoped bool
@@ -124,7 +124,7 @@ type Cluster struct {
 	// and keyed by namespace ("" = all) because a cluster-wide release list
 	// is a much bigger read than the one namespace a screen is showing —
 	// independent of scoped/cluster-wide mode, since this scoping predates
-	// and is orthogonal to it (docs/plans/namespace-scoped-final-plan.md
+	// and is orthogonal to it (docs/lazy-informers.md §5.6
 	// §1: "Delete Helm's mutable helmScope field: its per-namespace
 	// informers are already keyed correctly and now answer through the same
 	// scope-aware seam").
@@ -221,7 +221,7 @@ func (c *Cluster) Events() <-chan ResourceChangedMsg { return c.events }
 // SetNamespaceScope turns on namespace-scoped mode for this Cluster and pins
 // it to namespace: every namespaced kind's informer scopes to just this
 // namespace instead of the whole cluster
-// (docs/plans/namespace-scoped-final-plan.md: "restricts kute to this
+// (docs/lazy-informers.md §5.6: "restricts kute to this
 // namespace, for identities without cluster-wide list access"). Must be
 // called before Start — it sets Context.Namespace too, so Session.Location,
 // Cluster.Context, and the eager Pod cache all agree from the first frame.
@@ -514,7 +514,7 @@ func (c *Cluster) scopeKeyForLocked(kind ResourceKind, namespace string) scopeKe
 // forbids listing (say) HorizontalPodAutoscalers, an aggregate flag never
 // flips at all. In scoped mode a denial for one namespace's cache must not
 // vouch for (or poison) another's — callers must ask about the same
-// namespace the read used (docs/plans/namespace-scoped-final-plan.md §2).
+// namespace the read used (docs/lazy-informers.md §5.6).
 //
 // Reports true — "this empty answer is trustworthy, render it" — for a
 // stopped cluster, for synthetic kinds with no informer to wait on, and for

@@ -15,7 +15,7 @@ import (
 // caller's own read used — cluster-wide mode always normalizes to the same
 // answer regardless of what's passed, but namespace-scoped mode keys each
 // cache by namespace, so asking about the wrong one answers for a cache that
-// was never read (docs/plans/namespace-scoped-final-plan.md §2: "ask about
+// was never read (docs/lazy-informers.md §5.6: "ask about
 // the same namespace the read used").
 type KindSyncChecker interface {
 	KindSynced(kind kube.ResourceKind, namespace string) bool

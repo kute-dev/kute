@@ -507,7 +507,7 @@ clears it, and the informer's own change event reloads the screen.
 
 ---
 
-### 5.6 Namespace-scoped mode (`--namespace-scoped`) — **done**
+### 5.6 Namespace-scoped mode (`--namespace-scoped`) — **done** (`34a7df7`, e2e coverage `7dfc325`)
 
 [Why not namespace-scoped informers by default](#why-not-namespace-scoped-informers-by-default)
 still holds for the default launch. It doesn't hold for an identity that has *no*
@@ -563,14 +563,16 @@ same kind in the same frame.
 `internal/tui/{namespace,goto,model}.go`, `internal/tui/components/palette/palette.go`,
 `internal/tui/tasks/browse/{model,update,view,hints}.go`, and one call-site update apiece in
 `internal/tui/tasks/{events,timeline,whocan,helmhistory,cronjobdetail,cronjobschedule,
-jobattempts,fluxtree,nodedetail}`. See `docs/plans/namespace-scoped-final-plan.md`.
+jobattempts,fluxtree,nodedetail}`. End-to-end coverage against a real cluster (a scoped
+`kute-team` identity, a lazily-loaded granted kind, an ungranted kind's 403 card, denied
+all-namespaces, and returning to a granted namespace) lives in `test/e2e`.
 
 ## 6. CronJobs: a second lazy dependency and a third one-shot read (v0.8.0)
 
-Planned for the v0.8.0 CronJobs rework (`docs/plans/0.8.0-plan.md`); not yet implemented as
-of this writing, but recorded here so the lazy-loading rules that already govern every other
-kind are decided in advance rather than improvised mid-implementation. Nothing below changes
-the eager set — Namespace, Pod, Node stay the only informers `Cluster.Start` waits on.
+Shipped as part of the v0.8.0 CronJobs rework; recorded here so the lazy-loading rules that
+already govern every other kind stay documented rather than only implicit in the code.
+Nothing below changes the eager set — Namespace, Pod, Node stay the only informers
+`Cluster.Start` waits on.
 
 ### CronJob's own informer is lazy like any other kind
 

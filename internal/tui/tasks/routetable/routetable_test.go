@@ -396,7 +396,7 @@ func (l notYetSyncedIngressLister) ListRaw(ctx context.Context, kind kube.Resour
 func (l notYetSyncedIngressLister) KindSynced(kube.ResourceKind, string) bool { return false }
 
 // TestNotFoundStaysLoadingWhileCacheSyncing pins the fix for §5 of
-// docs/plans/namespace-scoped-final-plan.md: findUnstructured's own "not
+// docs/lazy-informers.md §5.6: findUnstructured's own "not
 // found" (a plain fmt.Errorf) is indistinguishable on its face from the
 // object's own cache not having filled yet — without asking KindSynced
 // first, this used to render TaskStateError ("not found") for an object

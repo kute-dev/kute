@@ -486,7 +486,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	// the aux kinds its columns/prompts read need asking. A problem here
 	// must not take the whole screen away from what's already correctly on
 	// the table — it surfaces as one extra strip line instead of a blank/
-	// wrong cell (docs/plans/namespace-scoped-final-plan.md §5).
+	// wrong cell (docs/lazy-informers.md §5.6).
 	m.auxKindsDeniedNote = ""
 	var auxRetry tea.Cmd
 	if kinds := auxKinds[m.kind]; len(kinds) > 0 {

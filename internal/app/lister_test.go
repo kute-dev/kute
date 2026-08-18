@@ -311,7 +311,7 @@ func TestHelmReleaseErrorAsksAboutTheReleaseCache(t *testing.T) {
 }
 
 // TestKindSyncAndErrorForwardTheNamespaceArgument is
-// docs/plans/namespace-scoped-final-plan.md §2's rule stated as a decorator
+// docs/lazy-informers.md §5.6's rule stated as a decorator
 // test: KindSynced/KindError must carry the caller's namespace through both
 // layers of the decorator stack unchanged, not silently normalize it to ""
 // or the release cache's own scope.

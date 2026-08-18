@@ -199,7 +199,7 @@ mint_restricted_kubeconfigs() {
 # create dies inside `kubeadm init` with "cannot obtain client without
 # bootstrap … client rate limiter Wait returned an error: context deadline
 # exceeded", which reads like a slow machine and is nothing of the sort. This
-# is exactly what the verification steps in docs/e2e-plan.md walk into: they
+# is exactly what the verification steps in docs/e2e-testing.md walk into: they
 # ask you to bring up 1.36 while 1.35 is still running.
 preflight_inotify() {
   local others limit

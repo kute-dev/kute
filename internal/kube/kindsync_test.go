@@ -234,7 +234,7 @@ func TestWatchErrorAfterSyncIsNotAStall(t *testing.T) {
 }
 
 // TestNoteWatchErrorDropsStaleGeneration pins the fix for the SwitchContext
-// race (docs/plans/namespace-scoped-final-plan.md's own generation-guard
+// race (docs/lazy-informers.md §5.6's own generation-guard
 // section): a callback registered against an old context can still be
 // mid-flight when SwitchContext bumps c.generation and clears kindStalled —
 // its own up-front generationCurrent check happened before that, on a

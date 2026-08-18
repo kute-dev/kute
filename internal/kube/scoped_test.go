@@ -12,7 +12,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-// Tests for docs/plans/namespace-scoped-final-plan.md's opt-in namespace
+// Tests for docs/lazy-informers.md §5.6's opt-in namespace
 // scoping. newLazyTestCluster's Cluster starts unscoped (the zero value of
 // the new `scoped` field) — SetNamespaceScope is what turns scoping on, the
 // same call BuildSession makes for a real launch before Start.

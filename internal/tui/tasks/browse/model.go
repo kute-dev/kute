@@ -848,7 +848,7 @@ func (m Model) listerSynced() bool {
 // namespaceScopedHint names --namespace-scoped=<ns> as a recovery option on
 // the 403 card, when it's plausibly one: a namespace is known (m.namespace,
 // the one the user would scope to) and this session isn't already running
-// scoped (docs/plans/namespace-scoped-final-plan.md §7 — a session already
+// scoped (docs/lazy-informers.md §5.6 — a session already
 // scoped has nothing left to suggest, and a session with no namespace
 // selected yet has nothing to name). Empty otherwise, so the card renders
 // exactly as before it existed.

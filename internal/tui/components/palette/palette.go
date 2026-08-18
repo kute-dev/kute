@@ -222,7 +222,7 @@ type Model struct {
 	// switches the key row to a bare "↵ switch" hint — this identity may not
 	// list Namespace, so there is nothing to browse, and the palette becomes
 	// a free-typed "switch to <namespace>" input instead
-	// (docs/plans/namespace-scoped-final-plan.md §6). The caller is
+	// (docs/lazy-informers.md §5.6). The caller is
 	// responsible for leaving Items empty and, typically, relabeling Input's
 	// placeholder ("switch to").
 	Denied bool

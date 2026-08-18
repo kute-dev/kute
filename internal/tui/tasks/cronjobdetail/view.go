@@ -356,7 +356,7 @@ func (m Model) jobsSectionHeader(theme tui.Theme, width int) string {
 	if m.jobsErr != nil {
 		// A permission denial gets its own wording rather than the raw
 		// client-go error text, distinguishing "will never arrive" from
-		// "still retrying" (docs/plans/namespace-scoped-final-plan.md §5).
+		// "still retrying" (docs/lazy-informers.md §5.6).
 		if kube.IsPermissionError(m.jobsErr) {
 			retention = "associated with this cronjob · job history unavailable: permission denied"
 		} else {

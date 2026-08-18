@@ -591,7 +591,7 @@ func TestStaleNamespaceLoadDoesNotOverwriteNewNamespace(t *testing.T) {
 // forbiddenLister extends golden_test.go's fakeLister with the KindForbidden
 // health-check seam applyLoaded reads (tui.KindForbiddenReporter) — mirrors
 // timeline/whocan's own forbidden fakes for the same
-// docs/plans/namespace-scoped-final-plan.md §5 symmetry check.
+// docs/lazy-informers.md §5.6 symmetry check.
 type forbiddenLister struct {
 	fakeLister
 	denied kube.ResourceKind

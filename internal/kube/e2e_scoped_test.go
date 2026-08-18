@@ -13,7 +13,7 @@ import (
 // The wire-level counterpart of test/e2e/scoped_test.go: these read
 // c.kindInformers directly, which only package kube can do — the same reason
 // e2e_lazy_test.go's tests live here rather than in test/e2e. See
-// docs/plans/scoped-namespace-e2e.md.
+// docs/lazy-informers.md §5.6.
 //
 // Run: scripts/e2e-cluster.sh up && go test -tags e2e ./internal/kube/... -run TestScoped
 

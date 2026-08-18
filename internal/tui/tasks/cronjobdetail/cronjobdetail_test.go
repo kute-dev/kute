@@ -343,7 +343,7 @@ func (l jobForbiddenLister) ListRaw(ctx context.Context, kind kube.ResourceKind,
 }
 
 // TestJobsErrForbiddenShowsPermissionDeniedWording pins §5 of
-// docs/plans/namespace-scoped-final-plan.md: CronJob's own read stays
+// docs/lazy-informers.md §5.6: CronJob's own read stays
 // healthy, but a Forbidden Job cache used to render the JOBS section header
 // with the raw client-go error text — indistinguishable from a transient
 // stall that's still retrying. It must instead say "permission denied".

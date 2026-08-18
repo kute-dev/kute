@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// TestEverydayFlow is beta-plan §2's acceptance walk as one session: land on
-// the Pods list, open a pod, read its logs, its events and its timeline, then
-// run a mutating verb — and end up back on the screen you started the verb
-// from, which is the part a unit test cannot check.
+// TestEverydayFlow is the everyday-flows acceptance walk as one session: land
+// on the Pods list, open a pod, read its logs, its events and its timeline,
+// then run a mutating verb — and end up back on the screen you started the
+// verb from, which is the part a unit test cannot check.
 //
 // It runs as one Launch on purpose. Each step's starting state is the
 // previous step's ending state, so a screen that renders correctly only when

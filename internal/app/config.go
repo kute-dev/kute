@@ -43,7 +43,7 @@ type Config struct {
 	// ScopeNamespace turns on namespace-scoped mode and selects the
 	// namespace, both at once (--namespace-scoped=<namespace>) — for an
 	// identity without cluster-wide list access
-	// (docs/plans/namespace-scoped-final-plan.md). Empty means cluster-wide
+	// (docs/lazy-informers.md §5.6). Empty means cluster-wide
 	// mode, unchanged from today. Mutually exclusive with Namespace/-n at
 	// the flag layer (cmd/kute/main.go's conflictingScopeFlags) — by the
 	// time this reaches BuildSession, at most one of the two is non-empty.

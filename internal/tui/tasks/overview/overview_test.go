@@ -234,7 +234,7 @@ func (f *forbiddenNodeLister) KindForbidden(kind kube.ResourceKind, _ string) er
 }
 
 // TestDeniedNodeCacheRendersPermissionDeniedNotZeroes pins the fix for §5 of
-// docs/plans/namespace-scoped-final-plan.md: loadOverview's ListRaw calls
+// docs/lazy-informers.md §5.6: loadOverview's ListRaw calls
 // never surface a Forbidden reflector as an error (it just returns an empty
 // cache), so without an explicit KindsSynced/KindsError gate this rendered
 // as a healthy-looking cluster overview with 0 nodes instead of a

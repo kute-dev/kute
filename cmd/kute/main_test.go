@@ -3,7 +3,7 @@ package main
 import "testing"
 
 // TestConflictingScopeFlags pins the usage-error rule
-// (docs/plans/namespace-scoped-final-plan.md): --namespace-scoped already
+// (docs/lazy-informers.md §5.6): --namespace-scoped already
 // selects the namespace, so pairing it with either spelling of -n/--namespace
 // is ambiguous rather than a precedence question, and every other
 // combination is a normal launch.

@@ -11,9 +11,9 @@ import (
 const noMetrics = "– –"
 
 // TestNoMetricsServerRendersUnknown: kind ships no metrics-server, which
-// makes it free coverage for the row beta-plan §2 words as "CPU/MEM render –,
-// never a lie or a crash". Every surface that shows usage has to say it does
-// not know, on a cluster where nothing can tell it.
+// makes it free coverage for the rule "CPU/MEM render –, never a lie or a
+// crash". Every surface that shows usage has to say it does not know, on a
+// cluster where nothing can tell it.
 //
 // The failure this guards against is not a crash — it is a zero. A missing
 // metrics client that yields an empty PodMetrics reads as 0m/0Mi, and a pod

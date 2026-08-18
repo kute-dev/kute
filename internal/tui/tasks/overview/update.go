@@ -104,7 +104,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// (loadOverview's own reads swallow their errors) — a denial here
 	// decorates just the fact/panel it backs rather than promoting to the
 	// full-screen state Node/Pod's denial does above
-	// (docs/plans/namespace-scoped-final-plan.md §5). Pending is the same
+	// (docs/lazy-informers.md §5.6). Pending is the same
 	// idea for the transient case: a cache that hasn't finished its initial
 	// fill yet reads as an "unknown right now" dash instead of a false
 	// zero/empty, and self-heals via the retry below rather than waiting on

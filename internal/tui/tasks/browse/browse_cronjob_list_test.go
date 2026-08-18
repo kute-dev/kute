@@ -365,7 +365,7 @@ func (l *jobErrLister) ListRaw(ctx context.Context, kind kube.ResourceKind, name
 }
 
 // TestCronJobJobCacheForbiddenShowsPermissionDeniedWording pins §5 of
-// docs/plans/namespace-scoped-final-plan.md: a permission denial on the Job
+// docs/lazy-informers.md §5.6: a permission denial on the Job
 // side of the CronJob/Job join used to render identically to a transient
 // stall — both as the raw client-go error text. A denial is permanent for
 // the session and gets its own wording distinguishing it from "still

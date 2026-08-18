@@ -104,7 +104,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// Event, ReplicaSet, Deployment, and Pod are all structurally required
 	// to the merged feed's honesty — a missing rollout or missing restart is
 	// exactly the dangerous silent-gap case
-	// docs/plans/namespace-scoped-final-plan.md §5 calls out. Unlike
+	// docs/lazy-informers.md §5.6 calls out. Unlike
 	// browse/overview/cronjobdetail (each has a clear primary identity plus
 	// separate best-effort reads), timeline has no such split: every kind it
 	// merges is part of the one answer it presents, so a denial on any of

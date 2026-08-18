@@ -133,7 +133,7 @@ func demoCronJobDetailTask(t *testing.T, name string) (*cronjobdetail.Model, *fa
 }
 
 // TestNewModelDemoScopeNamespaceSelectsNamespace pins the fix for
-// docs/plans/namespace-scoped-final-plan.md §4 in demo mode: --namespace-
+// docs/lazy-informers.md §5.6 in demo mode: --namespace-
 // scoped must select the namespace the same way -n does there (the fake has
 // no informers to scope). BuildSession already sets sess.Location.Namespace
 // correctly from cfg.ScopeNamespace; without this fix NewModel's own demo

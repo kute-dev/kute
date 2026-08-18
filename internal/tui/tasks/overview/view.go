@@ -95,7 +95,7 @@ func (m Model) clusterSummaryText() string {
 		// A denied Namespace cache reads as zero from loadOverview's own
 		// best-effort read — saying so beats a silent "0 namespaces", which
 		// is a claim about the cluster this screen is in no position to make
-		// (docs/plans/namespace-scoped-final-plan.md §5).
+		// (docs/lazy-informers.md §5.6).
 		nsText = "permission denied"
 	}
 	return fmt.Sprintf("%s · %d nodes · %d pods · %s namespaces", version, m.nodeCount, m.podCount, nsText)
@@ -363,7 +363,7 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	// helmNote flags a denied HelmRelease cache — the TROUBLE panel's
 	// outdated-releases tail (troubleEntries) reads as empty for either
 	// reason (no outdated releases, or denial), so both branches below need
-	// it appended (docs/plans/namespace-scoped-final-plan.md §5).
+	// it appended (docs/lazy-informers.md §5.6).
 	helmNote := func() []string {
 		switch {
 		case m.helmPending:
@@ -474,7 +474,7 @@ func (m Model) changesLines(theme tui.Theme, width int) []string {
 		case m.changesDenied:
 			// A denied ReplicaSet cache means m.changes is always empty —
 			// say so instead of the reassuring "no changes" reading
-			// (docs/plans/namespace-scoped-final-plan.md §5).
+			// (docs/lazy-informers.md §5.6).
 			text = "permission denied: rollout history unavailable"
 			style = theme.Warn
 		}

@@ -116,7 +116,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// empty, so a denial on one pair is never invisible just because the
 	// other pair already resolved a non-empty result — a partial answer is
 	// as dangerous a security claim as an empty one
-	// (docs/plans/namespace-scoped-final-plan.md §5).
+	// (docs/lazy-informers.md §5.6).
 	if !tui.KindsSynced(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding) ||
 		!tui.KindsSynced(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding) {
 		// 22a resolves bindings entirely from informer caches, and all four

@@ -1,5 +1,4 @@
-// Package resources: this file holds v0.8.0's CronJob/Job aggregation —
-// docs/plans/0.8.0-plan.md §4.1-4.3, Phase 1. It is pure data: every
+// Package resources: this file holds v0.8.0's CronJob/Job aggregation. It is pure data: every
 // exported function here takes its inputs (raw API objects, a caller-
 // supplied clock) as parameters and returns a value. Nothing in this file
 // performs cluster I/O or reads the wall clock — see BuildCronJobSummaries'

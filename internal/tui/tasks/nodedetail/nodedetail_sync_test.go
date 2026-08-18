@@ -113,7 +113,7 @@ func (l *forbiddenPodLister) KindForbidden(kind kube.ResourceKind, _ string) err
 }
 
 // TestDeniedPodCacheRendersPermissionDeniedNotEmpty pins the fix for §5 of
-// docs/plans/namespace-scoped-final-plan.md: listerSynced (KindSynced)
+// docs/lazy-informers.md §5.6: listerSynced (KindSynced)
 // reports settled for a Forbidden cache too — that's the anti-hang rule,
 // not a claim the node has zero pods — so without an explicit KindError
 // check this fell straight through to TaskStateReady with an empty pods

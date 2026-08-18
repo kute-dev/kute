@@ -164,7 +164,7 @@ func PartialKubeconfigPath() string {
 // TeamKubeconfigPath returns the token kubeconfig for the kute-team
 // ServiceAccount — a namespace-bound Role in kute-e2e (Pods, ConfigMaps,
 // Events, pods/log) and no ClusterRole anywhere. The identity
-// docs/plans/scoped-namespace-e2e.md's scoped-mode suite launches under.
+// scoped_test.go's scoped-mode suite launches under.
 func TeamKubeconfigPath() string {
 	if p := os.Getenv("KUTE_E2E_TEAM_KUBECONFIG"); p != "" {
 		return p

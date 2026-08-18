@@ -91,7 +91,7 @@ var auxKinds = map[kube.ResourceKind][]kube.ResourceKind{
 // node's pods can come from any namespace — unlike Pod's own Node aux-kind
 // read, which needs no override at all, because Node is cluster-scoped and
 // *kube.Cluster's own cacheScope already normalizes any namespace passed
-// for it to "" (docs/plans/namespace-scoped-final-plan.md §1).
+// for it to "" (docs/lazy-informers.md §5.6).
 func (m Model) auxScope(kind kube.ResourceKind) string {
 	if m.kind == kube.KindNode && kind == kube.KindPod {
 		return ""

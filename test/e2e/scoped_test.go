@@ -76,7 +76,7 @@ func TestScopedModeUngrantedKindStillShowsTheCard(t *testing.T) {
 
 // TestScopedModeAllNamespacesFailsHonestly: kute-team's Role is namespaced,
 // so a cluster-wide Pod LIST is Forbidden even though the scoped one just
-// worked. This is docs/plans/namespace-scoped-final-plan.md's
+// worked. This is docs/lazy-informers.md §5.6's
 // namespaceScopedHint proven the other direction — a scoped session's
 // explicit global read must still degrade to a permission card, never a
 // false empty.

@@ -12,7 +12,7 @@
 # exception: it is a namespaced Role on purpose, because it is only ever
 # launched under --namespace-scoped, where the eager Pod cache itself is
 # scoped to kute-e2e rather than cluster-wide (see
-# docs/plans/scoped-namespace-e2e.md).
+# test/e2e/scoped_test.go).
 ---
 # kute-restricted may list and get Pods in kute-e2e and nothing else,
 # anywhere. Namespace is one of the three eager informers, so this identity is
@@ -96,7 +96,7 @@ subjects:
 # kute-team is a realistic namespace-bound developer: several kinds of read
 # access inside kute-e2e, none of it cluster-scoped. This is the persona
 # --namespace-scoped exists for — a Role, never a ClusterRole — and the identity
-# docs/plans/scoped-namespace-e2e.md's scoped-mode suite launches under.
+# test/e2e/scoped_test.go's scoped-mode suite launches under.
 # Deliberately no Secrets/Deployments/Ingresses: those are what proves an
 # ungranted kind still shows the 403 card honestly under scoped mode too.
 apiVersion: v1

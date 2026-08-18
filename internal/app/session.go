@@ -58,7 +58,7 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 		// --namespace-scoped selects the namespace the same way -n does in
 		// demo mode — the fake has no informers to scope, so there is no
 		// mode to turn on, only a namespace to select
-		// (docs/plans/namespace-scoped-final-plan.md §4).
+		// (docs/lazy-informers.md §5.6).
 		if cfg.ScopeNamespace != "" {
 			sess.Location.Namespace = cfg.ScopeNamespace
 		} else if cfg.Namespace != "" {

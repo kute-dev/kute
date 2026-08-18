@@ -69,7 +69,7 @@ func (m Model) loadEmptyHints() tea.Cmd {
 // (cluster-wide) mode this is a free cache read: resources.Count(kind, "")
 // goes through the same single cache already backing the namespace just
 // found empty. Under --namespace-scoped, kind's cache is keyed per
-// namespace (docs/plans/namespace-scoped-final-plan.md §2), so that same
+// namespace (docs/lazy-informers.md §5.6), so that same
 // call would start a brand-new cluster-wide informer for kind merely to
 // decorate a hint — the exact implicit global read scoped mode exists to
 // avoid. tui.LiveCounter (CountLive) answers the same question with one
@@ -97,10 +97,10 @@ func allNamespacesCount(ctx context.Context, lister resources.RawLister, kind ku
 // Skipped entirely under --namespace-scoped: resources.Count(kind, ns) goes
 // through ListRaw, so calling it once per namespace would start one
 // per-namespace informer for kind just to decorate an empty state — the
-// exact breadth-first read the mode exists to avoid (docs/plans/
-// namespace-scoped-final-plan.md §6, same reasoning as the namespace
-// palette's own per-namespace count loop). The caller already degrades to a
-// plain, still-truthful line when this returns nothing.
+// exact breadth-first read the mode exists to avoid (docs/lazy-informers.md
+// §5.6, same reasoning as the namespace palette's own per-namespace count
+// loop). The caller already degrades to a plain, still-truthful line when
+// this returns nothing.
 func busiestOtherNamespace(ctx context.Context, lister resources.RawLister, reg resources.Registry, kind kube.ResourceKind, current string) (string, int) {
 	if sc, ok := lister.(tui.ScopedChecker); ok && sc.Scoped() {
 		return "", 0

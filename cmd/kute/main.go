@@ -58,9 +58,9 @@ func main() {
 }
 
 // conflictingScopeFlags rejects -n/--namespace alongside --namespace-scoped:
-// --namespace-scoped already selects the namespace (docs/plans/
-// namespace-scoped-final-plan.md), so the two together are ambiguous rather
-// than a precedence question. setNames is exactly flag.Visit's own list —
+// --namespace-scoped already selects the namespace (docs/lazy-informers.md
+// §5.6), so the two together are ambiguous rather than a precedence
+// question. setNames is exactly flag.Visit's own list —
 // the flags actually set on the command line, not their (possibly
 // zero-value) results — so an explicit `--namespace=""` still counts as
 // set, and a bare, unflagged launch never trips this.

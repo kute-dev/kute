@@ -30,7 +30,7 @@ type gotoFakeLister struct {
 	scoped bool
 	// calls, when non-nil, records every ListRaw(kind, namespace) call — for
 	// tests asserting a scoped-mode palette does *not* fan out one ListRaw
-	// per namespace (docs/plans/namespace-scoped-final-plan.md §6).
+	// per namespace (docs/lazy-informers.md §5.6).
 	calls *[]gotoListCall
 }
 

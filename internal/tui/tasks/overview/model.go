@@ -99,7 +99,7 @@ type Model struct {
 	// most recent load. Unlike Node/Pod (the two required caches, gated in
 	// applyLoaded), a denial on these must not take over the whole screen —
 	// each flags only the fact/panel it backs
-	// (docs/plans/namespace-scoped-final-plan.md §5).
+	// (docs/lazy-informers.md §5.6).
 	//
 	// nsPending/helmPending/changesPending are true when the corresponding
 	// cache hasn't finished its initial fill yet (or has stalled on a

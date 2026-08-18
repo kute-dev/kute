@@ -93,7 +93,8 @@ go test -race ./internal/kube
 ```
 
 The full real-cluster E2E suite runs in CI. If your agreed change needs local E2E coverage,
-follow [`docs/e2e-plan.md`](docs/e2e-plan.md) and use the repository's kind cluster scripts.
+follow [`docs/e2e-testing.md`](docs/e2e-testing.md) and use the repository's kind cluster
+scripts.
 
 ## Pull requests
 

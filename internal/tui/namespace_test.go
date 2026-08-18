@@ -84,7 +84,7 @@ func TestRootModelNOpensNamespacePaletteWithLiveCounts(t *testing.T) {
 }
 
 // TestRootModelNScopedModeSkipsPerNamespaceFanOut pins
-// docs/plans/namespace-scoped-final-plan.md §6: under --namespace-scoped, the
+// docs/lazy-informers.md §5.6: under --namespace-scoped, the
 // palette must not count every namespace one ListRaw at a time — each of
 // those calls would start its own per-namespace informer under the hood.
 // Count/HEALTH/CPU render as the ghost dash instead.
@@ -742,7 +742,7 @@ func TestRootModelNSettlesWhenNamespacesAreGenuinelyEmpty(t *testing.T) {
 	}
 }
 
-// deniedNamespaceLister reproduces docs/plans/namespace-scoped-final-plan.md
+// deniedNamespaceLister reproduces docs/lazy-informers.md §5.6
 // §6's shape: this identity may not list Namespace at all — the common
 // answer for a namespace-bound Role — so the palette has nothing to browse.
 type deniedNamespaceLister struct {
