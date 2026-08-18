@@ -996,3 +996,59 @@ func TestFakeKindSyncedNormalizesClusterScopedKinds(t *testing.T) {
 		t.Error("SetKindSynced(Node, team-a, false) did not normalize across namespace arguments for a cluster-scoped kind")
 	}
 }
+
+// TestFakeKindErrorIsScopedPerNamespace mirrors
+// TestFakeKindSyncedIsScopedPerNamespace for the third health seam: an error
+// set for one namespace's cache must not leak into another namespace's, or a
+// scoped-mode test asking the wrong namespace would see the same error
+// anyway and never catch the mistake.
+func TestFakeKindErrorIsScopedPerNamespace(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	stalled := errors.New("stalled list")
+	c.SetKindError(kube.KindPod, "team-a", stalled)
+	if c.KindError(kube.KindPod, "team-a") == nil {
+		t.Error("KindError(Pod, team-a) = nil after SetKindError(Pod, team-a, err)")
+	}
+	if c.KindError(kube.KindPod, "team-b") != nil {
+		t.Error("SetKindError(Pod, team-a, err) wrongly poisoned KindError(Pod, team-b)")
+	}
+	if c.KindError(kube.KindPod, "") != nil {
+		t.Error("SetKindError(Pod, team-a, err) wrongly poisoned the cluster-wide KindError(Pod, \"\") cache")
+	}
+}
+
+// TestFakeKindErrorNormalizesClusterScopedKinds mirrors
+// TestFakeKindSyncedNormalizesClusterScopedKinds for KindError: Node has
+// exactly one cache regardless of namespace, so gating it under any
+// namespace argument must gate every namespace argument.
+func TestFakeKindErrorNormalizesClusterScopedKinds(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	stalled := errors.New("stalled list")
+	c.SetKindError(kube.KindNode, "team-a", stalled)
+	if c.KindError(kube.KindNode, "") == nil {
+		t.Error("SetKindError(Node, team-a, err) did not normalize to the cluster-wide \"\" cache")
+	}
+	if c.KindError(kube.KindNode, "team-b") == nil {
+		t.Error("SetKindError(Node, team-a, err) did not normalize across namespace arguments for a cluster-scoped kind")
+	}
+}
+
+// TestFakeKindForbiddenNormalizesClusterScopedKinds mirrors
+// TestFakeKindSyncedNormalizesClusterScopedKinds for KindForbidden.
+func TestFakeKindForbiddenNormalizesClusterScopedKinds(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	denied := errors.New("forbidden")
+	c.SetKindForbidden(kube.KindNode, "team-a", denied)
+	if c.KindForbidden(kube.KindNode, "") == nil {
+		t.Error("SetKindForbidden(Node, team-a, err) did not normalize to the cluster-wide \"\" cache")
+	}
+	if c.KindForbidden(kube.KindNode, "team-b") == nil {
+		t.Error("SetKindForbidden(Node, team-a, err) did not normalize across namespace arguments for a cluster-scoped kind")
+	}
+}

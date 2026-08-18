@@ -605,13 +605,13 @@ func (f *forbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error 
 	return nil
 }
 
-// TestEventCacheDeniedIsVisibleEvenWithGroupsAlreadyRendered is the
-// lowest-priority §5 symmetry test noted in docs/TODO.md: unlike
-// timeline/whocan (which had to be restructured to run their checks
-// unconditionally), events is single-kind, so applyLoaded's KindsError check
-// was already unconditional — this pins that a denial discovered on a
-// background reload still wins even though a group is already rendered, and
-// guards the behavior against a future refactor that accidentally gates it.
+// TestEventCacheDeniedIsVisibleEvenWithGroupsAlreadyRendered tests a
+// symmetry case for the KindsError check. timeline and whocan needed
+// restructuring to run their KindsError checks unconditionally. events is
+// single-kind, so applyLoaded's KindsError check was already unconditional.
+// This test confirms that a denial discovered on a background reload still
+// wins, even when a group is already rendered. It also guards against a
+// future refactor that accidentally makes the check conditional.
 func TestEventCacheDeniedIsVisibleEvenWithGroupsAlreadyRendered(t *testing.T) {
 	events := []kube.Event{
 		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "default", Message: "restarting", Count: 1, LastSeen: time.Now()},

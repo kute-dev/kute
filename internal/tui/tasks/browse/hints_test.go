@@ -24,14 +24,14 @@ func firstEmptyHints(t *testing.T, cmd tea.Cmd) emptyHintsMsg {
 	return msg
 }
 
-// TestStaleEmptyHintsDoNotOverwriteNewNamespace pins TODO.md item 4: kind
-// alone doesn't catch a namespace switch that lands back on the same kind —
-// two empty namespaces of the same kind both leave m.state ==
-// TaskStateEmpty and msg.kind unchanged, so a slow hints reply for the
-// namespace just left could still land after the switch's own faster reply
-// already populated m.hints for the new namespace. The guard has to be
-// epoch/namespace, the same fix rowsLoadedMsg already has (see
-// TestStaleNamespaceLoadDoesNotOverwriteNewNamespace).
+// TestStaleEmptyHintsDoNotOverwriteNewNamespace tests a namespace-switch
+// race. Kind alone does not detect a namespace switch that returns to the
+// same kind: two empty namespaces of the same kind both leave m.state ==
+// TaskStateEmpty and msg.kind unchanged. A slow hints reply for the
+// namespace just left can still arrive after the switch's own faster reply
+// has already set m.hints for the new namespace. The guard must check the
+// epoch and the namespace, not the kind. rowsLoadedMsg uses the same fix —
+// see TestStaleNamespaceLoadDoesNotOverwriteNewNamespace.
 func TestStaleEmptyHintsDoNotOverwriteNewNamespace(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		// Pods: empty in both "default" and "nva-stage", so both namespace
@@ -138,13 +138,13 @@ func (l *scopedRecordingLister) globalReads() []kube.ResourceKind {
 	return out
 }
 
-// TestScopedEmptyHintsSkipGlobalRead pins TODO.md item 5: under
-// --namespace-scoped, resources.Count(kind, "") for the "N cluster-wide"
-// hint detail goes through ListRaw and would start a brand-new cluster-wide
-// informer for kind just to decorate an empty state — the exact
-// breadth-first, implicit global read scoped mode exists to avoid.
-// loadEmptyHints must answer the same question from CountLive instead, with
-// no namespace=="" ListRaw call for any kind.
+// TestScopedEmptyHintsSkipGlobalRead tests the empty-state hint under
+// --namespace-scoped mode. The "N cluster-wide" hint detail normally calls
+// resources.Count(kind, ""). That call goes through ListRaw and starts a new
+// cluster-wide informer for kind. Namespace-scoped mode exists to prevent
+// exactly this kind of implicit, breadth-first global read. loadEmptyHints
+// must answer the same question from CountLive instead. It must never call
+// ListRaw with namespace == "" for any kind.
 func TestScopedEmptyHintsSkipGlobalRead(t *testing.T) {
 	lister := &scopedRecordingLister{
 		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},

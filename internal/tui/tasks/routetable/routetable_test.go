@@ -344,13 +344,14 @@ func (l neverStartedBackendLister) KindSynced(kind kube.ResourceKind, _ string) 
 	return kind != kube.KindService && kind != kube.KindPod
 }
 
-// TestZeroListenerGatewayDoesNotWaitOnUnreadCaches pins the fix for TODO #3
-// (docs/TODO.md): a Gateway with zero spec.listeners rows must settle into
-// TaskStateEmpty, not retry forever waiting on Service/Pod caches loadGateway
-// never reads and that therefore never start. applyLoaded is called directly
-// (rather than driven through step(), which would follow the retry command
-// and spin for real — the exact hang this test exists to catch) so an
-// unfixed regression fails fast instead of hanging the suite.
+// TestZeroListenerGatewayDoesNotWaitOnUnreadCaches tests the zero-listener
+// Gateway case. A Gateway with zero spec.listeners rows must settle into
+// TaskStateEmpty. It must not retry forever, waiting on Service and Pod
+// caches. loadGateway never reads Service or Pod, so those caches never
+// start. The test calls applyLoaded directly instead of driving it through
+// step(): step() would follow the retry command and spin for real, which is
+// the exact hang this test must catch. Calling applyLoaded directly makes an
+// unfixed regression fail fast instead of hanging the whole test suite.
 func TestZeroListenerGatewayDoesNotWaitOnUnreadCaches(t *testing.T) {
 	lister := neverStartedBackendLister{lister: fakeLister{}}
 	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindGateway, Namespace: "default", Name: "public"})

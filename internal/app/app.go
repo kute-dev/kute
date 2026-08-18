@@ -467,7 +467,18 @@ var (
 	_ whocan.WhoCanReader          = (*fake.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*fake.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*fake.Cluster)(nil)
+	_ tui.KindErrorReporter        = (*fake.Cluster)(nil)
+	_ tui.KindForbiddenReporter    = (*fake.Cluster)(nil)
 	_ helmhistory.HelmSecretLister = (*fake.Cluster)(nil)
+	// This block has no tui.ScopedChecker or tui.LiveCounter assertion for
+	// fake.Cluster. The fake has no informers to scope: SwitchNamespace only
+	// changes which objects ListRaw filters to (see fake.go's own field
+	// comment). The fake also has no server to count against. Scoped() and
+	// CountLive() would have nothing honest to report. --demo never accepts
+	// --namespace-scoped. Scoped-mode UI behavior — the 403 card's
+	// ScopedChecker read — is already tested against purpose-built lister
+	// doubles in browse/hints_test.go (scopedRecordingLister), not against
+	// this fake.
 )
 
 // seams is what browse, nodedetail, poddetail, yamlview, events, and

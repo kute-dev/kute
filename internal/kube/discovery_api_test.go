@@ -348,14 +348,15 @@ func TestEnsurePrinterColumnsUnknownKindIsANoOp(t *testing.T) {
 }
 
 // TestFetchPrinterColumnsDropsStaleGeneration is fetchPrinterColumns'
-// counterpart to TestNoteWatchErrorDropsStaleGeneration/
-// TestMarkKindFailedDropsStaleGeneration (docs/TODO.md's "pass the captured
-// generation through printer-column fetches and check it in the same
-// critical section that writes crdColumnsFetched/discovered"). A CRD Get
-// kicked off against one context must not write its result once
-// SwitchContext has moved c.generation on — even though, as here, the
-// replacement context happens to have rediscovered a kind with the exact
-// same name and the in-flight Get still resolves successfully.
+// counterpart to TestNoteWatchErrorDropsStaleGeneration and
+// TestMarkKindFailedDropsStaleGeneration. fetchPrinterColumns must pass the
+// captured generation through each printer-column fetch, and check that
+// generation in the same critical section that writes crdColumnsFetched and
+// discovered. A CRD Get started against one context must not write its
+// result after SwitchContext has moved c.generation forward. This holds
+// even when, as in this test, the replacement context has rediscovered a
+// kind with the exact same name and the in-flight Get still resolves
+// successfully.
 func TestFetchPrinterColumnsDropsStaleGeneration(t *testing.T) {
 	t.Parallel()
 	crd := crdObject("widgets", "example.com", "Widget", []map[string]any{
