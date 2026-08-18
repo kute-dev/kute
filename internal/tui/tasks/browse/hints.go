@@ -57,12 +57,37 @@ func (m Model) loadEmptyHints() tea.Cmd {
 			otherKinds: otherKindsIn(ctx, lister, reg, kind, namespace),
 		}
 		hints.altNamespace, hints.altCount = busiestOtherNamespace(ctx, lister, reg, kind, namespace)
-		if n, err := resources.Count(ctx, lister, kind, ""); err == nil {
+		if n, ok := allNamespacesCount(ctx, lister, kind); ok {
 			hints.allCount = n
 		}
 
 		return emptyHintsMsg{epoch: epoch, namespace: namespace, kind: kind, hints: hints}
 	}
+}
+
+// allNamespacesCount answers the "N cluster-wide" hint detail. Under plain
+// (cluster-wide) mode this is a free cache read: resources.Count(kind, "")
+// goes through the same single cache already backing the namespace just
+// found empty. Under --namespace-scoped, kind's cache is keyed per
+// namespace (docs/plans/namespace-scoped-final-plan.md §2), so that same
+// call would start a brand-new cluster-wide informer for kind merely to
+// decorate a hint — the exact implicit global read scoped mode exists to
+// avoid. tui.LiveCounter (CountLive) answers the same question with one
+// server-side list instead of an informer, so scoped mode uses that and
+// falls back to no detail at all when it isn't available (KindHelmRelease
+// has no cheap live count; the caller already degrades to a plain,
+// still-truthful line when this returns false).
+func allNamespacesCount(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind) (int, bool) {
+	if sc, ok := lister.(tui.ScopedChecker); ok && sc.Scoped() {
+		lc, ok := lister.(tui.LiveCounter)
+		if !ok {
+			return 0, false
+		}
+		n, err := lc.CountLive(ctx, kind, "")
+		return n, err == nil
+	}
+	n, err := resources.Count(ctx, lister, kind, "")
+	return n, err == nil
 }
 
 // busiestOtherNamespace finds the namespace (other than the current one)
