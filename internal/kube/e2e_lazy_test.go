@@ -63,7 +63,7 @@ func e2eClusterWithKubeconfig(t *testing.T, path string) *Cluster {
 
 	// Pod is eager and readable by every identity these tests use, so it is
 	// the signal that the factory is running and the caches are filling.
-	waitForKindSynced(t, c, KindPod, 90*time.Second)
+	waitForKindSynced(t, c, KindPod, "", 90*time.Second)
 	return c
 }
 
@@ -216,7 +216,7 @@ func TestFirstReadStartsExactlyOneInformer(t *testing.T) {
 
 	// And the cache really fills — a lazily-started informer that nobody
 	// waits on correctly is the other half of this bug.
-	waitForKindSynced(t, c, KindSecret, 60*time.Second)
+	waitForKindSynced(t, c, KindSecret, "", 60*time.Second)
 	objs, err := c.ListRaw(ctx, KindSecret, e2eNamespace)
 	if err != nil {
 		t.Fatalf("second ListRaw(Secret): %v", err)
@@ -242,7 +242,12 @@ func TestHelmInformerIsPerNamespaceAndTypeFiltered(t *testing.T) {
 	if _, err := c.ListHelmReleaseSecrets(ctx, e2eNamespace); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
-	waitForKindSynced(t, c, KindHelmRelease, 60*time.Second)
+	// Helm releases bypass the scope normalizer entirely and are keyed by
+	// the exact namespace their own read used (cluster.go's
+	// scopeKeyForLocked) — unlike every other kind here, "" is the wrong
+	// namespace to wait on, since ListHelmReleaseSecrets above already read
+	// e2eNamespace.
+	waitForKindSynced(t, c, KindHelmRelease, e2eNamespace, 60*time.Second)
 	objs, err := c.ListHelmReleaseSecrets(ctx, e2eNamespace)
 	if err != nil {
 		t.Fatalf("ListHelmReleaseSecrets after sync: %v", err)
@@ -317,12 +322,12 @@ func TestForbiddenKindIsSettledAndSaysWhy(t *testing.T) {
 	}
 
 	// Settled, without the cache ever filling.
-	waitForKindSynced(t, c, KindDeployment, 60*time.Second)
+	waitForKindSynced(t, c, KindDeployment, "", 60*time.Second)
 
 	// And settled *because it is known not to be coming*, not because the
 	// informer reported a successful empty LIST. Without this the assertion
 	// above would pass just as well for a kind that genuinely has none.
-	denial := waitForKindForbidden(t, c, KindDeployment, 60*time.Second)
+	denial := waitForKindForbidden(t, c, KindDeployment, "", 60*time.Second)
 	if !IsPermissionError(denial) {
 		t.Fatalf("KindForbidden(Deployment) = %v, want the apiserver's own Forbidden", denial)
 	}
@@ -352,9 +357,9 @@ func TestReadableKindSurvivesAForbiddenNeighbour(t *testing.T) {
 	if _, err := c.ListRaw(ctx, KindDeployment, e2eNamespace); err != nil {
 		t.Fatalf("ListRaw(Deployment): %v", err)
 	}
-	_ = waitForKindForbidden(t, c, KindDeployment, 60*time.Second)
+	_ = waitForKindForbidden(t, c, KindDeployment, "", 60*time.Second)
 
-	waitForKindSynced(t, c, KindPod, 60*time.Second)
+	waitForKindSynced(t, c, KindPod, "", 60*time.Second)
 	if err := c.KindError(KindPod, ""); err != nil {
 		t.Fatalf("KindError(Pod) = %v, want nil — the partial SA can list pods", err)
 	}
@@ -367,15 +372,15 @@ func TestReadableKindSurvivesAForbiddenNeighbour(t *testing.T) {
 	}
 }
 
-func waitForKindSynced(t *testing.T, c *Cluster, kind ResourceKind, timeout time.Duration) {
+func waitForKindSynced(t *testing.T, c *Cluster, kind ResourceKind, namespace string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		if c.KindSynced(kind, "") {
+		if c.KindSynced(kind, namespace) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("KindSynced(%s) never became true within %s — a loading state gated on it would hang forever", kind, timeout)
+			t.Fatalf("KindSynced(%s, %q) never became true within %s — a loading state gated on it would hang forever", kind, namespace, timeout)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -383,15 +388,15 @@ func waitForKindSynced(t *testing.T, c *Cluster, kind ResourceKind, timeout time
 
 // waitForKindForbidden waits for kind's denial to be recorded — set from the
 // reflector's own goroutine when its watch comes back 403 — and returns it.
-func waitForKindForbidden(t *testing.T, c *Cluster, kind ResourceKind, timeout time.Duration) error {
+func waitForKindForbidden(t *testing.T, c *Cluster, kind ResourceKind, namespace string, timeout time.Duration) error {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := c.KindForbidden(kind, ""); err != nil {
+		if err := c.KindForbidden(kind, namespace); err != nil {
 			return err
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("KindForbidden(%s) stayed nil for %s — a forbidden cache that reads as merely empty is a lie about the cluster", kind, timeout)
+			t.Fatalf("KindForbidden(%s, %q) stayed nil for %s — a forbidden cache that reads as merely empty is a lie about the cluster", kind, namespace, timeout)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

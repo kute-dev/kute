@@ -1,11 +1,18 @@
-# Two restricted identities, because 403 reaches kute two very different ways.
+# Three restricted identities. The first two prove kute degrades honestly
+# when access is missing; the third proves --namespace-scoped turns a
+# previously-unusable namespace-only Role into a working session.
 #
-# Both grants are cluster-scoped, and that is not an accident: kute's
-# informers list every kind cluster-wide regardless of which namespace is
-# selected (the namespace is a filter applied to the cache, not to the LIST).
-# A Role bound only in kute-e2e therefore does not let kute read pods at all —
-# the reflector's cluster-scope LIST is denied — which is why an earlier
-# version of this fixture could not get the app past its connect screen.
+# kute-restricted and kute-partial's grants are cluster-scoped, and that is
+# not an accident: kute's informers list every kind cluster-wide regardless
+# of which namespace is selected (the namespace is a filter applied to the
+# cache, not to the LIST). A Role bound only in kute-e2e therefore does not
+# let kute read pods at all under an *unscoped* launch — the reflector's
+# cluster-scope LIST is denied — which is why an earlier version of this
+# fixture could not get the app past its connect screen. kute-team is the
+# exception: it is a namespaced Role on purpose, because it is only ever
+# launched under --namespace-scoped, where the eager Pod cache itself is
+# scoped to kute-e2e rather than cluster-wide (see
+# docs/plans/scoped-namespace-e2e.md).
 ---
 # kute-restricted may list and get Pods in kute-e2e and nothing else,
 # anywhere. Namespace is one of the three eager informers, so this identity is
@@ -84,4 +91,40 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: kute-partial
+    namespace: kute-e2e
+---
+# kute-team is a realistic namespace-bound developer: several kinds of read
+# access inside kute-e2e, none of it cluster-scoped. This is the persona
+# --namespace-scoped exists for — a Role, never a ClusterRole — and the identity
+# docs/plans/scoped-namespace-e2e.md's scoped-mode suite launches under.
+# Deliberately no Secrets/Deployments/Ingresses: those are what proves an
+# ungranted kind still shows the 403 card honestly under scoped mode too.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kute-team
+  namespace: kute-e2e
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kute-team
+  namespace: kute-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "configmaps", "events"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kute-team
+  namespace: kute-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kute-team
+subjects:
+  - kind: ServiceAccount
+    name: kute-team
     namespace: kute-e2e

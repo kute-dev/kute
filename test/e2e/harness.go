@@ -161,6 +161,17 @@ func PartialKubeconfigPath() string {
 	return filepath.Join(repoRoot(), ".kube", "e2e-partial.config")
 }
 
+// TeamKubeconfigPath returns the token kubeconfig for the kute-team
+// ServiceAccount — a namespace-bound Role in kute-e2e (Pods, ConfigMaps,
+// Events, pods/log) and no ClusterRole anywhere. The identity
+// docs/plans/scoped-namespace-e2e.md's scoped-mode suite launches under.
+func TeamKubeconfigPath() string {
+	if p := os.Getenv("KUTE_E2E_TEAM_KUBECONFIG"); p != "" {
+		return p
+	}
+	return filepath.Join(repoRoot(), ".kube", "e2e-team.config")
+}
+
 func repoRoot() string {
 	// This file is <root>/test/e2e/harness.go and tests run in their own
 	// package directory, so the root is two levels up from the working
@@ -186,12 +197,14 @@ func RequireCluster(t *testing.T) {
 type Option func(*options)
 
 type options struct {
-	kubeconfig   string
-	kubeContext  string
-	namespace    string
-	width        int
-	height       int
-	prodContexts []string
+	kubeconfig        string
+	kubeContext       string
+	namespace         string
+	namespaceExplicit bool
+	scopeNamespace    string
+	width             int
+	height            int
+	prodContexts      []string
 }
 
 // WithKubeconfig launches against a kubeconfig other than the admin one —
@@ -202,7 +215,17 @@ func WithKubeconfig(path string) Option {
 
 // WithNamespace pins the namespace the app starts in.
 func WithNamespace(ns string) Option {
-	return func(o *options) { o.namespace = ns }
+	return func(o *options) { o.namespace = ns; o.namespaceExplicit = true }
+}
+
+// WithScopeNamespace launches with --namespace-scoped=ns instead of a plain
+// -n/--namespace launch — cfg.Namespace and cfg.ScopeNamespace are mutually
+// exclusive at the real flag layer (cmd/kute/main.go's conflictingScopeFlags).
+// Combining this with an explicit WithNamespace is a harness usage error
+// (t.Fatal), not a silent precedence rule — mirroring the real CLI's own
+// conflict check instead of only mirroring its happy path.
+func WithScopeNamespace(ns string) Option {
+	return func(o *options) { o.scopeNamespace = ns }
 }
 
 // WithContext pins the kubeconfig context to launch against.
@@ -262,11 +285,29 @@ func Launch(t *testing.T, opts ...Option) *App {
 		opt(&o)
 	}
 
+	if o.scopeNamespace != "" && o.namespaceExplicit {
+		t.Fatalf("e2e: WithNamespace and WithScopeNamespace are mutually exclusive, mirroring cmd/kute's own --namespace/--namespace-scoped conflict check")
+	}
+
+	// Distinguish "no cluster" (RequireCluster above already handled that)
+	// from "the cluster is up but this identity's kubeconfig was never
+	// minted": a stat failure here means scripts/e2e-cluster.sh's minting
+	// step silently broke, not that nobody ran `up`.
+	if o.kubeconfig != KubeconfigPath() {
+		if _, err := os.Stat(o.kubeconfig); err != nil {
+			t.Fatalf("kubeconfig %s does not exist, but the admin kubeconfig %s does — scripts/e2e-cluster.sh up did not mint it: %v", o.kubeconfig, KubeconfigPath(), err)
+		}
+	}
+
 	isolateEnv(t, o)
 
 	cfg := app.DefaultConfig()
 	cfg.Kubeconfig = o.kubeconfig
-	cfg.Namespace = o.namespace
+	if o.scopeNamespace != "" {
+		cfg.ScopeNamespace = o.scopeNamespace
+	} else {
+		cfg.Namespace = o.namespace
+	}
 	cfg.Context = o.kubeContext
 	// Pin the theme rather than letting terminal-background detection run:
 	// there is no terminal here, and a frame's content must not depend on

@@ -21,6 +21,7 @@
 #   KUTE_E2E_KUBECONFIG             default <repo>/.kube/e2e.config
 #   KUTE_E2E_RESTRICTED_KUBECONFIG  default <repo>/.kube/e2e-restricted.config
 #   KUTE_E2E_PARTIAL_KUBECONFIG  default <repo>/.kube/e2e-partial.config
+#   KUTE_E2E_TEAM_KUBECONFIG        default <repo>/.kube/e2e-team.config
 #
 # Both default *outside* .kube/config, which mise.toml points KUBECONFIG at and
 # which holds the developer's own contexts: an e2e run must never rewrite the
@@ -32,6 +33,7 @@ K8S_VERSION="${K8S_VERSION:-1.35}"
 NAMESPACE=kute-e2e
 RESTRICTED_SA=kute-restricted
 PARTIAL_SA=kute-partial
+TEAM_SA=kute-team
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KIND_CONFIG="${REPO_ROOT}/kind/config-${K8S_VERSION}.yaml"
@@ -40,6 +42,7 @@ FIXTURE_DIR="${REPO_ROOT}/test/e2e/fixtures"
 KUTE_E2E_KUBECONFIG="${KUTE_E2E_KUBECONFIG:-${REPO_ROOT}/.kube/e2e.config}"
 KUTE_E2E_RESTRICTED_KUBECONFIG="${KUTE_E2E_RESTRICTED_KUBECONFIG:-${REPO_ROOT}/.kube/e2e-restricted.config}"
 KUTE_E2E_PARTIAL_KUBECONFIG="${KUTE_E2E_PARTIAL_KUBECONFIG:-${REPO_ROOT}/.kube/e2e-partial.config}"
+KUTE_E2E_TEAM_KUBECONFIG="${KUTE_E2E_TEAM_KUBECONFIG:-${REPO_ROOT}/.kube/e2e-team.config}"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -185,6 +188,7 @@ EOF
 mint_restricted_kubeconfigs() {
   mint_sa_kubeconfig "$RESTRICTED_SA" "$KUTE_E2E_RESTRICTED_KUBECONFIG"
   mint_sa_kubeconfig "$PARTIAL_SA" "$KUTE_E2E_PARTIAL_KUBECONFIG"
+  mint_sa_kubeconfig "$TEAM_SA" "$KUTE_E2E_TEAM_KUBECONFIG"
 }
 
 # preflight_inotify warns before a create that is likely to fail for a reason
@@ -254,7 +258,7 @@ down() {
   else
     log "no kind cluster ${CLUSTER_NAME} to delete"
   fi
-  rm -f "$KUTE_E2E_KUBECONFIG" "$KUTE_E2E_RESTRICTED_KUBECONFIG" "$KUTE_E2E_PARTIAL_KUBECONFIG"
+  rm -f "$KUTE_E2E_KUBECONFIG" "$KUTE_E2E_RESTRICTED_KUBECONFIG" "$KUTE_E2E_PARTIAL_KUBECONFIG" "$KUTE_E2E_TEAM_KUBECONFIG"
 }
 
 case "${1:-up}" in
