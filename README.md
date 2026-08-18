@@ -8,7 +8,7 @@
 
 See what broke. Understand why. Act safely.
 
-kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
+Browse, diagnose, and act on your cluster — all from one terminal console. kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
 
 ![kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier](docs/assets/incident-walkthrough-all-namespaces.gif)
 
@@ -27,9 +27,11 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 - **Unhealthy-first triage** — every list sorts broken workloads to the top; fully healthy groups collapse to a single line instead of burying the incident in green rows.
 - **Restart-aware logs and an incident timeline** — pod logs draw a boundary at every container restart; the timeline screen merges events, restarts, and rollout revisions into one newest-first feed answering "what changed recently."
 - **Termination causes and conditions shown verbatim** — the actual condition message is the diagnosis, never paraphrased or summarized away.
+- **Batch workloads get their own failure trail** — CronJob detail promotes the controller's own failure reason above retained run history; Jobs open an attempt ledger with every retry's exit code, duration, and node kept together.
+- **Routing tables resolve to what's actually answering** — Ingress and Gateway API HTTPRoute show every host and path against the backend that's actually serving it, live endpoint health included.
 - **Every mutating action shows its command first** — exec, port-forward, scale, image/resource changes, label edits, rollout restarts, and Helm rollbacks all print the exact command that's about to run before it runs. Copyable documentation, not a black box.
 - **Deliberate friction on destructive actions** — reversible verbs like cordon execute immediately; delete and rollout-restart are tiered, with inline y/N confirmation normally and a type-the-name modal when the context is explicitly listed as production in your [config file](#configuration), never guessed from a name. Drain always confirms, and force-delete needs the typed name in a prod context.
-- **CRDs work without a configuration project** — kinds discovered from the API automatically get columns, status, and detail views. No plugins, no per-CRD setup.
+- **CRDs, Flux, and Argo CD render with zero configuration** — kinds discovered from the API automatically get columns, status, and detail views (a cert-manager `Certificate → CertificateRequest → Order → Challenge` chain shows the real failure reason at each step); Flux's sources/reconcilers and Argo CD's Applications get their own screens, sync status kept separate from workload health. No plugins, no per-CRD setup.
 - **Alt-tab namespace/context switching** — the same palette that jumps to any resource kind also toggles between your last two namespaces or contexts with no typing, and recalls recent ones by number.
 - **One palette jumps to anything** — a kind's alias letter, a fuzzy kind name, or a specific resource by name all live in the same `g` palette; typing a pod's name jumps straight to it, switching kind and namespace as a side effect.
 
@@ -56,6 +58,8 @@ No cluster or kubeconfig required — `--demo` runs against a built-in in-memory
 When the API server connection drops, kute keeps showing your last known state (desaturated, with an age stamp) instead of blanking the screen — and disables every mutating action until the connection is back, including the ones that hand off to `kubectl`: exec, node shell, and edit.
 
 ## Install
+
+One binary. Nothing installed in the cluster.
 
 ```sh
 curl -fsSL https://kute.dev/install.sh | sh
