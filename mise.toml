@@ -3,7 +3,7 @@ KUBECONFIG = "{{config_root}}/.kube/config"
 _.path = "./scripts"
 
 [tools]
-go = "1.26.5"
+go = "1.26.6"
 golangci-lint = "2.12.2"
 kubectl = "1.35"
 git-cliff = "2.13.1"
