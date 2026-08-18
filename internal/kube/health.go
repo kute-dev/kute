@@ -6,8 +6,6 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"k8s.io/client-go/tools/cache"
 )
 
 // ConnPhase is the cluster connection's state machine (mvp-plan.md §0.7).
@@ -370,22 +368,4 @@ func isTimeout(err error) bool {
 	}
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
-}
-
-// setWatchErrorHandlers wires health.onWatchError into every informer in
-// handlers. Must be called before the factory starts (SetWatchErrorHandler
-// returns an error once an informer is running).
-//
-// A watch error that turns out to be a permission denial is also recorded
-// against its own kind: that cache will never sync, so without this a
-// caller gating a loading state on KindSynced would spin forever instead of
-// falling through to the 4b "you can't list this" card.
-func (c *Cluster) setWatchErrorHandlers(handlers map[ResourceKind]cache.SharedIndexInformer) {
-	for kind, informer := range handlers {
-		//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
-		_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-			c.noteWatchError(kind, err)
-			c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
-		})
-	}
 }

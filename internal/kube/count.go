@@ -66,7 +66,7 @@ func (c *Cluster) resourceFor(kind ResourceKind) (gvr schema.GroupVersionResourc
 	if tk, found := typedKinds[kind]; found {
 		return tk.gvr, tk.clusterScoped, true
 	}
-	if info, found := c.getDynKind(kind); found {
+	if info, found := c.getDynKind(kind, ""); found {
 		return info.gvr, !info.namespaced, true
 	}
 	c.mu.Lock()

@@ -44,19 +44,28 @@ Two facts from the investigation shaped everything that followed:
   + cache not synced → stay loading, retry in 250 ms". It only needed a per-kind truth
   source instead of the cluster-wide one.
 
-### Why not namespace-scoped informers
+### Why not namespace-scoped informers by default
 
-Considered and ruled out. `namespace == ""` is a first-class, user-reachable state (the
-`a` key, §6b's namespace-grouped triage view), and ~15 consumers genuinely need
-cross-namespace reads — the overview, the Nodes list, `nodedetail`, the empty-state hints,
-cross-workload image history, the namespace palette's per-namespace counts, and
-`routetable`'s cross-namespace Gateway resolution. Worse, a namespace switch would have
-become a `SwitchContext`-shaped cache rebuild, turning today's instant filter change
-(one field write) into a loading flash. It trades away features for the same win laziness
-gets for free.
+Considered and ruled out **as the default**. `namespace == ""` is a first-class,
+user-reachable state (the `a` key, §6b's namespace-grouped triage view), and ~15 consumers
+genuinely need cross-namespace reads — the overview, the Nodes list, `nodedetail`, the
+empty-state hints, cross-workload image history, the namespace palette's per-namespace
+counts, and `routetable`'s cross-namespace Gateway resolution. Worse, a namespace switch
+would have become a `SwitchContext`-shaped cache rebuild, turning today's instant filter
+change (one field write) into a loading flash. It trades away features for the same win
+laziness gets for free.
 
-Still true as a default. [§5.5](#55-the-helm-release-cache-scopes-to-the-namespace--done) is
-the one kind that had to break it, and it pays exactly the price named above.
+Still true as the default. [§5.5](#55-the-helm-release-cache-scopes-to-the-namespace--done)
+is the one kind that had to break it unconditionally, and it pays exactly the price named
+above (one cache per namespace *read*, not per namespace that exists).
+
+It is now also available as an **explicit, opt-in mode** rather than a rejected idea —
+[§5.6](#56-namespace-scoped-mode----namespace-scoped-done) — for the case this section's
+reasoning doesn't cover: an identity with no cluster-wide `list` access at all, only a
+namespaced `Role`. A plain `kute` under that identity can't even complete the eager
+Namespace/Pod/Node reads this document assumes always succeed; `--namespace-scoped=<ns>`
+is what makes it usable, at the cost this section describes, paid deliberately and only when
+asked for.
 
 ---
 
@@ -472,7 +481,7 @@ So `ensureHelmSecrets` now takes the namespace being read and keys one informer 
 namespace ("" still meaning all). `KindSynced(KindHelmRelease)` answers for the scope of
 the most recent read, since that is the cache the rows on screen came from.
 
-This is the exception to [Why not namespace-scoped informers](#why-not-namespace-scoped-informers),
+This is the exception to [Why not namespace-scoped informers by default](#why-not-namespace-scoped-informers-by-default),
 and it pays that section's price honestly: switching namespaces on the Helm list starts a
 second cache and shows a loading state while it fills, where every other kind re-filters
 an existing one instantly. It buys a screen that loads at all. The reasoning doesn't
@@ -495,6 +504,66 @@ clears it, and the informer's own change event reloads the screen.
 `internal/kube/helm.go`, `cluster.go`, `dynamic.go`, `health.go`, `internal/app/app.go`,
 `internal/tui/kindsync.go`, `internal/tui/tasks/browse/{aux,update}.go`,
 `internal/tui/tasks/{helmhistory,events,timeline,whocan}/update.go`
+
+---
+
+### 5.6 Namespace-scoped mode (`--namespace-scoped`) — **done**
+
+[Why not namespace-scoped informers by default](#why-not-namespace-scoped-informers-by-default)
+still holds for the default launch. It doesn't hold for an identity that has *no*
+cluster-wide `list` access at all — a `Role` bound in one namespace, no `ClusterRole`
+anywhere. Under that identity a plain `kute` never gets past connect: the eager
+Namespace/Pod/Node reads (§1) are cluster-wide LISTs, every one comes back `Forbidden`, and
+`Cluster.Start` used to wait on their raw `HasSynced` forever — a denied cache never syncs,
+so a missing capability read as a hung connection.
+
+`--namespace-scoped=<ns>` fixes the actual problem (there is no cluster-wide cache this
+identity can read, so stop trying to build one) rather than papering over the symptom. Two
+changes, orthogonal to each other:
+
+- **Startup tolerance** (`Cluster.Start`, both modes): "settled" now means *the initial LIST
+  completed, or a watch error recorded a permanent Forbidden* — `eagerHasSynced`'s own
+  `InformerSynced` funcs check `kindFailed` before `HasSynced`. A transient failure (an
+  outage, a slow link) still waits for real; only a denial short-circuits. This half applies
+  whether or not scoped mode is on — a cluster-wide launch against a partially-restricted
+  identity (Namespace granted, Node denied) benefits identically.
+- **Per-namespace caches, opt-in** (`Cluster.cacheScope`, the single place mode is
+  consulted): with `SetNamespaceScope` never called, every cache key normalizes to `""` —
+  byte-for-byte the behavior this whole document describes, asserted by tests that check the
+  fake clientset's recorded actions don't change with the feature compiled in but unused.
+  With it called, a namespaced kind gets one informer *per namespace actually read*
+  (`kindInformers`/`kindFailed`/`kindStalled`/`dynKinds` are keyed by `(kind, namespace)`,
+  not `kind` alone — the same "start on first read, not up front" laziness this document's
+  §1 established, just with more distinct caches instead of one). `""` always still means
+  the explicit cluster-wide/all-namespaces cache — never silently downgraded — so §5's
+  cross-namespace consumers (the overview, `nodedetail`, `routetable`, who-can's
+  ClusterRole half) keep working under scoped mode exactly as they do today, at the cost of
+  starting that one cache on demand when something actually asks for `""`.
+- **Cluster-scoped kinds are unaffected either way**: Node, Namespace, ClusterRole(Binding),
+  and the built-in CRD list have exactly one cache regardless of mode — `cacheScope`
+  recognizes them (via `typedKinds[kind].clusterScoped`, or a discovered kind's own
+  `ClusterScoped` flag) and always answers `""`.
+- **KindHelmRelease keeps its own §5.5 scoping**, independent of this mode: its one-cache-
+  per-namespace-read shape already existed and is now what scoped mode's own per-kind
+  caches copy, not something layered under it — `KindSynced(KindHelmRelease, ns)` reads
+  `helmInformers[ns]` directly rather than going through `cacheScope` at all.
+
+Two smaller correctness fixes ride along, both scoped/unscoped-agnostic: a context
+generation counter (`Cluster.generation`, bumped on every `Start`) so a watch-error callback
+from a context `SwitchContext` already replaced can't write into the new context's
+`kindFailed`/`kindStalled` maps (a wider window than before, now that a context can have
+several factories instead of one); and `KindSynced`/`KindError`/`KindForbidden` all take an
+explicit `namespace` argument instead of answering for "the last read's own scope" — the
+implicit-scope shape §5.5 introduced for Helm, generalized and made required everywhere,
+since a caller in scoped mode genuinely can be asking about two different caches for the
+same kind in the same frame.
+
+`internal/kube/{cluster,watch,dynamic,helm,count,health}.go`, `internal/tui/kindsync.go`,
+`internal/app/{app,config,session}.go`, `cmd/kute/main.go`,
+`internal/tui/{namespace,goto,model}.go`, `internal/tui/components/palette/palette.go`,
+`internal/tui/tasks/browse/{model,update,view,hints}.go`, and one call-site update apiece in
+`internal/tui/tasks/{events,timeline,whocan,helmhistory,cronjobdetail,cronjobschedule,
+jobattempts,fluxtree,nodedetail}`. See `docs/plans/namespace-scoped-final-plan.md`.
 
 ## 6. CronJobs: a second lazy dependency and a third one-shot read (v0.8.0)
 

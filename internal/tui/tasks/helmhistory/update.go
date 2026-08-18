@@ -76,7 +76,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		// an empty first answer means "not loaded yet" far more often than
 		// "this release has no revisions" — and the latter is an alarming
 		// thing to assert about a release the user just opened.
-		if !tui.KindsSynced(m.lister, kube.KindHelmRelease) {
+		if !tui.KindsSynced(m.lister, m.namespace, kube.KindHelmRelease) {
 			m.state = tui.TaskStateLoading
 			m.feedback = ""
 			cmds := []tea.Cmd{tui.ScheduleCacheSyncRetry(m.reloadEpoch)}
@@ -91,7 +91,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Batch(cmds...)
 		}
-		if err := tui.KindsError(m.lister, kube.KindHelmRelease); err != nil {
+		if err := tui.KindsError(m.lister, m.namespace, kube.KindHelmRelease); err != nil {
 			// The release cache is settled only in the sense that it has
 			// stopped making progress — see tui.KindsError. "No revisions"
 			// about a release the user just opened would be a worse answer

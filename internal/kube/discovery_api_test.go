@@ -287,7 +287,7 @@ func TestEnsurePrinterColumnsFetchesOneCRD(t *testing.T) {
 
 	// Synchronous half, so the assertion doesn't race the goroutine
 	// ensurePrinterColumns spawns.
-	if changed := c.fetchPrinterColumns(context.Background(), "Widget"); !changed {
+	if changed := c.fetchPrinterColumns(context.Background(), c.generation, "Widget"); !changed {
 		t.Fatal("fetchPrinterColumns reported no change despite the CRD declaring two columns")
 	}
 	got := c.DiscoveredKinds()[0].PrinterColumns
@@ -323,7 +323,7 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 	c.refreshDiscovery(context.Background())
 
 	for i := 0; i < 10; i++ {
-		c.fetchPrinterColumns(context.Background(), "Widget")
+		c.fetchPrinterColumns(context.Background(), c.generation, "Widget")
 	}
 
 	gets := 0
@@ -342,7 +342,52 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 func TestEnsurePrinterColumnsUnknownKindIsANoOp(t *testing.T) {
 	t.Parallel()
 	c := newDiscoveryTestCluster(nil)
-	if c.fetchPrinterColumns(context.Background(), "Nonexistent") {
+	if c.fetchPrinterColumns(context.Background(), c.generation, "Nonexistent") {
 		t.Fatal("reported a change for a kind discovery never saw")
+	}
+}
+
+// TestFetchPrinterColumnsDropsStaleGeneration is fetchPrinterColumns'
+// counterpart to TestNoteWatchErrorDropsStaleGeneration/
+// TestMarkKindFailedDropsStaleGeneration (docs/TODO.md's "pass the captured
+// generation through printer-column fetches and check it in the same
+// critical section that writes crdColumnsFetched/discovered"). A CRD Get
+// kicked off against one context must not write its result once
+// SwitchContext has moved c.generation on — even though, as here, the
+// replacement context happens to have rediscovered a kind with the exact
+// same name and the in-flight Get still resolves successfully.
+func TestFetchPrinterColumnsDropsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	crd := crdObject("widgets", "example.com", "Widget", []map[string]any{
+		{"name": "Phase", "type": "string", "jsonPath": ".status.phase"},
+	})
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme,
+		map[schema.GroupVersionResource]string{crdGVR: "CustomResourceDefinitionList"}, crd)
+
+	c := newDiscoveryTestCluster(
+		[]*metav1.APIResourceList{{
+			GroupVersion: "example.com/v1",
+			APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget", Namespaced: true}},
+		}},
+		crdMeta("widgets.example.com"),
+	)
+	c.dynClient = dyn
+	c.refreshDiscovery(context.Background())
+
+	staleGen := c.generation
+	c.generation++ // simulates a SwitchContext that ran while this Get was in flight
+
+	if changed := c.fetchPrinterColumns(context.Background(), staleGen, "Widget"); changed {
+		t.Fatal("fetchPrinterColumns reported a change for a stale generation")
+	}
+	if got := c.DiscoveredKinds()[0].PrinterColumns; len(got) != 0 {
+		t.Fatalf("printer columns = %+v; a stale-generation fetch must not write into the replacement context's discovered kind", got)
+	}
+	c.mu.Lock()
+	fetched := c.crdColumnsFetched[ResourceKind("Widget")]
+	c.mu.Unlock()
+	if fetched {
+		t.Fatal("crdColumnsFetched[Widget] = true from a stale-generation fetch; the replacement context would never retry it")
 	}
 }

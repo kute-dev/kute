@@ -40,6 +40,14 @@ type Config struct {
 	// highest-precedence source: it beats the persisted per-context
 	// namespace and the context's own default.
 	Namespace string
+	// ScopeNamespace turns on namespace-scoped mode and selects the
+	// namespace, both at once (--namespace-scoped=<namespace>) — for an
+	// identity without cluster-wide list access
+	// (docs/plans/namespace-scoped-final-plan.md). Empty means cluster-wide
+	// mode, unchanged from today. Mutually exclusive with Namespace/-n at
+	// the flag layer (cmd/kute/main.go's conflictingScopeFlags) — by the
+	// time this reaches BuildSession, at most one of the two is non-empty.
+	ScopeNamespace string
 	// Kubeconfig pins the kubeconfig file to read (--kubeconfig), ahead of
 	// $KUBECONFIG and ~/.kube/config. Applied via kube.SetKubeconfigPath
 	// before any client is built.

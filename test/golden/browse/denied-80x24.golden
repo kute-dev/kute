@@ -3,7 +3,6 @@
                                                                                 
                                                                                 
                                                                                 
-                                                                                
             403 Forbidden  secrets · list                                       
             secrets is forbidden: User "dev-readonly" cannot list               
             resource "secrets" in namespace "nva-stage"                         
@@ -14,7 +13,8 @@
             y copy error — paste to your cluster admin                          
             r retry                                                             
                                                                                 
-                                                                                
+            kute --namespace-scoped=nva-stage may see more, if that             
+            namespace grants it                                                 
                                                                                 
                                                                                 
                                                                                 

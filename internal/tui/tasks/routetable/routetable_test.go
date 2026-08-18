@@ -2,6 +2,8 @@ package routetable
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,9 +11,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -333,6 +337,81 @@ func TestNotFoundRendersError(t *testing.T) {
 	}
 	if !strings.Contains(m.feedback, "not found") {
 		t.Fatalf("unexpected feedback: %q", m.feedback)
+	}
+}
+
+// notYetSyncedIngressLister reports its Ingress cache as never synced —
+// every read (found or not) looks like "still filling", the way the real
+// cache does right after launch or mid a context switch.
+type notYetSyncedIngressLister struct {
+	lister fakeLister
+}
+
+func (l notYetSyncedIngressLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l notYetSyncedIngressLister) KindSynced(kube.ResourceKind, string) bool { return false }
+
+// TestNotFoundStaysLoadingWhileCacheSyncing pins the fix for §5 of
+// docs/plans/namespace-scoped-final-plan.md: findUnstructured's own "not
+// found" (a plain fmt.Errorf) is indistinguishable on its face from the
+// object's own cache not having filled yet — without asking KindSynced
+// first, this used to render TaskStateError ("not found") for an object
+// that's actually just seconds away.
+func TestNotFoundStaysLoadingWhileCacheSyncing(t *testing.T) {
+	lister := notYetSyncedIngressLister{lister: fakeLister{}}
+	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindIngress, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+
+	updated, cmd := m.applyLoaded(loadedMsg{err: fmt.Errorf("%s %q not found", kube.KindIngress, "web")})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading — the Ingress cache hasn't synced yet", m.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry command to be scheduled while the cache is still syncing")
+	}
+}
+
+// forbiddenIngressLister simulates the Ingress reflector coming back
+// Forbidden: reads still succeed empty (no error), KindSynced reports
+// settled (the anti-hang rule), and KindForbidden carries the reason.
+type forbiddenIngressLister struct {
+	lister fakeLister
+	err    error
+}
+
+func (l forbiddenIngressLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l forbiddenIngressLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (l forbiddenIngressLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindIngress {
+		return l.err
+	}
+	return nil
+}
+
+// TestNotFoundRendersPermissionDeniedWhenKindIsForbidden is
+// TestNotFoundStaysLoadingWhileCacheSyncing's Forbidden-path counterpart:
+// a denied Ingress cache must render the permission card, not "not found".
+func TestNotFoundRendersPermissionDeniedWhenKindIsForbidden(t *testing.T) {
+	lister := forbiddenIngressLister{
+		lister: fakeLister{},
+		err:    apierrors.NewForbidden(schema.GroupResource{Resource: "ingresses"}, "", errors.New("nope")),
+	}
+	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindIngress, Namespace: "default", Name: "web"})
+	m.SetSize(120, 36)
+
+	updated, _ := m.applyLoaded(loadedMsg{err: fmt.Errorf("%s %q not found", kube.KindIngress, "web")})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — the Ingress cache is Forbidden, not empty", m.state)
 	}
 }
 

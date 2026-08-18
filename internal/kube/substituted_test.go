@@ -146,10 +146,10 @@ func TestEnsureDynamicKindForRegistersSubstitutedKindAgainstRealGVR(t *testing.T
 	}
 	defer close(c.stopCh)
 
-	if !c.ensureDynamicKindFor(testSubKind) {
+	if !c.ensureDynamicKindFor(testSubKind, "") {
 		t.Fatal("ensureDynamicKindFor did not register the substituted kind")
 	}
-	info, ok := c.getDynKind(testSubKind)
+	info, ok := c.getDynKind(testSubKind, "")
 	if !ok {
 		t.Fatal("the informer was not registered under the substituted registry key")
 	}

@@ -22,6 +22,7 @@ func (m Model) load() tea.Cmd {
 	objectKind := m.objectKind
 	objectName := m.objectName
 	timeout := m.timeout
+	epoch := m.loadEpoch
 	reg := resources.Registry{}
 	if m.session != nil {
 		reg = m.session.Registry
@@ -39,10 +40,11 @@ func (m Model) load() tea.Cmd {
 			raw, err = src.NamespaceEvents(ctx, namespace)
 		}
 		if err != nil {
-			return loadedMsg{err: err}
+			return loadedMsg{epoch: epoch, err: err}
 		}
 
 		return loadedMsg{
+			epoch:   epoch,
 			groups:  kube.DedupeEvents(raw),
 			failing: failingPods(ctx, lister, reg, namespace),
 		}

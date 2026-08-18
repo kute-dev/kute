@@ -202,7 +202,7 @@ func TestListRawAfterStopDoesNotStartInformers(t *testing.T) {
 		t.Fatalf("ListRaw after Stop issued %d new API actions, want 0", got-before)
 	}
 	c.mu.Lock()
-	_, registered := c.kindInformers[KindSecret]
+	_, registered := c.kindInformers[scopeKey{KindSecret, ""}]
 	c.mu.Unlock()
 	if registered {
 		t.Fatal("ListRaw after Stop registered an informer that can never be stopped")
@@ -225,7 +225,7 @@ func TestLazyStartReArmsTheConnectGrace(t *testing.T) {
 	c.health.startedAt = time.Now().Add(-2 * connectGrace)
 	c.health.mu.Unlock()
 
-	c.ensureKind(KindSecret)
+	c.ensureKind(KindSecret, "")
 
 	c.health.mu.Lock()
 	age := time.Since(c.health.startedAt)
@@ -250,13 +250,13 @@ func TestStartIgnoresAStrayListerRegistration(t *testing.T) {
 		t.Fatalf("ListRaw(ReplicaSet): %v", err)
 	}
 	c.mu.Lock()
-	inf, ok := c.kindInformers[KindReplicaSet]
+	inf, ok := c.kindInformers[scopeKey{KindReplicaSet, ""}]
 	c.mu.Unlock()
 	if !ok || inf == nil {
 		t.Fatal("reading a kind must register its informer, not leave it dangling on the factory")
 	}
 	// A registered informer is a watched one: its handler feeds notify.
-	waitFor(t, "the ReplicaSet informer to sync", func() bool { return c.KindSynced(KindReplicaSet) })
+	waitFor(t, "the ReplicaSet informer to sync", func() bool { return c.KindSynced(KindReplicaSet, "") })
 }
 
 // crdListActions counts full CRD object lists — the 2.76 MB read this work

@@ -36,10 +36,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
 		if msg.Kind == kube.KindEvent && m.events != nil {
+			m.loadEpoch++
 			return m, m.load()
 		}
 	case tui.CacheSyncRetryMsg:
 		if msg.Gen == m.syncRetryGen && m.events != nil {
+			m.loadEpoch++
 			return m, m.load()
 		}
 	case kube.ConnStateMsg:
@@ -62,6 +64,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
+	if msg.epoch != m.loadEpoch {
+		// Superseded by a namespace switch or another reload dispatched
+		// since — kind/columns has no equivalent here, so this is the only
+		// guard against a slow reply from a namespace the screen has since
+		// left landing under the new one's breadcrumb.
+		return m, nil
+	}
+	// alreadyRendered mirrors timeline/whocan's own stall-vs-rerender rule:
+	// once something is already on screen, a background reload finding the
+	// Event cache merely *stalled* must not discard it into a loading
+	// spinner — only a confirmed denial/error (checked below, unconditionally)
+	// may change what's on screen once something has already rendered.
+	alreadyRendered := m.state == tui.TaskStateReady
 	if msg.err != nil {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
@@ -70,31 +85,38 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
+
+	if !alreadyRendered && !tui.KindsSynced(m.lister, m.namespace, kube.KindEvent) {
+		// The Event informer starts on first read, so an empty first answer
+		// usually means the cache hasn't filled — not that the namespace is
+		// quiet, which is a reassuring thing to say wrongly during an
+		// incident.
+		m.state = tui.TaskStateLoading
+		m.feedback = ""
+		m.syncRetryGen++
+		return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+	}
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindEvent); err != nil {
+		// Settled without ever having loaded (see tui.KindsError). A quiet
+		// namespace and an Event cache that can't fill look identical from
+		// here, and only one of them is safe to report during an incident.
+		// A denial always wins, even over groups already on screen.
+		m.state = tui.TaskStateError
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
+		}
+		m.feedback = fmt.Sprintf("couldn't load events: %v", err)
+		return m, nil
+	}
+
 	m.groups = msg.groups
 	m.failing = msg.failing
 	m.fetchedAt = time.Now()
 	m.recomputeVisible()
 	m.state = tui.TaskStateReady
 	if len(m.groups) == 0 {
-		// The Event informer starts on first read, so an empty first answer
-		// usually means the cache hasn't filled — not that the namespace is
-		// quiet, which is a reassuring thing to say wrongly during an
-		// incident.
-		if !tui.KindsSynced(m.lister, kube.KindEvent) {
-			m.state = tui.TaskStateLoading
-			m.feedback = ""
-			m.syncRetryGen++
-			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
-		}
-		if err := tui.KindsError(m.lister, kube.KindEvent); err != nil {
-			// Settled without ever having loaded (see tui.KindsError). A
-			// quiet namespace and an Event cache that can't fill look
-			// identical from here, and only one of them is safe to report
-			// during an incident.
-			m.state = tui.TaskStateError
-			m.feedback = fmt.Sprintf("couldn't load events: %v — retrying", err)
-			return m, nil
-		}
+		// The checks above have already confirmed the Event cache is both
+		// synced and error-free, so an empty result here is trustworthy.
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""
@@ -181,6 +203,7 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	m.selected = 0
 	m.state = tui.TaskStateLoading
 	m.feedback = "Loading events..."
+	m.loadEpoch++
 	return tea.Batch(m.load(), m.spinner.Tick)
 }
 

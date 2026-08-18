@@ -83,7 +83,9 @@ func (l *perKindSyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKin
 	return l.lister.ListRaw(ctx, kind, namespace)
 }
 
-func (l *perKindSyncedLister) KindSynced(kind kube.ResourceKind) bool { return !l.unsynced[kind] }
+func (l *perKindSyncedLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	return !l.unsynced[kind]
+}
 
 // TestListerSyncedIsPerKind is the point of the whole per-kind seam: one
 // kind's cache still filling must not make another kind's empty result look
@@ -166,9 +168,9 @@ func (l *stalledLister) ListRaw(ctx context.Context, kind kube.ResourceKind, nam
 	return l.lister.ListRaw(ctx, kind, namespace)
 }
 
-func (l *stalledLister) KindSynced(kube.ResourceKind) bool { return true }
+func (l *stalledLister) KindSynced(kube.ResourceKind, string) bool { return true }
 
-func (l *stalledLister) KindError(kind kube.ResourceKind) error {
+func (l *stalledLister) KindError(kind kube.ResourceKind, _ string) error {
 	if kind == l.kind {
 		return l.err
 	}
@@ -328,9 +330,9 @@ func (l *silentlyForbiddenLister) ListRaw(ctx context.Context, kind kube.Resourc
 	return l.lister.ListRaw(ctx, kind, namespace)
 }
 
-func (l *silentlyForbiddenLister) KindSynced(kube.ResourceKind) bool { return true }
+func (l *silentlyForbiddenLister) KindSynced(kube.ResourceKind, string) bool { return true }
 
-func (l *silentlyForbiddenLister) KindForbidden(kind kube.ResourceKind) error {
+func (l *silentlyForbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error {
 	if kind == l.kind {
 		return l.err
 	}
@@ -387,5 +389,59 @@ func TestForbiddenUnrelatedKindStillRendersEmpty(t *testing.T) {
 
 	if m.state != tui.TaskStateEmpty {
 		t.Fatalf("state = %s, want empty — Pods are readable and there are none", m.state)
+	}
+}
+
+// TestStaleNamespaceLoadDoesNotOverwriteNewNamespace pins the fix for a
+// critical race: a slow load() from a namespace the user has since switched
+// away from must not land and overwrite the rows now showing under a
+// different namespace's breadcrumb. Kind and column count alone don't catch
+// this — a namespace switch keeps both — so the guard has to be
+// reloadEpoch, which resetAndLoad bumps on every namespace switch.
+func TestStaleNamespaceLoadDoesNotOverwriteNewNamespace(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {
+			pod("default", "api-1"),
+			pod("nva-stage", "worker-1"),
+		},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.namespace != "default" {
+		t.Fatalf("namespace = %q, want default", m.namespace)
+	}
+
+	// Capture "default"'s in-flight load before it resolves — this is the
+	// request that's about to be superseded.
+	staleCmd := m.load()
+
+	// The user switches to nva-stage before that load lands; this issues
+	// its own (fresh) load and bumps reloadEpoch.
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: "nva-stage"})
+	if m.namespace != "nva-stage" {
+		t.Fatalf("namespace = %q, want nva-stage", m.namespace)
+	}
+
+	// The stale "default" load now resolves late. Without the epoch guard
+	// this overwrites m.rows with default's pod under nva-stage's
+	// breadcrumb.
+	staleMsg := firstRowsLoaded(t, staleCmd)
+	if staleMsg.namespace != "default" {
+		t.Fatalf("staleMsg.namespace = %q, want default", staleMsg.namespace)
+	}
+	updated, cmd := m.applyRowsLoaded(staleMsg)
+	m = *updated.(*Model)
+	if cmd != nil {
+		t.Fatal("a stale reply must not schedule anything either")
+	}
+
+	if m.namespace != "nva-stage" {
+		t.Fatalf("namespace = %q, want nva-stage — stale reply must not touch it", m.namespace)
+	}
+	for _, row := range m.rows {
+		if row.Name == "api-1" {
+			t.Fatalf("stale default-namespace row leaked into nva-stage's rows: %+v", m.rows)
+		}
 	}
 }

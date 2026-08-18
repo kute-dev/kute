@@ -31,7 +31,7 @@ type syncLister struct {
 	synced bool
 }
 
-func (l syncLister) KindSynced(kube.ResourceKind) bool { return l.synced }
+func (l syncLister) KindSynced(kube.ResourceKind, string) bool { return l.synced }
 
 func TestLoadingStateShowsWhatFluxIsListing(t *testing.T) {
 	c := fake.NewDemo()

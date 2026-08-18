@@ -55,7 +55,13 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 	}
 
 	if cfg.Demo {
-		if cfg.Namespace != "" {
+		// --namespace-scoped selects the namespace the same way -n does in
+		// demo mode — the fake has no informers to scope, so there is no
+		// mode to turn on, only a namespace to select
+		// (docs/plans/namespace-scoped-final-plan.md §4).
+		if cfg.ScopeNamespace != "" {
+			sess.Location.Namespace = cfg.ScopeNamespace
+		} else if cfg.Namespace != "" {
 			sess.Location.Namespace = cfg.Namespace
 		}
 		return sess, nil, nil
@@ -81,6 +87,17 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 	// default namespace and the per-context restore above.
 	if cfg.Namespace != "" {
 		sess.Location.Namespace = cfg.Namespace
+	}
+	// --namespace-scoped takes the same highest-precedence slot cfg.Namespace
+	// does — cmd/kute's conflictingScopeFlags already rejects the two
+	// together, so this and the block above never both fire — and then turns
+	// scoped mode on for the whole session before a single informer starts.
+	// SetNamespaceScope also pins Cluster.Context.Namespace, so
+	// Session.Location, Cluster.Context, and the eager Pod cache all agree
+	// from the first frame (see its own doc comment).
+	if cfg.ScopeNamespace != "" {
+		sess.Location.Namespace = cfg.ScopeNamespace
+		cluster.SetNamespaceScope(cfg.ScopeNamespace)
 	}
 	return sess, cluster, nil
 }

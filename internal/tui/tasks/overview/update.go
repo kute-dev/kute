@@ -18,6 +18,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.reloadEpoch && m.lister != nil {
+			return m, m.load()
+		}
 	case loadedMsg:
 		return m.applyLoaded(msg)
 	case spinner.TickMsg:
@@ -59,6 +63,26 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
+	// loadOverview's own ListRaw calls never return an error for a denied
+	// cache — a Forbidden reflector just leaves it empty (CLAUDE.md's own
+	// invariant) — so a permanently-denied Node or Pod cache would otherwise
+	// sail through the err check above and render as a cluster with zero
+	// nodes/pods instead of a permission-denied card. Node and Pod are the
+	// two required caches (every other read here — Namespace, HelmRelease,
+	// ReplicaSet — is already best-effort per loadOverview's own comments).
+	if !tui.KindsSynced(m.lister, "", kube.KindNode, kube.KindPod) {
+		m.reloadEpoch++
+		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+	}
+	if err := tui.KindsError(m.lister, "", kube.KindNode, kube.KindPod); err != nil {
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
+		} else {
+			m.state = tui.TaskStateError
+		}
+		m.feedback = err.Error()
+		return m, nil
+	}
 	d := msg.data
 	m.version = d.version
 	m.nodeCount = d.nodeCount
@@ -75,6 +99,16 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.nodesSel = clamp(m.nodesSel, 0, cappedMax(len(m.nodeTrouble)))
 	m.troubleSel = clamp(m.troubleSel, 0, cappedMax(len(m.troubleEntries())))
 	m.changesSel = clamp(m.changesSel, 0, cappedMax(len(m.changes)))
+
+	// Namespace/HelmRelease/ReplicaSet are secondary/best-effort caches
+	// (loadOverview's own reads swallow their errors) — a denial here
+	// decorates just the fact/panel it backs rather than promoting to the
+	// full-screen state Node/Pod's denial does above
+	// (docs/plans/namespace-scoped-final-plan.md §5).
+	m.nsDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindNamespace))
+	m.helmDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindHelmRelease))
+	m.changesDenied = kube.IsPermissionError(tui.KindsError(m.lister, "", kube.KindReplicaSet))
+
 	m.state = tui.TaskStateReady
 	m.feedback = ""
 	return m, nil

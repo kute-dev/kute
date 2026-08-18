@@ -84,7 +84,15 @@ func (m Model) clusterSummaryText() string {
 	if version == "" {
 		version = "–"
 	}
-	return fmt.Sprintf("%s · %d nodes · %d pods · %d namespaces", version, m.nodeCount, m.podCount, m.nsCount)
+	nsText := strconv.Itoa(m.nsCount)
+	if m.nsDenied {
+		// A denied Namespace cache reads as zero from loadOverview's own
+		// best-effort read — saying so beats a silent "0 namespaces", which
+		// is a claim about the cluster this screen is in no position to make
+		// (docs/plans/namespace-scoped-final-plan.md §5).
+		nsText = "permission denied"
+	}
+	return fmt.Sprintf("%s · %d nodes · %d pods · %s namespaces", version, m.nodeCount, m.podCount, nsText)
 }
 
 // troubleSummary composes the strip's left side: fail/warn/cordoned counts
@@ -345,10 +353,23 @@ func dimFoldLine(theme tui.Theme, n int, word string) string {
 func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	lines := []string{sectionTitle(theme, "TROUBLE")}
 	entries := m.troubleEntries()
+
+	// helmNote flags a denied HelmRelease cache — the TROUBLE panel's
+	// outdated-releases tail (troubleEntries) reads as empty for either
+	// reason (no outdated releases, or denial), so both branches below need
+	// it appended (docs/plans/namespace-scoped-final-plan.md §5).
+	helmNote := func() []string {
+		if !m.helmDenied {
+			return nil
+		}
+		warn := lipgloss.NewStyle().Foreground(theme.Warn)
+		return []string{warn.Render("⚠ outdated releases: permission denied")}
+	}
+
 	if len(entries) == 0 {
 		good := lipgloss.NewStyle().Foreground(theme.Good)
 		lines = append(lines, good.Render(fmt.Sprintf("nothing unhealthy · %d pods running", m.podHealthy)))
-		return lines
+		return append(lines, helmNote()...)
 	}
 
 	shown := entries
@@ -376,7 +397,7 @@ func (m Model) troubleLines(theme tui.Theme, width int) []string {
 	if extra > 0 {
 		lines = append(lines, dimFoldLine(theme, extra, "more unhealthy"))
 	}
-	return lines
+	return append(lines, helmNote()...)
 }
 
 func (m Model) troubleRow(theme tui.Theme, entry troubleEntry, selected bool) components.Row {
@@ -427,7 +448,16 @@ func helmTroubleText(row resources.Row) string {
 func (m Model) changesLines(theme tui.Theme, width int) []string {
 	lines := []string{sectionTitle(theme, "RECENT CHANGES")}
 	if len(m.changes) == 0 {
-		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextDim).Render("no changes in the last 30m"))
+		text := "no changes in the last 30m"
+		style := theme.TextDim
+		if m.changesDenied {
+			// A denied ReplicaSet cache means m.changes is always empty —
+			// say so instead of the reassuring "no changes" reading
+			// (docs/plans/namespace-scoped-final-plan.md §5).
+			text = "permission denied: rollout history unavailable"
+			style = theme.Warn
+		}
+		lines = append(lines, lipgloss.NewStyle().Foreground(style).Render(text))
 		return lines
 	}
 

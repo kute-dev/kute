@@ -217,6 +217,18 @@ type Model struct {
 	// so a genuinely empty result isn't mistaken for "no matches" while data
 	// is still on its way in (mirrors browse's 15a loading state).
 	Loading bool
+	// Denied, when true (only meaningful for ScopeNamespace today), replaces
+	// the results area with DeniedNote instead of Items/"no matches" and
+	// switches the key row to a bare "↵ switch" hint — this identity may not
+	// list Namespace, so there is nothing to browse, and the palette becomes
+	// a free-typed "switch to <namespace>" input instead
+	// (docs/plans/namespace-scoped-final-plan.md §6). The caller is
+	// responsible for leaving Items empty and, typically, relabeling Input's
+	// placeholder ("switch to").
+	Denied bool
+	// DeniedNote is the notice line shown when Denied is true, e.g. "cannot
+	// list namespaces".
+	DeniedNote string
 }
 
 // Query returns the query box's current text.
@@ -464,6 +476,10 @@ func (m Model) renderInputRow(styles Styles, width int) string {
 }
 
 func (m Model) renderResults(styles Styles, width int) []string {
+	if m.Denied {
+		note := styles.RightBad.Background(styles.Body.GetBackground()).Render(" ✕ " + m.DeniedNote)
+		return []string{inset(note, width, styles.Body)}
+	}
 	if m.Loading {
 		text := "loading…"
 		if m.Scope == ScopeNamespace {
@@ -853,6 +869,11 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 	}
 	hints := []keyHint{{"↵", "jump"}, {"tab", "complete"}, {moveKey, "move"}}
 	switch {
+	case m.Scope == ScopeNamespace && m.Denied:
+		// 6a's denied state: nothing to browse or move through, just a
+		// free-typed namespace name and Enter — see Model.Denied's doc
+		// comment.
+		hints = []keyHint{{"↵", "switch"}}
 	case m.Browse:
 		// 12a: "type to narrow · ↑↓ move · ↵ jump · esc close" — no
 		// tab-complete hint in the empty-query ranked-chips state.

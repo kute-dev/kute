@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1406,5 +1407,109 @@ func TestCopyRevisionOnArgoSyncRow(t *testing.T) {
 	}
 	if cmd() == nil {
 		t.Fatal("expected a non-nil message from the clipboard command")
+	}
+}
+
+// forbiddenLister extends fakeLister with the two health-check seams
+// timeline's applyLoaded reads (tui.KindSyncChecker/KindForbiddenReporter) —
+// mirrors overview_test.go's forbiddenKindLister, generalized with an
+// independent unsynced-until-flipped kind so both the stall and denial paths
+// can be exercised from the same fake.
+type forbiddenLister struct {
+	fakeLister
+	unsynced kube.ResourceKind
+	synced   bool
+	denied   kube.ResourceKind
+	err      error
+}
+
+func (f *forbiddenLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	if kind == f.unsynced && !f.synced {
+		return false
+	}
+	return true
+}
+
+func (f *forbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == f.denied {
+		return f.err
+	}
+	return nil
+}
+
+// TestPodCacheDeniedPromotesToPermissionDenied pins §5 of
+// docs/plans/namespace-scoped-final-plan.md: Pod backs the merged feed's
+// restarts (isTimelineSource already treats Pod as a source), but the health
+// checks never asked about it — a denied Pod cache used to render silently
+// as a quiet timeline for an object mid-incident, made worse here by the
+// Event feed alone already being non-empty.
+func TestPodCacheDeniedPromotesToPermissionDenied(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "restarting", Count: 1, LastSeen: time.Now()},
+	}
+	lister := &forbiddenLister{
+		denied: kube.KindPod,
+		err:    fmt.Errorf("pods is forbidden: user cannot list"),
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{events: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — a denied Pod cache must promote the whole screen even though the Event feed is non-empty", m.state)
+	}
+}
+
+// TestEventDeniedIsVisibleEvenWithNonEmptyRail pins §5: timeline has no
+// primary/secondary split (every merged kind IS the one answer it presents),
+// so a denied Event cache must be visible even when the 16b revision rail
+// still resolved from ReplicaSet/Pod alone.
+func TestEventDeniedIsVisibleEvenWithNonEmptyRail(t *testing.T) {
+	lister, podName := railFixture()
+	forbidden := &forbiddenLister{
+		fakeLister: lister,
+		denied:     kube.KindEvent,
+		err:        fmt.Errorf("events is forbidden: user cannot list"),
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: forbidden,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: podName,
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — a denied Event cache must be visible even though the revision rail resolved", m.state)
+	}
+}
+
+// TestStalledCacheOnBackgroundReloadKeepsExistingFeedVisible pins the
+// stall-vs-rerender rule: once the feed is already on screen, a background
+// reload (e.g. a watch event) finding a required cache merely *stalled* —
+// not yet re-synced, no error yet — must not discard the rendered feed back
+// into a loading spinner. Only a confirmed denial may do that.
+func TestStalledCacheOnBackgroundReloadKeepsExistingFeedVisible(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "restarting", Count: 1, LastSeen: time.Now()},
+	}
+	lister := &forbiddenLister{}
+	m := New(Config{Session: newSession(), Events: fakeEvents{events: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after the first load", m.state)
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("expected rows after the first load")
+	}
+
+	lister.unsynced = kube.KindReplicaSet
+	m = step(t, m, kube.ResourceChangedMsg{Kind: kube.KindEvent})
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — an already-rendered feed must not be discarded by a background stall", m.state)
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("rows emptied by a background stall — the stall-vs-rerender regression")
 	}
 }

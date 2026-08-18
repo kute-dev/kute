@@ -111,6 +111,7 @@ Run `kute` with no arguments and it opens on the context you last used, in the n
 | --- | --- |
 | `--context <name>` | Launch against a specific kubeconfig context, instead of the last-used one (or the kubeconfig's `current-context` on a first run). |
 | `-n`, `--namespace <name>` | Launch in a specific namespace. Outranks both the remembered namespace and the context's own default. |
+| `--namespace-scoped <name>` | Restrict every informer to this one namespace instead of the whole cluster, and launch in it — for an identity that only has namespace-scoped (`Role`) access, not cluster-wide (`ClusterRole`) `list`. Mutually exclusive with `-n`/`--namespace`, since it already selects the namespace. |
 | `--kubeconfig <path>` | Read a specific kubeconfig file. Takes precedence over `$KUBECONFIG`, which takes precedence over `~/.kube/config`. |
 | `--theme dark\|light` | Force a theme instead of detecting it from the terminal background. |
 | `--demo` | Run against a built-in in-memory fake cluster. No kubeconfig or cluster needed. |

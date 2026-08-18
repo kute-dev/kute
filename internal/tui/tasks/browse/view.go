@@ -171,6 +171,9 @@ func (m Model) Strips(width int) []string {
 		} else {
 			lines = []string{m.healthStripLine(theme, width)}
 		}
+		if m.auxKindsDeniedNote != "" {
+			lines = append(lines, m.auxKindsDeniedNoteLine(theme, width))
+		}
 		if m.filterActive {
 			lines = append(lines, m.filterStripLine(theme, width))
 		}
@@ -385,8 +388,15 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		rightText = fmt.Sprintf("%d cronjobs · clock %s UTC", len(m.rows), m.now.UTC().Format("15:04:05"))
 		if m.cronJobJobsErr != nil {
 			// §4.4 point 5: a stalled/denied Job read must stay visible —
-			// never silently become the ordinary empty-history reading.
-			rightText += " · job history unavailable: " + m.cronJobJobsErr.Error()
+			// never silently become the ordinary empty-history reading. A
+			// permission denial gets its own wording rather than the raw
+			// client-go error text, distinguishing "will never arrive" from
+			// "still retrying" (docs/plans/namespace-scoped-final-plan.md §5).
+			if kube.IsPermissionError(m.cronJobJobsErr) {
+				rightText += " · job history unavailable: permission denied"
+			} else {
+				rightText += " · job history unavailable: " + m.cronJobJobsErr.Error()
+			}
 		}
 	case m.nodeCount > 0:
 		rightText += fmt.Sprintf(" · %d nodes", m.nodeCount)
@@ -471,6 +481,16 @@ func distinctCRDGroups(rows []resources.Row) int {
 		seen[crdGroupCell(r)] = struct{}{}
 	}
 	return len(seen)
+}
+
+// auxKindsDeniedNoteLine renders §5's inline denial flag: a secondary cache
+// the current kind's own columns/prompts read (auxKinds) came back Forbidden,
+// while the primary rows on screen stayed correct and stay showing — this is
+// the one extra line that says so, rather than a blank/wrong cell saying
+// nothing (docs/plans/namespace-scoped-final-plan.md §5).
+func (m Model) auxKindsDeniedNoteLine(theme tui.Theme, width int) string {
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	return insetStripLine(warn.Render("⚠ "+m.auxKindsDeniedNote), width)
 }
 
 // filterStripLine renders the live "/" query, matched/total, and — when
@@ -807,6 +827,9 @@ func (m Model) permissionDeniedBody(width, height int) string {
 		recover("w", "who-can", "see who does have access"),
 		recover("y", "copy error", "paste to your cluster admin"),
 		recover("r", "retry", ""),
+	}
+	if hint := m.namespaceScopedHint(); hint != "" {
+		lines = append(lines, "", note.Render(hint))
 	}
 
 	cardStyle := lipgloss.NewStyle().

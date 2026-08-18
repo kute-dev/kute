@@ -19,61 +19,67 @@ import (
 // Tea Update loop, so this map is genuinely cross-goroutine. There is no
 // paired setter: ensureDynamicKind is the only writer and holds the lock
 // across registration and Start, which a separate setter would break.
-func (c *Cluster) getDynKind(kind ResourceKind) (dynamicKindInfo, bool) {
+func (c *Cluster) getDynKind(kind ResourceKind, scope string) (dynamicKindInfo, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	info, ok := c.dynKinds[kind]
+	info, ok := c.dynKinds[scopeKey{kind, scope}]
 	return info, ok
 }
 
-// ensureDynamicKind idempotently starts watching gvr under kind: the
-// built-in KindCustomResourceDefinition (registered once in Start) or a
-// discovered custom kind (registered by refreshDiscovery once its CRD is
-// seen to be Established+Served). Safe to call repeatedly — dynFactory.Start
-// only starts informers that haven't already been started.
+// ensureDynamicKind idempotently starts watching gvr under kind at scope
+// ("" for the cluster-wide instance, the built-in
+// KindCustomResourceDefinition's only shape): the built-in
+// KindCustomResourceDefinition (registered once, on first 14b read) or a
+// discovered custom kind (registered by ensureDynamicKindFor once its CRD is
+// seen to be Established+Served). Safe to call repeatedly — the target
+// factory's Start only starts informers that haven't already been started.
 //
 // The whole body runs under c.mu, which does two things: it keeps the
 // dynFactory/stopCh reads from racing SwitchContext's wholesale replacement
 // of both, and it makes registration-then-Start atomic, so a concurrent
 // caller's Start can't run this informer before its handlers are attached.
-func (c *Cluster) ensureDynamicKind(kind ResourceKind, gvr schema.GroupVersionResource, namespaced bool) {
+func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.GroupVersionResource, namespaced bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.dynKinds[kind]; ok || c.stopCh == nil {
+	key := scopeKey{kind, scope}
+	if _, ok := c.dynKinds[key]; ok || c.stopCh == nil {
 		return
 	}
-	informer := c.dynFactory.ForResource(gvr)
+	f := c.dynFactoryForScopeLocked(scope)
+	informer := f.ForResource(gvr)
 	// The dynamic factory takes no transform option, so set it per informer
 	// — which must happen before it starts. Same reasoning as the typed
 	// factory's: managedFields is bookkeeping nothing here reads.
 	//nolint:errcheck // best-effort: a failure just means this cache keeps managedFields
 	_ = informer.Informer().SetTransform(stripManagedFields)
 	k := kind
-	// Same reason the typed informers have one (health.go's
-	// setWatchErrorHandlers): a discovered kind can be forbidden, or its
-	// initial LIST can keep failing, and without this the only symptom is a
-	// screen that never leaves its spinner.
+	gen := c.generation
+	// Same reason the typed informers have one
+	// (registerTypedWatchLocked): a discovered kind can be forbidden, or
+	// its initial LIST can keep failing, and without this the only symptom
+	// is a screen that never leaves its spinner.
 	//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
+	// recordWatchError re-checks gen atomically with both the state write
+	// and the health.onWatchError call — see its doc comment.
 	_ = informer.Informer().SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		c.noteWatchError(k, err)
-		c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
+		c.recordWatchError(gen, k, scope, err)
 	})
 	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
 	_, _ = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(any) { c.notify(k) },
-		UpdateFunc: func(any, any) { c.notify(k) },
-		DeleteFunc: func(any) { c.notify(k) },
+		AddFunc:    func(any) { c.notify(gen, k) },
+		UpdateFunc: func(any, any) { c.notify(gen, k) },
+		DeleteFunc: func(any) { c.notify(gen, k) },
 	})
 	if c.dynKinds == nil {
-		c.dynKinds = map[ResourceKind]dynamicKindInfo{}
+		c.dynKinds = map[scopeKey]dynamicKindInfo{}
 	}
-	c.dynKinds[kind] = dynamicKindInfo{
+	c.dynKinds[key] = dynamicKindInfo{
 		gvr:        gvr,
 		namespaced: namespaced,
 		lister:     informer.Lister(),
 		informer:   informer.Informer(),
 	}
-	c.dynFactory.Start(c.stopCh)
+	f.Start(c.stopCh)
 	c.health.noteListBurst()
 }
 
@@ -199,21 +205,24 @@ func dedupeDiscovered(in []DiscoveredKind) []DiscoveredKind {
 }
 
 // ensureDynamicKindFor starts the instance informer for a discovered kind by
-// name, the dynamic counterpart of ensureKind. Reports whether kind is
-// something discovery knows about at all — a false answer is what lets
-// ListRaw tell "no such kind" apart from "not watched yet".
-func (c *Cluster) ensureDynamicKindFor(kind ResourceKind) bool {
+// name, scoped to whatever namespace normalizes to under the current mode,
+// the dynamic counterpart of ensureKind. Reports whether kind is something
+// discovery knows about at all — a false answer is what lets ListRaw tell
+// "no such kind" apart from "not watched yet".
+func (c *Cluster) ensureDynamicKindFor(kind ResourceKind, namespace string) bool {
 	c.mu.Lock()
-	if _, ok := c.dynKinds[kind]; ok {
+	scope := c.cacheScopeLocked(kind, namespace)
+	if _, ok := c.dynKinds[scopeKey{kind, scope}]; ok {
 		c.mu.Unlock()
 		return true
 	}
 	if kind == KindCustomResourceDefinition {
 		// 14b's own list, the one screen that wants whole CRD objects —
-		// schemas and all. Nothing else does, so this informer starts only
-		// when that screen is opened, not at connect.
+		// schemas and all, and always cluster-wide. Nothing else does, so
+		// this informer starts only when that screen is opened, not at
+		// connect.
 		c.mu.Unlock()
-		c.ensureDynamicKind(KindCustomResourceDefinition, crdGVR, false)
+		c.ensureDynamicKind(KindCustomResourceDefinition, "", crdGVR, false)
 		return true
 	}
 	var match DiscoveredKind
@@ -228,7 +237,7 @@ func (c *Cluster) ensureDynamicKindFor(kind ResourceKind) bool {
 	if !found {
 		return false
 	}
-	c.ensureDynamicKind(kind, match.GVR, !match.ClusterScoped)
+	c.ensureDynamicKind(kind, scope, match.GVR, !match.ClusterScoped)
 	return true
 }
 
@@ -270,30 +279,64 @@ func (c *Cluster) ensurePrinterColumns(kind ResourceKind) {
 		c.crdColumnsInFlight = map[ResourceKind]bool{}
 	}
 	c.crdColumnsInFlight[kind] = true
+	gen := c.generation
 	c.mu.Unlock()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), crdFetchTimeout)
 		defer cancel()
-		changed := c.fetchPrinterColumns(ctx, kind)
-		c.mu.Lock()
-		delete(c.crdColumnsInFlight, kind)
-		c.mu.Unlock()
+		changed := c.fetchPrinterColumns(ctx, gen, kind)
+		c.clearPrinterColumnsInFlight(gen, kind)
 		if changed {
 			// Announcing this as a CRD change is what prompts the registry
-			// rebuild that puts the new columns on screen.
-			c.notify(KindCustomResourceDefinition)
+			// rebuild that puts the new columns on screen — but only for the
+			// context this fetch was actually kicked off against; a slow Get
+			// landing after SwitchContext must not rebuild the new context's
+			// registry from the old one's CRD. notify itself already drops a
+			// stale gen, but fetchPrinterColumns' own write is what has to
+			// stay honest — see its doc comment.
+			c.notify(gen, KindCustomResourceDefinition)
 		}
 	}()
+}
+
+// clearPrinterColumnsInFlight drops kind's in-flight marker, gated on gen so
+// a fetch belonging to a context SwitchContext has already replaced can't
+// clear the *new* context's own in-flight marker for a same-named kind
+// (crdColumnsInFlight is reset to a fresh map on SwitchContext, same as
+// every other per-context cache, but the map identity changes while the key
+// — a bare ResourceKind — does not).
+func (c *Cluster) clearPrinterColumnsInFlight(gen int, kind ResourceKind) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.generation != gen {
+		return
+	}
+	delete(c.crdColumnsInFlight, kind)
 }
 
 // crdFetchTimeout bounds one CRD Get. Columns are a nicety; a kind renders
 // perfectly well with neutral ones.
 const crdFetchTimeout = 15 * time.Second
 
-func (c *Cluster) fetchPrinterColumns(ctx context.Context, kind ResourceKind) bool {
+// fetchPrinterColumns does the actual CRD Get and folds the result into
+// c.discovered/crdColumnsFetched. gen is ensurePrinterColumns' registration-
+// time generation, re-checked against c.generation in the same critical
+// section as both reads of c.discovered — the one before the Get (so a
+// context already replaced by SwitchContext doesn't even issue a request for
+// a CRD name that belongs to the old one) and, more importantly, the one
+// after it that performs the write. Without that second check, a slow Get
+// landing after SwitchContext had already cleared and rebuilt
+// discovered/crdColumnsFetched for a new context would still pass the first,
+// now-stale crdName lookup and the unconditional `c.crdColumnsFetched[kind]
+// = true` / `c.discovered[i].PrinterColumns = ...` write below — silently
+// stamping the new context's freshly discovered kind (which happens to share
+// the same Kind string) with the old context's CRD's columns, or marking a
+// kind the new context has never fetched as already fetched so it never
+// tries again.
+func (c *Cluster) fetchPrinterColumns(ctx context.Context, gen int, kind ResourceKind) bool {
 	c.mu.Lock()
-	if c.crdColumnsFetched[kind] {
+	if c.generation != gen || c.crdColumnsFetched[kind] {
 		c.mu.Unlock()
 		return false
 	}
@@ -324,6 +367,13 @@ func (c *Cluster) fetchPrinterColumns(ctx context.Context, kind ResourceKind) bo
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.generation != gen {
+		// The context that requested this fetch has already been replaced.
+		// c.discovered and c.crdColumnsFetched are the new context's own,
+		// unrelated maps/slice now — writing this stale result into them
+		// would corrupt state that has nothing to do with what was fetched.
+		return false
+	}
 	if c.crdColumnsFetched == nil {
 		c.crdColumnsFetched = map[ResourceKind]bool{}
 	}

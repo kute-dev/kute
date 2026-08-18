@@ -238,10 +238,11 @@ type CacheSyncChecker interface {
 }
 
 // KindSyncChecker is CacheSyncChecker's per-kind refinement — see
-// browse.KindSyncChecker. This screen's list is always Pods, so that's the
-// kind it asks about.
+// browse.KindSyncChecker. This screen's list is always Pods read
+// cluster-wide (a node's pods can come from any namespace), so that's the
+// kind and namespace it asks about.
 type KindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind) bool
+	KindSynced(kind kube.ResourceKind, namespace string) bool
 }
 
 // listerSynced reports whether the Pod cache backing this screen's list has
@@ -250,7 +251,7 @@ type KindSyncChecker interface {
 // *kube.Cluster. Mirrors browse.Model.listerSynced.
 func (m Model) listerSynced() bool {
 	if kc, ok := m.lister.(KindSyncChecker); ok {
-		return kc.KindSynced(kube.KindPod)
+		return kc.KindSynced(kube.KindPod, "")
 	}
 	sc, ok := m.lister.(CacheSyncChecker)
 	return !ok || sc.Synced()

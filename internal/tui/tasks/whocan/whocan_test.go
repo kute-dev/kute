@@ -30,6 +30,33 @@ func newSession() *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "test-cluster"}}
 }
 
+// forbiddenRBAC extends fakeRBAC with the two health-check seams whocan's
+// applyLoaded reads (tui.KindSyncChecker/KindForbiddenReporter) — mirrors
+// overview_test.go's forbiddenKindLister, generalized with an independent
+// unsynced-until-flipped kind so both the stall and denial paths can be
+// exercised from the same fake.
+type forbiddenRBAC struct {
+	fakeRBAC
+	unsynced kube.ResourceKind
+	synced   bool
+	denied   kube.ResourceKind
+	err      error
+}
+
+func (f *forbiddenRBAC) KindSynced(kind kube.ResourceKind, _ string) bool {
+	if kind == f.unsynced && !f.synced {
+		return false
+	}
+	return true
+}
+
+func (f *forbiddenRBAC) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == f.denied {
+		return f.err
+	}
+	return nil
+}
+
 // step mirrors events_test.go's own helper: applies one message, draining
 // any resulting tea.BatchMsg fan-out, so Init()'s tea.Batch(load(),
 // spinner.Tick) resolves synchronously in tests.
@@ -236,6 +263,85 @@ func TestMoveSelectionScrollsOffset(t *testing.T) {
 	}
 	if m.selected < m.offset || m.selected >= m.offset+rows {
 		t.Fatalf("selected %d not within rendered viewport [%d, %d)", m.selected, m.offset, m.offset+rows)
+	}
+}
+
+// TestRoleBindingDeniedIsVisibleEvenWithClusterRoleRowsPresent pins §5 of
+// docs/plans/namespace-scoped-final-plan.md: who-can's RBAC health checks
+// used to run only when the merged result was empty, so a denied RoleBinding
+// cache was invisible whenever the ClusterRole/ClusterRoleBinding pair still
+// resolved a non-empty answer — exactly backwards for a security tool. The
+// checks must run unconditionally and win even over rows already resolved.
+func TestRoleBindingDeniedIsVisibleEvenWithClusterRoleRowsPresent(t *testing.T) {
+	rbac := &forbiddenRBAC{
+		fakeRBAC: fakeRBAC{result: kube.WhoCanResult{
+			Subjects: []kube.WhoCanSubject{
+				{Name: "dev-readonly", Kind: "User", Via: "clusterrole/view ← clusterrolebinding/viewers", ClusterScope: true},
+			},
+		}},
+		denied: kube.KindRoleBinding,
+		err:    fmt.Errorf("rolebindings is forbidden: user cannot list"),
+	}
+	m := New(Config{Session: newSession(), RBAC: rbac, Verb: "list", Resource: "secrets", Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — a denied RoleBinding cache must be visible even though the ClusterRole pair already resolved rows", m.state)
+	}
+}
+
+// TestUnsyncedRBACCacheStaysLoadingOnFirstOpen pins the cold-open half of §5:
+// all four RBAC informers start lazily on first read, so a cold session's
+// first answer is empty until they fill — that must render as loading, never
+// as a confident (and wrong) "no one can do this".
+func TestUnsyncedRBACCacheStaysLoadingOnFirstOpen(t *testing.T) {
+	rbac := &forbiddenRBAC{
+		fakeRBAC: fakeRBAC{result: kube.WhoCanResult{Subjects: []kube.WhoCanSubject{{Name: "bob", Kind: "User"}}}},
+		unsynced: kube.KindClusterRole,
+	}
+	m := New(Config{Session: newSession(), RBAC: rbac, Verb: "list", Resource: "pods", Namespace: "default"})
+	m.SetSize(120, 36)
+	// Deliberately not step(): applyLoaded's own retry cmd is a real tea.Tick
+	// (tui.ScheduleCacheSyncRetry), and draining it would really sleep 250ms
+	// per bounce until rbac.synced flips — the same hazard every other
+	// synchronous-cmd-draining test in this repo avoids around a recurring
+	// tick.
+	updated, _ := m.Update(m.load()())
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading while the ClusterRole cache reports unsynced", m.state)
+	}
+}
+
+// TestStalledCacheOnBackgroundReloadKeepsExistingRowsVisible pins the
+// stall-vs-rerender rule: once rows are already on screen, a background
+// reload (e.g. a watch event) finding a required cache merely *stalled* —
+// not yet re-synced, no error yet — must not discard the rendered result
+// back into a loading spinner. Only a confirmed denial may do that.
+func TestStalledCacheOnBackgroundReloadKeepsExistingRowsVisible(t *testing.T) {
+	rbac := &forbiddenRBAC{
+		fakeRBAC: fakeRBAC{result: kube.WhoCanResult{Subjects: []kube.WhoCanSubject{{Name: "bob", Kind: "User"}}}},
+	}
+	m := New(Config{Session: newSession(), RBAC: rbac, Verb: "list", Resource: "pods", Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after the first load", m.state)
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("expected rows after the first load")
+	}
+
+	rbac.unsynced = kube.KindRole
+	m = step(t, m, kube.ResourceChangedMsg{Kind: kube.KindRole})
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — an already-rendered result must not be discarded by a background stall", m.state)
+	}
+	if len(m.rows) == 0 {
+		t.Fatal("rows emptied by a background stall — the stall-vs-rerender regression")
 	}
 }
 

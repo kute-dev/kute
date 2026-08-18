@@ -1153,7 +1153,7 @@ func TestPatchMetaReachesACustomResourceWithNoInformerStarted(t *testing.T) {
 	t.Parallel()
 	c, dyn := newDynTestCluster(newWidget("thing", "default"))
 
-	if _, ok := c.getDynKind(ResourceKind("Widget")); ok {
+	if _, ok := c.getDynKind(ResourceKind("Widget"), ""); ok {
 		t.Fatal("precondition: no informer should be registered for Widget")
 	}
 	err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", true, "team", "platform", false)

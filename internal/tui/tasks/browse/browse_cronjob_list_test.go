@@ -15,8 +15,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -285,7 +287,7 @@ type perKindSyncedCronJobLister struct {
 	unsynced map[kube.ResourceKind]bool
 }
 
-func (l *perKindSyncedCronJobLister) KindSynced(kind kube.ResourceKind) bool {
+func (l *perKindSyncedCronJobLister) KindSynced(kind kube.ResourceKind, _ string) bool {
 	return !l.unsynced[kind]
 }
 
@@ -360,6 +362,35 @@ func (l *jobErrLister) ListRaw(ctx context.Context, kind kube.ResourceKind, name
 		return nil, l.err
 	}
 	return l.fakeLister.ListRaw(ctx, kind, namespace)
+}
+
+// TestCronJobJobCacheForbiddenShowsPermissionDeniedWording pins §5 of
+// docs/plans/namespace-scoped-final-plan.md: a permission denial on the Job
+// side of the CronJob/Job join used to render identically to a transient
+// stall — both as the raw client-go error text. A denial is permanent for
+// the session and gets its own wording distinguishing it from "still
+// retrying".
+func TestCronJobJobCacheForbiddenShowsPermissionDeniedWording(t *testing.T) {
+	lister := &jobErrLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindCronJob: {cronJobObj("default", "nightly")},
+		}},
+		err: apierrors.NewForbidden(schema.GroupResource{Resource: "jobs"}, "", errors.New("nope")),
+	}
+	m := New(Config{Session: cronJobBrowseSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — the CronJob cache itself is fine", m.state)
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "job history unavailable: permission denied") {
+		t.Fatalf("expected the strip to say 'permission denied', got:\n%s", view)
+	}
+	if strings.Contains(view, "forbidden") {
+		t.Fatalf("raw apierrors text leaked into the strip instead of the 'permission denied' wording:\n%s", view)
+	}
 }
 
 // TestCronJobLogsOpensActiveRunsPod pins Phase 4 task 13/test 12: 'l' opens

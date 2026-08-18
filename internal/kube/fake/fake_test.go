@@ -943,3 +943,56 @@ func TestDemoFluxEventsCarryTheRevisionAnnotation(t *testing.T) {
 		t.Errorf("expected a source-controller event carrying a commit subject, got %d", withSubject)
 	}
 }
+
+// TestFakeKindSyncedIsScopedPerNamespace: SetKindSynced/SetKindForbidden for
+// one namespace must not answer for another, or a scoped-mode UI test that
+// asks the wrong namespace by mistake would get the right-looking answer
+// anyway and never fail — the fake's job here is to be as strict as a real
+// Cluster's own (kind, namespace) health keying.
+func TestFakeKindSyncedIsScopedPerNamespace(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	c.SetKindSynced(kube.KindPod, "team-a", false)
+	if c.KindSynced(kube.KindPod, "team-a") {
+		t.Error("KindSynced(Pod, team-a) = true after SetKindSynced(Pod, team-a, false)")
+	}
+	if !c.KindSynced(kube.KindPod, "team-b") {
+		t.Error("SetKindSynced(Pod, team-a, false) wrongly poisoned KindSynced(Pod, team-b)")
+	}
+	if !c.KindSynced(kube.KindPod, "") {
+		t.Error("SetKindSynced(Pod, team-a, false) wrongly poisoned the cluster-wide KindSynced(Pod, \"\") cache")
+	}
+}
+
+// TestFakeKindForbiddenIsScopedPerNamespace mirrors the sync case for
+// KindForbidden/SetKindForbidden.
+func TestFakeKindForbiddenIsScopedPerNamespace(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	denied := errors.New("forbidden")
+	c.SetKindForbidden(kube.KindSecret, "team-a", denied)
+	if c.KindForbidden(kube.KindSecret, "team-a") == nil {
+		t.Error("KindForbidden(Secret, team-a) = nil after SetKindForbidden(Secret, team-a, err)")
+	}
+	if c.KindForbidden(kube.KindSecret, "team-b") != nil {
+		t.Error("SetKindForbidden(Secret, team-a, err) wrongly poisoned KindForbidden(Secret, team-b)")
+	}
+}
+
+// TestFakeKindSyncedNormalizesClusterScopedKinds: Node has exactly one cache
+// regardless of namespace, real or fake — gating it under any namespace
+// argument must gate every namespace argument.
+func TestFakeKindSyncedNormalizesClusterScopedKinds(t *testing.T) {
+	t.Parallel()
+	c := New("team-a", "dev")
+
+	c.SetKindSynced(kube.KindNode, "team-a", false)
+	if c.KindSynced(kube.KindNode, "") {
+		t.Error("SetKindSynced(Node, team-a, false) did not normalize to the cluster-wide \"\" cache")
+	}
+	if c.KindSynced(kube.KindNode, "team-b") {
+		t.Error("SetKindSynced(Node, team-a, false) did not normalize across namespace arguments for a cluster-scoped kind")
+	}
+}

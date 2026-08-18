@@ -162,6 +162,10 @@ type Model struct {
 	spinner  spinner.Model
 
 	loadStartedAt time.Time
+
+	// syncRetryGen guards a cache-sync retry against a newer load having
+	// landed in the meantime — same shape as events'/overview's own.
+	syncRetryGen int
 }
 
 // loadedMsg carries one load()'s result — exactly one of the three flavor

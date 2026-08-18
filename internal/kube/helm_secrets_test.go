@@ -86,7 +86,7 @@ func TestListHelmReleaseSecretsDoesNotStartTheSharedSecretCache(t *testing.T) {
 	})
 
 	c.mu.Lock()
-	_, sharedStarted := c.kindInformers[KindSecret]
+	_, sharedStarted := c.kindInformers[scopeKey{KindSecret, ""}]
 	c.mu.Unlock()
 	if sharedStarted {
 		t.Fatal("listing Helm releases started the shared Secret informer; that pulls every Secret in the cluster")
@@ -192,7 +192,7 @@ func TestListHelmReleaseSecretsAllNamespacesStaysClusterWide(t *testing.T) {
 		return len(secretListNamespaces(cs)) > 0
 	})
 	waitFor(t, "the all-namespaces release cache to fill", func() bool {
-		return c.KindSynced(KindHelmRelease)
+		return c.KindSynced(KindHelmRelease, "")
 	})
 
 	for _, ns := range secretListNamespaces(cs) {
@@ -226,14 +226,11 @@ func TestKindSyncedFollowsTheScopeOfTheLastRead(t *testing.T) {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the default-namespace release cache to fill", func() bool {
-		return c.KindSynced(KindHelmRelease)
+		return c.KindSynced(KindHelmRelease, "default")
 	})
 
-	// Switching namespaces reads a cache that has not been started at all.
-	c.mu.Lock()
-	c.helmScope = "other"
-	c.mu.Unlock()
-	if c.KindSynced(KindHelmRelease) {
+	// A namespace that has never been read has no cache started at all.
+	if c.KindSynced(KindHelmRelease, "other") {
 		t.Fatal("KindSynced answered off another namespace's cache; an empty first read there would render as \"no releases\"")
 	}
 }

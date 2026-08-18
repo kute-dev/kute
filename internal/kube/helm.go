@@ -521,9 +521,6 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	if c.stopCh == nil {
 		return
 	}
-	// The scope of the most recent read is what KindSynced(KindHelmRelease)
-	// answers for, so record it whether or not the informer already exists.
-	c.helmScope = namespace
 	if c.helmInformers[namespace] != nil {
 		return
 	}
@@ -536,18 +533,20 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 		}),
 	)
 	informer := factory.Core().V1().Secrets().Informer()
+	gen := c.generation
 	//nolint:errcheck // best-effort: a failed registration just means no health signal here
 	// Runs later, on the reflector's goroutine — so it takes the lock
-	// itself rather than assuming the one held here.
+	// itself rather than assuming the one held here. recordWatchError
+	// re-checks gen atomically with both the state write and the
+	// health.onWatchError call — see its doc comment.
 	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		c.noteWatchError(KindHelmRelease, err)
-		c.health.onWatchError(err, c.allStartedKindsSynced(), time.Now())
+		c.recordWatchError(gen, KindHelmRelease, namespace, err)
 	})
 	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(any) { c.notify(KindHelmRelease) },
-		UpdateFunc: func(any, any) { c.notify(KindHelmRelease) },
-		DeleteFunc: func(any) { c.notify(KindHelmRelease) },
+		AddFunc:    func(any) { c.notify(gen, KindHelmRelease) },
+		UpdateFunc: func(any, any) { c.notify(gen, KindHelmRelease) },
+		DeleteFunc: func(any) { c.notify(gen, KindHelmRelease) },
 	})
 	if c.helmFactories == nil {
 		c.helmFactories = map[string]informers.SharedInformerFactory{}

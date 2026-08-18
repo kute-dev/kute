@@ -2,10 +2,13 @@ package browse
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -77,6 +80,84 @@ func TestAuxKindOfIsDirectional(t *testing.T) {
 	}
 	if auxKindOf(kube.KindSecret, kube.KindNode) {
 		t.Error("Secrets don't read Nodes")
+	}
+}
+
+// TestAuxKindSyncGapStaysLoadingNotFalseEmpty pins §5 of
+// docs/plans/namespace-scoped-final-plan.md: before the fix, the empty-rows
+// branch's sync check (m.listerSynced()) only asked about the primary kind,
+// while the error check right below it already covered auxKinds — so an aux
+// cache that was merely still filling (not yet synced, no error to report)
+// sailed past both checks and rendered a false "no deployments" instead of
+// staying in the loading state.
+func TestAuxKindSyncGapStaysLoadingNotFalseEmpty(t *testing.T) {
+	lister := &perKindSyncedLister{
+		unsynced: map[kube.ResourceKind]bool{kube.KindReplicaSet: true},
+		lister:   fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+	}
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+	m.kind = kube.KindDeployment
+	m.desc, _ = m.session.Registry.Descriptor(kube.KindDeployment)
+
+	updated, cmd := m.applyRowsLoaded(emptyRowsFor(m, kube.KindDeployment))
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading {
+		t.Fatalf("state = %s, want loading — the ReplicaSet aux cache backing the IMAGE column hasn't synced yet", m.state)
+	}
+	if cmd == nil {
+		t.Fatal("expected a retry to be scheduled")
+	}
+}
+
+// forbiddenAuxKindLister returns the primary kind's rows normally but
+// reports one chosen aux kind as Forbidden — mirrors browse_sync_test.go's
+// silentlyForbiddenLister, generalized to name which kind is denied.
+type forbiddenAuxKindLister struct {
+	fakeLister
+	kind kube.ResourceKind
+	err  error
+}
+
+func (l *forbiddenAuxKindLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (l *forbiddenAuxKindLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == l.kind {
+		return l.err
+	}
+	return nil
+}
+
+// TestAuxKindDeniedShowsInlineNoteOnReadyReload pins §5's other half: once
+// the primary kind's rows are already non-empty (Ready), a denied aux cache
+// used to go entirely unchecked — the screen stayed Ready with no signal
+// that IMAGE/rollout-history data might be missing or wrong. It must now
+// show an inline note rather than either taking over the whole screen or
+// staying silent.
+func TestAuxKindDeniedShowsInlineNoteOnReadyReload(t *testing.T) {
+	lister := &forbiddenAuxKindLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindDeployment: {deploymentObj("default", "api")},
+		}},
+		kind: kube.KindReplicaSet,
+		err:  apierrors.NewForbidden(schema.GroupResource{Resource: "replicasets"}, "", errors.New("nope")),
+	}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — the Deployment cache itself is fine, only an aux cache is denied", m.state)
+	}
+	if m.auxKindsDeniedNote == "" {
+		t.Fatal("expected auxKindsDeniedNote to be set")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "permission denied") {
+		t.Fatalf("expected an inline note naming the denied aux cache:\n%s", view)
 	}
 }
 

@@ -2,6 +2,7 @@ package overview
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,9 +12,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -208,6 +211,157 @@ func TestNMetricsSentinelDoesNotCountAsAvailable(t *testing.T) {
 
 	if m.metricsAvailable {
 		t.Fatalf("metricsAvailable = true, want false when every node reports the n/a sentinel")
+	}
+}
+
+// forbiddenNodeLister simulates a Node reflector that came back Forbidden:
+// ListRaw still returns an empty, error-free slice — the real informer-
+// backed behavior (CLAUDE.md: "Informer-backed ListRaw returns an empty
+// cache when its reflector is forbidden") — and KindForbidden reports the
+// denial the way *kube.Cluster does.
+type forbiddenNodeLister struct {
+	fakeLister
+	err error
+}
+
+func (f *forbiddenNodeLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (f *forbiddenNodeLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindNode {
+		return f.err
+	}
+	return nil
+}
+
+// TestDeniedNodeCacheRendersPermissionDeniedNotZeroes pins the fix for §5 of
+// docs/plans/namespace-scoped-final-plan.md: loadOverview's ListRaw calls
+// never surface a Forbidden reflector as an error (it just returns an empty
+// cache), so without an explicit KindsSynced/KindsError gate this rendered
+// as a healthy-looking cluster overview with 0 nodes instead of a
+// permission-denied card.
+func TestDeniedNodeCacheRendersPermissionDeniedNotZeroes(t *testing.T) {
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "", errors.New("nope"))
+	lister := &forbiddenNodeLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindPod: {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		err: denied,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — the Node cache is Forbidden, not empty", m.state)
+	}
+}
+
+// forbiddenKindLister simulates a Forbidden reflector on one chosen kind
+// (mirrors forbiddenNodeLister, generalized) — used to pin §5's secondary/
+// best-effort caches (Namespace/HelmRelease/ReplicaSet), which must flag only
+// the fact/panel they back rather than taking over the whole screen the way
+// a denied Node/Pod cache does.
+type forbiddenKindLister struct {
+	fakeLister
+	kind kube.ResourceKind
+	err  error
+}
+
+func (f *forbiddenKindLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (f *forbiddenKindLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == f.kind {
+		return f.err
+	}
+	return nil
+}
+
+// TestDeniedNamespaceCacheShowsPermissionDeniedNotZero pins §5: a denied
+// Namespace cache used to render as "0 namespaces" (loadOverview's own
+// best-effort read swallows the error) — indistinguishable from a genuinely
+// empty cluster.
+func TestDeniedNamespaceCacheShowsPermissionDeniedNotZero(t *testing.T) {
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "", errors.New("nope"))
+	lister := &forbiddenKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindNamespace,
+		err:  denied,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready — Node/Pod are healthy, a denied Namespace cache must not take over the screen", m.state)
+	}
+	if !m.nsDenied {
+		t.Fatal("nsDenied = false, want true")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "permission denied") {
+		t.Fatalf("expected the namespace count to read 'permission denied' in view:\n%s", view)
+	}
+}
+
+// TestDeniedHelmCacheShowsInlineNoteInTroublePanel pins §5's HelmRelease
+// half: a denied cache used to render as if there were simply no outdated
+// releases, with no signal the read failed.
+func TestDeniedHelmCacheShowsInlineNoteInTroublePanel(t *testing.T) {
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "helmreleases"}, "", errors.New("nope"))
+	lister := &forbiddenKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindHelmRelease,
+		err:  denied,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready", m.state)
+	}
+	if !m.helmDenied {
+		t.Fatal("helmDenied = false, want true")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "outdated releases: permission denied") {
+		t.Fatalf("expected TROUBLE's inline denial note in view:\n%s", view)
+	}
+}
+
+// TestDeniedReplicaSetCacheShowsInlineNoteInChangesPanel pins §5's
+// ReplicaSet half: a denied cache used to render RECENT CHANGES as the
+// reassuring "no changes in the last 30m", identical to a genuinely quiet
+// cluster.
+func TestDeniedReplicaSetCacheShowsInlineNoteInChangesPanel(t *testing.T) {
+	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "replicasets"}, "", errors.New("nope"))
+	lister := &forbiddenKindLister{
+		fakeLister: fakeLister{objects: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a", true, false, 4000, 16*1024*1024*1024, 110)},
+			kube.KindPod:  {testPod("ns1", "web-1", corev1.PodRunning)},
+		}},
+		kind: kube.KindReplicaSet,
+		err:  denied,
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeMetrics: &fakeNodeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready", m.state)
+	}
+	if !m.changesDenied {
+		t.Fatal("changesDenied = false, want true")
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "permission denied: rollout history unavailable") {
+		t.Fatalf("expected RECENT CHANGES' inline denial note in view:\n%s", view)
 	}
 }
 

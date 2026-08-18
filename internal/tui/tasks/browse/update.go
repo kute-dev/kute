@@ -366,6 +366,13 @@ type editResultMsg struct{ err error }
 // applySort/sort.go), recomputes the filtered/visible set (preserving
 // selection by name where possible), and picks the resulting task state.
 func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.epoch != m.reloadEpoch {
+		// Superseded by a namespace/kind/context switch (or a CRD's columns
+		// landing) that's since bumped reloadEpoch — kind and columns can
+		// both still match (a namespace switch keeps the same kind and
+		// descriptor), so epoch is the guard that actually catches this.
+		return m, nil
+	}
 	if msg.kind != m.kind {
 		return m, nil // stale reply for a kind we've since switched away from
 	}
@@ -386,7 +393,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.kind == kube.KindCronJob && !tui.KindsSynced(m.lister, kube.KindCronJob, kube.KindJob) {
+	if m.kind == kube.KindCronJob && !tui.KindsSynced(m.lister, m.namespace, kube.KindCronJob, kube.KindJob) {
 		// §4.4 point 1 / Phase 4 task 3: gate Ready/Empty on *both* required
 		// caches settling, even when msg.rows is already non-empty — a
 		// CronJob row projected before the Job cache has filled would show
@@ -418,7 +425,13 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.cachedView = false
 
 	if len(m.rows) == 0 {
-		if !m.listerSynced() {
+		// kinds is m.kind plus every aux kind its own columns/prompts read
+		// (auxkinds.go) — an aux cache that's still filling can make an
+		// otherwise-correct empty result untrustworthy just as easily as
+		// m.kind's own cache can, so both checks below ask about the same
+		// set.
+		kinds := append([]kube.ResourceKind{m.kind}, auxKinds[m.kind]...)
+		if !tui.KindsSynced(m.lister, m.namespace, kinds...) {
 			// The informer cache is still filling (just after launch or mid
 			// SwitchContext) — this empty result isn't trustworthy yet.
 			// Stay in the loading state and retry shortly rather than
@@ -426,7 +439,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			m.reloadEpoch++
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
-		if err := tui.KindsError(m.lister, append([]kube.ResourceKind{m.kind}, auxKinds[m.kind]...)...); err != nil {
+		if err := tui.KindsError(m.lister, m.namespace, kinds...); err != nil {
 			// Settled, but with nothing to show and a reason why. Saying so
 			// beats the two alternatives — a spinner that outlives the
 			// user's patience, or "no <kind>", which is a claim about the
@@ -463,6 +476,18 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.state = tui.TaskStateReady
 	m.feedback = ""
 	m.cacheCurrentRows()
+
+	// m.kind's own cache is already known-good (rows are non-empty), so only
+	// the aux kinds its columns/prompts read need asking. A denial here must
+	// not take the whole screen away from what's already correctly on the
+	// table — it surfaces as one extra strip line instead of a blank/wrong
+	// cell (docs/plans/namespace-scoped-final-plan.md §5).
+	m.auxKindsDeniedNote = ""
+	if kinds := auxKinds[m.kind]; len(kinds) > 0 {
+		if err := tui.KindsError(m.lister, m.namespace, kinds...); err != nil && kube.IsPermissionError(err) {
+			m.auxKindsDeniedNote = "some columns may be incomplete — permission denied: " + err.Error()
+		}
+	}
 	return m, nil
 }
 

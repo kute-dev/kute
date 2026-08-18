@@ -86,6 +86,12 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// should default focus onto the rail; a later watch-triggered refresh
 	// must never yank focus away from wherever the user already moved it.
 	firstLoad := m.state == tui.TaskStateLoading
+	// alreadyRendered mirrors whocan's own stall-vs-rerender rule: once
+	// something is already on screen, a background reload finding a
+	// required cache merely *stalled* must not discard it into a loading
+	// spinner — only a confirmed denial/error (checked below, unconditionally)
+	// may change what's on screen once something has already rendered.
+	alreadyRendered := m.state == tui.TaskStateReady
 	if msg.err != nil {
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
@@ -94,6 +100,39 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
+
+	// Event, ReplicaSet, Deployment, and Pod are all structurally required
+	// to the merged feed's honesty — a missing rollout or missing restart is
+	// exactly the dangerous silent-gap case
+	// docs/plans/namespace-scoped-final-plan.md §5 calls out. Unlike
+	// browse/overview/cronjobdetail (each has a clear primary identity plus
+	// separate best-effort reads), timeline has no such split: every kind it
+	// merges is part of the one answer it presents, so a denial on any of
+	// them always promotes to the full error/permission-denied state — even
+	// when the others already produced a non-empty feed, which is why these
+	// checks run unconditionally rather than only when the feed was empty.
+	if !alreadyRendered && !tui.KindsSynced(m.lister, m.namespace, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment, kube.KindPod) {
+		// Events, ReplicaSets, Deployments, and Pods all start on first
+		// read, so a cold open would otherwise report a quiet timeline for
+		// an object mid-incident.
+		m.state = tui.TaskStateLoading
+		m.feedback = ""
+		m.syncRetryGen++
+		return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+	}
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment, kube.KindPod); err != nil {
+		// One of those caches is settled only by having given up (see
+		// tui.KindsError) — "a quiet timeline" is the same wrong answer here
+		// as an empty event feed, for the same reason. A denial always wins,
+		// even over entries already on screen.
+		m.state = tui.TaskStateError
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
+		}
+		m.feedback = fmt.Sprintf("couldn't load the timeline: %v", err)
+		return m, nil
+	}
+
 	m.entries = msg.entries
 	m.rail = msg.rail
 	m.railDeployment = msg.railDeployment
@@ -103,25 +142,9 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if len(m.rows) == 0 && len(m.rail) == 0 {
 		// A 16b revision rail is still worth showing even when nothing
 		// happened in the feed's own window — it's not "empty" until there's
-		// truly nothing on screen.
-		//
-		// And not even then, if the caches it merges are still filling:
-		// Events and ReplicaSets both start on first read, so a cold open
-		// would otherwise report a quiet timeline for an object mid-incident.
-		if !tui.KindsSynced(m.lister, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment) {
-			m.state = tui.TaskStateLoading
-			m.feedback = ""
-			m.syncRetryGen++
-			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
-		}
-		if err := tui.KindsError(m.lister, kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment); err != nil {
-			// One of those caches is settled only by having given up (see
-			// tui.KindsError) — "a quiet timeline" is the same wrong answer
-			// here as an empty event feed, for the same reason.
-			m.state = tui.TaskStateError
-			m.feedback = fmt.Sprintf("couldn't load the timeline: %v — retrying", err)
-			return m, nil
-		}
+		// truly nothing on screen. The checks above have already confirmed
+		// every merged cache is synced and error-free, so this really is a
+		// quiet window/object, not an unfilled cache.
 		m.state = tui.TaskStateEmpty
 	}
 	if firstLoad && len(m.rail) > 0 {

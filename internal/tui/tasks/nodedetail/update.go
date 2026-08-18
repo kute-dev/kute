@@ -114,13 +114,31 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.allPods = msg.pods
 	m.recomputeFiltered()
 
-	if len(m.allPods) == 0 && !m.listerSynced() {
-		// The informer cache is still filling (just after launch, mid a
-		// context switch, or on a very fast node-open) — this empty pod
-		// list isn't trustworthy yet. Stay loading and retry shortly rather
-		// than flashing "no pods on this node" before they've landed.
-		m.reloadEpoch++
-		return m, m.scheduleReload(m.reloadEpoch)
+	if len(m.allPods) == 0 {
+		if !m.listerSynced() {
+			// The informer cache is still filling (just after launch, mid a
+			// context switch, or on a very fast node-open) — this empty pod
+			// list isn't trustworthy yet. Stay loading and retry shortly
+			// rather than flashing "no pods on this node" before they've
+			// landed.
+			m.reloadEpoch++
+			return m, m.scheduleReload(m.reloadEpoch)
+		}
+		if err := tui.KindsError(m.lister, "", kube.KindPod); err != nil {
+			// listerSynced (KindSynced) reports settled for a Forbidden
+			// cache too — that's the anti-hang rule, not a claim the node
+			// has no pods. Without this check a denied Pod cache would
+			// fall straight through to Ready with an empty pods table,
+			// which is exactly the false "zero pods" claim KindError
+			// exists to prevent (CLAUDE.md's informer invariants).
+			if kube.IsPermissionError(err) {
+				m.state = tui.TaskStatePermissionDenied
+			} else {
+				m.state = tui.TaskStateError
+			}
+			m.feedback = err.Error()
+			return m, nil
+		}
 	}
 
 	m.state = tui.TaskStateReady

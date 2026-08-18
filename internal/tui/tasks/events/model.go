@@ -86,8 +86,13 @@ type Model struct {
 	// syncRetryGen guards a cache-sync retry against a newer load having
 	// landed in the meantime.
 	syncRetryGen int
-	openYAML     OpenYAMLFunc
-	timeout      time.Duration
+	// loadEpoch guards every load() dispatch — bumped on every namespace
+	// switch (and every other reload) so a slow reply from a namespace the
+	// screen has since left can't land and overwrite the feed now showing.
+	// See loadedMsg's own doc comment.
+	loadEpoch int
+	openYAML  OpenYAMLFunc
+	timeout   time.Duration
 
 	namespace  string
 	objectKind kube.ResourceKind
@@ -123,8 +128,13 @@ type Model struct {
 	spinner   spinner.Model
 }
 
-// loadedMsg carries one load()'s result.
+// loadedMsg carries one load()'s result. epoch is m.loadEpoch at the moment
+// load() was dispatched — the guard applyLoaded needs against a slow load
+// from a namespace the user has since switched away from landing late and
+// overwriting the feed now showing under a different namespace (there is no
+// kind/columns pair here the way browse has, so nothing else catches it).
 type loadedMsg struct {
+	epoch   int
 	groups  []kube.EventGroup
 	failing map[string]bool
 	err     error

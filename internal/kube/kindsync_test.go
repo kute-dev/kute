@@ -33,7 +33,7 @@ func TestKindSyncedFalseBeforeRegistration(t *testing.T) {
 	c := newSyncTestCluster()
 	defer close(c.stopCh)
 
-	if c.KindSynced(KindSecret) {
+	if c.KindSynced(KindSecret, "") {
 		t.Fatal("KindSynced(Secret) = true before its informer was registered")
 	}
 }
@@ -47,11 +47,11 @@ func TestKindSyncedTrueAfterCacheFills(t *testing.T) {
 	c.factory.Start(c.stopCh)
 	c.factory.WaitForCacheSync(c.stopCh)
 
-	if !c.KindSynced(KindPod) {
+	if !c.KindSynced(KindPod, "") {
 		t.Fatal("KindSynced(Pod) = false after WaitForCacheSync")
 	}
 	// Registering one kind must not vouch for another.
-	if c.KindSynced(KindSecret) {
+	if c.KindSynced(KindSecret, "") {
 		t.Fatal("KindSynced(Secret) = true after only Pod was registered")
 	}
 }
@@ -64,8 +64,33 @@ func TestKindSyncedTrueForSyntheticKinds(t *testing.T) {
 	defer close(c.stopCh)
 
 	// Forwards are in-process state, not a cache.
-	if !c.KindSynced(KindForward) {
+	if !c.KindSynced(KindForward, "") {
 		t.Error("KindSynced(Forward) = false; a kind with no informer has nothing to wait for")
+	}
+}
+
+// TestKindSyncedFalseForDiscoveredButUnstartedKind: a kind CRD discovery
+// already knows about, but whose instance informer nothing has read yet, must
+// not read as "settled" — Goto's fuzzy resource corpus and the empty-state
+// hints both skip a kind only once KindSynced says it's unsafe to list
+// (goto.go's kindSynced guard), and reporting true here let both list a
+// never-started discovered kind, starting its informer just to render a jump
+// entry or an empty-state hint (the exact breadth-first read CLAUDE.md's
+// informer invariant forbids). An undiscovered kind is unaffected: it still
+// falls through to true, since there is nothing to wait on at all.
+func TestKindSyncedFalseForDiscoveredButUnstartedKind(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	c.discovered = []DiscoveredKind{{
+		Kind:   "Widget",
+		Plural: "widgets",
+		Group:  "example.com",
+	}}
+
+	if c.KindSynced(ResourceKind("Widget"), "") {
+		t.Fatal("KindSynced(Widget) = true for a discovered kind whose informer was never started")
 	}
 }
 
@@ -78,7 +103,7 @@ func TestKindSyncedForHelmReleasesTracksItsOwnCache(t *testing.T) {
 	c := newSyncTestCluster()
 	defer close(c.stopCh)
 
-	if c.KindSynced(KindHelmRelease) {
+	if c.KindSynced(KindHelmRelease, "") {
 		t.Fatal("KindSynced(HelmRelease) = true before its informer was started")
 	}
 
@@ -86,7 +111,7 @@ func TestKindSyncedForHelmReleasesTracksItsOwnCache(t *testing.T) {
 	c.registerWatches(KindSecret)
 	c.factory.Start(c.stopCh)
 	c.factory.WaitForCacheSync(c.stopCh)
-	if c.KindSynced(KindHelmRelease) {
+	if c.KindSynced(KindHelmRelease, "") {
 		t.Fatal("the shared Secret cache wrongly vouched for HelmRelease")
 	}
 
@@ -94,10 +119,10 @@ func TestKindSyncedForHelmReleasesTracksItsOwnCache(t *testing.T) {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for !c.KindSynced(KindHelmRelease) && time.Now().Before(deadline) {
+	for !c.KindSynced(KindHelmRelease, "") && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 	}
-	if !c.KindSynced(KindHelmRelease) {
+	if !c.KindSynced(KindHelmRelease, "") {
 		t.Fatal("KindSynced(HelmRelease) never settled after its own cache filled")
 	}
 }
@@ -109,7 +134,7 @@ func TestKindSyncedTrueAfterStop(t *testing.T) {
 	c := newSyncTestCluster()
 	c.Stop()
 
-	if !c.KindSynced(KindSecret) {
+	if !c.KindSynced(KindSecret, "") {
 		t.Fatal("KindSynced(Secret) = false after Stop; a stopped cluster never syncs")
 	}
 }
@@ -122,17 +147,17 @@ func TestKindSyncedTrueAfterPermissionError(t *testing.T) {
 	c := newSyncTestCluster()
 	defer close(c.stopCh)
 
-	if c.KindSynced(KindHorizontalPodAutoscaler) {
+	if c.KindSynced(KindHorizontalPodAutoscaler, "") {
 		t.Fatal("precondition: unregistered kind should not report synced")
 	}
-	c.markKindFailed(KindHorizontalPodAutoscaler, apierrors.NewForbidden(
+	c.markKindFailed(c.generation, KindHorizontalPodAutoscaler, "", apierrors.NewForbidden(
 		schema.GroupResource{Resource: "horizontalpodautoscalers"}, "", errors.New("nope")))
 
-	if !c.KindSynced(KindHorizontalPodAutoscaler) {
+	if !c.KindSynced(KindHorizontalPodAutoscaler, "") {
 		t.Fatal("KindSynced = false after a permission failure; the cache will never arrive")
 	}
 	// A denial for one kind says nothing about any other.
-	if c.KindSynced(KindSecret) {
+	if c.KindSynced(KindSecret, "") {
 		t.Fatal("markKindFailed(HPA) wrongly vouched for Secret")
 	}
 }
@@ -149,16 +174,16 @@ func TestKindSyncedTrueAfterAStalledInitialList(t *testing.T) {
 	defer close(c.stopCh)
 
 	streamErr := errors.New("stream error when reading response body, may be caused by closed connection")
-	c.noteWatchError(KindSecret, streamErr)
+	c.noteWatchError(c.generation, KindSecret, "", streamErr)
 
-	if !c.KindSynced(KindSecret) {
+	if !c.KindSynced(KindSecret, "") {
 		t.Fatal("KindSynced = false for a cache whose initial LIST keeps failing; nothing is coming, so the spinner never ends")
 	}
-	if got := c.KindError(KindSecret); got == nil {
+	if got := c.KindError(KindSecret, ""); got == nil {
 		t.Fatal("KindError = nil for a stalled cache; without a reason the screen claims the cluster is empty")
 	}
 	// The stall belongs to the kind that failed, not to the session.
-	if c.KindSynced(KindConfigMap) || c.KindError(KindConfigMap) != nil {
+	if c.KindSynced(KindConfigMap, "") || c.KindError(KindConfigMap, "") != nil {
 		t.Fatal("one kind's failed LIST vouched for another")
 	}
 }
@@ -172,8 +197,8 @@ func TestStalledKindRecoversWhenTheCacheFinallyFills(t *testing.T) {
 	c := newSyncTestCluster()
 	defer close(c.stopCh)
 
-	c.noteWatchError(KindPod, errors.New("connect: connection refused"))
-	if c.KindError(KindPod) == nil {
+	c.noteWatchError(c.generation, KindPod, "", errors.New("connect: connection refused"))
+	if c.KindError(KindPod, "") == nil {
 		t.Fatal("precondition: the failed LIST should be recorded")
 	}
 
@@ -181,10 +206,10 @@ func TestStalledKindRecoversWhenTheCacheFinallyFills(t *testing.T) {
 	c.factory.Start(c.stopCh)
 	c.factory.WaitForCacheSync(c.stopCh)
 
-	if err := c.KindError(KindPod); err != nil {
+	if err := c.KindError(KindPod, ""); err != nil {
 		t.Fatalf("KindError = %v after the cache filled; the stall must clear", err)
 	}
-	if !c.KindSynced(KindPod) {
+	if !c.KindSynced(KindPod, "") {
 		t.Fatal("KindSynced = false after the cache filled")
 	}
 }
@@ -202,9 +227,51 @@ func TestWatchErrorAfterSyncIsNotAStall(t *testing.T) {
 	c.factory.Start(c.stopCh)
 	c.factory.WaitForCacheSync(c.stopCh)
 
-	c.noteWatchError(KindPod, errors.New("watch closed unexpectedly"))
-	if err := c.KindError(KindPod); err != nil {
+	c.noteWatchError(c.generation, KindPod, "", errors.New("watch closed unexpectedly"))
+	if err := c.KindError(KindPod, ""); err != nil {
 		t.Fatalf("KindError = %v for a post-sync watch drop; the cache still holds data", err)
+	}
+}
+
+// TestNoteWatchErrorDropsStaleGeneration pins the fix for the SwitchContext
+// race (docs/plans/namespace-scoped-final-plan.md's own generation-guard
+// section): a callback registered against an old context can still be
+// mid-flight when SwitchContext bumps c.generation and clears kindStalled —
+// its own up-front generationCurrent check happened before that, on a
+// separate lock acquisition, so only a re-check inside the same critical
+// section as the write actually stops a stale generation from landing.
+func TestNoteWatchErrorDropsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	staleGen := c.generation
+	c.generation++ // simulates a SwitchContext that ran between the
+	// callback's own preflight check and this call.
+
+	c.noteWatchError(staleGen, KindSecret, "", errors.New("stream error when reading response body"))
+
+	if err := c.KindError(KindSecret, ""); err != nil {
+		t.Fatalf("KindError = %v; a stale-generation watch error must not be recorded", err)
+	}
+}
+
+// TestMarkKindFailedDropsStaleGeneration is noteWatchError's Forbidden-path
+// counterpart above — markKindFailed re-checks gen itself for the same
+// reason.
+func TestMarkKindFailedDropsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	staleGen := c.generation
+	c.generation++
+
+	c.markKindFailed(staleGen, KindSecret, "", apierrors.NewForbidden(
+		schema.GroupResource{Resource: "secrets"}, "", errors.New("nope")))
+
+	if err := c.KindForbidden(KindSecret, ""); err != nil {
+		t.Fatalf("KindForbidden = %v; a stale-generation denial must not be recorded", err)
 	}
 }
 
@@ -218,22 +285,22 @@ func TestStalledPermissionErrorStaysAPermissionError(t *testing.T) {
 	defer close(c.stopCh)
 
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "", errors.New("nope"))
-	c.noteWatchError(KindSecret, forbidden)
+	c.noteWatchError(c.generation, KindSecret, "", forbidden)
 
-	if !c.KindSynced(KindSecret) {
+	if !c.KindSynced(KindSecret, "") {
 		t.Fatal("a forbidden kind must still read as settled")
 	}
-	if err := c.KindError(KindSecret); err != nil {
+	if err := c.KindError(KindSecret, ""); err != nil {
 		t.Fatalf("KindError = %v for a forbidden kind; that failure has its own state", err)
 	}
 	// The denial travels KindForbidden instead, carrying the reason — which
 	// is what lets a screen say "you may not read this" rather than "there
 	// are none".
-	if got := c.KindForbidden(KindSecret); !IsPermissionError(got) {
+	if got := c.KindForbidden(KindSecret, ""); !IsPermissionError(got) {
 		t.Fatalf("KindForbidden = %v for a forbidden kind, want the denial itself", got)
 	}
 	// And says nothing about a kind that was never refused.
-	if got := c.KindForbidden(KindPod); got != nil {
+	if got := c.KindForbidden(KindPod, ""); got != nil {
 		t.Fatalf("KindForbidden(Pod) = %v, want nil — only Secret was refused", got)
 	}
 }
@@ -266,7 +333,7 @@ func TestSyncedIsALatch(t *testing.T) {
 	if !c.Synced() {
 		t.Fatal("Synced() went false after a later registration; it is a connect latch, not a cache state")
 	}
-	if c.KindSynced(KindSecret) {
+	if c.KindSynced(KindSecret, "") {
 		t.Fatal("KindSynced(Secret) = true for a registered-but-unstarted informer")
 	}
 }

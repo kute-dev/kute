@@ -10,6 +10,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // otherKindHint is one "N kind" fragment for the 10c "g other kinds" line.
@@ -66,7 +67,18 @@ func (m Model) loadEmptyHints() tea.Cmd {
 // busiestOtherNamespace finds the namespace (other than the current one)
 // with the most instances of kind, for the "n switch namespace — X has N
 // pods" hint.
+//
+// Skipped entirely under --namespace-scoped: resources.Count(kind, ns) goes
+// through ListRaw, so calling it once per namespace would start one
+// per-namespace informer for kind just to decorate an empty state — the
+// exact breadth-first read the mode exists to avoid (docs/plans/
+// namespace-scoped-final-plan.md §6, same reasoning as the namespace
+// palette's own per-namespace count loop). The caller already degrades to a
+// plain, still-truthful line when this returns nothing.
 func busiestOtherNamespace(ctx context.Context, lister resources.RawLister, reg resources.Registry, kind kube.ResourceKind, current string) (string, int) {
+	if sc, ok := lister.(tui.ScopedChecker); ok && sc.Scoped() {
+		return "", 0
+	}
 	nsDesc, ok := reg.Descriptor(kube.KindNamespace)
 	if !ok {
 		return "", 0
@@ -100,7 +112,7 @@ func busiestOtherNamespace(ctx context.Context, lister resources.RawLister, reg 
 // to a plain, still-truthful line when there's nothing to name.
 func otherKindsIn(ctx context.Context, lister resources.RawLister, reg resources.Registry, exclude kube.ResourceKind, namespace string) []otherKindHint {
 	var found []otherKindHint
-	kindSynced := kindSyncedFunc(lister)
+	kindSynced := kindSyncedFunc(lister, namespace)
 	for _, group := range resources.DefaultGroups() {
 		for _, k := range group.Kinds {
 			if k == exclude {

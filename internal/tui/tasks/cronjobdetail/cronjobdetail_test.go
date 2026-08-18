@@ -298,7 +298,7 @@ func (l *unsyncedThenSyncedLister) ListRaw(_ context.Context, kind kube.Resource
 	}
 	return l.cronJobs, nil
 }
-func (l *unsyncedThenSyncedLister) KindSynced(kube.ResourceKind) bool { return l.synced }
+func (l *unsyncedThenSyncedLister) KindSynced(kube.ResourceKind, string) bool { return l.synced }
 
 func TestUnsyncedCronJobOrJobCacheStaysLoadingThenRetries(t *testing.T) {
 	t.Parallel()
@@ -322,6 +322,51 @@ func TestUnsyncedCronJobOrJobCacheStaysLoadingThenRetries(t *testing.T) {
 	}
 	if lister.polls <= firstPolls {
 		t.Fatalf("expected the retry to issue another ListRaw call")
+	}
+}
+
+// jobForbiddenLister wraps a *fake.Cluster, answering every ListRaw call
+// normally except KindJob, which returns a Forbidden-shaped error — pins §5's
+// wording fix (view.go's jobsSectionHeader): a genuine Job denial must read
+// "permission denied", not the raw apierrors text a stalled/retrying read
+// would also produce.
+type jobForbiddenLister struct {
+	*fake.Cluster
+	err error
+}
+
+func (l jobForbiddenLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if kind == kube.KindJob {
+		return nil, l.err
+	}
+	return l.Cluster.ListRaw(ctx, kind, namespace)
+}
+
+// TestJobsErrForbiddenShowsPermissionDeniedWording pins §5 of
+// docs/plans/namespace-scoped-final-plan.md: CronJob's own read stays
+// healthy, but a Forbidden Job cache used to render the JOBS section header
+// with the raw client-go error text — indistinguishable from a transient
+// stall that's still retrying. It must instead say "permission denied".
+func TestJobsErrForbiddenShowsPermissionDeniedWording(t *testing.T) {
+	t.Parallel()
+	c, _ := newFakeCronJob("default", "nightly")
+	lister := jobForbiddenLister{Cluster: c, err: fmt.Errorf("jobs is forbidden: user cannot list")}
+	m := New(Config{Session: newSession("default"), Lister: lister, Mutator: c, Namespace: "default", Name: "nightly"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.load()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %v, want Ready — a denied Job cache must not take over the whole screen when CronJob's own read is healthy", m.state)
+	}
+	if m.jobsErr == nil {
+		t.Fatal("jobsErr = nil, want the Job Forbidden error carried through")
+	}
+	header := m.jobsSectionHeader(m.Theme(), 100)
+	if !strings.Contains(header, "job history unavailable: permission denied") {
+		t.Fatalf("expected permission-denied wording in the JOBS header, got %q", header)
+	}
+	if strings.Contains(header, "forbidden: user cannot list") {
+		t.Fatalf("raw apierrors text leaked into the JOBS header: %q", header)
 	}
 }
 

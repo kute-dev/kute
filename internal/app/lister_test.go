@@ -25,10 +25,13 @@ import (
 // right rows come back" — both paths decode to the same releases — but "what
 // did the app pull down the wire to produce them".
 type recordingCluster struct {
-	listedKinds []kube.ResourceKind
-	helmReads   int
-	syncedAsked []kube.ResourceKind
-	errorAsked  []kube.ResourceKind
+	listedKinds   []kube.ResourceKind
+	helmReads     int
+	syncedAsked   []kube.ResourceKind
+	syncedAskedNS []string
+	errorAsked    []kube.ResourceKind
+	errorAskedNS  []string
+	scoped        bool
 }
 
 // errStalledCache stands in for the reason a cache stopped filling — on the
@@ -46,15 +49,19 @@ func (c *recordingCluster) ListHelmReleaseSecrets(context.Context, string) ([]ru
 	return nil, nil
 }
 
-func (c *recordingCluster) KindSynced(kind kube.ResourceKind) bool {
+func (c *recordingCluster) KindSynced(kind kube.ResourceKind, namespace string) bool {
 	c.syncedAsked = append(c.syncedAsked, kind)
+	c.syncedAskedNS = append(c.syncedAskedNS, namespace)
 	return true
 }
 
-func (c *recordingCluster) KindError(kind kube.ResourceKind) error {
+func (c *recordingCluster) KindError(kind kube.ResourceKind, namespace string) error {
 	c.errorAsked = append(c.errorAsked, kind)
+	c.errorAskedNS = append(c.errorAskedNS, namespace)
 	return errStalledCache
 }
+
+func (c *recordingCluster) Scoped() bool { return c.scoped }
 
 func (c *recordingCluster) listed(kind kube.ResourceKind) bool {
 	for _, k := range c.listedKinds {
@@ -242,7 +249,7 @@ func (c *narrowlessCluster) ListRaw(_ context.Context, kind kube.ResourceKind, _
 	return nil, nil
 }
 
-func (c *narrowlessCluster) KindSynced(kind kube.ResourceKind) bool {
+func (c *narrowlessCluster) KindSynced(kind kube.ResourceKind, _ string) bool {
 	c.syncedAsked = append(c.syncedAsked, kind)
 	return true
 }
@@ -280,7 +287,7 @@ func TestHelmReleaseSyncStateAsksAboutTheReleaseCache(t *testing.T) {
 	rec := &recordingCluster{}
 	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
-	lister.KindSynced(kube.KindHelmRelease)
+	lister.KindSynced(kube.KindHelmRelease, "default")
 
 	if len(rec.syncedAsked) != 1 || rec.syncedAsked[0] != kube.KindHelmRelease {
 		t.Fatalf("KindSynced asked about %v, want [%s]", rec.syncedAsked, kube.KindHelmRelease)
@@ -295,11 +302,54 @@ func TestHelmReleaseErrorAsksAboutTheReleaseCache(t *testing.T) {
 	rec := &recordingCluster{}
 	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
-	if err := lister.KindError(kube.KindHelmRelease); err == nil {
+	if err := lister.KindError(kube.KindHelmRelease, "default"); err == nil {
 		t.Fatal("KindError returned nil; the seam is not forwarded through the decorator stack")
 	}
 	if len(rec.errorAsked) != 1 || rec.errorAsked[0] != kube.KindHelmRelease {
 		t.Fatalf("KindError asked about %v, want [%s]", rec.errorAsked, kube.KindHelmRelease)
+	}
+}
+
+// TestKindSyncAndErrorForwardTheNamespaceArgument is
+// docs/plans/namespace-scoped-final-plan.md §2's rule stated as a decorator
+// test: KindSynced/KindError must carry the caller's namespace through both
+// layers of the decorator stack unchanged, not silently normalize it to ""
+// or the release cache's own scope.
+func TestKindSyncAndErrorForwardTheNamespaceArgument(t *testing.T) {
+	rec := &recordingCluster{}
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
+
+	lister.KindSynced(kube.KindPod, "team-a")
+	if len(rec.syncedAskedNS) != 1 || rec.syncedAskedNS[0] != "team-a" {
+		t.Fatalf("KindSynced forwarded namespace %v, want [\"team-a\"]", rec.syncedAskedNS)
+	}
+	if _, err := lister.ListRaw(context.Background(), kube.KindPod, "team-a"); err != nil {
+		t.Fatalf("ListRaw: %v", err)
+	}
+	if err := lister.KindError(kube.KindPod, "team-b"); err == nil {
+		t.Fatal("KindError returned nil; the seam is not forwarded through the decorator stack")
+	}
+	if len(rec.errorAskedNS) != 1 || rec.errorAskedNS[0] != "team-b" {
+		t.Fatalf("KindError forwarded namespace %v, want [\"team-b\"]", rec.errorAskedNS)
+	}
+}
+
+// TestScopedForwardsThroughTheDecoratorStack pins the seam the 403 card's
+// --namespace-scoped hint depends on: an unforwarded Scoped would always
+// read false through sess.Lister, regardless of what the underlying cluster
+// answers, and the hint would keep suggesting a flag to a session already
+// running it.
+func TestScopedForwardsThroughTheDecoratorStack(t *testing.T) {
+	rec := &recordingCluster{scoped: true}
+	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
+	if !lister.Scoped() {
+		t.Fatal("Scoped() = false through the decorator stack, want true")
+	}
+
+	rec2 := &recordingCluster{scoped: false}
+	lister2 := newSessionLister(rec2, kube.NewForwardManager(), nil)
+	if lister2.Scoped() {
+		t.Fatal("Scoped() = true through the decorator stack for an unscoped cluster")
 	}
 }
 
@@ -310,7 +360,7 @@ func TestForwardsNeverStall(t *testing.T) {
 	rec := &recordingCluster{}
 	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
-	if err := lister.KindError(kube.KindForward); err != nil {
+	if err := lister.KindError(kube.KindForward, ""); err != nil {
 		t.Fatalf("KindError(Forward) = %v, want nil", err)
 	}
 	if len(rec.errorAsked) != 0 {
@@ -334,7 +384,7 @@ func TestDecoratedListerFallsBackWithoutTheReleaseCache(t *testing.T) {
 		t.Fatalf("fallback listed %v, want [%s]", plain.listedKinds, kube.KindSecret)
 	}
 
-	lister.KindSynced(kube.KindHelmRelease)
+	lister.KindSynced(kube.KindHelmRelease, "default")
 	if len(plain.syncedAsked) != 1 || plain.syncedAsked[0] != kube.KindSecret {
 		t.Fatalf("KindSynced asked about %v, want [%s] to match the fallback's source",
 			plain.syncedAsked, kube.KindSecret)

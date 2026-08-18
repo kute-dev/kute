@@ -375,7 +375,7 @@ func (l *unsyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKind, ns
 	return l.inner.ListRaw(ctx, kind, ns)
 }
 
-func (l *unsyncedLister) KindSynced(kube.ResourceKind) bool { return *l.synced }
+func (l *unsyncedLister) KindSynced(kube.ResourceKind, string) bool { return *l.synced }
 
 // TestNoEmptyStateWhileTheReleaseCacheFills is the regression test for 18a
 // announcing "no revisions found — the release secrets may have been

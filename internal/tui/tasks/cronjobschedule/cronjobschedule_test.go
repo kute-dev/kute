@@ -159,7 +159,7 @@ func (l *unsyncedThenSyncedLister) ListRaw(context.Context, kube.ResourceKind, s
 	l.polls++
 	return l.objs, nil
 }
-func (l *unsyncedThenSyncedLister) KindSynced(kube.ResourceKind) bool { return l.synced }
+func (l *unsyncedThenSyncedLister) KindSynced(kube.ResourceKind, string) bool { return l.synced }
 
 func TestUnsyncedCronJobCacheStaysLoadingThenRetries(t *testing.T) {
 	t.Parallel()

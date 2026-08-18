@@ -28,6 +28,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.now = time.Now()
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.syncRetryGen && m.lister != nil {
+			return m, m.load()
+		}
 	case loadedMsg:
 		return m.applyLoaded(msg)
 	case spinner.TickMsg:
@@ -46,6 +50,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
+		// findUnstructured's own "<kind> <name> not found" (load.go) is a
+		// plain fmt.Errorf, indistinguishable on its face from the object's
+		// own cache having not filled yet or come back Forbidden — both of
+		// which read exactly like "not found" to a ListRaw scan for one
+		// name. Ask the cache directly before believing the string: a
+		// genuine 404 (the object really was deleted) still ends up at the
+		// same TaskStateError below once both checks come back clean.
+		if !tui.KindsSynced(m.lister, m.namespace, m.kind) {
+			m.syncRetryGen++
+			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		}
+		if kerr := tui.KindsError(m.lister, m.namespace, m.kind); kerr != nil {
+			if kube.IsPermissionError(kerr) {
+				m.state = tui.TaskStatePermissionDenied
+			} else {
+				m.state = tui.TaskStateError
+			}
+			m.feedback = kerr.Error()
+			return m, nil
+		}
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
 			m.state = tui.TaskStatePermissionDenied
@@ -69,6 +93,26 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.listeners = msg.listeners
 
 	if m.rowCount() == 0 {
+		// This screen resolves every row through the pushed-from object's
+		// own cache (m.kind/m.namespace) plus the Service/Pod caches every
+		// flavor's backend resolution reads (reloadsOn's own kind set,
+		// minus Secret/Gateway — TLS facts and the parent-Gateway strip
+		// already degrade gracefully and must not hard-gate the table).
+		// Without this, a cache that's merely still filling — or Forbidden
+		// — rendered as "no routes" instead of loading/permission-denied.
+		if !tui.KindsSynced(m.lister, m.namespace, m.kind, kube.KindService, kube.KindPod) {
+			m.syncRetryGen++
+			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
+		}
+		if err := tui.KindsError(m.lister, m.namespace, m.kind, kube.KindService, kube.KindPod); err != nil {
+			if kube.IsPermissionError(err) {
+				m.state = tui.TaskStatePermissionDenied
+			} else {
+				m.state = tui.TaskStateError
+			}
+			m.feedback = err.Error()
+			return m, nil
+		}
 		m.state = tui.TaskStateEmpty
 	} else {
 		m.state = tui.TaskStateReady

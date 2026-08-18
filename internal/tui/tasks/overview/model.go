@@ -93,6 +93,16 @@ type Model struct {
 	nodeCount int
 	podCount  int
 	nsCount   int
+	// nsDenied/helmDenied/changesDenied are true when the corresponding
+	// best-effort read (Namespace/HelmRelease/ReplicaSet — loadOverview's
+	// own "nothing here fails the screen" reads) came back Forbidden on the
+	// most recent load. Unlike Node/Pod (the two required caches, gated in
+	// applyLoaded), a denial on these must not take over the whole screen —
+	// each flags only the fact/panel it backs
+	// (docs/plans/namespace-scoped-final-plan.md §5).
+	nsDenied      bool
+	helmDenied    bool
+	changesDenied bool
 
 	metricsAvailable          bool
 	capCPUUsed, capCPUTotal   int64

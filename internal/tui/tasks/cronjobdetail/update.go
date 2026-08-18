@@ -101,11 +101,11 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// §4.4: check CronJob+Job settlement even when a CronJob was already
 	// found — a Job cache that hasn't finished filling yet must never render
 	// as a false "no retained runs" (see below, jobsErr/found handling).
-	if !tui.KindsSynced(m.lister, kube.KindCronJob, kube.KindJob) {
+	if !tui.KindsSynced(m.lister, m.namespace, kube.KindCronJob, kube.KindJob) {
 		m.reloadEpoch++
 		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
 	}
-	if err := tui.KindsError(m.lister, kube.KindCronJob); err != nil {
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindCronJob); err != nil {
 		if kube.IsPermissionError(err) {
 			m.state = tui.TaskStatePermissionDenied
 		} else {

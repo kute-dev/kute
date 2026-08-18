@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	batchv1 "k8s.io/api/batch/v1"
 
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
@@ -353,7 +354,14 @@ func (m Model) jobsSectionHeader(theme tui.Theme, width int) string {
 	retention := fmt.Sprintf("associated with this cronjob · newest first · %d retained · history limits %d succeeded / %d failed",
 		len(m.summary.Runs), succ, fail)
 	if m.jobsErr != nil {
-		retention = "associated with this cronjob · job history unavailable: " + m.jobsErr.Error()
+		// A permission denial gets its own wording rather than the raw
+		// client-go error text, distinguishing "will never arrive" from
+		// "still retrying" (docs/plans/namespace-scoped-final-plan.md §5).
+		if kube.IsPermissionError(m.jobsErr) {
+			retention = "associated with this cronjob · job history unavailable: permission denied"
+		} else {
+			retention = "associated with this cronjob · job history unavailable: " + m.jobsErr.Error()
+		}
 	}
 	sub := lipgloss.NewStyle().Foreground(theme.TextDim).Render(retention)
 	hint := lipgloss.NewStyle().Foreground(theme.TextDim).Render("↵ opens the job")

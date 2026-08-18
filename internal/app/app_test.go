@@ -132,6 +132,32 @@ func demoCronJobDetailTask(t *testing.T, name string) (*cronjobdetail.Model, *fa
 	return ready, demoCluster
 }
 
+// TestNewModelDemoScopeNamespaceSelectsNamespace pins the fix for
+// docs/plans/namespace-scoped-final-plan.md §4 in demo mode: --namespace-
+// scoped must select the namespace the same way -n does there (the fake has
+// no informers to scope). BuildSession already sets sess.Location.Namespace
+// correctly from cfg.ScopeNamespace; without this fix NewModel's own demo
+// branch silently overwrote it with the fake cluster's default namespace
+// right after.
+func TestNewModelDemoScopeNamespaceSelectsNamespace(t *testing.T) {
+	model, _, _ := NewModel(Config{AppName: DefaultAppName, Demo: true, ScopeNamespace: "team-a"})
+	if got := model.Session().Location.Namespace; got != "team-a" {
+		t.Fatalf("Session().Location.Namespace = %q, want team-a", got)
+	}
+}
+
+// TestNewModelDemoScopeNamespaceOutranksNamespaceFlag mirrors the real-
+// cluster precedence cmd/kute's conflictingScopeFlags already enforces (the
+// two flags are mutually exclusive) — belt and suspenders here, since a
+// caller that somehow set both should still get ScopeNamespace's answer,
+// the same slot cfg.Namespace holds on a real cluster.
+func TestNewModelDemoScopeNamespaceOutranksNamespaceFlag(t *testing.T) {
+	model, _, _ := NewModel(Config{AppName: DefaultAppName, Demo: true, ScopeNamespace: "team-a", Namespace: "team-b"})
+	if got := model.Session().Location.Namespace; got != "team-a" {
+		t.Fatalf("Session().Location.Namespace = %q, want team-a (ScopeNamespace should outrank Namespace)", got)
+	}
+}
+
 // newJobs returns the Jobs present in after but not in before, keyed by
 // name — run-now's own "what got created" diff.
 func newJobs(before, after []runtime.Object) []*batchv1.Job {

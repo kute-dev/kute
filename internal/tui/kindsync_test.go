@@ -20,16 +20,20 @@ type fakeReporter struct {
 
 type forbiddenOnly struct{ fakeReporter }
 
-func (f forbiddenOnly) KindForbidden(kind kube.ResourceKind) error { return f.forbidden[kind] }
+func (f forbiddenOnly) KindForbidden(kind kube.ResourceKind, _ string) error {
+	return f.forbidden[kind]
+}
 
 type stalledOnly struct{ fakeReporter }
 
-func (f stalledOnly) KindError(kind kube.ResourceKind) error { return f.stalled[kind] }
+func (f stalledOnly) KindError(kind kube.ResourceKind, _ string) error { return f.stalled[kind] }
 
 type bothReporters struct{ fakeReporter }
 
-func (f bothReporters) KindForbidden(kind kube.ResourceKind) error { return f.forbidden[kind] }
-func (f bothReporters) KindError(kind kube.ResourceKind) error     { return f.stalled[kind] }
+func (f bothReporters) KindForbidden(kind kube.ResourceKind, _ string) error {
+	return f.forbidden[kind]
+}
+func (f bothReporters) KindError(kind kube.ResourceKind, _ string) error { return f.stalled[kind] }
 
 func forbiddenErr(resource string) error {
 	return apierrors.NewForbidden(schema.GroupResource{Resource: resource}, "", errors.New("nope"))
@@ -45,7 +49,7 @@ func TestKindsErrorReportsADenial(t *testing.T) {
 		kube.KindSecret: forbiddenErr("secrets"),
 	}}}
 
-	err := KindsError(lister, kube.KindSecret)
+	err := KindsError(lister, "", kube.KindSecret)
 	if err == nil {
 		t.Fatal("KindsError = nil for a forbidden kind; the empty state has nothing to stop it")
 	}
@@ -62,7 +66,7 @@ func TestKindsErrorIgnoresKindsThatAreFine(t *testing.T) {
 		kube.KindSecret: forbiddenErr("secrets"),
 	}}}
 
-	if err := KindsError(lister, kube.KindPod); err != nil {
+	if err := KindsError(lister, "", kube.KindPod); err != nil {
 		t.Fatalf("KindsError(Pod) = %v, want nil — only Secret was refused", err)
 	}
 }
@@ -81,7 +85,7 @@ func TestKindsErrorPrefersADenialOverAStall(t *testing.T) {
 		{kube.KindSecret, kube.KindEvent},
 		{kube.KindEvent, kube.KindSecret},
 	} {
-		err := KindsError(lister, order...)
+		err := KindsError(lister, "", order...)
 		if !kube.IsPermissionError(err) {
 			t.Errorf("KindsError(%v) = %v, want the denial regardless of argument order", order, err)
 		}
@@ -97,7 +101,7 @@ func TestKindsErrorStillReportsAStall(t *testing.T) {
 		stalled: map[kube.ResourceKind]error{kube.KindEvent: errors.New("context deadline exceeded")},
 	}}
 
-	err := KindsError(lister, kube.KindEvent)
+	err := KindsError(lister, "", kube.KindEvent)
 	if err == nil {
 		t.Fatal("KindsError = nil for a stalled initial LIST")
 	}
@@ -111,10 +115,10 @@ func TestKindsErrorStillReportsAStall(t *testing.T) {
 // panicking on a failed type assertion.
 func TestKindsErrorNilForAListerWithNeitherSeam(t *testing.T) {
 	t.Parallel()
-	if err := KindsError(fakeReporter{}, kube.KindPod); err != nil {
+	if err := KindsError(fakeReporter{}, "", kube.KindPod); err != nil {
 		t.Fatalf("KindsError = %v for a lister implementing neither reporter, want nil", err)
 	}
-	if err := KindsError(nil, kube.KindPod); err != nil {
+	if err := KindsError(nil, "", kube.KindPod); err != nil {
 		t.Fatalf("KindsError(nil) = %v, want nil", err)
 	}
 }

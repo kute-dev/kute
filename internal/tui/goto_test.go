@@ -24,9 +24,25 @@ import (
 // gotoCount/gotoResourceItems scope reads by namespace.
 type gotoFakeLister struct {
 	objs map[kube.ResourceKind][]runtime.Object
+	// scoped backs tui.ScopedChecker for tests that need to simulate
+	// --namespace-scoped mode; false (the zero value) for every test that
+	// predates that mode.
+	scoped bool
+	// calls, when non-nil, records every ListRaw(kind, namespace) call — for
+	// tests asserting a scoped-mode palette does *not* fan out one ListRaw
+	// per namespace (docs/plans/namespace-scoped-final-plan.md §6).
+	calls *[]gotoListCall
+}
+
+type gotoListCall struct {
+	kind      kube.ResourceKind
+	namespace string
 }
 
 func (f gotoFakeLister) ListRaw(_ context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if f.calls != nil {
+		*f.calls = append(*f.calls, gotoListCall{kind: kind, namespace: namespace})
+	}
 	all := f.objs[kind]
 	if namespace == "" {
 		return all, nil
@@ -39,6 +55,8 @@ func (f gotoFakeLister) ListRaw(_ context.Context, kind kube.ResourceKind, names
 	}
 	return out, nil
 }
+
+func (f gotoFakeLister) Scoped() bool { return f.scoped }
 
 func gotoTestPod(ns, name string) *corev1.Pod {
 	return &corev1.Pod{
@@ -677,7 +695,7 @@ func (l *countOnlyLister) CountLive(_ context.Context, _ kube.ResourceKind, _ st
 
 // KindSynced answers false for anything not explicitly marked, standing in
 // for a cluster where only the kinds you've visited have running informers.
-func (l *countOnlyLister) KindSynced(kind kube.ResourceKind) bool { return l.synced[kind] }
+func (l *countOnlyLister) KindSynced(kind kube.ResourceKind, _ string) bool { return l.synced[kind] }
 
 func (l *countOnlyLister) reads() []kube.ResourceKind {
 	l.mu.Lock()

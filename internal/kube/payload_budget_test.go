@@ -295,7 +295,7 @@ func TestHelmReleaseReadPaysForOneNamespace(t *testing.T) {
 	if _, err := scoped.ListHelmReleaseSecrets(context.Background(), "prod"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
-	waitFor(t, "the prod release cache to fill", func() bool { return scoped.KindSynced(KindHelmRelease) })
+	waitFor(t, "the prod release cache to fill", func() bool { return scoped.KindSynced(KindHelmRelease, "prod") })
 	oneNamespace := transferred(t, csScoped.Tracker(), csScoped.Actions())
 
 	// The same read with no namespace — 19a's overview genuinely wants every
@@ -308,7 +308,7 @@ func TestHelmReleaseReadPaysForOneNamespace(t *testing.T) {
 	if _, err := wide.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
-	waitFor(t, "the cluster-wide release cache to fill", func() bool { return wide.KindSynced(KindHelmRelease) })
+	waitFor(t, "the cluster-wide release cache to fill", func() bool { return wide.KindSynced(KindHelmRelease, "") })
 	clusterWide := transferred(t, csWide.Tracker(), csWide.Actions())
 
 	if clusterWide == 0 {
@@ -349,7 +349,7 @@ func TestPodCacheDropsManagedFields(t *testing.T) {
 	if err := c.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	waitFor(t, "the pod cache to fill", func() bool { return c.KindSynced(KindPod) })
+	waitFor(t, "the pod cache to fill", func() bool { return c.KindSynced(KindPod, "") })
 
 	cached, err := c.ListRaw(context.Background(), KindPod, "default")
 	if err != nil {

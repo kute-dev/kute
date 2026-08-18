@@ -152,13 +152,25 @@ func (l helmAwareLister) Synced() bool {
 	return true
 }
 
+// Scoped forwards to the wrapped lister's own Scoped, same reasoning as
+// Synced — browse's 403 card asks this through the fully-decorated
+// sess.Lister, so an unforwarded Scoped would always read false (never
+// scoped) and keep suggesting --namespace-scoped to a session already
+// running it.
+func (l helmAwareLister) Scoped() bool {
+	if sc, ok := l.RawLister.(tui.ScopedChecker); ok {
+		return sc.Scoped()
+	}
+	return false
+}
+
 // KindSynced answers for the cache a kind is actually served from, which for
 // KindHelmRelease is whichever cache the releases actually came from: its
 // own filtered Secret informer when the lister has one, otherwise the shared
 // Secret cache the fallback read from. Getting this wrong means the Helm
 // list asks about a kind nothing backs, hears "nothing to wait for", and
 // flashes "no releases" while the real cache is still filling.
-func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
+func (l helmAwareLister) KindSynced(kind kube.ResourceKind, namespace string) bool {
 	kc, ok := l.RawLister.(kindSyncChecker)
 	if !ok {
 		return true
@@ -166,13 +178,13 @@ func (l helmAwareLister) KindSynced(kind kube.ResourceKind) bool {
 	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
 		kind = kube.KindSecret
 	}
-	return kc.KindSynced(kind)
+	return kc.KindSynced(kind, namespace)
 }
 
 // KindError answers for the same cache KindSynced does — for
 // KindHelmRelease, whichever one the releases actually came from — so a
 // screen told "settled" here is told why by the same informer.
-func (l helmAwareLister) KindError(kind kube.ResourceKind) error {
+func (l helmAwareLister) KindError(kind kube.ResourceKind, namespace string) error {
 	kr, ok := l.RawLister.(tui.KindErrorReporter)
 	if !ok {
 		return nil
@@ -180,7 +192,7 @@ func (l helmAwareLister) KindError(kind kube.ResourceKind) error {
 	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
 		kind = kube.KindSecret
 	}
-	return kr.KindError(kind)
+	return kr.KindError(kind, namespace)
 }
 
 // KindForbidden answers for the same cache KindSynced and KindError do. A
@@ -188,7 +200,7 @@ func (l helmAwareLister) KindError(kind kube.ResourceKind) error {
 // Secrets are, so the substitution has to happen here too — otherwise the
 // Helm list is told "settled, nothing wrong" about a cache it may not read,
 // and renders an empty release list for a namespace it cannot see.
-func (l helmAwareLister) KindForbidden(kind kube.ResourceKind) error {
+func (l helmAwareLister) KindForbidden(kind kube.ResourceKind, namespace string) error {
 	fr, ok := l.RawLister.(tui.KindForbiddenReporter)
 	if !ok {
 		return nil
@@ -196,7 +208,7 @@ func (l helmAwareLister) KindForbidden(kind kube.ResourceKind) error {
 	if kind == kube.KindHelmRelease && !l.hasHelmReleaseCache() {
 		kind = kube.KindSecret
 	}
-	return fr.KindForbidden(kind)
+	return fr.KindForbidden(kind, namespace)
 }
 
 // CountLive forwards the server-side count; KindHelmRelease is counted from
@@ -262,7 +274,7 @@ func (l helmAwareLister) helmSecrets(ctx context.Context, namespace string) ([]r
 type cacheSyncChecker interface{ Synced() bool }
 
 type kindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind) bool
+	KindSynced(kind kube.ResourceKind, namespace string) bool
 }
 
 // liveCounter mirrors tui.LiveCounter structurally, for the same reason.
@@ -284,15 +296,24 @@ func (l forwardAwareLister) Synced() bool {
 	return true
 }
 
+// Scoped forwards to the wrapped lister's own Scoped, for the same reason
+// Synced does — see helmAwareLister.Scoped.
+func (l forwardAwareLister) Scoped() bool {
+	if sc, ok := l.RawLister.(tui.ScopedChecker); ok {
+		return sc.Scoped()
+	}
+	return false
+}
+
 // KindSynced forwards per-kind sync state for the same reason Synced
 // forwards the aggregate. Forwards are in-process state with no cache to
 // wait on, so they are always current.
-func (l forwardAwareLister) KindSynced(kind kube.ResourceKind) bool {
+func (l forwardAwareLister) KindSynced(kind kube.ResourceKind, namespace string) bool {
 	if kind == kube.KindForward {
 		return true
 	}
 	if kc, ok := l.RawLister.(kindSyncChecker); ok {
-		return kc.KindSynced(kind)
+		return kc.KindSynced(kind, namespace)
 	}
 	return true
 }
@@ -303,12 +324,12 @@ func (l forwardAwareLister) KindSynced(kind kube.ResourceKind) bool {
 // reason from this one, which is precisely the combination that renders a
 // failed read as an empty cluster. Forwards are in-process state that cannot
 // fail to load, so they never have one.
-func (l forwardAwareLister) KindError(kind kube.ResourceKind) error {
+func (l forwardAwareLister) KindError(kind kube.ResourceKind, namespace string) error {
 	if kind == kube.KindForward {
 		return nil
 	}
 	if kr, ok := l.RawLister.(tui.KindErrorReporter); ok {
-		return kr.KindError(kind)
+		return kr.KindError(kind, namespace)
 	}
 	return nil
 }
@@ -317,12 +338,12 @@ func (l forwardAwareLister) KindError(kind kube.ResourceKind) error {
 // load-bearing for exactly the reason KindError is — it is the third member
 // of the set a screen reads before deciding it may say "none". Forwards are
 // in-process state with no API server to refuse them, so they never are.
-func (l forwardAwareLister) KindForbidden(kind kube.ResourceKind) error {
+func (l forwardAwareLister) KindForbidden(kind kube.ResourceKind, namespace string) error {
 	if kind == kube.KindForward {
 		return nil
 	}
 	if fr, ok := l.RawLister.(tui.KindForbiddenReporter); ok {
-		return fr.KindForbidden(kind)
+		return fr.KindForbidden(kind, namespace)
 	}
 	return nil
 }
@@ -399,6 +420,7 @@ var (
 	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*kube.Cluster)(nil)
 	_ tui.KindForbiddenReporter    = (*kube.Cluster)(nil)
+	_ tui.ScopedChecker            = (*kube.Cluster)(nil)
 	_ tui.LiveCounter              = (*kube.Cluster)(nil)
 	_ helmhistory.HelmSecretLister = (*kube.Cluster)(nil)
 
@@ -418,12 +440,14 @@ var (
 	_ browse.CacheSyncChecker      = forwardAwareLister{}
 	_ tui.KindErrorReporter        = forwardAwareLister{}
 	_ tui.KindForbiddenReporter    = forwardAwareLister{}
+	_ tui.ScopedChecker            = forwardAwareLister{}
 	_ tui.LiveCounter              = forwardAwareLister{}
 	_ helmhistory.HelmSecretLister = forwardAwareLister{}
 	_ browse.KindSyncChecker       = helmAwareLister{}
 	_ browse.CacheSyncChecker      = helmAwareLister{}
 	_ tui.KindErrorReporter        = helmAwareLister{}
 	_ tui.KindForbiddenReporter    = helmAwareLister{}
+	_ tui.ScopedChecker            = helmAwareLister{}
 	_ tui.LiveCounter              = helmAwareLister{}
 	_ helmhistory.HelmSecretLister = helmAwareLister{}
 	// Only the outermost decorator can answer this one — nothing below it
@@ -506,7 +530,17 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	case cfg.Demo:
 		demoCluster := fake.NewDemo()
 		clusterName, namespace := demoCluster.CurrentContext(), demoCluster.CurrentNamespace()
-		if cfg.Namespace != "" {
+		switch {
+		case cfg.ScopeNamespace != "":
+			// --namespace-scoped selects the namespace the same way -n does
+			// in demo mode (BuildSession's own doc comment on this — the
+			// fake has no informers to scope). Checked first, same
+			// precedence -n/--namespace gets on a real cluster: without
+			// this, BuildSession's correct sess.Location.Namespace gets
+			// silently overwritten by the demo's own default namespace
+			// below.
+			namespace = cfg.ScopeNamespace
+		case cfg.Namespace != "":
 			// -n/--namespace outranks the fake cluster's own default here for
 			// the same reason it does on a real one: an explicit flag wins.
 			namespace = cfg.Namespace
@@ -722,6 +756,14 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 		if err != nil {
 			return setup.RetryFailedMsg{Err: err}
 		}
+		// A scoped session that reconnects must stay scoped — otherwise a
+		// namespace-bound identity's fresh cluster launches cluster-wide and
+		// every informer goes back to the denied cluster-wide LIST the flag
+		// exists to avoid (docs/plans/namespace-scoped-final-plan.md §4).
+		// Same slot BuildSession gives it, before a single informer starts.
+		if cfg.ScopeNamespace != "" {
+			cluster.SetNamespaceScope(cfg.ScopeNamespace)
+		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), reconnectStartTimeout)
 		defer cancel()
@@ -765,6 +807,13 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 		cluster, err := kube.NewClusterForContext(contextName)
 		if err != nil {
 			return setup.RetryFailedMsg{Err: err}
+		}
+		// Scoped mode is session-wide and survives a context switch
+		// (docs/plans/namespace-scoped-final-plan.md's Decisions) — this is
+		// a brand new *kube.Cluster, so that survival has to be re-applied
+		// explicitly, the same as attemptReconnect just above.
+		if cfg.ScopeNamespace != "" {
+			cluster.SetNamespaceScope(cfg.ScopeNamespace)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), reconnectStartTimeout)

@@ -69,9 +69,22 @@ type Cluster struct {
 	// notSynced/kindSynced mirror *kube.Cluster's cache-sync reporting so a
 	// test can drive a screen's loading/retry path through the real seam.
 	// Inverted so the zero value reads as synced, which is what --demo and
-	// every fixture that never touches these want.
-	notSynced  bool
-	kindSynced map[kube.ResourceKind]bool
+	// every fixture that never touches these want. kindErrors/kindForbidden
+	// are their KindError/KindForbidden counterparts. The fake has no
+	// informers to actually scope (SetNamespaceScope has nothing to do here),
+	// but the *health* these three answer for is still keyed per (kind,
+	// namespace) via fakeScopeKey/scopeKeyFor, exactly like a real Cluster's
+	// scopeKey — a UI caller that asks the wrong namespace for one kind's
+	// cache must get a different answer than the right one, or a scoped-mode
+	// test asserting "asks about the same namespace its own read used"
+	// (CLAUDE.md) can never fail. Cluster-scoped kinds (Node, Namespace,
+	// discovered cluster-scoped CRDs, …) still normalize every namespace
+	// argument to "" via kube.ClusterScopedKind, matching cacheScopeLocked —
+	// there is exactly one of those caches, real or fake.
+	notSynced     bool
+	kindSynced    map[fakeScopeKey]bool
+	kindErrors    map[fakeScopeKey]error
+	kindForbidden map[fakeScopeKey]error
 
 	events chan kube.ResourceChangedMsg
 	connCh chan kube.ConnStateMsg
@@ -179,14 +192,37 @@ func (c *Cluster) Synced() bool {
 	return !c.notSynced
 }
 
+// fakeScopeKey mirrors *kube.Cluster's own (kind, namespace) health key —
+// SetKindSynced(Pod, "team-a", …) must not also answer for
+// KindSynced(Pod, "team-b") or KindSynced(Pod, "").
+type fakeScopeKey struct {
+	kind      kube.ResourceKind
+	namespace string
+}
+
+// scopeKeyFor normalizes namespace for kind the same way *kube.Cluster's
+// cacheScopeLocked does: a cluster-scoped kind (Node, Namespace, the CRD
+// list, any discovered cluster-scoped CRD) always answers at "" regardless
+// of what's passed, since there is exactly one such cache. c.discovered is
+// only appended to (SeedDiscovered), never mutated in place, so reading it
+// without c.mu here is safe; every caller already holds it anyway.
+func (c *Cluster) scopeKeyFor(kind kube.ResourceKind, namespace string) fakeScopeKey {
+	if kube.ClusterScopedKind(kind, c.discovered) {
+		return fakeScopeKey{kind, ""}
+	}
+	return fakeScopeKey{kind, namespace}
+}
+
 // KindSynced mirrors *kube.Cluster.KindSynced. Every kind reads as synced
 // unless a test gates one with SetKindSynced — which is the seam that lets a
 // test drive a screen's loading/retry path through the real interface rather
-// than a bespoke per-package lister double.
-func (c *Cluster) KindSynced(kind kube.ResourceKind) bool {
+// than a bespoke per-package lister double. Keyed per (kind, namespace) via
+// scopeKeyFor, so a test can gate one namespace's cache without also gating
+// another's — see the field comment on kindSynced.
+func (c *Cluster) KindSynced(kind kube.ResourceKind, namespace string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if synced, ok := c.kindSynced[kind]; ok {
+	if synced, ok := c.kindSynced[c.scopeKeyFor(kind, namespace)]; ok {
 		return synced
 	}
 	return !c.notSynced
@@ -221,15 +257,61 @@ func (c *Cluster) SetSynced(synced bool) {
 	c.notSynced = !synced
 }
 
-// SetKindSynced overrides what KindSynced reports for one kind, leaving
-// every other kind alone.
-func (c *Cluster) SetKindSynced(kind kube.ResourceKind, synced bool) {
+// SetKindSynced overrides what KindSynced reports for one (kind, namespace)
+// scope, leaving every other kind — and every other namespace of this one —
+// alone. namespace is normalized through scopeKeyFor first, so gating a
+// cluster-scoped kind always gates its one "" cache regardless of what's
+// passed here.
+func (c *Cluster) SetKindSynced(kind kube.ResourceKind, namespace string, synced bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.kindSynced == nil {
-		c.kindSynced = map[kube.ResourceKind]bool{}
+		c.kindSynced = map[fakeScopeKey]bool{}
 	}
-	c.kindSynced[kind] = synced
+	c.kindSynced[c.scopeKeyFor(kind, namespace)] = synced
+}
+
+// KindError mirrors *kube.Cluster.KindError. nil unless a test says
+// otherwise via SetKindError, keyed per (kind, namespace) via scopeKeyFor —
+// see KindSynced.
+func (c *Cluster) KindError(kind kube.ResourceKind, namespace string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.kindErrors[c.scopeKeyFor(kind, namespace)]
+}
+
+// SetKindError overrides what KindError reports for one (kind, namespace)
+// scope — the seam that lets a test drive a screen's "cache stopped filling"
+// path through the real interface.
+func (c *Cluster) SetKindError(kind kube.ResourceKind, namespace string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kindErrors == nil {
+		c.kindErrors = map[fakeScopeKey]error{}
+	}
+	c.kindErrors[c.scopeKeyFor(kind, namespace)] = err
+}
+
+// KindForbidden mirrors *kube.Cluster.KindForbidden. nil unless a test says
+// otherwise via SetKindForbidden, keyed per (kind, namespace) via
+// scopeKeyFor — see KindSynced.
+func (c *Cluster) KindForbidden(kind kube.ResourceKind, namespace string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.kindForbidden[c.scopeKeyFor(kind, namespace)]
+}
+
+// SetKindForbidden overrides what KindForbidden reports for one (kind,
+// namespace) scope — the seam that lets a test drive a screen's
+// permission-denied path (4b's card) through the real interface rather than
+// a bespoke per-package double.
+func (c *Cluster) SetKindForbidden(kind kube.ResourceKind, namespace string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kindForbidden == nil {
+		c.kindForbidden = map[fakeScopeKey]error{}
+	}
+	c.kindForbidden[c.scopeKeyFor(kind, namespace)] = err
 }
 
 // --- kube.Mutator ---

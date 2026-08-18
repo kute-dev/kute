@@ -170,19 +170,20 @@ type cacheSyncChecker interface {
 
 // kindSyncChecker mirrors browse.KindSyncChecker, the per-kind refinement.
 type kindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind) bool
+	KindSynced(kind kube.ResourceKind, namespace string) bool
 }
 
-// kindSynced reports whether the cache backing kind is done with its initial
-// fill — true for any lister that opts into neither checker (fakes, test
-// doubles, or no session yet), so this only changes behavior for a live
-// *kube.Cluster.
-func kindSynced(sess *Session, kind kube.ResourceKind) bool {
+// kindSynced reports whether the cache backing kind at namespace is done
+// with its initial fill — true for any lister that opts into neither
+// checker (fakes, test doubles, or no session yet), so this only changes
+// behavior for a live *kube.Cluster. namespace should be whatever the
+// caller's own read of kind used — see tui.KindSyncChecker's doc comment.
+func kindSynced(sess *Session, kind kube.ResourceKind, namespace string) bool {
 	if sess == nil {
 		return true
 	}
 	if kc, ok := sess.Lister.(kindSyncChecker); ok {
-		return kc.KindSynced(kind)
+		return kc.KindSynced(kind, namespace)
 	}
 	sc, ok := sess.Lister.(cacheSyncChecker)
 	return !ok || sc.Synced()
@@ -204,11 +205,34 @@ func scheduleNamespaceSyncRetry(gen int) tea.Cmd {
 	})
 }
 
+// namespaceForbidden reports the denial behind the Namespace cache, or nil
+// if it's readable (or the session/lister can't say) — the namespace
+// palette's own KindForbidden question, asked at namespace "" since
+// Namespace is always a cluster-scoped kind regardless of mode.
+func namespaceForbidden(sess *Session) error {
+	if sess == nil {
+		return nil
+	}
+	fr, ok := sess.Lister.(KindForbiddenReporter)
+	if !ok {
+		return nil
+	}
+	return fr.KindForbidden(kube.KindNamespace, "")
+}
+
 // loadNamespacePalette populates m.palette from namespaceItems for gen, or
 // — while the Namespace informer's cache is still empty just after launch
 // or mid SwitchContext — puts the palette in 6a's loading state and retries
 // shortly rather than flashing "no matches" for a cluster that actually has
 // namespaces (mirrors browse's listerSynced retry in applyRowsLoaded).
+//
+// A permanent denial (docs/plans/namespace-scoped-final-plan.md §6 — the
+// shape a namespace-bound identity actually hits) short-circuits both: it
+// will never sync, so waiting on it would spin forever, and there is
+// nothing to list, so the palette switches to the denied notice + a
+// free-typed "switch to" input instead of the browsable list. Checked before
+// the sync question below, since a denied cache also never reports synced
+// and would otherwise loop the retry indefinitely.
 //
 // The sync question asked is specifically about the Namespace cache. It used
 // to be the cluster-wide one, which only flipped true once every registered
@@ -218,8 +242,19 @@ func scheduleNamespaceSyncRetry(gen int) tea.Cmd {
 // before. The rows check remains as well, so a populated list renders
 // immediately whatever the cache reports.
 func (m *Model) loadNamespacePalette(gen int) tea.Cmd {
+	if err := namespaceForbidden(m.session); err != nil {
+		m.palette.Loading = false
+		m.palette.Denied = true
+		m.palette.DeniedNote = "cannot list namespaces"
+		m.palette.Items = nil
+		m.palette.Input.Placeholder = "switch to"
+		m.palette.Recent = namespaceRecentLabels(m.session)
+		m.palette.Footer = namespaceDeniedFooter(m.session)
+		return nil
+	}
+	m.palette.Denied = false
 	items, rows := namespaceItems(m.session)
-	if len(rows) == 0 && !kindSynced(m.session, kube.KindNamespace) {
+	if len(rows) == 0 && !kindSynced(m.session, kube.KindNamespace, "") {
 		m.palette.Loading = true
 		m.palette.Items = nil
 		return scheduleNamespaceSyncRetry(gen)
@@ -230,6 +265,19 @@ func (m *Model) loadNamespacePalette(gen int) tea.Cmd {
 	return fetchNamespaceCPUSharesCmd(m.session, rows, gen)
 }
 
+// namespaceDeniedFooter names the current namespace on the denied palette's
+// footer line ("currently nva-prod") — the one piece of orientation a
+// browsable list would otherwise have supplied via the "current" row tag.
+func namespaceDeniedFooter(sess *Session) []palette.FooterSpan {
+	if sess == nil || sess.Location.Namespace == "" {
+		return nil
+	}
+	return []palette.FooterSpan{
+		{Text: "currently ", Tone: palette.FooterDim},
+		{Text: sess.Location.Namespace, Tone: palette.FooterEm},
+	}
+}
+
 func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 	if sess == nil || sess.Lister == nil {
 		return nil, nil
@@ -238,26 +286,36 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 	if !ok {
 		return nil, nil
 	}
-	countDesc := namespaceCountDescriptor(sess)
 	rows, err := resources.List(context.Background(), sess.Lister, nsDesc, "")
 	if err != nil {
 		return nil, nil
 	}
 
+	// docs/plans/namespace-scoped-final-plan.md §6: counting every
+	// namespace's rows one at a time is exactly the breadth-first read
+	// scoped mode forbids — under it, each of these resources.List calls
+	// would start its own per-namespace informer just to decorate a palette
+	// row. Count/HEALTH/CPU drop to the ghost dash instead; cluster-wide
+	// mode keeps today's counts unchanged.
+	scoped := sessionScoped(sess)
+
+	countDesc := namespaceCountDescriptor(sess)
 	ctx := context.Background()
 	counts := make([]int, len(rows))
 	healths := make([]resources.HealthCounts, len(rows))
 	totalCount := 0
 	var totalHealth resources.HealthCounts
-	for i, row := range rows {
-		countRows, _ := resources.List(ctx, sess.Lister, countDesc, row.Name)
-		counts[i] = len(countRows)
-		totalCount += len(countRows)
-		healths[i] = countDesc.Health(countRows)
-		totalHealth.OK += healths[i].OK
-		totalHealth.Warn += healths[i].Warn
-		totalHealth.Fail += healths[i].Fail
-		totalHealth.Neutral += healths[i].Neutral
+	if !scoped {
+		for i, row := range rows {
+			countRows, _ := resources.List(ctx, sess.Lister, countDesc, row.Name)
+			counts[i] = len(countRows)
+			totalCount += len(countRows)
+			healths[i] = countDesc.Health(countRows)
+			totalHealth.OK += healths[i].OK
+			totalHealth.Warn += healths[i].Warn
+			totalHealth.Fail += healths[i].Fail
+			totalHealth.Neutral += healths[i].Neutral
+		}
 	}
 
 	recents := contextRecentNamespaces(sess)
@@ -267,9 +325,13 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 	for i, row := range rows {
 		item := palette.Item{
 			Label: row.Name,
-			Dim:   counts[i] == 0,
 			Data:  namespaceTarget{namespace: row.Name},
-			Cols:  namespaceCols(counts[i], healths[i]),
+		}
+		if scoped {
+			item.Cols = namespaceColsUnknown()
+		} else {
+			item.Dim = counts[i] == 0
+			item.Cols = namespaceCols(counts[i], healths[i])
 		}
 		switch {
 		case row.Name == sess.Location.Namespace:
@@ -295,11 +357,27 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 			{},
 		},
 	}
+	if scoped {
+		// totalCount/totalHealth were never computed above — the same
+		// unknown ghost dash the per-namespace rows get, not a claimed 0.
+		allItem.Cols = namespaceColsUnknown()
+	}
 	if sess.Location.Namespace == "" {
 		allItem.Tag = "current"
 	}
 	items = append(items, allItem)
 	return items, rows
+}
+
+// sessionScoped reports whether sess.Lister is running under
+// --namespace-scoped mode — the single check namespaceItems/
+// namespaceCPUShares consult before doing a per-namespace fan-out read.
+func sessionScoped(sess *Session) bool {
+	if sess == nil {
+		return false
+	}
+	sc, ok := sess.Lister.(ScopedChecker)
+	return ok && sc.Scoped()
 }
 
 // namespaceCols builds one row's count/HEALTH/CPU cells for the active kind
@@ -320,6 +398,20 @@ func namespaceCols(count int, health resources.HealthCounts) []palette.Cell {
 	return []palette.Cell{
 		{Text: strconv.Itoa(count), Tone: palette.ToneSecondary},
 		healthCell(health),
+		{Text: "–", Tone: palette.ToneGhost},
+	}
+}
+
+// namespaceColsUnknown is namespaceCols' scoped-mode counterpart: every cell
+// ghosted, for a namespace whose count genuinely wasn't read rather than one
+// known to be zero (namespaceCols' own count==0 branch above) — the two
+// must render the same way (docs/plans/namespace-scoped-final-plan.md §6:
+// "Count/HEALTH/CPU render as the existing ghost dash") without namespaceCols
+// itself having to know why.
+func namespaceColsUnknown() []palette.Cell {
+	return []palette.Cell{
+		{Text: "–", Tone: palette.ToneGhost},
+		{Text: "–", Tone: palette.ToneGhost},
 		{Text: "–", Tone: palette.ToneGhost},
 	}
 }
@@ -406,6 +498,13 @@ func applyNamespaceCPUShares(items []palette.Item, shares map[string]int) {
 // real reading.
 func namespaceCPUShares(sess *Session, rows []resources.Row) map[string]int {
 	if sess == nil || sess.Metrics == nil {
+		return nil
+	}
+	if sessionScoped(sess) {
+		// Same reasoning as namespaceItems' count/HEALTH loop: one
+		// PodMetricsByNamespace round trip per namespace is the
+		// per-namespace fan-out scoped mode exists to avoid. Every CPU
+		// cell stays the ghost dash namespaceColsUnknown already set.
 		return nil
 	}
 	ctx := context.Background()

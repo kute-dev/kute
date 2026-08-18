@@ -99,13 +99,16 @@ func repoRootForTest(t *testing.T) string {
 	return filepath.Clean(filepath.Join(wd, "..", ".."))
 }
 
-// startedKinds snapshots which typed informers exist right now.
+// startedKinds snapshots which typed informers exist right now, one entry
+// per kind regardless of how many scopes it's registered at (this suite
+// runs an unscoped launch, so every kind is registered at exactly one scope,
+// "").
 func startedKinds(c *Cluster) map[ResourceKind]bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[ResourceKind]bool, len(c.kindInformers))
-	for kind := range c.kindInformers {
-		out[kind] = true
+	for key := range c.kindInformers {
+		out[key.kind] = true
 	}
 	return out
 }
@@ -326,12 +329,12 @@ func TestForbiddenKindIsSettledAndSaysWhy(t *testing.T) {
 
 	// KindError stays nil for a permission failure, by design. Pinned so the
 	// retryable and permanent paths can't be quietly merged.
-	if err := c.KindError(KindDeployment); err != nil {
+	if err := c.KindError(KindDeployment, ""); err != nil {
 		t.Fatalf("KindError(Deployment) = %v, want nil: a denial is not a retryable stall", err)
 	}
 
 	// And a kind this identity can read is untouched by its neighbour's 403.
-	if err := c.KindForbidden(KindPod); err != nil {
+	if err := c.KindForbidden(KindPod, ""); err != nil {
 		t.Fatalf("KindForbidden(Pod) = %v, want nil — the partial SA can list pods", err)
 	}
 }
@@ -352,7 +355,7 @@ func TestReadableKindSurvivesAForbiddenNeighbour(t *testing.T) {
 	_ = waitForKindForbidden(t, c, KindDeployment, 60*time.Second)
 
 	waitForKindSynced(t, c, KindPod, 60*time.Second)
-	if err := c.KindError(KindPod); err != nil {
+	if err := c.KindError(KindPod, ""); err != nil {
 		t.Fatalf("KindError(Pod) = %v, want nil — the partial SA can list pods", err)
 	}
 	pods, err := c.ListRaw(ctx, KindPod, e2eNamespace)
@@ -368,7 +371,7 @@ func waitForKindSynced(t *testing.T, c *Cluster, kind ResourceKind, timeout time
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		if c.KindSynced(kind) {
+		if c.KindSynced(kind, "") {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -384,7 +387,7 @@ func waitForKindForbidden(t *testing.T, c *Cluster, kind ResourceKind, timeout t
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := c.KindForbidden(kind); err != nil {
+		if err := c.KindForbidden(kind, ""); err != nil {
 			return err
 		}
 		if time.Now().After(deadline) {

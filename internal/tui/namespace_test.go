@@ -2,6 +2,7 @@ package tui_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,8 +12,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
@@ -77,6 +80,45 @@ func TestRootModelNOpensNamespacePaletteWithLiveCounts(t *testing.T) {
 	}
 	if m.Mode() != tui.ModeGoto {
 		t.Fatalf("Mode() = %v, want ModeGoto while the namespace palette is open", m.Mode())
+	}
+}
+
+// TestRootModelNScopedModeSkipsPerNamespaceFanOut pins
+// docs/plans/namespace-scoped-final-plan.md §6: under --namespace-scoped, the
+// palette must not count every namespace one ListRaw at a time — each of
+// those calls would start its own per-namespace informer under the hood.
+// Count/HEALTH/CPU render as the ghost dash instead.
+func TestRootModelNScopedModeSkipsPerNamespaceFanOut(t *testing.T) {
+	t.Parallel()
+	var calls []gotoListCall
+	lister := gotoFakeLister{
+		scoped: true,
+		calls:  &calls,
+		objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNamespace: {namespaceObj("default"), namespaceObj("prod")},
+			kube.KindPod: {
+				gotoTestPod("default", "api-1"),
+				gotoTestPod("prod", "api-2"),
+			},
+		},
+	}
+	sess := gotoTestSession(lister)
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
+	view := updated.(tui.Model).View().Content
+
+	for _, want := range []string{"default", "prod", "all namespaces"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected %q in the scoped-mode namespace palette:\n%s", want, view)
+		}
+	}
+	for _, call := range calls {
+		if call.kind == kube.KindPod && call.namespace != "" {
+			t.Fatalf("scoped-mode palette started a per-namespace Pod read (namespace=%q) — exactly the fan-out the mode forbids", call.namespace)
+		}
 	}
 }
 
@@ -644,7 +686,7 @@ func (l stuckAggregateLister) ListRaw(ctx context.Context, kind kube.ResourceKin
 
 func (l stuckAggregateLister) Synced() bool { return false }
 
-func (l stuckAggregateLister) KindSynced(kind kube.ResourceKind) bool {
+func (l stuckAggregateLister) KindSynced(kind kube.ResourceKind, _ string) bool {
 	return kind != kube.KindHorizontalPodAutoscaler
 }
 
@@ -697,5 +739,78 @@ func TestRootModelNSettlesWhenNamespacesAreGenuinelyEmpty(t *testing.T) {
 	// It settles on the real (empty) list, with 6a's pinned last row intact.
 	if !strings.Contains(view, "all namespaces") {
 		t.Fatalf("expected the settled palette to render its pinned row:\n%s", view)
+	}
+}
+
+// deniedNamespaceLister reproduces docs/plans/namespace-scoped-final-plan.md
+// §6's shape: this identity may not list Namespace at all — the common
+// answer for a namespace-bound Role — so the palette has nothing to browse.
+type deniedNamespaceLister struct {
+	lister gotoFakeLister
+}
+
+func (l deniedNamespaceLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l deniedNamespaceLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind != kube.KindNamespace {
+		return nil
+	}
+	return apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "", errors.New("nope"))
+}
+
+// TestRootModelNShowsDeniedNoticeInsteadOfHanging pins §6's palette state: a
+// permanently forbidden Namespace cache must never read as "still loading"
+// (it will never sync) nor as "no matches" (there's nothing to browse at
+// all) — it gets its own notice plus a free-typed "switch to" input.
+func TestRootModelNShowsDeniedNoticeInsteadOfHanging(t *testing.T) {
+	t.Parallel()
+	lister := deniedNamespaceLister{lister: gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	sess := gotoTestSession(lister)
+	sess.Location.Namespace = "nva-stage"
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
+	// ansi.Strip: the block cursor renders over the placeholder's first
+	// character as its own styled span, which would otherwise split "switch
+	// to" across an ANSI escape and break a plain substring check.
+	view := ansi.Strip(updated.(tui.Model).View().Content)
+
+	for _, want := range []string{"cannot list namespaces", "switch to", "currently", "nva-stage"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected %q in the denied namespace palette:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "loading") {
+		t.Fatalf("a permanently denied cache must never render as still loading:\n%s", view)
+	}
+}
+
+// TestRootModelNDeniedEnterDispatchesTypedNamespace covers §6's "switch to"
+// input: with no Items to select, Enter must commit whatever was typed as
+// the switch target instead of silently no-op'ing.
+func TestRootModelNDeniedEnterDispatchesTypedNamespace(t *testing.T) {
+	t.Parallel()
+	lister := deniedNamespaceLister{lister: gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	sess := gotoTestSession(lister)
+	sess.State = state.State{PerContext: map[string]state.PerContext{}}
+
+	task := &screenTask{name: "browse"}
+	model := tui.NewWithSession(task, sess)
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "n"})
+	for _, ch := range []string{"t", "e", "a", "m", "-", "a"} {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: ch})
+	}
+	_, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected a switch-namespace cmd for the typed \"team-a\"")
+	}
+	msg := cmd()
+	sw, ok := msg.(tui.SwitchNamespaceMsg)
+	if !ok || sw.Namespace != "team-a" {
+		t.Fatalf("dispatched %#v, want SwitchNamespaceMsg{Namespace: \"team-a\"}", msg)
 	}
 }

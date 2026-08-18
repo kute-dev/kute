@@ -11,9 +11,14 @@ import (
 // KindSyncChecker is implemented by a lister whose per-kind caches populate
 // asynchronously (*kube.Cluster's informers, which start on first read).
 // Mirrors browse.KindSyncChecker; declared here too so task packages that
-// don't import browse can gate on it.
+// don't import browse can gate on it. namespace is the exact namespace the
+// caller's own read used — cluster-wide mode always normalizes to the same
+// answer regardless of what's passed, but namespace-scoped mode keys each
+// cache by namespace, so asking about the wrong one answers for a cache that
+// was never read (docs/plans/namespace-scoped-final-plan.md §2: "ask about
+// the same namespace the read used").
 type KindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind) bool
+	KindSynced(kind kube.ResourceKind, namespace string) bool
 }
 
 // CacheSyncChecker is the pre-per-kind, cluster-wide form.
@@ -23,21 +28,32 @@ type CacheSyncChecker interface {
 
 // KindErrorReporter is implemented by a lister that can say why a kind's
 // cache is empty when the reason isn't "there are none of them"
-// (*kube.Cluster: an initial LIST that keeps failing).
+// (*kube.Cluster: an initial LIST that keeps failing). namespace follows the
+// same rule as KindSyncChecker's.
 type KindErrorReporter interface {
-	KindError(kind kube.ResourceKind) error
+	KindError(kind kube.ResourceKind, namespace string) error
 }
 
 // KindForbiddenReporter is implemented by a lister that can say a kind's
 // cache is empty because this identity may not list it (*kube.Cluster: a
-// watch that came back Forbidden).
+// watch that came back Forbidden). namespace follows the same rule as
+// KindSyncChecker's.
 //
 // Separate from KindErrorReporter because the two answers are not the same
 // answer. A stalled initial LIST is being retried and may yet succeed, so a
 // screen says "couldn't load — retrying"; a denial will not change while the
 // process runs, so a screen says so and offers the 4b card instead.
 type KindForbiddenReporter interface {
-	KindForbidden(kind kube.ResourceKind) error
+	KindForbidden(kind kube.ResourceKind, namespace string) error
+}
+
+// ScopedChecker is implemented by a lister that knows whether it's running
+// under namespace-scoped mode (*kube.Cluster: SetNamespaceScope was called
+// at launch). Browse's 403 card reads this to decide whether to name
+// --namespace-scoped as a recovery option — there is nothing to suggest to a
+// session already running scoped.
+type ScopedChecker interface {
+	Scoped() bool
 }
 
 // KindsError returns the first reason any of kinds has no data to show, or
@@ -54,10 +70,13 @@ type KindForbiddenReporter interface {
 // than kind-by-kind: with one kind forbidden and another merely stalling, the
 // permanent reason is the one worth showing, whichever order the caller
 // happened to list them in.
-func KindsError(lister any, kinds ...kube.ResourceKind) error {
+//
+// namespace is the namespace the caller's own read used — the same value it
+// passes to KindsSynced for the same kinds.
+func KindsError(lister any, namespace string, kinds ...kube.ResourceKind) error {
 	if fr, ok := lister.(KindForbiddenReporter); ok {
 		for _, kind := range kinds {
-			if err := fr.KindForbidden(kind); err != nil {
+			if err := fr.KindForbidden(kind, namespace); err != nil {
 				return err
 			}
 		}
@@ -67,7 +86,7 @@ func KindsError(lister any, kinds ...kube.ResourceKind) error {
 		return nil
 	}
 	for _, kind := range kinds {
-		if err := kr.KindError(kind); err != nil {
+		if err := kr.KindError(kind, namespace); err != nil {
 			return err
 		}
 	}
@@ -87,13 +106,20 @@ func KindsError(lister any, kinds ...kube.ResourceKind) error {
 // nothing will ever deliver — a stopped cluster, a kind with no informer, one
 // whose watch came back Forbidden — so a caller gating a spinner on it cannot
 // hang waiting for a cache that is never coming.
-func KindsSynced(lister any, kinds ...kube.ResourceKind) bool {
+//
+// namespace is the namespace the caller's own read used for kinds — pass ""
+// for a cluster-wide read (Nodes, an explicit all-namespaces screen); pass
+// the read's actual namespace otherwise. Getting this wrong under
+// namespace-scoped mode asks a cache that was never read whether it's
+// trustworthy, which reads as "settled" for the wrong reason (nothing has
+// ever started that informer) rather than the right one.
+func KindsSynced(lister any, namespace string, kinds ...kube.ResourceKind) bool {
 	if lister == nil {
 		return true
 	}
 	if kc, ok := lister.(KindSyncChecker); ok {
 		for _, kind := range kinds {
-			if !kc.KindSynced(kind) {
+			if !kc.KindSynced(kind, namespace) {
 				return false
 			}
 		}

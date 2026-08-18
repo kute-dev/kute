@@ -264,10 +264,11 @@ func (c *Cluster) registerWatches(kinds ...ResourceKind) {
 	c.registerWatchesLocked(kinds...)
 }
 
-// registerWatchesLocked attaches change handlers to each of kinds and, as a
-// side effect of reaching for their informers, registers them with the
-// factory so the next factory.Start runs them. Passing no kinds registers
-// every kind in typedKinds. c.mu must be held.
+// registerWatchesLocked registers each of kinds against the cluster-wide
+// factory at scope "" — the shape every caller outside Start's own
+// scope-aware Pod registration wants (Namespace/Node are always cluster-wide
+// regardless of mode; every test-only caller predates scoped mode entirely).
+// Passing no kinds registers every kind in typedKinds. c.mu must be held.
 func (c *Cluster) registerWatchesLocked(kinds ...ResourceKind) {
 	if len(kinds) == 0 {
 		kinds = make([]ResourceKind, 0, len(typedKinds))
@@ -275,36 +276,63 @@ func (c *Cluster) registerWatchesLocked(kinds ...ResourceKind) {
 			kinds = append(kinds, kind)
 		}
 	}
-	handlers := make(map[ResourceKind]cache.SharedIndexInformer, len(kinds))
 	for _, kind := range kinds {
-		tk, ok := typedKinds[kind]
-		if !ok {
+		if _, ok := typedKinds[kind]; !ok {
 			continue
 		}
-		handlers[kind] = tk.informer(c.factory)
-	}
-	// Must run before factory.Start (SetWatchErrorHandler errors once an
-	// informer is already running).
-	c.setWatchErrorHandlers(handlers)
-	for kind, informer := range handlers {
-		//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
-		_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc:    func(any) { c.notify(kind) },
-			UpdateFunc: func(any, any) { c.notify(kind) },
-			DeleteFunc: func(any) { c.notify(kind) },
-		})
-	}
-	if c.kindInformers == nil {
-		c.kindInformers = make(map[ResourceKind]cache.SharedIndexInformer, len(handlers))
-	}
-	for kind, informer := range handlers {
-		c.kindInformers[kind] = informer
+		c.registerTypedWatchLocked(kind, "", c.factory)
 	}
 }
 
-// notify delivers a change event without blocking the informer goroutine; if the
-// buffer is full the event is dropped and the next resync/refresh reconciles.
-func (c *Cluster) notify(kind ResourceKind) {
+// registerTypedWatchLocked attaches change/watch-error handlers to kind's
+// informer on f and registers it under (kind, scope) — the single place a
+// typed informer's handlers are wired, whether it's part of Start's eager
+// set, ensureKind's lazy path, or a test's direct registerWatches call. Must
+// run before f.Start (SetWatchErrorHandler errors once an informer is
+// already running). c.mu must be held.
+func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f informers.SharedInformerFactory) {
+	tk, ok := typedKinds[kind]
+	if !ok {
+		return
+	}
+	informer := tk.informer(f)
+	gen := c.generation
+	//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
+	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		// recordWatchError re-checks gen itself, atomically with both the
+		// kindFailed/kindStalled write and the health.onWatchError call —
+		// see its doc comment for why a callback belonging to a context
+		// SwitchContext has already replaced can't corrupt the new
+		// context's state, health included.
+		c.recordWatchError(gen, kind, scope, err)
+	})
+	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
+	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(any) { c.notify(gen, kind) },
+		UpdateFunc: func(any, any) { c.notify(gen, kind) },
+		DeleteFunc: func(any) { c.notify(gen, kind) },
+	})
+	if c.kindInformers == nil {
+		c.kindInformers = map[scopeKey]cache.SharedIndexInformer{}
+	}
+	c.kindInformers[scopeKey{kind, scope}] = informer
+}
+
+// notify delivers a change event without blocking the informer goroutine; if
+// the buffer is full the event is dropped and the next resync/refresh
+// reconciles. gen is the informer's own registration-time generation — a
+// notify from an informer a since-completed SwitchContext has already torn
+// down is dropped rather than prompting a reload against the new context's
+// cache for a kind change that happened in the old one. Lower-stakes than
+// noteWatchError's atomicity (worst case here is one wasted reload reading
+// the new context's own, correct data), so a plain locked read is enough.
+func (c *Cluster) notify(gen int, kind ResourceKind) {
+	c.mu.Lock()
+	current := c.generation == gen
+	c.mu.Unlock()
+	if !current {
+		return
+	}
 	select {
 	case c.events <- ResourceChangedMsg{Kind: kind}:
 	default:

@@ -2,11 +2,14 @@ package nodedetail
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -81,6 +84,55 @@ func TestApplyLoadedStaysLoadingWhileCacheSyncing(t *testing.T) {
 	}
 	if m.reloadEpoch == before {
 		t.Fatal("expected reloadEpoch to advance so the scheduled retry is distinguishable from a stale one")
+	}
+}
+
+// forbiddenPodLister simulates *kube.Cluster's Pod reflector coming back
+// Forbidden: ListRaw(Pod) still returns an empty, error-free slice — the
+// real informer-backed behavior — and KindSynced reports settled (the
+// anti-hang rule) while KindForbidden carries the reason.
+type forbiddenPodLister struct {
+	lister fakeLister
+	err    error
+}
+
+func (l *forbiddenPodLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	if kind == kube.KindPod {
+		return nil, nil
+	}
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l *forbiddenPodLister) KindSynced(kube.ResourceKind, string) bool { return true }
+
+func (l *forbiddenPodLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == kube.KindPod {
+		return l.err
+	}
+	return nil
+}
+
+// TestDeniedPodCacheRendersPermissionDeniedNotEmpty pins the fix for §5 of
+// docs/plans/namespace-scoped-final-plan.md: listerSynced (KindSynced)
+// reports settled for a Forbidden cache too — that's the anti-hang rule,
+// not a claim the node has zero pods — so without an explicit KindError
+// check this fell straight through to TaskStateReady with an empty pods
+// table instead of the permission-denied card.
+func TestDeniedPodCacheRendersPermissionDeniedNotEmpty(t *testing.T) {
+	lister := &forbiddenPodLister{
+		lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindNode: {testNode("node-a")},
+		}},
+		err: apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", errors.New("nope")),
+	}
+	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a"})
+	m.SetSize(120, 36)
+
+	updated, _ := m.applyLoaded(loadedMsg{node: testNode("node-a"), pods: nil})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — the Pod cache is Forbidden, not empty", m.state)
 	}
 }
 

@@ -817,6 +817,19 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		m.palette = nil
 		m.mode = ModeBrowse
 	case "enter":
+		if m.palette.Scope == palette.ScopeNamespace && m.palette.Denied {
+			// The denied namespace palette has no Items to select — Enter
+			// commits whatever the user typed as the switch target instead
+			// (Model.Denied's doc comment).
+			target := strings.TrimSpace(m.palette.Query())
+			m.palette = nil
+			m.mode = ModeBrowse
+			if target == "" {
+				return true, m, nil
+			}
+			pushRecentNamespace(m.session, target)
+			return true, m, func() tea.Msg { return SwitchNamespaceMsg{Namespace: target} }
+		}
 		item, ok := m.palette.Selected()
 		scope := m.palette.Scope
 		m.palette = nil
@@ -1163,6 +1176,13 @@ func (m *Model) refreshGotoPalette() {
 // digitRecentTarget's RECENT-row pick instead of fuzzy-filtering on the
 // digit text itself (see that func's doc comment).
 func (m *Model) refreshNamespacePalette() {
+	if m.palette.Denied {
+		// Nothing to filter — the palette is a free-typed "switch to" input
+		// while the Namespace cache is denied (loadNamespacePalette already
+		// set Items/Recent/Footer for this state), so typing must not
+		// re-fuzzy-filter an empty corpus out from under it.
+		return
+	}
 	// namespaceRecentLabels already excludes current and previous (see its
 	// doc comment) — it IS the numberedRecents list, so it doubles as
 	// digitRecentTarget's lookup with no further filtering.

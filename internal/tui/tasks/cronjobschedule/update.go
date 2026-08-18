@@ -108,7 +108,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
-	if !tui.KindsSynced(m.lister, kube.KindCronJob) {
+	if !tui.KindsSynced(m.lister, m.namespace, kube.KindCronJob) {
 		// §4.4's anti-hang rule applies here exactly as it does to browse's
 		// own CronJob branch: stay loading and retry shortly rather than
 		// reporting "not found" against a cache that hasn't finished
@@ -116,7 +116,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.reloadEpoch++
 		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
 	}
-	if err := tui.KindsError(m.lister, kube.KindCronJob); err != nil {
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindCronJob); err != nil {
 		if kube.IsPermissionError(err) {
 			m.state = tui.TaskStatePermissionDenied
 		} else {

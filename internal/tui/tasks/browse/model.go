@@ -80,9 +80,10 @@ type CacheSyncChecker interface {
 // started independently, so "has this cluster connected" is the wrong
 // question when the one being asked is "is this empty list of Secrets
 // trustworthy". A lister implementing this answers for the kind actually on
-// screen.
+// screen. namespace is the namespace the caller's own read used — see
+// tui.KindSyncChecker's doc comment.
 type KindSyncChecker interface {
-	KindSynced(kind kube.ResourceKind) bool
+	KindSynced(kind kube.ResourceKind, namespace string) bool
 }
 
 // OpenNodeDetailFunc pushes tasks/nodedetail (11b) for the named node.
@@ -408,6 +409,13 @@ type Model struct {
 	// and it drives the health strip's own inline note. Always nil for
 	// every other kind.
 	cronJobJobsErr error
+	// auxKindsDeniedNote is non-empty when a secondary cache one of the
+	// current kind's own columns/prompts reads (auxKinds) came back
+	// Forbidden on the most recent Ready load — rendered as one extra strip
+	// line (view.go) rather than blanking or wrongly-populating the cells
+	// that depend on it. Reset on every kind/namespace switch by
+	// resetAndLoad, same lifecycle as cronJobJobsErr.
+	auxKindsDeniedNote string
 	// jobListSummaries backs §37a (Job kind only) — same cache-local
 	// aggregation shape as cronJobSummaries: absolute timestamps, held onto
 	// so the one-second UI clock tick can re-derive m.rows' relative
@@ -562,7 +570,16 @@ type Model struct {
 // health strip (0 when unknown or not the Pods kind); nodeCapacity/
 // podCountByNode/clusterPodTotal ride along for the Nodes columns/health
 // strip (Node kind only, see nodes.go's loadNodeExtras).
+// epoch is m.reloadEpoch at the moment load() was dispatched. Kind and
+// columns alone don't catch a namespace switch that lands back on the same
+// kind (or a context switch that restores it) — the request that's now
+// stale still names the right kind and the right column count, just the
+// wrong namespace/cluster. resetAndLoad bumps reloadEpoch on every path
+// that changes what should be showing (namespace, kind, context switch, a
+// CRD's columns landing), so this one check subsumes all of them.
 type rowsLoadedMsg struct {
+	epoch           int
+	namespace       string
 	kind            kube.ResourceKind
 	columns         int
 	rows            []resources.Row
@@ -793,13 +810,13 @@ func (m Model) grouped() bool {
 	return m.namespace == "" && !m.desc.ClusterScoped
 }
 
-// kindSyncedFunc adapts any lister to a per-kind sync predicate, for callers
-// that ask about kinds other than the one on screen. Everything that opts
-// into neither checker reads as synced, so fakes and test doubles behave as
-// they always did.
-func kindSyncedFunc(lister resources.RawLister) func(kube.ResourceKind) bool {
+// kindSyncedFunc adapts any lister to a per-kind sync predicate scoped to
+// namespace, for callers that ask about kinds other than the one on screen.
+// Everything that opts into neither checker reads as synced, so fakes and
+// test doubles behave as they always did.
+func kindSyncedFunc(lister resources.RawLister, namespace string) func(kube.ResourceKind) bool {
 	if kc, ok := lister.(KindSyncChecker); ok {
-		return kc.KindSynced
+		return func(kind kube.ResourceKind) bool { return kc.KindSynced(kind, namespace) }
 	}
 	if sc, ok := lister.(CacheSyncChecker); ok {
 		return func(kube.ResourceKind) bool { return sc.Synced() }
@@ -814,10 +831,27 @@ func kindSyncedFunc(lister resources.RawLister) func(kube.ResourceKind) bool {
 // *kube.Cluster.
 func (m Model) listerSynced() bool {
 	if kc, ok := m.lister.(KindSyncChecker); ok {
-		return kc.KindSynced(m.kind)
+		return kc.KindSynced(m.kind, m.countNamespace())
 	}
 	sc, ok := m.lister.(CacheSyncChecker)
 	return !ok || sc.Synced()
+}
+
+// namespaceScopedHint names --namespace-scoped=<ns> as a recovery option on
+// the 403 card, when it's plausibly one: a namespace is known (m.namespace,
+// the one the user would scope to) and this session isn't already running
+// scoped (docs/plans/namespace-scoped-final-plan.md §7 — a session already
+// scoped has nothing left to suggest, and a session with no namespace
+// selected yet has nothing to name). Empty otherwise, so the card renders
+// exactly as before it existed.
+func (m Model) namespaceScopedHint() string {
+	if m.namespace == "" {
+		return ""
+	}
+	if sc, ok := m.lister.(tui.ScopedChecker); ok && sc.Scoped() {
+		return ""
+	}
+	return "kute --namespace-scoped=" + m.namespace + " may see more, if that namespace grants it"
 }
 
 // pollsMetrics reports whether kind's CPU/MEM columns need the 2s metrics
@@ -890,6 +924,7 @@ func (m Model) load() tea.Cmd {
 	ns := m.countNamespace()
 	kind := m.kind
 	timeout := m.timeout
+	epoch := m.reloadEpoch
 	podDesc, _ := m.session.Registry.Descriptor(kube.KindPod)
 	currentUser := m.currentUser
 	return func() tea.Msg {
@@ -900,18 +935,22 @@ func (m Model) load() tea.Cmd {
 			// (registry.go's own doc comment on the CronJob entry) — Job-aware
 			// rows need the cache-local CronJob+Job+Pod join Phase 1 built
 			// (resources.BuildCronJobSummaries), never a per-row ListRaw(Job).
-			return loadCronJobRows(ctx, lister, ns, len(desc.Columns))
+			msg := loadCronJobRows(ctx, lister, ns, len(desc.Columns))
+			msg.epoch, msg.namespace = epoch, ns
+			return msg
 		}
 		if kind == kube.KindJob {
 			// §37a bypasses resources.List/Descriptor.Project entirely
 			// (registry.go's own doc comment on the Job entry), same reasoning
 			// as CronJob above — SOURCE/FAILED/COMPL need the real aggregation,
 			// never the single-object fallback.
-			return loadJobRows(ctx, lister, ns, len(desc.Columns), currentUser)
+			msg := loadJobRows(ctx, lister, ns, len(desc.Columns), currentUser)
+			msg.epoch, msg.namespace = epoch, ns
+			return msg
 		}
 		rows, err := resources.List(ctx, lister, desc, ns)
 		if err != nil {
-			return rowsLoadedMsg{kind: kind, columns: len(desc.Columns), err: err}
+			return rowsLoadedMsg{epoch: epoch, namespace: ns, kind: kind, columns: len(desc.Columns), err: err}
 		}
 		var pods map[string]kube.Pod
 		var helmReleases map[string]kube.HelmRelease
@@ -936,6 +975,7 @@ func (m Model) load() tea.Cmd {
 			cacheNote = chartCacheNoteFor(lister, time.Now())
 		}
 		return rowsLoadedMsg{
+			epoch: epoch, namespace: ns,
 			kind: kind, columns: len(desc.Columns), rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
 			nodePodHealth: nodePodHealth, chartCacheNote: cacheNote,
@@ -1181,6 +1221,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.nodePodHealth = nil
 	m.cronJobSummaries = nil
 	m.cronJobJobsErr = nil
+	m.auxKindsDeniedNote = ""
 	m.pendingCronJobRun = nil
 	m.pendingCronJobResume = nil
 	m.jobListSummaries = nil

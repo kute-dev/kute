@@ -101,28 +101,61 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
-	m.result = msg.result
-	m.rows = buildRows(msg.result)
-	m.state = tui.TaskStateReady
-	if len(m.rows) == 0 {
+	// alreadyRendered is true once a prior load has already put rows on
+	// screen. A background reload finding a required cache merely *stalled*
+	// (not yet synced, no error yet) must not discard that content back into
+	// a loading spinner — only a confirmed denial/error (checked below,
+	// unconditionally) may change what's on screen once something has
+	// already rendered.
+	alreadyRendered := m.state == tui.TaskStateReady
+
+	// Role/RoleBinding (namespaced) and ClusterRole/ClusterRoleBinding
+	// (cluster-scoped) are who-can's one required set — there is no
+	// secondary cache here; the four kinds together ARE the answer. These
+	// checks run unconditionally rather than only when the result was
+	// empty, so a denial on one pair is never invisible just because the
+	// other pair already resolved a non-empty result — a partial answer is
+	// as dangerous a security claim as an empty one
+	// (docs/plans/namespace-scoped-final-plan.md §5).
+	if !alreadyRendered &&
+		(!tui.KindsSynced(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding) ||
+			!tui.KindsSynced(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding)) {
 		// 22a resolves bindings entirely from informer caches, and all four
 		// RBAC informers start on first read — so the first answer is empty
 		// on a cold session. "No one can do this" is a security claim; it
 		// must not be made about a cache that hasn't loaded.
-		if !tui.KindsSynced(m.rbac, kube.KindRole, kube.KindRoleBinding,
-			kube.KindClusterRole, kube.KindClusterRoleBinding) {
-			m.state = tui.TaskStateLoading
-			m.feedback = ""
-			return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+		m.state = tui.TaskStateLoading
+		m.feedback = ""
+		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+	}
+	if err := tui.KindsError(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding); err != nil {
+		// The same security claim, against a cache that stopped filling
+		// rather than one that never started (see tui.KindsError) — a
+		// denial always wins, even over rows already on screen.
+		m.state = tui.TaskStateError
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
 		}
-		if err := tui.KindsError(m.rbac, kube.KindRole, kube.KindRoleBinding,
-			kube.KindClusterRole, kube.KindClusterRoleBinding); err != nil {
-			// The same security claim, against a cache that stopped filling
-			// rather than one that never started (see tui.KindsError).
-			m.state = tui.TaskStateError
-			m.feedback = fmt.Sprintf("couldn't load RBAC bindings: %v — retrying", err)
-			return m, nil
+		m.feedback = fmt.Sprintf("couldn't load RBAC bindings: %v", err)
+		return m, nil
+	}
+	if err := tui.KindsError(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding); err != nil {
+		// Same as above, for the cluster-scoped half of the RBAC graph.
+		m.state = tui.TaskStateError
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
 		}
+		m.feedback = fmt.Sprintf("couldn't load RBAC bindings: %v", err)
+		return m, nil
+	}
+
+	m.result = msg.result
+	m.rows = buildRows(msg.result)
+	m.state = tui.TaskStateReady
+	if len(m.rows) == 0 {
+		// The checks above have already confirmed all four caches are both
+		// synced and error-free, so an empty result here is a trustworthy
+		// one.
 		m.state = tui.TaskStateEmpty
 	}
 	m.feedback = ""

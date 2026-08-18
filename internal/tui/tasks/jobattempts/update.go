@@ -97,11 +97,11 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
-	if !tui.KindsSynced(m.lister, kube.KindJob) {
+	if !tui.KindsSynced(m.lister, m.namespace, kube.KindJob) {
 		m.reloadEpoch++
 		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
 	}
-	if err := tui.KindsError(m.lister, kube.KindJob); err != nil {
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindJob); err != nil {
 		if kube.IsPermissionError(err) {
 			m.state = tui.TaskStatePermissionDenied
 		} else {

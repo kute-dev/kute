@@ -305,7 +305,12 @@ func switchContextCmd(sess *Session, name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), switchContextTimeout)
 		defer cancel()
-		if err := cluster.SwitchContext(ctx, name); err != nil {
+		// restoreNS is threaded through so a scoped Cluster's eager Pod
+		// cache scopes to the namespace the UI is about to show (the
+		// target context's own restored namespace) rather than that
+		// context's kubeconfig-default one — see SwitchContext's doc
+		// comment. Ignored entirely in cluster-wide mode.
+		if err := cluster.SwitchContext(ctx, name, restoreNS); err != nil {
 			return SwitchContextMsg{Err: err}
 		}
 		return SwitchContextMsg{Context: name, Namespace: restoreNS, Kind: restoreKind, Filter: restoreFilter}

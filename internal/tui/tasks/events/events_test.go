@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,20 @@ func (f fakeEvents) NamespaceEvents(context.Context, string) ([]kube.Event, erro
 
 func (f fakeEvents) ObjectEvents(context.Context, string, kube.ResourceKind, string) ([]kube.Event, error) {
 	return f.objectEvents, f.err
+}
+
+// nsAwareEvents is a namespace-aware EventsReader test double, for tests
+// that need to tell one namespace's reply apart from another's.
+type nsAwareEvents struct {
+	byNamespace map[string][]kube.Event
+}
+
+func (f *nsAwareEvents) NamespaceEvents(_ context.Context, namespace string) ([]kube.Event, error) {
+	return f.byNamespace[namespace], nil
+}
+
+func (f *nsAwareEvents) ObjectEvents(context.Context, string, kube.ResourceKind, string) ([]kube.Event, error) {
+	return nil, nil
 }
 
 func newSession() *tui.Session {
@@ -524,5 +539,99 @@ func TestEscSendsBackMsg(t *testing.T) {
 	}
 	if _, ok := cmd().(tui.BackMsg); !ok {
 		t.Fatal("esc did not send BackMsg")
+	}
+}
+
+// TestStaleNamespaceLoadDoesNotOverwriteNewNamespace pins the fix for the
+// same race browse's own version of this test covers: a slow load() from a
+// namespace the user has since switched away from must not land and
+// overwrite the feed now showing under a different namespace.
+func TestStaleNamespaceLoadDoesNotOverwriteNewNamespace(t *testing.T) {
+	events := &nsAwareEvents{byNamespace: map[string][]kube.Event{
+		"default":   {{Type: "Warning", Reason: "BackOff", Object: "Pod/api-1", Message: "m", Count: 1, LastSeen: time.Now()}},
+		"nva-stage": {{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-1", Message: "m", Count: 1, LastSeen: time.Now()}},
+	}}
+	m := New(Config{Session: newSession(), Events: events, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.namespace != "default" {
+		t.Fatalf("namespace = %q, want default", m.namespace)
+	}
+
+	// Capture "default"'s in-flight load before it resolves.
+	staleCmd := m.load()
+
+	// Switch away before that load lands — this issues its own fresh load
+	// and bumps loadEpoch.
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: "nva-stage"})
+	if m.namespace != "nva-stage" {
+		t.Fatalf("namespace = %q, want nva-stage", m.namespace)
+	}
+
+	staleMsg, ok := staleCmd().(loadedMsg)
+	if !ok {
+		t.Fatalf("expected loadedMsg from the stale command")
+	}
+	updated, cmd := m.applyLoaded(staleMsg)
+	m = *updated.(*Model)
+	if cmd != nil {
+		t.Fatal("a stale reply must not schedule anything either")
+	}
+
+	if m.namespace != "nva-stage" {
+		t.Fatalf("namespace = %q, want nva-stage — stale reply must not touch it", m.namespace)
+	}
+	for _, g := range m.groups {
+		if g.Object == "Pod/api-1" {
+			t.Fatalf("stale default-namespace event leaked into nva-stage's groups: %+v", m.groups)
+		}
+	}
+}
+
+// forbiddenLister extends golden_test.go's fakeLister with the KindForbidden
+// health-check seam applyLoaded reads (tui.KindForbiddenReporter) — mirrors
+// timeline/whocan's own forbidden fakes for the same
+// docs/plans/namespace-scoped-final-plan.md §5 symmetry check.
+type forbiddenLister struct {
+	fakeLister
+	denied kube.ResourceKind
+	err    error
+}
+
+func (f *forbiddenLister) KindForbidden(kind kube.ResourceKind, _ string) error {
+	if kind == f.denied {
+		return f.err
+	}
+	return nil
+}
+
+// TestEventCacheDeniedIsVisibleEvenWithGroupsAlreadyRendered is the
+// lowest-priority §5 symmetry test noted in docs/TODO.md: unlike
+// timeline/whocan (which had to be restructured to run their checks
+// unconditionally), events is single-kind, so applyLoaded's KindsError check
+// was already unconditional — this pins that a denial discovered on a
+// background reload still wins even though a group is already rendered, and
+// guards the behavior against a future refactor that accidentally gates it.
+func TestEventCacheDeniedIsVisibleEvenWithGroupsAlreadyRendered(t *testing.T) {
+	events := []kube.Event{
+		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Namespace: "default", Message: "restarting", Count: 1, LastSeen: time.Now()},
+	}
+	lister := &forbiddenLister{}
+	m := New(Config{Session: newSession(), Events: fakeEvents{namespaceEvents: events}, Lister: lister, Namespace: "default"})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("state = %s, want ready after the first load", m.state)
+	}
+	if len(m.groups) == 0 {
+		t.Fatal("expected groups after the first load")
+	}
+
+	lister.denied = kube.KindEvent
+	lister.err = errors.New("events is forbidden: user cannot list")
+	m = step(t, m, kube.ResourceChangedMsg{Kind: kube.KindEvent})
+
+	if m.state != tui.TaskStatePermissionDenied {
+		t.Fatalf("state = %s, want permission-denied — a denial found on a background reload must win even over groups already on screen", m.state)
 	}
 }
