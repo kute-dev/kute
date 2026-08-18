@@ -326,6 +326,47 @@ func TestLoadGatewayListeners(t *testing.T) {
 	}
 }
 
+// neverStartedBackendLister simulates Service/Pod informers that were never
+// started because nothing on this screen reads them — the state a Gateway
+// view leaves them in, since loadGateway never lists either kind.
+// KindSynced reports false forever for both (mirrors *kube.Cluster's real
+// answer for a typed kind whose informer was never registered — not
+// stalled, just never asked for), while the viewed kind itself is synced.
+type neverStartedBackendLister struct {
+	lister fakeLister
+}
+
+func (l neverStartedBackendLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	return l.lister.ListRaw(ctx, kind, namespace)
+}
+
+func (l neverStartedBackendLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	return kind != kube.KindService && kind != kube.KindPod
+}
+
+// TestZeroListenerGatewayDoesNotWaitOnUnreadCaches pins the fix for TODO #3
+// (docs/TODO.md): a Gateway with zero spec.listeners rows must settle into
+// TaskStateEmpty, not retry forever waiting on Service/Pod caches loadGateway
+// never reads and that therefore never start. applyLoaded is called directly
+// (rather than driven through step(), which would follow the retry command
+// and spin for real — the exact hang this test exists to catch) so an
+// unfixed regression fails fast instead of hanging the suite.
+func TestZeroListenerGatewayDoesNotWaitOnUnreadCaches(t *testing.T) {
+	lister := neverStartedBackendLister{lister: fakeLister{}}
+	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindGateway, Namespace: "default", Name: "public"})
+	m.SetSize(120, 36)
+
+	updated, cmd := m.applyLoaded(loadedMsg{flavor: flavorGateway, gatewayClass: "nginx"})
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty — a zero-listener Gateway must not wait on Service/Pod caches it never reads (feedback %q)", m.state, m.feedback)
+	}
+	if cmd != nil {
+		t.Fatal("expected no retry scheduled once the Gateway's own cache has settled")
+	}
+}
+
 func TestNotFoundRendersError(t *testing.T) {
 	lister := fakeLister{}
 	m := New(Config{Session: newSession(), Lister: lister, Kind: kube.KindIngress, Namespace: "default", Name: "missing"})

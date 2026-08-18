@@ -101,11 +101,21 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		// already degrade gracefully and must not hard-gate the table).
 		// Without this, a cache that's merely still filling — or Forbidden
 		// — rendered as "no routes" instead of loading/permission-denied.
-		if !tui.KindsSynced(m.lister, m.namespace, m.kind, kube.KindService, kube.KindPod) {
+		//
+		// loadGateway never reads Service/Pod at all (a Gateway's listener
+		// rows come entirely from spec/status.listeners), so those two must
+		// drop out of the required set for that flavor — gating on caches
+		// this flavor never starts a read against left a zero-listener
+		// Gateway waiting on a KindSynced that would never turn true.
+		required := []kube.ResourceKind{m.kind}
+		if m.flavor != flavorGateway {
+			required = append(required, kube.KindService, kube.KindPod)
+		}
+		if !tui.KindsSynced(m.lister, m.namespace, required...) {
 			m.syncRetryGen++
 			return m, tui.ScheduleCacheSyncRetry(m.syncRetryGen)
 		}
-		if err := tui.KindsError(m.lister, m.namespace, m.kind, kube.KindService, kube.KindPod); err != nil {
+		if err := tui.KindsError(m.lister, m.namespace, required...); err != nil {
 			if kube.IsPermissionError(err) {
 				m.state = tui.TaskStatePermissionDenied
 			} else {
