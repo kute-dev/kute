@@ -134,7 +134,7 @@ One difference worth knowing about: kute holds the terminal, so a credential plu
 
 ### Permissions
 
-**kute reads cluster-wide.** It watches each kind once across the whole cluster and filters by namespace in memory, so switching namespaces is instant and costs no extra API traffic. The consequence is that a token scoped to a single namespace — a `Role` and `RoleBinding`, with nothing bound at cluster scope — is not enough: kute is refused on its first read and can't get started. See [#9](https://github.com/kute-dev/kute/issues/9) if that's your situation.
+**kute reads cluster-wide by default.** It watches each kind once across the whole cluster and filters by namespace in memory, so switching namespaces is instant and costs no extra API traffic. The consequence is that a token scoped to a single namespace — a `Role` and `RoleBinding`, with nothing bound at cluster scope — is not enough by default: kute is refused on its first read and can't get started. If that's your situation, launch with `--namespace-scoped <name>` instead, which restricts every informer to that one namespace so a namespaced `Role` is sufficient; see [#9](https://github.com/kute-dev/kute/issues/9) for background.
 
 The minimum to launch is cluster-wide read on three kinds:
 

@@ -60,7 +60,7 @@ is the one kind that had to break it unconditionally, and it pays exactly the pr
 above (one cache per namespace *read*, not per namespace that exists).
 
 It is now also available as an **explicit, opt-in mode** rather than a rejected idea —
-[§5.6](#56-namespace-scoped-mode----namespace-scoped-done) — for the case this section's
+[§5.6](#56-namespace-scoped-mode---namespace-scoped--done) — for the case this section's
 reasoning doesn't cover: an identity with no cluster-wide `list` access at all, only a
 namespaced `Role`. A plain `kute` under that identity can't even complete the eager
 Namespace/Pod/Node reads this document assumes always succeed; `--namespace-scoped=<ns>`
