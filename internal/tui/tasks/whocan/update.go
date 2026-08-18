@@ -117,15 +117,23 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	// other pair already resolved a non-empty result — a partial answer is
 	// as dangerous a security claim as an empty one
 	// (docs/plans/namespace-scoped-final-plan.md §5).
-	if !alreadyRendered &&
-		(!tui.KindsSynced(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding) ||
-			!tui.KindsSynced(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding)) {
+	if !tui.KindsSynced(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding) ||
+		!tui.KindsSynced(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding) {
 		// 22a resolves bindings entirely from informer caches, and all four
 		// RBAC informers start on first read — so the first answer is empty
 		// on a cold session. "No one can do this" is a security claim; it
-		// must not be made about a cache that hasn't loaded.
-		m.state = tui.TaskStateLoading
-		m.feedback = ""
+		// must not be made about a cache that hasn't loaded. The retry is
+		// scheduled unconditionally — a background reload can find a cache
+		// merely stalled just as easily as a cold-start one can — but once
+		// something has already rendered, that result stays on screen
+		// as-is: only alreadyRendered's own state/feedback are skipped,
+		// never the retry, so a stalled cache doesn't collapse existing
+		// rows back into a loading spinner while still catching up once
+		// the cache actually fills.
+		if !alreadyRendered {
+			m.state = tui.TaskStateLoading
+			m.feedback = ""
+		}
 		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
 	}
 	if err := tui.KindsError(m.rbac, m.namespace, kube.KindRole, kube.KindRoleBinding); err != nil {

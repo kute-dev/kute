@@ -23,6 +23,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// after the screen opened — left BACKENDS wrong until the user
 		// backed out and came in again.
 		if m.reloadsOn(msg.Kind) && m.lister != nil {
+			// Bump the retry generation so any CacheSyncRetryMsg already
+			// queued from a prior load stays stale: applyLoaded schedules a
+			// retry keyed to m.syncRetryGen, and if this fresh load also
+			// needs one it hands out its own current generation — a retry
+			// arriving from before this reload would otherwise still match
+			// and fire a redundant load whose result could overwrite this
+			// one's.
+			m.syncRetryGen++
 			return m, m.load()
 		}
 	case kube.ConnStateMsg:
