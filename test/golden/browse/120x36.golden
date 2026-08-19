@@ -1,4 +1,4 @@
-  kute │  c microk8s-cluster › n default › g Pods                                          sync 2s  ● connected · 12ms  
+  kute │ c microk8s-cluster › n default › g Pods                                           sync 2s  ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 1 running   ▲ 1 pending   ✕ 1 crashloop   ○ 1 completed                                           4 pods · 3 nodes  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

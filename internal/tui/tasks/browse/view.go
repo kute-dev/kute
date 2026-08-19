@@ -53,10 +53,9 @@ func (m Model) Header() tui.HeaderState {
 	}
 
 	crumbs := append(tui.BrandCrumbs(theme),
-		// The extra trailing space (vs. the plain " › " separators below)
-		// unglues the leading "c" from the wordmark, so "kute" and the
-		// key-prefixed path read as two distinct clusters.
-		tui.Crumb{Text: " │  ", Style: ghost2},
+		// Same single-space spacing as the " › " separators below, so the
+		// wordmark/path divider reads as one consistent breadcrumb rhythm.
+		tui.Crumb{Text: " │ ", Style: ghost2},
 		tui.Crumb{Text: verbs.Context.Key + " ", Style: keyHint},
 		tui.Crumb{Text: ctxName, Style: secondary},
 	)

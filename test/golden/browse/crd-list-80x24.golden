@@ -1,4 +1,4 @@
-  kute │  c microk8s-cluster › g CustomResourceDefinitions  cluster-scoped      
+  kute │ c microk8s-cluster › g CustomResourceDefinitions  cluster-scoped       
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 established   ▲ 1 installing                                              
 ────────────────────────────────────────────────────────────────────────────────
