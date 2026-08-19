@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › Cluster Overview  cluster-scoped                                          ● connected · 12ms  
+  kute │ test-cluster › Cluster Overview  cluster-scoped                                            ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ✕ 2 failing   ▲ 2 pending                                                 v1.30.2 · 5 nodes · 11 pods · 4 namespaces  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-  ❯ kute │ c microk8s-cluster › g CustomResourceDefinitions  cluster-scoped                                ● connected  
+  kute │  c microk8s-cluster › g CustomResourceDefinitions  cluster-scoped                                 ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 2 established   ▲ 1 installing                                      3 definitions · 2 API groups · sorted by group  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

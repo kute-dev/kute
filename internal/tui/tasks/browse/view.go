@@ -37,14 +37,16 @@ func (m Model) Header() tui.HeaderState {
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
-	// Same style renderKeybarV2 (chrome.go) uses for key letters — the
-	// breadcrumb's inline g/n/c prefixes read as the same affordance as the
-	// keybar's, by construction.
-	accent := lipgloss.NewStyle().Foreground(theme.Accent)
-	// Sits between TextDim (context) and Text (kind) on the text ramp, so
-	// the breadcrumb reads dim → mid → bright as it narrows from cluster to
-	// namespace to kind.
+	// A step duller than the keybar's own Accent key hints — the breadcrumb's
+	// inline g/n/c prefixes are wayfinding, not actions, so they recede into
+	// a second layer behind the path text instead of matching the keybar's
+	// brightness.
+	keyHint := lipgloss.NewStyle().Foreground(theme.AccentMuted)
+	// Path segments step up in brightness toward the current kind — dim →
+	// mid → bright — so depth reads at a glance as the breadcrumb narrows
+	// from cluster to namespace to kind.
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	primary := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 
 	ctxName := "cluster unavailable"
 	if m.session != nil && m.session.Location.Context != "" {
@@ -52,15 +54,18 @@ func (m Model) Header() tui.HeaderState {
 	}
 
 	crumbs := append(tui.BrandCrumbs(theme),
-		tui.Crumb{Text: " │ ", Style: ghost2},
-		tui.Crumb{Text: verbs.Context.Key + " ", Style: accent},
-		tui.Crumb{Text: ctxName, Style: dim},
+		// The extra trailing space (vs. the plain " › " separators below)
+		// unglues the leading "c" from the wordmark, so "kute" and the
+		// key-prefixed path read as two distinct clusters.
+		tui.Crumb{Text: " │  ", Style: ghost2},
+		tui.Crumb{Text: verbs.Context.Key + " ", Style: keyHint},
+		tui.Crumb{Text: ctxName, Style: secondary},
 	)
 	if !m.desc.ClusterScoped {
-		// One step brighter than the context segment (TextSecondary, not
-		// TextDim) — and not the accent purple the "n" key itself uses, so
-		// the segment text stays distinct from its own key prefix.
-		nsText, nsStyle := m.namespace, secondary
+		// One step brighter than the context segment (TextPrimary, not
+		// TextSecondary) — and not the muted purple the "n" key itself uses,
+		// so the segment text stays distinct from its own key prefix.
+		nsText, nsStyle := m.namespace, primary
 		if m.grouped() {
 			// 6b: scope is never ambiguous — the blue ALL-NS token
 			// (docs/design README.md §6b).
@@ -68,7 +73,7 @@ func (m Model) Header() tui.HeaderState {
 		}
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},
-			tui.Crumb{Text: verbs.Namespace.Key + " ", Style: accent},
+			tui.Crumb{Text: verbs.Namespace.Key + " ", Style: keyHint},
 			tui.Crumb{Text: nsText, Style: nsStyle},
 		)
 	}
@@ -83,7 +88,7 @@ func (m Model) Header() tui.HeaderState {
 	}
 	crumbs = append(crumbs,
 		tui.Crumb{Text: " › ", Style: ghost},
-		tui.Crumb{Text: verbs.Goto.Key + " ", Style: accent},
+		tui.Crumb{Text: verbs.Goto.Key + " ", Style: keyHint},
 		tui.Crumb{Text: m.desc.Display, Style: text},
 	)
 	if m.desc.Custom && m.desc.APIGroup != "" && m.desc.APIVersion != "" {

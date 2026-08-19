@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › default › CronJobs › quiet               ● connected  
+  kute │ test-cluster › default › CronJobs › quiet                 ● connected  
 ────────────────────────────────────────────────────────────────────────────────
 ○  quiet  0 4 * * 0                                        next controller local
                                                                                 

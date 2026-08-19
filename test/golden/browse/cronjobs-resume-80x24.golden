@@ -1,4 +1,4 @@
-  ❯ kute │ c microk8s-cluster › n default › g CronJobs             ● connected  
+  kute │  c microk8s-cluster › n default › g CronJobs              ● connected  
 ────────────────────────────────────────────────────────────────────────────────
   ○ 1 no history   ⏸ 1 suspended               1 cronjobs · clock 12:12:00 UTC  
 ────────────────────────────────────────────────────────────────────────────────

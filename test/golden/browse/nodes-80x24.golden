@@ -1,4 +1,4 @@
-  ❯ kute │ c microk8s-cluster › g Nodes  cluster-scoped            ● connected  
+  kute │  c microk8s-cluster › g Nodes  cluster-scoped             ● connected  
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 ready   ✕ 1 not ready   ◈ 1 cordoned                    4 nodes · 0 pods  
 ────────────────────────────────────────────────────────────────────────────────

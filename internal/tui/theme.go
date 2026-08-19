@@ -36,10 +36,10 @@ type Theme struct {
 	// Accent + selection
 	Accent, AccentHi, SelBg color.Color
 
-	// Brand is the header wordmark's "❯" chevron color (BrandCrumbs in
-	// chrome.go) — kept separate from Accent, which the same header row
-	// still uses for the namespace segment, sort arrows, etc.
-	Brand color.Color
+	// AccentMuted is the breadcrumb's de-emphasized c/n/g key-hint color — a
+	// step darker/duller than Accent so the key recedes behind the path text
+	// it prefixes (docs/design README.md §2a).
+	AccentMuted color.Color
 
 	// MarkBg is 20a's bulk-operations marked-row tint — quieter than SelBg,
 	// since a marked row's cursor-independent state must read as distinct
@@ -110,11 +110,11 @@ func Dark() Theme {
 		TextGhost:     lipgloss.Color("#44445c"),
 		TextGhost2:    lipgloss.Color("#33334a"),
 
-		Accent:   lipgloss.Color("#a78bfa"),
-		AccentHi: lipgloss.Color("#c4b5fd"),
-		SelBg:    lipgloss.Color("#1d1633"),
-		MarkBg:   lipgloss.Color("#14101f"),
-		Brand:    lipgloss.Color("#5ddba4"),
+		Accent:      lipgloss.Color("#a78bfa"),
+		AccentHi:    lipgloss.Color("#c4b5fd"),
+		AccentMuted: lipgloss.Color("#7c6bb0"),
+		SelBg:       lipgloss.Color("#1d1633"),
+		MarkBg:      lipgloss.Color("#14101f"),
 
 		Good:     lipgloss.Color("#34d17b"),
 		Warn:     lipgloss.Color("#e8c74a"),
@@ -184,11 +184,11 @@ func Light() Theme {
 		TextGhost:     lipgloss.Color("#b4b4c6"),
 		TextGhost2:    lipgloss.Color("#c6c6d4"),
 
-		Accent:   lipgloss.Color("#6b46d9"),
-		AccentHi: lipgloss.Color("#5936b8"),
-		SelBg:    lipgloss.Color("#ece5fb"),
-		MarkBg:   lipgloss.Color("#f5f1fc"),
-		Brand:    lipgloss.Color("#12855a"),
+		Accent:      lipgloss.Color("#6b46d9"),
+		AccentHi:    lipgloss.Color("#5936b8"),
+		AccentMuted: lipgloss.Color("#a59cbf"),
+		SelBg:       lipgloss.Color("#ece5fb"),
+		MarkBg:      lipgloss.Color("#f5f1fc"),
 
 		Good:     lipgloss.Color("#148a4e"),
 		Warn:     lipgloss.Color("#a87b0a"),

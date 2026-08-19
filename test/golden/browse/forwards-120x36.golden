@@ -1,4 +1,4 @@
-  ❯ kute │ c microk8s-cluster › g Forwards  ∗ all namespaces                                               ● connected  
+  kute │  c microk8s-cluster › g Forwards  ∗ all namespaces                                                ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 1 active   ▲ 1 reconnecting                               2 forwards · 2 namespaces · forwards end when kute exits  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

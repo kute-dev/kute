@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › certificate/web-tls › Chain             
+  kute │ microk8s-cluster › default › certificate/web-tls › Chain  ● connected  
 ────────────────────────────────────────────────────────────────────────────────
 ▲ Ready=False · Issuing   attempt 4         chain resolved from the watch · live
 ────────────────────────────────────────────────────────────────────────────────

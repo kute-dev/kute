@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › nva-stage › secret/nva-secrets › Data                                     ● connected · 12ms  
+  kute │ test-cluster › nva-stage › secret/nva-secrets › Data                                       ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Opaque · 3 keys → 4                                                 values decode in memory only · re-masked on exit  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

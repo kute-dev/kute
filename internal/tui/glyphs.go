@@ -24,11 +24,6 @@ const (
 	// GlyphMarked is 20a's bulk-operations mark glyph (`▪`), rendered in the
 	// table's leading mark column and the health strip's "▪ N marked" segment.
 	GlyphMarked = "▪"
-
-	// GlyphBrandMark is the header wordmark's "❯" chevron, prefixing "kute"
-	// in every screen's Header() via BrandCrumbs (chrome.go).
-	GlyphBrandMark = "❯"
-
 	// GlyphRevision is §32a's git-revision marker in the incident timeline
 	// (`◆`) — the only accent-purple marker in that feed, because on a
 	// GitOps cluster a commit is the answer to "what changed?".

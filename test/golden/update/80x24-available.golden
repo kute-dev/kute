@@ -1,4 +1,4 @@
-  ❯ kute │ Update             you run 0.2.0 · latest 0.2.1 · released 2d ago    
+  kute │ Update               you run 0.2.0 · latest 0.2.1 · released 2d ago    
 ────────────────────────────────────────────────────────────────────────────────
   CHANGELOG · 0.2.1                                                             
   fix     rollout watch could miss the final ready event on slow clusters       

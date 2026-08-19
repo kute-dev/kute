@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › nva-stage › Ingress/web                                                    ● connected · 8ms  
+  kute │ test-cluster › nva-stage › Ingress/web                                                      ● connected · 8ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   nginx · 1 hosts · 3 routes   ● 2 healthy   ✕ 1 broken                        backends resolved from the watch · live  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

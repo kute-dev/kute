@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › flux-system › Kustomizations › nebula-infra                                  ● connected  
+  kute │ microk8s-cluster › flux-system › Kustomizations › nebula-infra                                    ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 SUSPENDED · reconciliation is paused                                                                                    
 source ahead · git/flux-system is at main@8f3c2a1                                                                       

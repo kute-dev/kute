@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › default › CronJobs › nightly             ● connected  
+  kute │ test-cluster › default › CronJobs › nightly               ● connected  
 ────────────────────────────────────────────────────────────────────────────────
 ◐  nightly  0 2 * * *                                      next controller local
                                                                                 

@@ -1,4 +1,4 @@
-  [38;2;18;133;90m❯[m[1;38;2;20;20;28m kute[m[38;2;180;180;198m │ [m[38;2;138;138;158mmicrok8s-cluster[m[38;2;180;180;198m › [m[38;2;107;70;217mflux-system[m[38;2;180;180;198m › [m[38;2;138;138;158mKustomizations[m[38;2;180;180;198m › [m[1;38;2;20;20;28mnebula-workers[m                                [38;2;20;138;78m● connected[m  
+  [1;38;2;20;20;28mkute[m[38;2;180;180;198m │ [m[38;2;138;138;158mmicrok8s-cluster[m[38;2;180;180;198m › [m[38;2;107;70;217mflux-system[m[38;2;180;180;198m › [m[38;2;138;138;158mKustomizations[m[38;2;180;180;198m › [m[1;38;2;20;20;28mnebula-workers[m                                  [38;2;20;138;78m● connected[m  
 [38;2;180;180;198m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[m
 [1;38;2;204;58;58mRECONCILE FAILED · HealthCheckFailed · 4m ago · retry in 3m 12s[m                                                         
 [38;2;176;104;104mhealth check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'[m                              

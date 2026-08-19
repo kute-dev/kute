@@ -1,4 +1,4 @@
-  ❯ kute │ test-cluster › Who Can                                  ● connected  
+  kute │ test-cluster › Who Can                                    ● connected  
 ────────────────────────────────────────────────────────────────────────────────
   who can list secrets in nva-stage                                 2 subjects  
   same as: kubectl auth can-i list secrets -n nva-stage                         

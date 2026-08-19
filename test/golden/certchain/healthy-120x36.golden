@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › certificate/api-tls › Chain                                        ● connected  
+  kute │ microk8s-cluster › default › certificate/api-tls › Chain                                          ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      CHAIN                                                   STATE                                                 AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

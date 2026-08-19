@@ -1,4 +1,4 @@
-  ❯ kute │ c microk8s-cluster › n default › g Deployments          ● connected  
+  kute │  c microk8s-cluster › n default › g Deployments           ● connected  
 ────────────────────────────────────────────────────────────────────────────────
   ● 1 stable                                                     1 deployments  
 ────────────────────────────────────────────────────────────────────────────────
