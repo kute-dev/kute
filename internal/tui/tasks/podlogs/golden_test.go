@@ -32,10 +32,29 @@ func goldenModel(width, height int) Model {
 	return model
 }
 
+// waitingGoldenModel is the new pre-connect state: the active container
+// hasn't started yet, so there's no buffer to render — just the badge/
+// strip/body all naming the reason (docs/design README.md §5b's
+// "waiting-for-container state").
+func waitingGoldenModel(width, height int) Model {
+	model := New(Config{Pod: SelectedPod{
+		Context:    "prod-eks",
+		Namespace:  "default",
+		Name:       "nva-worker-9k2ss",
+		Containers: []string{"worker", "metrics-sidecar"},
+	}})
+	model.SetSize(width, height)
+	model.stream = StreamWaitingForContainer
+	model.waitingReason = "ContainerCreating"
+	return model
+}
+
 func goldenFixtures() map[string]string {
 	return map[string]string{
-		"120x36.golden": goldentest.Plain(goldenModel(120, 36).Render()),
-		"80x24.golden":  goldentest.Plain(goldenModel(80, 24).Render()),
+		"120x36.golden":         goldentest.Plain(goldenModel(120, 36).Render()),
+		"80x24.golden":          goldentest.Plain(goldenModel(80, 24).Render()),
+		"120x36-waiting.golden": goldentest.Plain(waitingGoldenModel(120, 36).Render()),
+		"80x24-waiting.golden":  goldentest.Plain(waitingGoldenModel(80, 24).Render()),
 	}
 }
 
@@ -77,9 +96,15 @@ func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	dark.session = &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "prod-eks"}}
 	light := goldenModel(120, 36)
 	light.session = &tui.Session{Theme: tui.Light(), Location: tui.Location{Context: "prod-eks"}}
+	waitingDark := waitingGoldenModel(120, 36)
+	waitingDark.session = &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "prod-eks"}}
+	waitingLight := waitingGoldenModel(120, 36)
+	waitingLight.session = &tui.Session{Theme: tui.Light(), Location: tui.Location{Context: "prod-eks"}}
 	return map[string]string{
-		"120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
-		"120x36-light.golden": goldentest.Truecolor(light.Render()),
+		"120x36-dark.golden":          goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden":         goldentest.Truecolor(light.Render()),
+		"120x36-waiting-dark.golden":  goldentest.Truecolor(waitingDark.Render()),
+		"120x36-waiting-light.golden": goldentest.Truecolor(waitingLight.Render()),
 	}
 }
 

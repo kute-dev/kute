@@ -92,3 +92,19 @@ func IsPermissionError(err error) bool {
 	text := strings.ToLower(err.Error())
 	return strings.Contains(text, "forbidden") || strings.Contains(text, "permission")
 }
+
+// IsContainerNotStartedError classifies err as the kubelet log handler's
+// fixed error text for a container that hasn't started yet (e.g.
+// `container "X" in pod "Y" is waiting to start: ContainerCreating`) — a
+// substring check, same shape as IsPermissionError, since the API server
+// returns this as a BadRequest with no distinct typed error to check
+// instead. podlogs (5b) uses it only as a defense-in-depth fallback: the
+// pod cache's own container state is checked before connecting, so this
+// only fires in the narrow race where a container flips back to waiting
+// between that check and the actual connect.
+func IsContainerNotStartedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "is waiting to start")
+}

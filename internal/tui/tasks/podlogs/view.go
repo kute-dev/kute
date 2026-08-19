@@ -44,6 +44,8 @@ func (m Model) Header() tui.HeaderState {
 	switch {
 	case m.stream == StreamError:
 		conn = tui.ConnBadge{Text: tui.GlyphFailed + " error", Style: lipgloss.NewStyle().Foreground(theme.Bad)}
+	case m.stream == StreamWaitingForContainer:
+		conn = tui.ConnBadge{Text: tui.GlyphPending + " starting", Style: lipgloss.NewStyle().Foreground(theme.Warn)}
 	case !m.view.AutoScroll:
 		conn = tui.ConnBadge{Text: "⏸ paused", Style: dim}
 	}
@@ -55,6 +57,9 @@ func (m Model) Header() tui.HeaderState {
 // wrap + timestamps on the left, severity-in-view counts on the right —
 // plus, while filtering, a second line mirroring browse's filter strip.
 func (m Model) Strips(width int) []string {
+	if m.stream == StreamWaitingForContainer {
+		return []string{m.waitingStripLine(width)}
+	}
 	if m.taskState() == tui.TaskStateLoading {
 		return []string{m.loadingStripLine(width)}
 	}
@@ -76,6 +81,21 @@ func (m Model) loadingStripLine(width int) string {
 	left := lipgloss.NewStyle().Foreground(theme.Warn).Render(m.spinner.View()) + " " +
 		dim.Render("loading logs for "+container+"…")
 	right := faint.Render("history loads before follow starts")
+	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
+}
+
+// waitingStripLine is 5b's new pre-connect state: the active container
+// hasn't started yet, so there's no stream to describe a spinner/progress
+// for — just the container's own reason, in the app's standing "pending/
+// not-yet-settled" vocabulary (tui.GlyphPending + theme.Warn, the pairing
+// browse/nodedetail/overview/timeline/helmhistory all use).
+func (m Model) waitingStripLine(width int) string {
+	theme := m.Theme()
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	container, _ := m.activeContainer()
+	left := warn.Render(tui.GlyphPending + " waiting for container " + container + " to start: " + m.waitingReason)
+	right := faint.Render("streams automatically once running")
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 
@@ -126,6 +146,9 @@ func (m Model) filterStripLine(width int) string {
 
 func (m Model) Body(width, height int) string {
 	if state := m.taskState(); state != tui.TaskStateReady {
+		if m.stream == StreamWaitingForContainer {
+			return m.waitingBody(width, height)
+		}
 		if state == tui.TaskStateLoading {
 			return m.loadingBody(width, height)
 		}
@@ -161,17 +184,38 @@ func (m Model) loadingBody(width, height int) string {
 	theme := m.Theme()
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	final := faint.Render("since " + m.sinceLabel() + " · waiting for log history…")
+	return decorativeBars(width, height, dim, faint) + "\n" + final
+}
+
+// waitingBody is 5b's pre-connect state — same decorative-bars shape as
+// loadingBody, but the final line names the container's own reason
+// (docs/design README.md §5b) instead of loadingBody's generic "waiting for
+// log history", in the app's standing pending/not-yet-settled color
+// (theme.Warn, matching waitingStripLine/Header's ConnBadge for this state).
+func (m Model) waitingBody(width, height int) string {
+	theme := m.Theme()
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	faint := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	container, _ := m.activeContainer()
+	final := warn.Render(tui.GlyphPending + " waiting for container " + container + " to start: " + m.waitingReason)
+	return decorativeBars(width, height, dim, faint) + "\n" + final
+}
+
+// decorativeBars renders loadingBody/waitingBody's shared shrinking-bar
+// filler, everything but the final status line each caller supplies itself.
+func decorativeBars(width, height int, first, rest lipgloss.Style) string {
 	rows := max(height-2, 1)
-	lines := make([]string, 0, rows+1)
+	lines := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
 		bar := strings.Repeat("━", max(width/3-(i%3)*2, 8))
-		style := faint
+		style := rest
 		if i == 0 {
-			style = dim
+			style = first
 		}
 		lines = append(lines, style.Render(bar))
 	}
-	lines = append(lines, faint.Render("since "+m.sinceLabel()+" · waiting for log history…"))
 	return strings.Join(lines, "\n")
 }
 

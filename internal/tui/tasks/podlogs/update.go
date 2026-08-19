@@ -35,6 +35,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamStartedMsg:
 		m.stream = msg.state
 		m.feedback = ""
+	case containerReadyMsg:
+		if msg.streamID != 0 && msg.streamID != m.streamID {
+			return m, nil
+		}
+		return m, m.connect(m.streamID)
+	case containerWaitingMsg:
+		if msg.streamID != 0 && msg.streamID != m.streamID {
+			return m, nil
+		}
+		m.stream = StreamWaitingForContainer
+		m.waitingReason = msg.reason
+		m.feedback = "waiting for container to start: " + msg.reason
+	case kube.ResourceChangedMsg:
+		if msg.Kind == kube.KindPod && m.stream == StreamWaitingForContainer {
+			return m, m.checkContainerCmd(m.streamID)
+		}
 	case spinner.TickMsg:
 		if m.taskState() != tui.TaskStateLoading {
 			return m, nil
@@ -75,7 +91,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case rateTickMsg:
 		if msg.gen != m.rateGen {
-			return m, nil // stale generation from a since-superseded restartStream — drop, don't reschedule
+			return m, nil // stale generation from a since-superseded beginStream — drop, don't reschedule
 		}
 		m.lastRate = m.linesSinceTick
 		m.linesSinceTick = 0
@@ -95,11 +111,13 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		m.cancelStream()
+		m.streamID++ // invalidate any in-flight container check/ResourceChangedMsg re-check
 		m.stream = StreamClosed
 		m.feedback = "Log stream closed."
 		return m, tea.Quit
 	case "esc":
 		m.cancelStream()
+		m.streamID++ // invalidate any in-flight container check/ResourceChangedMsg re-check
 		m.stream = StreamClosed
 		m.feedback = "Log stream closed."
 		return m, func() tea.Msg { return tui.BackMsg{} }
@@ -139,10 +157,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.view.Timestamps = !m.view.Timestamps
 	case "tab":
 		m.cycleContainer()
-		return m, m.restartStream(StreamReconnecting)
+		return m, m.beginStream(StreamReconnecting)
 	case "s":
 		m.cycleSince()
-		return m, m.restartStream(StreamReconnecting)
+		return m, m.beginStream(StreamReconnecting)
 	case "w":
 		m.jumpSeverity(SeverityWarn)
 	case "e":

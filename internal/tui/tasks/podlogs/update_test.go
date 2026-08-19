@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -316,6 +317,78 @@ func TestCopyVisibleViewSetsClipboard(t *testing.T) {
 	_, cmd := model.Update(tea.KeyPressMsg{Text: "Y"})
 	if cmd == nil {
 		t.Fatalf("ctrl+y did not return a command")
+	}
+}
+
+func TestContainerWaitingMsgParksInWaitingState(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	_, cmd := model.Update(containerWaitingMsg{reason: "ContainerCreating"})
+	if cmd != nil {
+		t.Fatalf("cmd = %v, want nil (no self-rescheduling — the next check comes from kube.ResourceChangedMsg)", cmd)
+	}
+	if model.stream != StreamWaitingForContainer || model.waitingReason != "ContainerCreating" {
+		t.Fatalf("model = %+v", model)
+	}
+	if model.taskState() != tui.TaskStateLoading {
+		t.Fatalf("taskState = %s, want loading", model.taskState())
+	}
+
+	// A stale streamID (from a superseded beginStream, e.g. the user
+	// switched containers again while this check was in flight) is ignored.
+	model.streamID = 9
+	_, cmd = model.Update(containerWaitingMsg{streamID: 1, reason: "ImagePullBackOff"})
+	if cmd != nil || model.waitingReason != "ContainerCreating" {
+		t.Fatalf("stale containerWaitingMsg was applied: waitingReason=%q cmd=%v", model.waitingReason, cmd)
+	}
+}
+
+func TestContainerReadyMsgConnects(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.streamer = &fakeStreamer{connects: map[string][]string{"app": {""}}}
+	model.stream = StreamWaitingForContainer
+	model.waitingReason = "ContainerCreating"
+
+	_, cmd := model.Update(containerReadyMsg{})
+	if cmd == nil {
+		t.Fatalf("containerReadyMsg did not return a connect cmd")
+	}
+	if model.streamCancel == nil {
+		t.Fatalf("connect did not spin up the stream goroutine")
+	}
+	model.cancelStream()
+}
+
+func TestResourceChangedMsgRechecksOnlyWhileWaitingOnPods(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.lister = &fakeRestartLister{podName: "api", container: "app", state: "Running"}
+	model.stream = StreamWaitingForContainer
+
+	_, cmd := model.Update(kube.ResourceChangedMsg{Kind: kube.KindPod})
+	if cmd == nil {
+		t.Fatalf("expected a recheck cmd while StreamWaitingForContainer")
+	}
+	if msg := cmd(); msg != (containerReadyMsg{streamID: model.streamID}) {
+		t.Fatalf("recheck result = %#v, want containerReadyMsg", msg)
+	}
+
+	// Not waiting: a Pod change event is a no-op.
+	model.stream = StreamStreaming
+	_, cmd = model.Update(kube.ResourceChangedMsg{Kind: kube.KindPod})
+	if cmd != nil {
+		t.Fatalf("cmd = %v, want nil while not waiting on a container", cmd)
+	}
+
+	// Waiting, but a change to an unrelated kind is also a no-op.
+	model.stream = StreamWaitingForContainer
+	_, cmd = model.Update(kube.ResourceChangedMsg{Kind: kube.KindEvent})
+	if cmd != nil {
+		t.Fatalf("cmd = %v, want nil for a non-Pod kind", cmd)
 	}
 }
 

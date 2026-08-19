@@ -28,6 +28,31 @@ func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
 	}
 }
 
+// TestRenderWaitingForContainerShowsReasonNotAnError pins the feature:
+// a container that hasn't started yet must render as a pending/amber
+// "starting" state — badge, toolbar, and body all naming the reason — not
+// as the generic "loading logs" spinner state or an error.
+func TestRenderWaitingForContainerShowsReasonNotAnError(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.SetSize(140, 24) // wide enough for the strip's left + right content to both fit
+	model.stream = StreamWaitingForContainer
+	model.waitingReason = "ContainerCreating"
+	view := ansi.Strip(model.Render())
+	for _, want := range []string{"starting", "waiting for container app to start: ContainerCreating", "streams automatically once running"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("waiting view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "loading logs for") {
+		t.Fatalf("waiting view should not show the generic loading strip:\n%s", view)
+	}
+	if strings.Contains(view, "error") {
+		t.Fatalf("waiting view should not read as an error:\n%s", view)
+	}
+}
+
 func TestRenderStreamingShowsToolbarAndLogLines(t *testing.T) {
 	t.Parallel()
 

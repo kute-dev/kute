@@ -87,13 +87,21 @@ type LogBuffer struct {
 type StreamState string
 
 const (
-	StreamIdle         StreamState = "idle"
-	StreamLoading      StreamState = "loading"
-	StreamStreaming    StreamState = "streaming"
-	StreamReconnecting StreamState = "reconnecting"
-	StreamEmpty        StreamState = "empty"
-	StreamError        StreamState = "error"
-	StreamClosed       StreamState = "closed"
+	StreamIdle      StreamState = "idle"
+	StreamLoading   StreamState = "loading"
+	StreamStreaming StreamState = "streaming"
+	// StreamWaitingForContainer is the pre-connect state: the active
+	// container hasn't started yet per the pod cache (checkContainerCmd's
+	// containerWaitingMsg, stream.go), so no stream has been opened at all.
+	// Distinct from StreamReconnecting, which is between two actual
+	// connections against a container that has already run. Resolved by
+	// the next kube.ResourceChangedMsg{Kind: KindPod} (update.go), not a
+	// timer.
+	StreamWaitingForContainer StreamState = "waiting-container"
+	StreamReconnecting        StreamState = "reconnecting"
+	StreamEmpty               StreamState = "empty"
+	StreamError               StreamState = "error"
+	StreamClosed              StreamState = "closed"
 )
 
 // Config are podlogs' dependencies, per repo convention (package-local
@@ -126,14 +134,15 @@ type Model struct {
 	containerIdx int
 	sinceIdx     int
 
-	view       LogViewState
-	buffer     LogBuffer
-	stream     StreamState
-	lastError  string
-	permDenied bool
-	feedback   string
-	streamer   kube.PodLogStreamer
-	tailLines  int64
+	view          LogViewState
+	buffer        LogBuffer
+	stream        StreamState
+	lastError     string
+	permDenied    bool
+	waitingReason string // set only while stream == StreamWaitingForContainer
+	feedback      string
+	streamer      kube.PodLogStreamer
+	tailLines     int64
 
 	streamCancel context.CancelFunc
 	streamCh     chan tea.Msg
@@ -217,7 +226,7 @@ func (m Model) Init() tea.Cmd { return nil }
 // alongside pushing the screen (mirrors poddetail/nodedetail's Init()
 // pattern, kept as an explicit method since browse already calls it that
 // way and changing the call site isn't otherwise needed).
-func (m *Model) Start() tea.Cmd { return m.restartStream(StreamLoading) }
+func (m *Model) Start() tea.Cmd { return m.beginStream(StreamLoading) }
 
 func (m Model) Theme() tui.Theme {
 	if m.session != nil {
@@ -387,7 +396,7 @@ func (m Model) taskState() tui.TaskState {
 			return tui.TaskStatePermissionDenied
 		}
 		return tui.TaskStateError
-	case StreamLoading, StreamReconnecting, StreamIdle:
+	case StreamLoading, StreamReconnecting, StreamIdle, StreamWaitingForContainer:
 		return tui.TaskStateLoading
 	default:
 		return tui.TaskStateReady

@@ -18,27 +18,41 @@ import (
 )
 
 // fakeRestartLister answers ListRaw with a single pod carrying one
-// container's live restart count — letting tests simulate an actual
-// container restart happening mid-stream (or not happening at all).
+// container's live restart count and (state, reason) — letting tests
+// simulate an actual container restart happening mid-stream, or a
+// container that hasn't started yet (or fails to). state defaults to
+// "Running" when unset, so existing restart-count-only tests that never set
+// it are unaffected. listErr, when set, makes ListRaw itself fail —
+// simulating a lister/lookup failure distinct from "the pod says Waiting".
 type fakeRestartLister struct {
 	podName   string
 	container string
 	restarts  int32
+	state     string // "", "Running", "Waiting", "Terminated"
+	reason    string
+	listErr   error
 }
 
 func (f *fakeRestartLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
 	if kind != kube.KindPod {
 		return nil, nil
 	}
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	status := corev1.ContainerStatus{Name: f.container, RestartCount: f.restarts}
+	switch f.state {
+	case "Waiting":
+		status.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: f.reason}}
+	case "Terminated":
+		status.State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: f.reason}}
+	default: // "" and "Running" both mean running — the common case for existing restart-count tests
+		status.State = corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+	}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: f.podName},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: f.container}}},
-		Status: corev1.PodStatus{
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:         f.container,
-				RestartCount: f.restarts,
-			}},
-		},
+		Status:     corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{status}},
 	}
 	return []runtime.Object{pod}, nil
 }
@@ -356,4 +370,92 @@ func collectRunStream(model Model) []tea.Msg {
 		out = append(out, msg)
 	}
 	return out
+}
+
+// TestCheckContainerCmdReadyWhenRunning confirms the pre-connect check lets
+// a running container through as containerReadyMsg.
+func TestCheckContainerCmdReadyWhenRunning(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.lister = &fakeRestartLister{podName: "api", container: "app", state: "Running"}
+
+	msg := model.checkContainerCmd(1)()
+	ready, ok := msg.(containerReadyMsg)
+	if !ok || ready.streamID != 1 {
+		t.Fatalf("msg = %#v, want containerReadyMsg{streamID: 1}", msg)
+	}
+}
+
+// TestCheckContainerCmdWaitingWhenContainerCreating is the core of the
+// feature: a container still ContainerCreating must not be treated as ready
+// to stream.
+func TestCheckContainerCmdWaitingWhenContainerCreating(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.lister = &fakeRestartLister{podName: "api", container: "app", state: "Waiting", reason: "ContainerCreating"}
+
+	msg := model.checkContainerCmd(1)()
+	waiting, ok := msg.(containerWaitingMsg)
+	if !ok || waiting.streamID != 1 || waiting.reason != "ContainerCreating" {
+		t.Fatalf("msg = %#v, want containerWaitingMsg{streamID: 1, reason: \"ContainerCreating\"}", msg)
+	}
+}
+
+// TestCheckContainerCmdReadyWhenLookupFails is the fail-open guard: a
+// lister error must never hang the screen in StreamWaitingForContainer —
+// it degrades to the old "just try to connect" behavior instead.
+func TestCheckContainerCmdReadyWhenLookupFails(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.lister = &fakeRestartLister{podName: "api", container: "app", listErr: errors.New("boom")}
+
+	msg := model.checkContainerCmd(1)()
+	if _, ok := msg.(containerReadyMsg); !ok {
+		t.Fatalf("msg = %#v, want containerReadyMsg on lookup failure", msg)
+	}
+}
+
+// TestBeginStreamSkipsCheckWithoutLister is a regression guard: beginStream
+// must connect immediately, exactly as the old restartStream did, when no
+// lister is wired to check against (testModel() itself, and any other
+// caller/test that never sets one).
+func TestBeginStreamSkipsCheckWithoutLister(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.streamer = &fakeStreamer{connects: map[string][]string{"app": {""}}}
+	cmd := model.beginStream(StreamLoading)
+	if model.streamCancel == nil {
+		t.Fatalf("streamCancel is nil, want beginStream to have connected synchronously without a lister")
+	}
+	if cmd == nil {
+		t.Fatalf("beginStream returned a nil cmd")
+	}
+	model.cancelStream()
+}
+
+// TestRunStreamTreatsContainerNotStartedErrorAsWaiting covers the narrow
+// race beginStream's pre-check can't fully close: the container flips back
+// to waiting between that check and the actual connect attempt. The
+// kubelet's fixed error text for that must not surface as a fatal
+// streamErrorMsg.
+func TestRunStreamTreatsContainerNotStartedErrorAsWaiting(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.streamer = &fakeStreamer{err: errors.New(`container "app" in pod "api" is waiting to start: ContainerCreating`)}
+	msgs := collectRunStream(model)
+	if len(msgs) != 1 {
+		t.Fatalf("msgs = %+v, want exactly one message", msgs)
+	}
+	waiting, ok := msgs[0].(containerWaitingMsg)
+	if !ok {
+		t.Fatalf("msgs[0] = %#v, want containerWaitingMsg, not a fatal streamErrorMsg", msgs[0])
+	}
+	if waiting.reason == "" {
+		t.Fatalf("waiting.reason is empty, want a non-empty fallback reason")
+	}
 }

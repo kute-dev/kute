@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 )
 
 // reconnectDelay is the pause before re-opening a container's log stream
@@ -35,7 +36,34 @@ type streamClosedMsg struct{ streamID int }
 type streamWaitMsg struct{}
 type rateTickMsg struct{ gen int }
 
-func (m *Model) restartStream(state StreamState) tea.Cmd {
+// containerReadyMsg and containerWaitingMsg are checkContainerCmd's two
+// outcomes — see beginStream's doc comment for the flow they drive.
+type containerReadyMsg struct{ streamID int }
+type containerWaitingMsg struct {
+	streamID int
+	reason   string
+}
+
+// containerCheckTimeout bounds checkContainerCmd's ListRaw call — the pod
+// cache is a local informer read (no network), so this is just a safety net
+// against a misbehaving lister, not a latency budget that matters in
+// practice.
+const containerCheckTimeout = 10 * time.Second
+
+// beginStream is the single entry point for (re)starting the active
+// container's stream — Start() (cold open) and the tab/s key handlers
+// (container/since change) all go through it, replacing the old
+// restartStream. It resets the same presentation state restartStream
+// always has, then either connects immediately (no lister to check
+// against — preserves pre-existing behavior for callers/tests with none
+// wired) or checks the container's live cached state first via
+// checkContainerCmd: a container that hasn't started yet parks in
+// StreamWaitingForContainer (see Update's containerWaitingMsg case)
+// instead of attempting to stream and erroring on the kubelet's "is
+// waiting to start" response. The wait is resolved by the next
+// kube.ResourceChangedMsg{Kind: KindPod} the root shell already forwards
+// to every task (mirrors poddetail's CONTAINERS grid) — not a poll.
+func (m *Model) beginStream(state StreamState) tea.Cmd {
 	m.cancelStream()
 	m.streamID++
 	m.rateGen++
@@ -43,18 +71,63 @@ func (m *Model) restartStream(state StreamState) tea.Cmd {
 	m.feedback = "Loading logs for " + m.scope() + "..."
 	m.lastError = ""
 	m.permDenied = false
+	m.waitingReason = ""
 	m.buffer.Entries = nil
 	m.buffer.DroppedCount = 0
 	m.view.VerticalOffset = 0
 	m.linesSinceTick = 0
 	m.lastRate = 0
+
+	streamID := m.streamID
+	if m.lister == nil {
+		return m.connect(streamID)
+	}
+	return m.checkContainerCmd(streamID)
+}
+
+// connect actually spins up the streaming goroutine — reached either
+// directly from beginStream (no lister to pre-check with) or once
+// containerReadyMsg confirms the active container is no longer waiting. A
+// stale streamID (a later beginStream superseded this one while a check
+// was in flight, e.g. the user pressed tab again) is a no-op.
+func (m *Model) connect(streamID int) tea.Cmd {
+	if streamID != m.streamID {
+		return nil
+	}
 	m.streamCh = make(chan tea.Msg, 128)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.streamCancel = cancel
-	streamID := m.streamID
 	model := *m
 	go model.runStream(ctx, streamID, m.streamCh)
 	return tea.Batch(waitForStream(m.streamCh), rateTickCmd(m.rateGen), m.spinner.Tick)
+}
+
+// checkContainerCmd reads the active container's live state from the pod
+// cache and reports whether it's safe to connect. A lookup failure (lister
+// error, pod/container not found — e.g. a momentary cache hiccup) degrades
+// to "ready": it never blocks the screen on something that isn't a
+// positively-observed wait, matching the old behavior of just attempting
+// to stream.
+func (m Model) checkContainerCmd(streamID int) tea.Cmd {
+	container, ok := m.activeContainer()
+	if !ok {
+		return func() tea.Msg { return streamEmptyMsg{streamID: streamID} }
+	}
+	lister := m.lister
+	namespace := m.pod.Namespace
+	podName := m.pod.Name
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), containerCheckTimeout)
+		defer cancel()
+		info, found := lookupContainerInfo(ctx, lister, namespace, podName, container)
+		if found && info.State != "" && info.State != "Waiting" {
+			return containerReadyMsg{streamID: streamID}
+		}
+		if !found {
+			return containerReadyMsg{streamID: streamID}
+		}
+		return containerWaitingMsg{streamID: streamID, reason: info.Reason}
+	}
 }
 
 func rateTickCmd(gen int) tea.Cmd {
@@ -80,7 +153,7 @@ func (m Model) nextStreamCmd() tea.Cmd {
 
 // runStream drives the active container's reconnect loop (streamContainer)
 // to completion — which only happens once ctx is cancelled (cancelStream,
-// on esc/quit/restartStream) or a genuine error occurs — and reports the
+// on esc/quit/beginStream) or a genuine error occurs — and reports the
 // outcome down ch.
 func (m Model) runStream(ctx context.Context, streamID int, ch chan<- tea.Msg) {
 	defer close(ch)
@@ -109,6 +182,17 @@ func (m Model) runStream(ctx context.Context, streamID int, ch chan<- tea.Msg) {
 		}
 	})
 	if err != nil && !errors.Is(err, context.Canceled) {
+		if kube.IsContainerNotStartedError(err) {
+			// The race window beginStream's pre-check can't fully close:
+			// the container flipped back to waiting between that check and
+			// this connect attempt. Treat it the same as a positive
+			// checkContainerCmd observation rather than a fatal error — the
+			// goroutine just ends, and the next Pod-cache change event
+			// resumes the check (see Update's containerWaitingMsg/
+			// kube.ResourceChangedMsg cases).
+			ch <- containerWaitingMsg{streamID: streamID, reason: "starting"}
+			return
+		}
 		ch <- streamErrorMsg{streamID: streamID, err: fmt.Errorf("stream logs for %s: %w", m.scope(), err)}
 		return
 	}
@@ -267,33 +351,47 @@ func (m Model) waitForContainerRestart(ctx context.Context, container string, la
 	}
 }
 
-// containerRestartCount reads container's own live restart count via
-// lister — distinct from currentRestartCount's pod-level sum across every
-// container, since only this container's own count tells us whether *it*
-// has actually restarted. ok is false whenever that can't be determined (no
-// lister, list failure, pod/container not found) — callers fall back to the
-// blind reconnect-after-delay behavior in that case.
-func (m Model) containerRestartCount(ctx context.Context, container string) (int32, bool) {
-	if m.lister == nil {
-		return 0, false
+// lookupContainerInfo reads container's own live status from the pod
+// cache via lister — the ListRaw-and-find-this-pod-and-container dance
+// shared by containerRestartCount and checkContainerCmd. ok is false
+// whenever the answer can't be determined at all (no lister, list failure,
+// pod/container not found) — callers each have their own fail-open
+// fallback for that case.
+func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namespace, podName, container string) (kube.ContainerInfo, bool) {
+	if lister == nil {
+		return kube.ContainerInfo{}, false
 	}
-	objs, err := m.lister.ListRaw(ctx, kube.KindPod, m.pod.Namespace)
+	objs, err := lister.ListRaw(ctx, kube.KindPod, namespace)
 	if err != nil {
-		return 0, false
+		return kube.ContainerInfo{}, false
 	}
 	for _, obj := range objs {
 		p, ok := obj.(*corev1.Pod)
-		if !ok || p.Name != m.pod.Name {
+		if !ok || p.Name != podName {
 			continue
 		}
 		for _, ci := range kube.PodFromObject(p).ContainerInfos {
 			if ci.Name == container {
-				return ci.Restarts, true
+				return ci, true
 			}
 		}
+		return kube.ContainerInfo{}, false
+	}
+	return kube.ContainerInfo{}, false
+}
+
+// containerRestartCount reads container's own live restart count —
+// distinct from currentRestartCount's pod-level sum across every
+// container, since only this container's own count tells us whether *it*
+// has actually restarted. ok is false whenever that can't be determined —
+// callers fall back to the blind reconnect-after-delay behavior in that
+// case.
+func (m Model) containerRestartCount(ctx context.Context, container string) (int32, bool) {
+	info, ok := lookupContainerInfo(ctx, m.lister, m.pod.Namespace, m.pod.Name, container)
+	if !ok {
 		return 0, false
 	}
-	return 0, false
+	return info.Restarts, true
 }
 
 // unretrievableLogsPrefix is the kubelet containerLogs handler's own error
