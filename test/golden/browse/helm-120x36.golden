@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › nva-stage › Helm Releases  g goto  n namespace  c context                    ● connected  
+  ❯ kute │ c microk8s-cluster › n nva-stage › g Helm Releases                                              ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated              repo cache 6d old — run helm repo update  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › CronJobs  g goto  n namespace  c context
+  ❯ kute │ c microk8s-cluster › n default › g CronJobs             ● connected  
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 last run ok   ✕ 1 last run failed   ○ 1 no history   ◐ 1 active now   ⏸ 1…
 ────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › Pods  g goto  n namespace  c context                     ⣾ loading pods · 0.0s  
+  ❯ kute │ c microk8s-cluster › n default › g Pods                                               ⣾ loading pods · 0.0s  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ⣾ listing pods in default…                                                          watch starts when the list lands  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

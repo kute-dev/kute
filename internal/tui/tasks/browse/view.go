@@ -16,6 +16,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func (m Model) View() tea.View { return tea.NewView(m.Render()) }
@@ -36,6 +37,14 @@ func (m Model) Header() tui.HeaderState {
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
 	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+	// Same style renderKeybarV2 (chrome.go) uses for key letters — the
+	// breadcrumb's inline g/n/c prefixes read as the same affordance as the
+	// keybar's, by construction.
+	accent := lipgloss.NewStyle().Foreground(theme.Accent)
+	// Sits between TextDim (context) and Text (kind) on the text ramp, so
+	// the breadcrumb reads dim → mid → bright as it narrows from cluster to
+	// namespace to kind.
+	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 
 	ctxName := "cluster unavailable"
 	if m.session != nil && m.session.Location.Context != "" {
@@ -44,17 +53,22 @@ func (m Model) Header() tui.HeaderState {
 
 	crumbs := append(tui.BrandCrumbs(theme),
 		tui.Crumb{Text: " │ ", Style: ghost2},
+		tui.Crumb{Text: verbs.Context.Key + " ", Style: accent},
 		tui.Crumb{Text: ctxName, Style: dim},
 	)
 	if !m.desc.ClusterScoped {
-		nsText, nsStyle := m.namespace, lipgloss.NewStyle().Foreground(theme.Accent)
+		// One step brighter than the context segment (TextSecondary, not
+		// TextDim) — and not the accent purple the "n" key itself uses, so
+		// the segment text stays distinct from its own key prefix.
+		nsText, nsStyle := m.namespace, secondary
 		if m.grouped() {
-			// 6b: scope is never ambiguous — the blue ALL-NS token, not the
-			// namespace's usual purple accent (docs/design README.md §6b).
+			// 6b: scope is never ambiguous — the blue ALL-NS token
+			// (docs/design README.md §6b).
 			nsText, nsStyle = tui.GlyphAllNS+" all namespaces", lipgloss.NewStyle().Foreground(theme.Info)
 		}
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},
+			tui.Crumb{Text: verbs.Namespace.Key + " ", Style: accent},
 			tui.Crumb{Text: nsText, Style: nsStyle},
 		)
 	}
@@ -69,6 +83,7 @@ func (m Model) Header() tui.HeaderState {
 	}
 	crumbs = append(crumbs,
 		tui.Crumb{Text: " › ", Style: ghost},
+		tui.Crumb{Text: verbs.Goto.Key + " ", Style: accent},
 		tui.Crumb{Text: m.desc.Display, Style: text},
 	)
 	if m.desc.Custom && m.desc.APIGroup != "" && m.desc.APIVersion != "" {
@@ -90,7 +105,6 @@ func (m Model) Header() tui.HeaderState {
 		// namespace segment is already dropped above.
 		crumbs = append(crumbs, tui.Crumb{Text: "  cluster-scoped", Style: faint})
 	}
-	crumbs = append(crumbs, tui.Crumb{Text: "  g goto  n namespace  c context", Style: faint})
 
 	if m.state == tui.TaskStateLoading {
 		// 15a: the header's right side is a counting timer instead of the

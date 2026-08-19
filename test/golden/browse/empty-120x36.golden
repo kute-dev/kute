@@ -1,4 +1,4 @@
-  ❯ kute │ microk8s-cluster › default › Pods  g goto  n namespace  c context                               ● connected  
+  ❯ kute │ c microk8s-cluster › n default › g Pods                                                         ● connected  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
      NAME                                  RDY    STATUS            ↺     CPU           MEM           NODE         AGE  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -317,14 +317,14 @@ func TestBreadcrumbShowsOriginDeploymentName(t *testing.T) {
 
 	header := m.Header()
 	before := crumbText(header)
-	if strings.Contains(before, "api › Pods") {
+	if strings.Contains(before, "api › g Pods") {
 		t.Fatalf("expected no deployment name in breadcrumb before opening pods:\n%s", before)
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
 	after := crumbText(m.Header())
-	if !strings.Contains(after, "api › Pods") {
-		t.Fatalf("expected breadcrumb to include %q, got:\n%s", "api › Pods", after)
+	if !strings.Contains(after, "api › g Pods") {
+		t.Fatalf("expected breadcrumb to include %q, got:\n%s", "api › g Pods", after)
 	}
 }
 
