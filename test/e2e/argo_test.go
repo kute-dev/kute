@@ -26,7 +26,18 @@ func TestArgoApplications(t *testing.T) {
 
 	gotoApps := func() {
 		a.gotoKind(t, "applic", "Applications")
-		a.WaitFor("kute-billing", Settle)
+		// "kute-billing" alone isn't a Ready fence: a revisited kind seeds
+		// its loading state from 15a's cached-rows-dimmed view
+		// (resetAndLoad), which can render the very same row text while
+		// m.state is still Loading. argoVerbsApply() — and so every §33a
+		// verb, refresh included — is gated on state == Ready, so a 'r'
+		// pressed inside that window is a silent no-op: nothing in the
+		// switch's case list matches, and the model has no complaint to
+		// show. "refresh" only ever renders in the keybar once
+		// argoVerbsApply() is true, so waiting for it here closes the
+		// exact window "list renders the sync×health matrix" already
+		// fences on for its own first visit.
+		a.WaitForAll(Settle, "kute-billing", "refresh")
 	}
 
 	t.Run("list renders the sync×health matrix", func(t *testing.T) {
