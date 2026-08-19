@@ -46,7 +46,6 @@ func (m Model) Header() tui.HeaderState {
 	// mid → bright — so depth reads at a glance as the breadcrumb narrows
 	// from cluster to namespace to kind.
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
-	primary := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 
 	ctxName := "cluster unavailable"
 	if m.session != nil && m.session.Location.Context != "" {
@@ -65,7 +64,7 @@ func (m Model) Header() tui.HeaderState {
 		// One step brighter than the context segment (TextPrimary, not
 		// TextSecondary) — and not the muted purple the "n" key itself uses,
 		// so the segment text stays distinct from its own key prefix.
-		nsText, nsStyle := m.namespace, primary
+		nsText, nsStyle := m.namespace, lipgloss.NewStyle().Foreground(theme.TextPrimary)
 		if m.grouped() {
 			// 6b: scope is never ambiguous — the blue ALL-NS token
 			// (docs/design README.md §6b).
