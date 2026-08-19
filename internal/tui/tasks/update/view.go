@@ -30,11 +30,11 @@ func (m Model) Theme() tui.Theme {
 // already renders nothing, per renderHeaderV2).
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
 	crumbs := append(tui.BrandCrumbs(theme),
-		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: " │ ", Style: ghost2},
 		tui.Crumb{Text: "Update", Style: text},
 	)
 	return tui.HeaderState{

@@ -28,6 +28,7 @@ func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
 	// No namespace segment: the chain crosses namespaces by design (a
@@ -35,7 +36,7 @@ func (m Model) Header() tui.HeaderState {
 	// flux-system), so scoping the breadcrumb to one would misdescribe what
 	// is on screen.
 	crumbs := append(tui.BrandCrumbs(theme),
-		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: " │ ", Style: ghost2},
 		tui.Crumb{Text: m.contextName(), Style: dim},
 		tui.Crumb{Text: " › ", Style: ghost},
 		tui.Crumb{Text: "Flux", Style: text},

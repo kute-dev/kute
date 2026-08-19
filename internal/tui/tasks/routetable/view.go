@@ -28,6 +28,7 @@ func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
 	ctxName := "cluster unavailable"
@@ -36,11 +37,11 @@ func (m Model) Header() tui.HeaderState {
 	}
 
 	crumbs := append(tui.BrandCrumbs(theme),
-		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: " │ ", Style: ghost2},
 		tui.Crumb{Text: ctxName, Style: dim},
 	)
 	if m.namespace != "" {
-		crumbs = append(crumbs, tui.Crumb{Text: " › ", Style: ghost}, tui.Crumb{Text: m.namespace, Style: dim})
+		crumbs = append(crumbs, tui.Crumb{Text: " › ", Style: ghost}, tui.Crumb{Text: m.namespace, Style: lipgloss.NewStyle().Foreground(theme.TextPrimary)})
 	}
 	crumbs = append(crumbs,
 		tui.Crumb{Text: " › ", Style: ghost},

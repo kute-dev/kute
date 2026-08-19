@@ -31,9 +31,10 @@ func (m Model) Theme() tui.Theme {
 // own "› Data" segment.
 func (m Model) Header() tui.HeaderState {
 	theme := m.Theme()
-	accent := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	nsStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	ghost2 := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	text := lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
 
@@ -42,13 +43,13 @@ func (m Model) Header() tui.HeaderState {
 		ctxName = m.session.Location.Context
 	}
 	crumbs := append(tui.BrandCrumbs(theme),
-		tui.Crumb{Text: " │ ", Style: ghost},
+		tui.Crumb{Text: " │ ", Style: ghost2},
 		tui.Crumb{Text: ctxName, Style: dim},
 	)
 	if m.namespace != "" {
 		crumbs = append(crumbs,
 			tui.Crumb{Text: " › ", Style: ghost},
-			tui.Crumb{Text: m.namespace, Style: accent})
+			tui.Crumb{Text: m.namespace, Style: nsStyle})
 	}
 	crumbs = append(crumbs,
 		tui.Crumb{Text: " › ", Style: ghost},
