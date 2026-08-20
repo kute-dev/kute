@@ -67,6 +67,10 @@
           <span class="explorer-tab-title">Debug batch workloads</span>
           <span class="explorer-tab-meta">cronjobs and job attempts</span>
         </button>
+        <button id="explorer-tab-helm" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-helm" tabindex="-1">
+          <span class="explorer-tab-title">Inspect Helm releases</span>
+          <span class="explorer-tab-meta">values, history, rollback</span>
+        </button>
         <button id="explorer-tab-routing" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-routing" tabindex="-1">
           <span class="explorer-tab-title">Inspect routing</span>
           <span class="explorer-tab-meta">ingress and httproute</span>
@@ -189,6 +193,31 @@
             </div>
             <a class="explorer-fullsize theme-link-dark" href="/assets/home-batch-attempts.png" target="_blank" rel="noopener">Open screenshot full size</a>
             <a class="explorer-fullsize theme-link-light" href="/assets/home-batch-attempts-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+        </article>
+
+        <article id="explorer-panel-helm" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-helm" tabindex="0" hidden>
+          <div class="explorer-subtabs" role="tablist" aria-label="Helm release screen">
+            <button id="helm-tab-releases" type="button" role="tab" aria-selected="true" aria-controls="helm-panel-releases" tabindex="0">Releases</button>
+            <button id="helm-tab-history" type="button" role="tab" aria-selected="false" aria-controls="helm-panel-history" tabindex="-1">History <code>h</code></button>
+          </div>
+          <div id="helm-panel-releases" class="explorer-subpanel" role="tabpanel" aria-labelledby="helm-tab-releases">
+            <p class="explorer-intro">The deployed chart sits beside the newest version in your local repo cache, so current and outdated releases stay distinct without the <code>helm</code> binary installed.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-helm-releases.png" width="1632" height="700" loading="lazy" alt="kute Helm Releases list showing current Redis and PostgreSQL with a newer chart available">
+              <img class="theme-shot theme-shot-light" src="/assets/home-helm-releases-light.png" width="1632" height="700" loading="lazy" alt="kute Helm Releases list in the light theme showing current Redis and PostgreSQL with a newer chart available">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-helm-releases.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-helm-releases-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="helm-panel-history" class="explorer-subpanel" role="tabpanel" aria-labelledby="helm-tab-history" hidden>
+            <p class="explorer-intro">Read values with <code>v</code> and walk every revision with <code>h</code>, still without Helm installed. Only rollback with <code>R</code> invokes the Helm CLI.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-helm-history.png" width="1632" height="700" loading="lazy" alt="kute Helm release history showing the current and superseded PostgreSQL revisions">
+              <img class="theme-shot theme-shot-light" src="/assets/home-helm-history-light.png" width="1632" height="700" loading="lazy" alt="kute Helm release history in the light theme showing the current and superseded PostgreSQL revisions">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-helm-history.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-helm-history-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
         </article>
 

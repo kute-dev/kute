@@ -391,13 +391,14 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 	body := string(mustRead(t, filepath.Join(out, "index.html")))
 	tabRe := regexp.MustCompile(`<button id="(explorer-tab-[^"]+)" class="explorer-tab"[^>]+aria-selected="(true|false)" aria-controls="([^"]+)"`)
 	tabs := tabRe.FindAllStringSubmatch(body, -1)
-	if len(tabs) != 7 {
-		t.Fatalf("homepage has %d explorer tabs, want 7", len(tabs))
+	if len(tabs) != 8 {
+		t.Fatalf("homepage has %d explorer tabs, want 8", len(tabs))
 	}
 	wantTabs := []string{
 		"explorer-tab-incident",
 		"explorer-tab-navigation",
 		"explorer-tab-batch",
+		"explorer-tab-helm",
 		"explorer-tab-routing",
 		"explorer-tab-gitops",
 		"explorer-tab-actions",
@@ -421,13 +422,14 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		t.Errorf("homepage has %d initially selected explorer tabs, want 1", selected)
 	}
 
-	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 19 {
-		t.Errorf("homepage has %d explorer subpanels, want 19 grouped screens", got)
+	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 21 {
+		t.Errorf("homepage has %d explorer subpanels, want 21 grouped screens", got)
 	}
 	for _, id := range []string{
 		"incident-panel-cluster", "incident-panel-pod", "incident-panel-certificate", "incident-panel-timeline",
 		"navigation-panel-goto", "navigation-panel-namespace", "navigation-panel-context",
 		"batch-panel-cronjob", "batch-panel-attempts",
+		"helm-panel-releases", "helm-panel-history",
 		"routing-panel-ingress", "routing-panel-http",
 		"gitops-panel-flux", "gitops-panel-argo",
 		"actions-panel-scale", "actions-panel-setimage", "actions-panel-resources", "actions-panel-forward",
@@ -465,6 +467,8 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 		"home-timeline",
 		"home-batch-cronjob",
 		"home-batch-attempts",
+		"home-helm-releases",
+		"home-helm-history",
 		"home-routing-ingress",
 		"home-routing-http",
 		"home-flux",
