@@ -22,6 +22,14 @@ go run ./cmd/kute --demo
 
 No cluster or kubeconfig required — `--demo` runs against a built-in in-memory fake cluster so you can explore every screen immediately.
 
+## How is kute different from k9s?
+
+**Answers, not objects.**
+
+k9s is an excellent general-purpose Kubernetes browser. If fast object browsing is your main need, it may already be the right tool.
+
+kute is built for the first 15 minutes after something breaks: unhealthy workloads rise first, termination causes remain visible, logs mark container restarts, and the incident timeline correlates crashes, events, and rollout changes. It still browses and edits resources, but its center of gravity is diagnosis.
+
 ## What makes it different
 
 - **Unhealthy-first triage** — every list sorts broken workloads to the top; fully healthy groups collapse to a single line instead of burying the incident in green rows.
