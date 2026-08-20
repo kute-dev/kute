@@ -20,16 +20,26 @@
 # "worker" also matches the StatefulSet and its ControllerRevisions, and
 # "api" also matches the Deployment — either would land on an ambiguous
 # top match instead of the one pod.
+#
+# FontSize/Width/Height are a matched set, not free knobs. Betamax draws
+# U+2500 at the font's own advance rather than stretching it to the cell, so
+# at most sizes every horizontal rule in kute's chrome comes out dashed —
+# one dark pixel per cell boundary. At 11px the cell was 8px wide against
+# ~6.8px of ink, which is what made the header, strip and palette rules read
+# as "_ _ _" instead of solid lines. 16px is the smallest size where the two
+# line up (measured across 8-24px; 21px and 24px are the only other clean
+# ones, and both blow up the GIF). 1040x615 at 16px reproduces exactly the
+# 102x23 grid 840x434 gave at 11px, so the framing is unchanged.
 
 Output "docs/assets/goto-palette-demo.gif"
 
 Require kute
 
 Set Shell "bash"
-Set FontSize 11
+Set FontSize 16
 Set FontFamily "JetBrainsMono Nerd Font Mono"
-Set Width 840
-Set Height 434
+Set Width 1040
+Set Height 615
 Set Padding 10
 Set Framerate 24
 Set Theme "3024 Night"
