@@ -1,4 +1,4 @@
-// 25a's 'R' inline resources editor (docs/design README.md §25a): reversible
+// 25a's 'r' inline resources editor (docs/design README.md §25a): reversible
 // outside PROD, so — like scale.go's pendingScale and setimage.go's
 // pendingSetImage — this is a bespoke gate (pendingSetResources) rather than
 // actions.Controller's y/N/type-name flow, since there's a per-field

@@ -16,10 +16,7 @@ Set LineHeight 1.55
 Env COLORTERM truecolor
 
 Hide
-Type "mkdir -p ~/.config/kute && printf 'update: {check: false}\n' > ~/.config/kute/config.yaml"
-Enter
-Sleep 200ms
-Type "kute --demo --theme dark -n production"
+Type "kute --demo --no-update-check --theme dark -n production"
 Enter
 Wait+Screen@8s "web-7c9f8d"
 Type "D"

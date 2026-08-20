@@ -63,12 +63,11 @@ The recording, using kute --demo, shows:
 ## Everyday Actions
 The recording, using kute --demo, shows a single continuous flow on Deployment "api" (default namespace):
 
-1. Scale (§17b): + opens the inline prompt pre-filled to current+1. "api" is HPA-managed, so the keybar shows the
-   yellow "managed by hpa/api-hpa — scaling overridden on next sync" warning in place of the usual will-run line —
-   kute catches a no-op scale before it's committed, not after — then ↵ applies anyway.
+1. Scale (§17b): + opens the inline prompt pre-filled to current+1. "api" is HPA-managed, so the keybar warns that
+   the HPA will override the change on its next sync before ↵ applies it.
 2. Set image (§24a): i opens the panel's rollout-history dropdown; ↓ steps to the canary's previously-seen tag
    (api:2.2), ↵ applies immediately (non-prod, no confirm).
-3. Set resources (§25a): R opens the panel; ↓ selects the cpu limit field, + nudges it up twice (50m per step),
+3. Set resources (§25a): r opens the panel; ↓ selects the cpu limit field, + nudges it up twice (50m per step),
    ↵ applies the one changed field.
 4. Labels & annotations (§26a): m opens the panel; a inserts a new label (demo=true), tab moves from key to value,
    ↵ commits instantly (an ordinary edit is reversible, no confirm). Selecting that row and ctrl-d removing it

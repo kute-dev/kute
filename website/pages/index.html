@@ -1,9 +1,8 @@
 <header class="hero">
   <div class="wrap hero-inner">
-    <span class="home-kicker"><span aria-hidden="true"></span>Modern Kubernetes TUI</span>
+    <span class="home-kicker"><span aria-hidden="true"></span>The incident console for Kubernetes</span>
     <h1>Your cluster, in <em>plain sight</em>.</h1>
     <p class="sub-lead">See what broke. Understand why. Act safely.</p>
-    <p class="sub">Browse, diagnose, and act on your cluster — all from one terminal console.</p>
     <div class="home-command-grid hero-install-options os-install-options" data-install-options="unix" aria-label="Install kute on macOS or Linux">
       <div>
         <span class="command-label">install.sh</span>
@@ -50,7 +49,7 @@
 <section class="explore" id="explore">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="home-kicker"><span aria-hidden="true"></span>What you open it for</span>
+      <span class="home-kicker"><span aria-hidden="true"></span>Answers, not objects</span>
       <h2>Start with the symptom. Open the screen that answers it.</h2>
     </div>
 
@@ -76,8 +75,12 @@
           <span class="explorer-tab-title">Review GitOps health</span>
           <span class="explorer-tab-meta">flux and argo cd</span>
         </button>
+        <button id="explorer-tab-actions" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-actions" tabindex="-1">
+          <span class="explorer-tab-title">Act without leaving the list</span>
+          <span class="explorer-tab-meta">scale, image, requests/limits, port-forward</span>
+        </button>
         <button id="explorer-tab-safety" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-safety" tabindex="-1">
-          <span class="explorer-tab-title">Make a safe change</span>
+          <span class="explorer-tab-title">Confirm destructive actions</span>
           <span class="explorer-tab-meta">non-prod and prod confirms</span>
         </button>
         <p class="explorer-keyhint">Use arrow keys to move between screens.</p>
@@ -236,6 +239,51 @@
             </div>
             <a class="explorer-fullsize theme-link-dark" href="/assets/home-argo.png" target="_blank" rel="noopener">Open screenshot full size</a>
             <a class="explorer-fullsize theme-link-light" href="/assets/home-argo-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+        </article>
+
+        <article id="explorer-panel-actions" class="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab-actions" tabindex="0" hidden>
+          <div class="explorer-subtabs" role="tablist" aria-label="Workload actions">
+            <button id="actions-tab-scale" type="button" role="tab" aria-selected="true" aria-controls="actions-panel-scale" tabindex="0">Scale <code>+/−</code></button>
+            <button id="actions-tab-setimage" type="button" role="tab" aria-selected="false" aria-controls="actions-panel-setimage" tabindex="-1">Set image <code>i</code></button>
+            <button id="actions-tab-resources" type="button" role="tab" aria-selected="false" aria-controls="actions-panel-resources" tabindex="-1">Resources <code>r</code></button>
+            <button id="actions-tab-forward" type="button" role="tab" aria-selected="false" aria-controls="actions-panel-forward" tabindex="-1">Port-forward <code>f</code></button>
+          </div>
+          <div id="actions-panel-scale" class="explorer-subpanel" role="tabpanel" aria-labelledby="actions-tab-scale">
+            <p class="explorer-intro">Press <code>+</code> or <code>−</code> to start from the next replica count. If an HPA owns replicas, kute warns that it will overwrite the change before you apply.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-actions-scale.png" width="1632" height="600" loading="lazy" alt="kute scale prompt on an HPA-managed Deployment warning that the HPA will override the change">
+              <img class="theme-shot theme-shot-light" src="/assets/home-actions-scale-light.png" width="1632" height="600" loading="lazy" alt="kute scale prompt in the light theme warning that the HPA will override the change">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-actions-scale.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-actions-scale-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="actions-panel-setimage" class="explorer-subpanel" role="tabpanel" aria-labelledby="actions-tab-setimage" hidden>
+            <p class="explorer-intro">Pick a tag from this workload's rollout history or one already running elsewhere, instead of typing it from memory.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-actions-setimage.png" width="1632" height="800" loading="lazy" alt="kute set image panel offering a Deployment's own rollout history as image tag choices">
+              <img class="theme-shot theme-shot-light" src="/assets/home-actions-setimage-light.png" width="1632" height="800" loading="lazy" alt="kute set image panel in the light theme offering rollout history as tag choices">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-actions-setimage.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-actions-setimage-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="actions-panel-resources" class="explorer-subpanel" role="tabpanel" aria-labelledby="actions-tab-resources" hidden>
+            <p class="explorer-intro">Edit requests and limits beside the container's usage, with the exact change shown before you apply.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-actions-resources.png" width="1632" height="800" loading="lazy" alt="kute resources panel raising a cpu request from 100m to 200m beside 240m usage and the exact kubectl command">
+              <img class="theme-shot theme-shot-light" src="/assets/home-actions-resources-light.png" width="1632" height="800" loading="lazy" alt="kute resources panel in the light theme raising a cpu request beside its usage and exact kubectl command">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-actions-resources.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-actions-resources-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="actions-panel-forward" class="explorer-subpanel" role="tabpanel" aria-labelledby="actions-tab-forward" hidden>
+            <p class="explorer-intro">Start a port-forward and keep browsing. The header tracks it globally; the Forwards list shows its local port, resolved target, and status.</p>
+            <div class="explorer-frame">
+              <img class="theme-shot theme-shot-dark" src="/assets/home-actions-forward.png" width="1632" height="800" loading="lazy" alt="kute Forwards list showing an active local port, resolved pod target, and the global forward chip">
+              <img class="theme-shot theme-shot-light" src="/assets/home-actions-forward-light.png" width="1632" height="800" loading="lazy" alt="kute Forwards list in the light theme showing an active port-forward and the global forward chip">
+            </div>
+            <a class="explorer-fullsize theme-link-dark" href="/assets/home-actions-forward.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            <a class="explorer-fullsize theme-link-light" href="/assets/home-actions-forward-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
           </div>
         </article>
 

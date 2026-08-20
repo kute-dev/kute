@@ -63,6 +63,17 @@ func NewDemo() *Cluster {
 	apiPod := demoPod("api-7d9f6c8-abcde", "default", age(2*24*time.Hour), corev1.PodRunning, corev1.PodQOSGuaranteed, "node-a", true, 0, nil)
 	apiPod.Labels = map[string]string{"app": "api"}
 	apiPod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "api-7d9f6c8"}}
+	// demoPod's primary container is generically named "app"; rename it to
+	// match demoMidRolloutDeployment("api", ...)'s own pod-template container
+	// name ("api") below. 25a's Set Resources panel builds its container tabs
+	// from the Deployment's declared template but reads live usage by joining
+	// on this pod's real container name (setresources.go's containerUsage) —
+	// a mismatch here means every field silently reads "metrics unavailable"
+	// no matter what ContainerMetricsByNamespace seeds, since the join never
+	// hits (CLAUDE.md: "the fake provider must stay feature-complete for
+	// tests/demo mode").
+	apiPod.Spec.Containers[0].Name = "api"
+	apiPod.Status.ContainerStatuses[0].Name = "api"
 	// A second, running sidecar container makes apiPod --demo's one
 	// reachable exercise of 10a's exec-container-picker screen — a
 	// single-container pod execs straight through instead, so without this
@@ -78,6 +89,11 @@ func NewDemo() *Cluster {
 	workerPod := demoCrashLoopPod("worker-0", "default", age(14*time.Hour), "node-a")
 	workerPod.Labels = map[string]string{"app": "worker"}
 	workerPod.OwnerReferences = []metav1.OwnerReference{{Kind: "StatefulSet", Name: "worker"}}
+	// Same rename as apiPod above, matching demoWorkerStatefulSet's own
+	// template container name ("worker") so 25a's usage join hits for the
+	// StatefulSet too.
+	workerPod.Spec.Containers[0].Name = "worker"
+	workerPod.Status.ContainerStatuses[0].Name = "worker"
 
 	c.Seed(kube.KindPod,
 		apiPod,
@@ -1108,7 +1124,27 @@ func demoMidRolloutDeployment(name, ns string, created metav1.Time) *appsv1.Depl
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "api:2.1"}}},
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Name: "api", Image: "api:2.1",
+					// Same request/limit pair demoPod's generic container
+					// carries, so 25a's Set Resources CURRENT column isn't
+					// empty and its usage bar has a real denominator to
+					// render a fill against (docs/design README.md §25a:
+					// "requests and limits edit next to the live usage bar
+					// for that exact container") — apiPod's own "api"
+					// container (renamed to match, above) reports the
+					// matching live usage.
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("128Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+					},
+				}}},
 			},
 		},
 		Status: appsv1.DeploymentStatus{

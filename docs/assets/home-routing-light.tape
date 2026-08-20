@@ -14,7 +14,7 @@ Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Type "kute --demo --theme light -n production"
+Type "kute --demo --no-update-check --theme light -n production"
 Enter
 Sleep 1200ms
 Type "g"

@@ -18,7 +18,7 @@ Env COLORTERM truecolor
 Hide
 Type "mkdir -p \"$XDG_STATE_HOME/kute\" && printf '%s' '{\"version\":2,\"perContext\":{\"demo\":{\"namespace\":\"default\",\"kind\":\"Pod\",\"recentNamespaces\":[\"default\",\"production\",\"monitoring\",\"argocd\"]}}}' > \"$XDG_STATE_HOME/kute/state.json\""
 Enter
-Type "kute --demo --theme light"
+Type "kute --demo --no-update-check --theme light"
 Enter
 Wait+Screen@8s "worker-0"
 Type "n"

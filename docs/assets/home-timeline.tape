@@ -14,7 +14,7 @@ Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Type "kute --demo --theme dark"
+Type "kute --demo --no-update-check --theme dark"
 Enter
 Wait+Screen@8s "worker-0"
 Type "g"

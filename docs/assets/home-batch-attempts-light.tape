@@ -16,10 +16,7 @@ Set LineHeight 1.55
 Env COLORTERM truecolor
 
 Hide
-Type "mkdir -p ~/.config/kute && printf 'update: {check: false}\n' > ~/.config/kute/config.yaml"
-Enter
-Sleep 200ms
-Type "kute --demo --theme light -n default"
+Type "kute --demo --no-update-check --theme light -n default"
 Enter
 Sleep 1000ms
 Type "g"

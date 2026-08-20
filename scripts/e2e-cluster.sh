@@ -241,7 +241,14 @@ up() {
     log "kind cluster ${CLUSTER_NAME} already exists — topping it up"
   else
     preflight_inotify
-    preflight_devkmsg || die "/dev/kmsg is unavailable — kubelet would crash-loop; see the message above and retry"
+    # preflight_devkmsg is deliberately not called here: it tests /dev/kmsg on
+    # the host running *this script*, not on the host running the Docker
+    # daemon. Those are the same machine on a bare Linux host, but not on
+    # Docker Desktop (macOS/Windows) — there the containers run inside a
+    # Linux VM that has its own /dev/kmsg, while the script's own host never
+    # has that device at all, so the check is a guaranteed false failure.
+    # It's kept around, unused, because it's still correct for a genuine
+    # same-kernel Linux host/CI runner/sandbox that lacks the device.
     log "creating kind cluster ${CLUSTER_NAME} (k8s ${K8S_VERSION})"
     kind create cluster --config "$KIND_CONFIG" --wait 180s
   fi

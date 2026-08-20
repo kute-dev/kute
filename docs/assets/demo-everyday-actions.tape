@@ -15,8 +15,7 @@
 # The scale beat deliberately keeps "api"'s HPA in place rather than picking
 # an unmanaged Deployment: browse/keys.go's scale keybar replaces the usual
 # will-run line with a yellow "managed by hpa/api-hpa — scaling overridden
-# on next sync" warning, which is itself the beat worth showing — kute
-# catches a no-op scale before it's committed, not after.
+# on next sync" warning before the user applies.
 
 Output "docs/assets/demo-everyday-actions.gif"
 
@@ -34,7 +33,7 @@ Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Type "kute --demo --keycast"
+Type "kute --demo --no-update-check --keycast"
 Enter
 
 Sleep 1200ms
@@ -66,9 +65,9 @@ Sleep 900ms
 Enter
 Sleep 1200ms
 
-# --- 4) set resources: "R" opens 25a's panel. ↓ moves to a field, "+"
+# --- 4) set resources: "r" opens 25a's panel. ↓ moves to a field, "+"
 # nudges it up twice (64Mi per step), ↵ applies the changed field.
-Type "R"
+Type "r"
 Sleep 900ms
 Down
 Sleep 500ms

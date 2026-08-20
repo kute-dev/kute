@@ -30,7 +30,7 @@ Set LineHeight 1.55
 
 Env COLORTERM truecolor
 
-Type "kute --demo --keycast -n production"
+Type "kute --demo --no-update-check --keycast -n production"
 Enter
 
 Sleep 900ms

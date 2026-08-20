@@ -1,6 +1,6 @@
-# Homepage checkpoint: a failed CronJob promotes the controller's reason above
-# its associated scheduled and manual Job history.
-Output "docs/assets/home-batch-cronjob-light.png"
+# Homepage checkpoint: setting an image offers the tags from the
+# workload's own rollout history first (§24a).
+Output "docs/assets/home-actions-setimage-light.png"
 
 Require kute
 
@@ -21,11 +21,13 @@ Enter
 Sleep 1000ms
 Type "g"
 Sleep 300ms
-Type "nightly-cleanup"
+Type "d"
 Sleep 500ms
 Enter
-Wait+Screen@8s "LAST RUN"
-Enter
-Wait+Screen@8s "BackoffLimitExceeded"
-Sleep 700ms
+Wait+Screen@8s "ROLLOUT"
+Sleep 1200ms
+Type "i"
+Wait+Screen@8s "pick from history"
+Down
+Sleep 500ms
 Show

@@ -391,8 +391,8 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 	body := string(mustRead(t, filepath.Join(out, "index.html")))
 	tabRe := regexp.MustCompile(`<button id="(explorer-tab-[^"]+)" class="explorer-tab"[^>]+aria-selected="(true|false)" aria-controls="([^"]+)"`)
 	tabs := tabRe.FindAllStringSubmatch(body, -1)
-	if len(tabs) != 6 {
-		t.Fatalf("homepage has %d explorer tabs, want 6", len(tabs))
+	if len(tabs) != 7 {
+		t.Fatalf("homepage has %d explorer tabs, want 7", len(tabs))
 	}
 	wantTabs := []string{
 		"explorer-tab-incident",
@@ -400,6 +400,7 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		"explorer-tab-batch",
 		"explorer-tab-routing",
 		"explorer-tab-gitops",
+		"explorer-tab-actions",
 		"explorer-tab-safety",
 	}
 
@@ -420,8 +421,8 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		t.Errorf("homepage has %d initially selected explorer tabs, want 1", selected)
 	}
 
-	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 15 {
-		t.Errorf("homepage has %d explorer subpanels, want 15 grouped screens", got)
+	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 19 {
+		t.Errorf("homepage has %d explorer subpanels, want 19 grouped screens", got)
 	}
 	for _, id := range []string{
 		"incident-panel-cluster", "incident-panel-pod", "incident-panel-certificate", "incident-panel-timeline",
@@ -429,10 +430,20 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		"batch-panel-cronjob", "batch-panel-attempts",
 		"routing-panel-ingress", "routing-panel-http",
 		"gitops-panel-flux", "gitops-panel-argo",
+		"actions-panel-scale", "actions-panel-setimage", "actions-panel-resources", "actions-panel-forward",
 		"safety-panel-nonprod", "safety-panel-prod",
 	} {
 		if !strings.Contains(body, `id="`+id+`" class="explorer-subpanel" role="tabpanel"`) {
 			t.Errorf("homepage explorer is missing %s", id)
+		}
+	}
+	for _, action := range []string{
+		`Scale <code>+/−</code>`,
+		`Resources <code>r</code>`,
+		`Port-forward <code>f</code>`,
+	} {
+		if !strings.Contains(body, action) {
+			t.Errorf("homepage explorer is missing action label %q", action)
 		}
 	}
 }
@@ -461,6 +472,10 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 		"home-nonprod-confirm",
 		"home-prod-confirm",
 		"home-certificate-failure",
+		"home-actions-scale",
+		"home-actions-setimage",
+		"home-actions-resources",
+		"home-actions-forward",
 	}
 	for _, stem := range stems {
 		dark := `class="theme-shot theme-shot-dark" src="/assets/` + stem + `.png"`

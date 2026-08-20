@@ -21,13 +21,13 @@ Type "mkdir -p ~/.kube ~/.config/kute \"$XDG_STATE_HOME/kute\""
 Enter
 Type "printf '%s' '{\"version\":2,\"recentContexts\":[\"demo\",\"prod-eks\",\"stage-gke\",\"ops-aks\"],\"perContext\":{\"demo\":{\"namespace\":\"default\"},\"prod-eks\":{\"namespace\":\"production\"},\"stage-gke\":{\"namespace\":\"staging\"},\"ops-aks\":{\"namespace\":\"monitoring\"}}}' > \"$XDG_STATE_HOME/kute/state.json\""
 Enter
-Type "printf 'prodContexts: [prod-eks]\\nupdate: {check: false}\\n' > ~/.config/kute/config.yaml"
+Type "printf 'prodContexts: [prod-eks]\\n' > ~/.config/kute/config.yaml"
 Enter
 Type "printf 'apiVersion: v1\\nkind: Config\\ncurrent-context: demo\\ncontexts:\\n- name: demo\\n  context: {cluster: demo, namespace: default}\\n- name: prod-eks\\n  context: {cluster: prod, namespace: production}\\n- name: stage-gke\\n  context: {cluster: stage, namespace: staging}\\n- name: ops-aks\\n  context: {cluster: ops, namespace: monitoring}\\nclusters:\\n- name: demo\\n  cluster: {server: http://10.255.255.1}\\n- name: prod\\n  cluster: {server: http://10.255.255.2}\\n- name: stage\\n  cluster: {server: http://10.255.255.3}\\n- name: ops\\n  cluster: {server: http://10.255.255.4}\\nusers: []\\n' > ~/.kube/config"
 Enter
 Type "export KUBECONFIG=$HOME/.kube/config"
 Enter
-Type "kute --demo --theme light"
+Type "kute --demo --no-update-check --theme light"
 Enter
 Wait+Screen@8s "worker-0"
 Type "c"
