@@ -112,7 +112,7 @@ func TestMutatingVerbsCoverAllRegisteredWriteOps(t *testing.T) {
 		"cordon": true, "scale": true, "set-image": true, "set-resources": true,
 		"meta": true, "add-secret-key": true, "add-configmap-key": true,
 		"restart-configmap-consumers": true,
-		"exec":                        true, "node-shell": true, "edit": true,
+		"exec":                        true, "node-debug": true, "node-debug-detail": true, "edit": true,
 		// §30a. Suspend is Cordon's exact shape: reversible and immediate,
 		// and resume restores the prior state exactly. Reconcile requests
 		// the sync Flux would have run on its own interval anyway, so it
@@ -242,14 +242,14 @@ func TestTierForLeavesNonInlineVerbsAlone(t *testing.T) {
 // TestTtyHandoffVerbsAreGatedOffline pins docs/design README.md §4a's
 // "delete/exec/edit verbs are disabled while offline" for the three verbs
 // that reach the cluster through a kubectl subprocess rather than
-// kube.Mutator: exec hands the user a prompt they can write from, a node
-// shell creates a privileged debugger pod before they type anything, and edit
+// kube.Mutator: exec hands the user a prompt they can write from, node
+// debug creates a privileged debugger pod before they type anything, and edit
 // applies whatever they save. Forward stays exempt — a port-forward is a
 // local session, not a cluster write.
 func TestTtyHandoffVerbsAreGatedOffline(t *testing.T) {
 	t.Parallel()
 
-	for _, v := range []Verb{Exec, NodeShell, Edit} {
+	for _, v := range []Verb{Exec, NodeDebug, NodeDebugDetail, Edit} {
 		if !v.Mutating {
 			t.Errorf("%s should be Mutating so the OFFLINE gate reaches it", v.ID)
 		}
@@ -275,7 +275,7 @@ func TestAllRegistersEveryDefinedVerb(t *testing.T) {
 	t.Parallel()
 
 	defined := []Verb{
-		Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
+		Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 		Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 		HelmValues, HelmHistory, Mark, MarkAll,
 		FluxReconcile, FluxSuspend, FluxSource,

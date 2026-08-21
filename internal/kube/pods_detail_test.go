@@ -58,6 +58,73 @@ func TestPodFromObjectPopulatesDetailFields(t *testing.T) {
 	if got.LastTermination != nil {
 		t.Errorf("LastTermination = %+v, want nil (no container has terminated)", got.LastTermination)
 	}
+	if len(got.EphemeralContainerInfos) != 0 {
+		t.Errorf("EphemeralContainerInfos = %+v, want none — 13d: no chrome until earned", got.EphemeralContainerInfos)
+	}
+}
+
+// TestPodFromObjectPopulatesEphemeralContainerInfos covers §41e: a pod with
+// an attached debug container gets one EphemeralContainerInfo row, merging
+// spec.ephemeralContainers (name/image/target) with
+// status.ephemeralContainerStatuses (state), the same shape
+// buildContainerInfos already uses for the ordinary grid.
+func TestPodFromObjectPopulatesEphemeralContainerInfos(t *testing.T) {
+	t.Parallel()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api-1", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}},
+			EphemeralContainers: []corev1.EphemeralContainer{
+				{
+					EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+						Name:  "debugger-7xk2",
+						Image: "nicolaka/netshoot",
+					},
+					TargetContainerName: "app",
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			EphemeralContainerStatuses: []corev1.ContainerStatus{
+				{Name: "debugger-7xk2", Ready: true, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+
+	got := PodFromObject(pod)
+	if len(got.EphemeralContainerInfos) != 1 {
+		t.Fatalf("EphemeralContainerInfos = %+v, want 1 entry", got.EphemeralContainerInfos)
+	}
+	e := got.EphemeralContainerInfos[0]
+	if e.Name != "debugger-7xk2" || e.Image != "nicolaka/netshoot" || e.TargetContainer != "app" {
+		t.Errorf("EphemeralContainerInfos[0] = %+v, want name/image/target from spec", e)
+	}
+	if e.State != "Running" || !e.Ready {
+		t.Errorf("EphemeralContainerInfos[0] = %+v, want Running and ready from status", e)
+	}
+}
+
+// TestPodFromObjectEphemeralContainerWithoutStatusYet mirrors
+// TestPodFromObjectContainerWithoutStatusYet's ordinary-container coverage:
+// a just-created ephemeral container has spec data but no status entry yet.
+func TestPodFromObjectEphemeralContainerWithoutStatusYet(t *testing.T) {
+	t.Parallel()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api-1", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			EphemeralContainers: []corev1.EphemeralContainer{
+				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debugger-1", Image: "busybox"}},
+			},
+		},
+	}
+
+	got := PodFromObject(pod)
+	if len(got.EphemeralContainerInfos) != 1 {
+		t.Fatalf("expected one EphemeralContainerInfo even with no status yet, got %d", len(got.EphemeralContainerInfos))
+	}
+	if got.EphemeralContainerInfos[0].State != "" {
+		t.Errorf("State = %q, want empty (no status reported)", got.EphemeralContainerInfos[0].State)
+	}
 }
 
 func TestPodFromObjectDetectsLastTermination(t *testing.T) {

@@ -70,6 +70,26 @@ type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, 
 // detail screen.
 type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Model, tea.Cmd)
 
+// OpenDebugFunc pushes tasks/debugpanel (§41b/§41c) for the loaded pod when
+// no container has a shell, or the pod won't stay running — same shape as
+// browse.OpenDebugFunc, duplicated per the repo's package-local-seam
+// convention.
+type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
+
+// ShellDetector answers which shells a container actually has — same shape
+// as browse.ShellDetector, duplicated per the repo's consuming-interface
+// convention. A nil value falls back to openSelectedExec's old synchronous
+// single-vs-multi-container routing.
+type ShellDetector interface {
+	DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error)
+}
+
+// OpenWhoCanFunc pushes tasks/whocan (22a), pre-filled with verb/resource/
+// namespace — same shape as browse.OpenWhoCanFunc, duplicated per the
+// repo's package-local-seam convention. Backs §41a's RBAC pre-check 'w'
+// handoff (debug.go); nothing else in this package pushes who-can yet.
+type OpenWhoCanFunc func(verb, resource, namespace string, width, height int) (tea.Model, tea.Cmd)
+
 // Config are poddetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values). Siblings/
 // SiblingIndex are the ordered pod-name list + cursor browse hands over so
@@ -86,6 +106,13 @@ type Config struct {
 	OpenEvents   OpenEventsFunc
 	OpenTimeline OpenTimelineFunc
 	OpenExec     OpenExecFunc
+	OpenDebug    OpenDebugFunc
+	Shells       ShellDetector
+	// RBAC answers §41a's "capability is checked before ↵" pre-check for
+	// the debug fork — nil disables the check entirely, matching Shells'
+	// own nil-disables convention.
+	RBAC         RBACChecker
+	OpenWhoCan   OpenWhoCanFunc
 	OpenForward  OpenForwardFunc
 	Namespace    string
 	Name         string
@@ -108,6 +135,10 @@ type Model struct {
 	openEvents   OpenEventsFunc
 	openTimeline OpenTimelineFunc
 	openExec     OpenExecFunc
+	openDebug    OpenDebugFunc
+	shells       ShellDetector
+	rbac         RBACChecker
+	openWhoCan   OpenWhoCanFunc
 	openForward  OpenForwardFunc
 	timeout      time.Duration
 	// execFeedback carries a non-zero directly-run kubectl-exec exit's
@@ -116,6 +147,12 @@ type Model struct {
 	// Also carries kubectl edit's exit message (editResultMsg) — same
 	// transient channel, same reasoning.
 	execFeedback string
+	// pendingDebugDenial is non-nil after §41a's RBAC pre-check (debug.go)
+	// found the create verb kubectl debug's chosen mode needs denied —
+	// mirrors browse.Model's own pendingDebugDenial field, including its
+	// sticky lifetime (left set until 'w' consumes it or a later 'x'
+	// overwrites it).
+	pendingDebugDenial *debugDenial
 	// pendingEdit is non-nil while 'E' edit's PROD-only y/N line is showing
 	// (verbs.TierForEdit) — mirrors browse.Model's own pendingEdit field.
 	pendingEdit *editTarget
@@ -213,6 +250,10 @@ func New(cfg Config) Model {
 		openEvents:   cfg.OpenEvents,
 		openTimeline: cfg.OpenTimeline,
 		openExec:     cfg.OpenExec,
+		openDebug:    cfg.OpenDebug,
+		shells:       cfg.Shells,
+		rbac:         cfg.RBAC,
+		openWhoCan:   cfg.OpenWhoCan,
 		openForward:  cfg.OpenForward,
 		timeout:      cfg.LoadTimeout,
 		namespace:    cfg.Namespace,

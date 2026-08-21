@@ -341,18 +341,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.execFeedback = ""
 		}
-	case nodeShellResultMsg:
-		if msg.err != nil {
-			m.execFeedback = "node shell exited: " + msg.err.Error()
-		} else {
-			m.execFeedback = ""
-		}
 	case editResultMsg:
 		if msg.err != nil {
 			m.execFeedback = "edit exited: " + msg.err.Error()
 		} else {
 			m.execFeedback = ""
 		}
+	case podShellsProbedMsg:
+		return m.routePodShellsProbed(msg)
 	case dryRunSetResourcesMsg:
 		return m.handleDryRunSetResources(msg)
 	case tea.KeyPressMsg:
@@ -366,14 +362,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // execResultMsg, duplicated per the repo's package-local-seam convention.
 type execResultMsg struct{ err error }
 
-// nodeShellResultMsg carries a node-shell kubectl debug's exit outcome —
-// same feedback channel as execResultMsg, kept as its own type so the
-// keybar note can say which of the two exited.
-type nodeShellResultMsg struct{ err error }
-
 // editResultMsg carries a kubectl edit exit outcome (edit.go) — same
-// feedback channel as execResultMsg/nodeShellResultMsg, kept as its own type
-// for the same reason.
+// feedback channel as execResultMsg, kept as its own type for the same
+// reason.
 type editResultMsg struct{ err error }
 
 // applyRowsLoaded handles a fresh List reply: sorts workload kinds
@@ -422,6 +413,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 
 	m.rows = msg.rows
 	m.rowColumns = msg.columns
+	m.decorateDebugCopies()
 	m.applySort()
 	m.pods = msg.pods
 	m.helmReleases = msg.helmReleases
@@ -766,6 +758,17 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
+		// §41a's RBAC pre-check offers the same handoff for a denied debug
+		// launch — pre-filled with the exact create/resource/namespace
+		// query that came back denied, not the current list's own "list"
+		// verb (docs/design v.0.11.0.dc.html §41a: "offers w who-can").
+		if m.pendingDebugDenial != nil {
+			d := m.pendingDebugDenial
+			if task, cmd, ok := m.pushWhoCan(d.verb, d.resource, d.namespace); ok {
+				m.pendingDebugDenial = nil
+				return task, cmd
+			}
+		}
 	case "y":
 		if m.state == tui.TaskStatePermissionDenied || m.state == tui.TaskStateError {
 			return m, tea.SetClipboard(m.feedback)
@@ -814,6 +817,20 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.kind == kube.KindForward {
 			return m, m.stopSelectedForward()
 		}
+		if m.kind == kube.KindNode {
+			// NodeDebug: replaces the retired standalone NodeShell verb
+			// ('s') — see verbs.go's NodeDebug doc comment. Same gate
+			// shape as Exec below, and a stronger reason for it: kubectl
+			// debug creates a privileged node-debugger pod, so this writes
+			// to the cluster before the user types anything.
+			if verbs.NodeDebug.HiddenWhileOffline(m.offline()) {
+				return m, nil
+			}
+			if task, cmd, ok := m.openSelectedNodeDebug(); ok {
+				return task, cmd
+			}
+			return m, nil
+		}
 		// Exec is Mutating: refused while offline, like every other mutating
 		// verb (docs/design README.md §52). The keybar has already dropped
 		// the hint and says "mutating actions disabled", so this is a
@@ -821,7 +838,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if verbs.Exec.HiddenWhileOffline(m.offline()) {
 			return m, nil
 		}
-		if task, cmd, ok := m.openSelectedExec(); ok {
+		if task, cmd, ok := m.beginExecOrDebug(); ok {
 			if task != nil {
 				return task, cmd
 			}
@@ -862,22 +879,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginCronJobSuspendOrResume(row)
 			}
-		}
-		// Same gate as 'x' above, and a stronger reason for it: kubectl debug
-		// creates a privileged node-debugger pod, so a node shell writes to
-		// the cluster before the user types anything.
-		if verbs.NodeShell.HiddenWhileOffline(m.offline()) {
-			return m, nil
-		}
-		if reason, blocked := m.selectedNodeShellUnavailable(); blocked {
-			// The key stays on the keybar on every cluster (docs/
-			// managed-clusters.md §3: a clear error naming the reason, not a
-			// hidden key), so pressing it here has to answer.
-			m.execFeedback = reason
-			return m, nil
-		}
-		if cmd, ok := m.selectedNodeShell(); ok {
-			return m, cmd
 		}
 	case "E":
 		// kubectl edit applies whatever the user saves, so it's gated with
@@ -1343,40 +1344,24 @@ func execCmd(namespace, pod, container string) tea.Cmd {
 	})
 }
 
-// selectedNodeShell resolves 's' for the selected Nodes row: suspend and
-// hand the tty to kubectl debug (kube.NodeShellSpec) — the same direct
-// tea.ExecProcess path exec's single-container branch takes, no task
-// pushed, so browse stays the active task and handles its own
-// nodeShellResultMsg. ok is false when nothing applies (not the Nodes kind,
-// no row selected), so 's' stays a no-op.
-// selectedNodeShellUnavailable reports the reason the selected Nodes row
-// can't host a node shell (EKS Fargate, GKE Autopilot — resolved when the row
-// was projected, from the node's own labels), and whether there is one.
-func (m Model) selectedNodeShellUnavailable() (string, bool) {
-	if m.kind != kube.KindNode || m.state != tui.TaskStateReady {
-		return "", false
-	}
-	row, ok := m.selectedRow()
-	if !ok || row.NodeShellUnavailable == "" {
-		return "", false
-	}
-	return row.NodeShellUnavailable, true
-}
-
-func (m Model) selectedNodeShell() (tea.Cmd, bool) {
-	if m.kind != kube.KindNode || m.state != tui.TaskStateReady {
-		return nil, false
+// openSelectedNodeDebug resolves 'x' for the selected Nodes row (§41d):
+// pushes tasks/debugpanel via openNodeDebug. ok is false when nothing
+// applies (not the Nodes kind, no row selected, not wired) or the row can't
+// host a node shell — in the latter case browse sets execFeedback to the
+// reason instead of pushing (docs/managed-clusters.md §3: the key stays on
+// the keybar and explains itself, rather than a hidden key).
+func (m *Model) openSelectedNodeDebug() (tea.Model, tea.Cmd, bool) {
+	if m.openNodeDebug == nil || m.kind != kube.KindNode || m.state != tui.TaskStateReady {
+		return nil, nil, false
 	}
 	row, ok := m.selectedRow()
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	image := ""
-	if m.session != nil {
-		image = m.session.Config.NodeShellImage
+	if row.NodeShellUnavailable != "" {
+		m.execFeedback = row.NodeShellUnavailable
+		return nil, nil, false
 	}
-	spec := kube.NodeShellSpec(row.Name, image)
-	return tea.ExecProcess(spec, func(err error) tea.Msg {
-		return nodeShellResultMsg{err: err}
-	}), true
+	task, cmd := m.openNodeDebug(row.Name, m.podCountByNode[row.Name], m.width, m.height)
+	return task, cmd, task != nil
 }

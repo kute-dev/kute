@@ -40,6 +40,17 @@ type shellResult struct {
 	err    error
 }
 
+// OpenDebugFunc pushes tasks/debugpanel (§41b) in attach mode, targeting
+// the highlighted shell-less container — §41a's fork: pressing enter on a
+// container this picker already knows has no shell routes here instead of
+// a dead exec attempt (docs/design v.0.11.0.dc.html §41a: "a shell-less row
+// is a route, not a dead ↵"). Always attach mode, never copy: the picker is
+// only ever reached when at least one *other* container in the pod does
+// have a shell (browse/poddetail's own pre-check skips straight to the
+// panel when every container is shell-less), so the pod plainly has a
+// running container to attach alongside.
+type OpenDebugFunc func(namespace, podName string, containers []kube.ContainerInfo, target string, width, height int) (tea.Model, tea.Cmd)
+
 // Config are execpicker's dependencies, per repo convention (package-local
 // Config struct, New fills zero values). Shells may be nil — the picker then
 // renders its shells column as unknown rather than probing.
@@ -49,6 +60,7 @@ type Config struct {
 	PodName    string
 	Containers []kube.ContainerInfo
 	Shells     ShellDetector
+	OpenDebug  OpenDebugFunc
 }
 
 type Model struct {
@@ -59,8 +71,9 @@ type Model struct {
 	podName    string
 	containers []kube.ContainerInfo
 
-	shells   ShellDetector
-	detected map[string]shellResult
+	shells    ShellDetector
+	openDebug OpenDebugFunc
+	detected  map[string]shellResult
 
 	selected int
 	// feedback is set after a non-zero kubectl exec exit (docs/design
@@ -82,6 +95,7 @@ func New(cfg Config) Model {
 		podName:    cfg.PodName,
 		containers: cfg.Containers,
 		shells:     cfg.Shells,
+		openDebug:  cfg.OpenDebug,
 		detected:   map[string]shellResult{},
 	}
 }
@@ -125,6 +139,15 @@ func (m Model) preferredShell(i int) string {
 		return ""
 	}
 	return res.shells[0]
+}
+
+// selectedContainerName is the highlighted row's container name, or "" when
+// nothing's selected.
+func (m Model) selectedContainerName() string {
+	if m.selected < 0 || m.selected >= len(m.containers) {
+		return ""
+	}
+	return m.containers[m.selected].Name
 }
 
 func (m *Model) SetSize(width, height int) {

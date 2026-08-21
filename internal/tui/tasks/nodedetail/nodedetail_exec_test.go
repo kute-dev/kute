@@ -136,48 +136,41 @@ type exitStatusError struct{}
 
 func (exitStatusError) Error() string { return "exit status 127" }
 
-// TestNodeShellKeyRunsDirectly confirms 's' hands the tty to kubectl debug
-// for the node itself: nodedetail stays the active task and the Cmd is the
-// tea.ExecProcess wrapping kube.NodeShellSpec.
-func TestNodeShellKeyRunsDirectly(t *testing.T) {
+// TestNodeDebugKeyPushesPanel confirms 's' pushes tasks/debugpanel (§41d)
+// for the node itself via OpenNodeDebug — replaces the retired NodeShell
+// verb's direct tea.ExecProcess launch (see verbs.go's NodeDebug/
+// NodeDebugDetail doc comments); the panel itself owns the launch and its
+// exit feedback now, so nodedetail's own execFeedback channel no longer
+// carries a node-debug result.
+func TestNodeDebugKeyPushesPanel(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {testNode("node-a")},
 	}}
-	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a"})
+	var gotName string
+	m := New(Config{
+		Session: newSession(), Lister: lister, NodeName: "node-a",
+		OpenNodeDebug: func(name string, _, _, _ int) (tea.Model, tea.Cmd) {
+			gotName = name
+			return sentinelTask{}, nil
+		},
+	})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	updated, cmd := m.Update(tea.KeyPressMsg{Text: "s"})
-	if _, ok := updated.(*Model); !ok {
-		t.Fatalf("expected nodedetail to stay the active task, got %T", updated)
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "s"})
+	if _, ok := updated.(sentinelTask); !ok {
+		t.Fatalf("expected debugpanel's sentinel task to be pushed, got %T", updated)
 	}
-	if cmd == nil {
-		t.Fatal("expected a non-nil node-shell Cmd")
-	}
-}
-
-// TestNodeShellResultFeedbackSurfacesInKeybar confirms a non-zero kubectl
-// debug exit sets execFeedback, surfaced via Keybar's RightNote and naming
-// the node shell rather than exec.
-func TestNodeShellResultFeedbackSurfacesInKeybar(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindNode: {testNode("node-a")},
-	}}
-	m := New(Config{Session: newSession(), Lister: lister, NodeName: "node-a"})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	m = step(t, m, nodeShellResultMsg{err: exitStatusError{}})
-	if note := m.Keybar().RightNote; !strings.Contains(note, "node shell exited") {
-		t.Fatalf("expected node-shell feedback in Keybar RightNote, got %q", note)
+	if gotName != "node-a" {
+		t.Fatalf("OpenNodeDebug called with name %q, want node-a", gotName)
 	}
 }
 
-// The 11b twin of browse's TestNodeShellExplainsItselfOnFargate (docs/
+// The 11b twin of browse's TestNodeDebugExplainsItselfOnFargate (docs/
 // managed-clusters.md §3): on GKE Autopilot the privileged host-namespace
 // container kubectl debug needs is rejected by admission, so 's' says why
-// instead of tearing the screen down for a command that can't work.
-func TestNodeShellExplainsItselfOnAutopilot(t *testing.T) {
+// instead of pushing a panel for a command that can't work.
+func TestNodeDebugExplainsItselfOnAutopilot(t *testing.T) {
 	node := testNode("gk3-autopilot-cluster-default-pool-bcd71fbe-6qh9")
 	node.Labels = map[string]string{"cloud.google.com/gke-nodepool": "default-pool"}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{

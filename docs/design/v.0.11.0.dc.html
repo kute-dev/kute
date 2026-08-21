@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #08080c; }
+  a { color: #a78bfa; } a:hover { color: #c4b5fd; }
+</style>
+</helmet>
+
+<section style="padding: 48px; font-family: 'JetBrains Mono', monospace; color: #d8d8e8;">
+  <div style="display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px;">
+    <span style="background: #a78bfa; color: #14101f; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px;">41</span>
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #f0f0fa;">kubectl debug — one key asks for a shell, the object decides how</h1>
+  </div>
+
+  <div style="font-size: 12px; color: #9a9ab2; max-width: 940px; line-height: 1.7; margin-bottom: 28px;">
+    <span style="color: #e9e2ff;">No new top-level key</span>: <span style="color: #a78bfa;">x</span> already means "get me a shell near this object". A running pod with a shell in the image → <span style="color: #a78bfa;">kubectl exec</span> (<a href="#10a">10a</a>). A distroless pod → ephemeral container. A pod that won't stay up → pod copy. A node → host-namespace pod. Which provider applies is a <span style="color: #e9e2ff;">command-table declaration per kind</span>, not a new screen.
+  </div>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 48px; align-items: flex-start;">
+
+    <!-- ══════════════════ OPTION 41A ══════════════════ -->
+    <div id="41a" data-screen-label="41a Exec picker, no shell" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">41a</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">The fork — x on a distroless pod</span>
+        <span style="font-size: 12px; color: #676780;">same panel as <a href="#10a">10a</a> · shell detection is already there · ↵ routes to the answer instead of failing</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5); position: relative;">
+        <div style="opacity: 0.28; pointer-events: none;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+            <span style="color: #a78bfa; font-weight: 700;">kute</span>
+            <span style="color: #33334a;">│</span>
+            <span style="color: #676780;">microk8s-cluster</span>
+            <span style="color: #44445c;">›</span>
+            <span style="color: #a78bfa;">aim-stage</span>
+            <span style="color: #44445c;">›</span>
+            <span style="color: #f0f0fa; font-weight: 700;">Pods</span>
+            <span style="margin-left: auto; color: #34d17b;">● connected</span>
+          </div>
+          <sc-for list="{{ podsA }}" as="p" hint-placeholder-count="9">
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 56px 132px 40px 92px 48px; gap: 0 12px; padding: 4px 14px; align-items: center;">
+              <span style="color: {{ p.dotColor }};">●</span>
+              <span style="color: {{ p.nameColor }}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.name }}</span>
+              <span style="color: #9a9ab2;">{{ p.ready }}</span>
+              <span style="color: {{ p.statusColor }};">{{ p.status }}</span>
+              <span style="color: {{ p.restartColor }};">{{ p.restarts }}</span>
+              <span style="color: #676780;">{{ p.node }}</span>
+              <span style="color: #676780; text-align: right;">{{ p.age }}</span>
+            </div>
+          </sc-for>
+          <div style="height: 150px;"></div>
+        </div>
+
+        <div style="position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: 560px; background: #101018; border: 1px solid #3b3b58; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.7); overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #26263a; background: #12101d;">
+            <span style="color: #a78bfa; font-weight: 700;">exec ›</span>
+            <span style="color: #d8d8e8;">aim-gateway-2b81x</span>
+            <span style="margin-left: auto; color: #55556e; font-size: 11px;">2 containers</span>
+          </div>
+
+          <div style="padding: 4px 0;">
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 84px 108px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+              <span style="color: #a78bfa;">▸</span>
+              <span style="color: #f0f0fa; font-weight: 500;">gateway <span style="color: #55556e; font-size: 11px;">distroless/static</span></span>
+              <span style="color: #34d17b;">● running</span>
+              <span style="color: #e8c74a; text-align: right;">no shell</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 84px 108px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span></span>
+              <span style="color: #d8d8e8;">istio-proxy <span style="color: #55556e; font-size: 11px;">sidecar</span></span>
+              <span style="color: #34d17b;">● running</span>
+              <span style="color: #676780; text-align: right;">sh</span>
+            </div>
+          </div>
+
+          <div style="padding: 7px 14px; border-top: 1px solid #1c1c2c; font-size: 11px; line-height: 1.6;">
+            <div style="color: #e8c74a;">no sh or bash in gateway — nothing to exec into</div>
+            <div style="color: #676780;">debug attaches a shell <span style="color: #9a9ab2;">alongside</span> it, sharing the pod's process namespace</div>
+          </div>
+
+          <div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid #26263a; background: #0e0e15; font-size: 11px;">
+            <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">debug gateway</span></span>
+            <span><span style="color: #a78bfa;">↑↓</span> <span style="color: #676780;">move</span></span>
+            <span style="margin-left: auto;"><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">EXEC</span>
+          <span style="color: #676780;">one container has a shell, one doesn't — the ↵ label follows the cursor</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>The picker already detects shells (<a href="#10a">10a</a>) — a shell-less row is <span style="color: #e9e2ff;">a route, not a dead ↵</span>. Cursor on <span style="color: #e9e2ff;">gateway</span> → `↵ debug gateway`; cursor on istio-proxy → `↵ open shell`. Same key, the row decides.</li>
+          <li>A distroless pod where <span style="color: #e9e2ff;">no</span> container has a shell skips this panel entirely and opens <a href="#41b">41b</a> — a picker with nothing to pick is chrome.</li>
+          <li>If `pods/ephemeralcontainers` create is denied, or the server predates it, the line reads the <span style="color: #e9e2ff;">verbatim reason</span> and offers `w who-can` (<a href="#22a">22a</a>) — checked before ↵, never a failure after it. Same discipline as helm-missing-from-PATH (<a href="#18a">18a</a>).</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 41B ══════════════════ -->
+    <div id="41b" data-screen-label="41b Debug panel, ephemeral" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">41b</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Debug panel — ephemeral container on a running pod</span>
+        <span style="font-size: 12px; color: #676780;">picker recipe of <a href="#10a">10a</a> / <a href="#13a">13a</a> · fields edited in place · will-run is the contract</span>
+      </div>
+
+      <div style="width: 960px; background: #0b0b10; border: 1px solid #26263a; border-radius: 10px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5); position: relative;">
+        <div style="opacity: 0.28; pointer-events: none;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: #0e0e15; border-bottom: 1px solid #26263a;">
+            <span style="color: #a78bfa; font-weight: 700;">kute</span>
+            <span style="color: #33334a;">│</span>
+            <span style="color: #676780;">microk8s-cluster</span>
+            <span style="color: #44445c;">›</span>
+            <span style="color: #a78bfa;">aim-stage</span>
+            <span style="color: #44445c;">›</span>
+            <span style="color: #f0f0fa; font-weight: 700;">Pods</span>
+            <span style="margin-left: auto; color: #34d17b;">● connected</span>
+          </div>
+          <sc-for list="{{ podsA }}" as="p" hint-placeholder-count="9">
+            <div style="display: grid; grid-template-columns: 20px minmax(0,1fr) 56px 132px 40px 92px 48px; gap: 0 12px; padding: 4px 14px; align-items: center;">
+              <span style="color: {{ p.dotColor }};">●</span>
+              <span style="color: {{ p.nameColor }}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.name }}</span>
+              <span style="color: #9a9ab2;">{{ p.ready }}</span>
+              <span style="color: {{ p.statusColor }};">{{ p.status }}</span>
+              <span style="color: {{ p.restartColor }};">{{ p.restarts }}</span>
+              <span style="color: #676780;">{{ p.node }}</span>
+              <span style="color: #676780; text-align: right;">{{ p.age }}</span>
+            </div>
+          </sc-for>
+          <div style="height: 150px;"></div>
+        </div>
+
+        <div style="position: absolute; top: 64px; left: 50%; transform: translateX(-50%); width: 880px; background: #101018; border: 1px solid #3b3b58; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.7); overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #26263a; background: #12101d;">
+            <span style="color: #a78bfa; font-weight: 700;">⚑ debug ›</span>
+            <span style="color: #d8d8e8;">aim-gateway-2b81x</span>
+            <span style="margin-left: auto; color: #55556e; font-size: 11px;">pod running · ephemeral container</span>
+          </div>
+
+          <div style="padding: 4px 0;">
+            <div style="display: grid; grid-template-columns: 16px 128px minmax(0,1fr) 74px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+              <span style="color: #a78bfa;">▸</span>
+              <span style="color: #f0f0fa; font-weight: 500;">attach ephemeral</span>
+              <span style="color: #9a9ab2;">shares this pod's namespaces · nothing restarts</span>
+              <span style="color: #a78bfa; text-align: right; font-size: 11px;">default</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px 128px minmax(0,1fr) 74px; gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent;">
+              <span></span>
+              <span style="color: #d8d8e8;">copy pod</span>
+              <span style="color: #676780;">a new pod from this spec · for pods that won't stay up</span>
+              <span style="color: #55556e; text-align: right; font-size: 11px;">m</span>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid #1c1c2c; padding: 6px 0;">
+            <div style="display: grid; grid-template-columns: 16px 72px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+              <span></span><span style="color: #55556e; font-size: 11px;">image</span>
+              <span style="color: #f0f0fa;">nicolaka/netshoot<span style="color: #a78bfa;">▎</span> <span style="color: #44445c; font-size: 11px;">i edit · recent: busybox:1.36 · alpine:3.20</span></span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px 72px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+              <span></span><span style="color: #55556e; font-size: 11px;">target</span>
+              <span style="color: #d8d8e8;">gateway <span style="color: #44445c; font-size: 11px;">t cycle · shares the process namespace, so its pid is visible</span></span>
+            </div>
+            <div style="display: grid; grid-template-columns: 16px 72px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+              <span></span><span style="color: #55556e; font-size: 11px;">profile</span>
+              <span style="color: #d8d8e8;">general <span style="color: #44445c; font-size: 11px;">p cycle · netadmin · sysadmin · restricted</span></span>
+            </div>
+          </div>
+
+          <div style="padding: 6px 14px; border-top: 1px solid #1c1c2c; background: #14120c; font-size: 11px; color: #e8c74a;">⚑ becomes part of this pod — an ephemeral container cannot be removed, only outlived</div>
+
+          <div style="padding: 7px 14px; border-top: 1px solid #1c1c2c; font-size: 11px; color: #55556e; white-space: pre; overflow: hidden;"><span style="color: #44445c;">will run</span>  <span style="color: #9a9ab2;">kubectl debug -it aim-gateway-2b81x -n aim-stage --image=nicolaka/netshoot --target=gateway --profile=general</span></div>
+
+          <div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid #26263a; background: #0e0e15; font-size: 11px;">
+            <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">start</span></span>
+            <span><span style="color: #a78bfa;">m</span> <span style="color: #676780;">mode</span></span>
+            <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+            <span><span style="color: #a78bfa;">t</span> <span style="color: #676780;">target</span></span>
+            <span><span style="color: #a78bfa;">p</span> <span style="color: #676780;">profile</span></span>
+            <span style="margin-left: auto;"><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 6px 14px; background: #0e0e15; border-top: 1px solid #26263a; font-size: 12px;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">DEBUG</span>
+          <span style="color: #676780;">kute suspends, the debug shell takes the terminal, exit returns you exactly here</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>Mode is <span style="color: #e9e2ff;">two rows, not a form</span> — the same selection grammar as every other list, and each row states when it applies. Pod state picks the default; `m` overrides.</li>
+          <li>Image, target and profile are <span style="color: #e9e2ff;">edited in place on the row</span> (13a's local-port idiom). Recents are remembered per context in the existing persisted state — <span style="color: #e9e2ff;">no image registry, no config file</span>, no wizard.</li>
+          <li><span style="color: #e9e2ff;">Profile is shown, never hidden</span>: `general` by default; `sysadmin`/`netadmin` are visible escalations, so what you get is on screen before ↵.</li>
+          <li>Friction tier: this mutates a live pod irreversibly, so it earns <span style="color: #e9e2ff;">the panel and the will-run line</span> — not a modal. Follows <a href="#8b">8b</a>: the red border stays reserved for delete and drain. In PROD contexts ↵ takes an inline `y/N` in the keybar.</li>
+          <li>Handoff is exec's (<a href="#10a">10a</a>): kute suspends, `kubectl debug` owns the tty, exit lands back on the same pod — no embedded terminal.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 41C ══════════════════ -->
+    <div id="41c" data-screen-label="41c Debug copy, dead pod" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">41c</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Copy mode — the pod won't stay up</span>
+        <span style="font-size: 12px; color: #676780;">x on a crashlooping pod · panel only, table behind it unchanged</span>
+      </div>
+
+      <div style="width: 940px; background: #101018; border: 1px solid #3b3b58; border-radius: 8px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #26263a; background: #12101d;">
+          <span style="color: #a78bfa; font-weight: 700;">⚑ debug ›</span>
+          <span style="color: #d8d8e8;">aim-worker-9k2ss</span>
+          <span style="margin-left: auto; color: #e8c74a; font-size: 11px;">✕ CrashLoopBackOff · ↺ 6 · copy mode</span>
+        </div>
+
+        <div style="padding: 4px 0;">
+          <div style="display: grid; grid-template-columns: 16px 128px minmax(0,1fr); gap: 0 12px; padding: 4px 14px; align-items: center; border-left: 2px solid transparent; opacity: 0.55;">
+            <span></span>
+            <span style="color: #676780;">attach ephemeral</span>
+            <span style="color: #e8c74a; font-size: 11px;">needs a running container — this one is in backoff</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 128px minmax(0,1fr) 74px; gap: 0 12px; padding: 4px 14px; align-items: center; background: #1d1633; border-left: 2px solid #a78bfa;">
+            <span style="color: #a78bfa;">▸</span>
+            <span style="color: #f0f0fa; font-weight: 500;">copy pod</span>
+            <span style="color: #9a9ab2;">same spec, your entrypoint · the original keeps crashing, untouched</span>
+            <span style="color: #a78bfa; text-align: right; font-size: 11px;">default</span>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #1c1c2c; padding: 6px 0;">
+          <div style="display: grid; grid-template-columns: 16px 84px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">copy name</span>
+            <span style="color: #f0f0fa;">aim-worker-9k2ss-debug<span style="color: #a78bfa;">▎</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 84px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">container</span>
+            <span style="color: #d8d8e8;">worker <span style="color: #44445c; font-size: 11px;">t cycle · image kept, so you debug the real thing</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 84px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">entrypoint</span>
+            <span style="color: #e8c74a;">sh <span style="color: #44445c; font-size: 11px;">replaces the command — that is what stops the crash loop</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 84px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">processes</span>
+            <span style="color: #d8d8e8;">shared <span style="color: #44445c; font-size: 11px;">s toggle</span></span>
+          </div>
+        </div>
+
+        <div style="padding: 6px 14px; border-top: 1px solid #1c1c2c; background: #14120c; font-size: 11px; color: #e8c74a;">⚑ creates a real pod — it counts against quota and it is yours to delete</div>
+
+        <div style="padding: 7px 14px; border-top: 1px solid #1c1c2c; font-size: 11px; color: #55556e; white-space: pre; overflow: hidden;"><span style="color: #44445c;">will run</span>  <span style="color: #9a9ab2;">kubectl debug -it aim-worker-9k2ss -n aim-stage --copy-to=aim-worker-9k2ss-debug --container=worker --share-processes -- sh</span></div>
+
+        <div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid #26263a; background: #0e0e15; font-size: 11px;">
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">create + attach</span></span>
+          <span><span style="color: #a78bfa;">m</span> <span style="color: #676780;">mode</span></span>
+          <span><span style="color: #a78bfa;">t</span> <span style="color: #676780;">container</span></span>
+          <span><span style="color: #a78bfa;">s</span> <span style="color: #676780;">processes</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+        </div>
+      </div>
+
+      <div style="width: 940px; background: #0b0b10; border: 1px solid #26263a; border-radius: 8px; overflow: hidden; font-size: 12px;">
+        <div style="padding: 5px 14px; color: #55556e; font-size: 11px; border-bottom: 1px solid #1c1c2c;">on exit — the keybar, back on the pods table</div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 6px 14px; background: #0e0e15;">
+          <span style="background: #1d1633; color: #c4b5fd; padding: 0 8px; border-radius: 3px; font-weight: 700;">CLEAN UP</span>
+          <span style="color: #9a9ab2;">aim-worker-9k2ss-debug still running · 4m</span>
+          <span style="margin-left: auto;"><span style="color: #ef8a8a;">ctrl-d</span> <span style="color: #676780;">delete it</span></span>
+          <span><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">keep</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>The impossible tier stays <span style="color: #e9e2ff;">listed and dim with the reason</span>, rather than vanishing — the panel teaches which tool applies when.</li>
+          <li><span style="color: #e9e2ff;">Replacing the entrypoint is the whole trick</span> and it is stated on the row, not buried in a flag. This is the screen that answers "the pod dies before I can look at it".</li>
+          <li>Copies are litter, so kute <span style="color: #e9e2ff;">names the litter it made</span>: on exit, an inline keybar prompt (never a modal), and the copy carries a `⚑ debug copy` tag in the pods table for the rest of the session — session registry, same as forwards (<a href="#13c">13c</a>).</li>
+          <li>Copy mode is a create, so PROD gets the inline `y/N` of <a href="#8b">8b</a>'s reversible tier — the copy is deletable, so no type-the-name.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 41D ══════════════════ -->
+    <div id="41d" data-screen-label="41d Node debug" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">41d</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">Node debug — x on a node</span>
+        <span style="font-size: 12px; color: #676780;">exec on a node is meaningless, so x means this · replaces the legacy `s` shell · from <a href="#11a">11a</a> / <a href="#11b">11b</a></span>
+      </div>
+
+      <div style="width: 940px; background: #101018; border: 1px solid #3b3b58; border-radius: 8px; overflow: hidden; font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 40px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #26263a; background: #12101d;">
+          <span style="color: #a78bfa; font-weight: 700;">⚑ debug ›</span>
+          <span style="color: #d8d8e8;">node/worker-01</span>
+          <span style="margin-left: auto; color: #55556e; font-size: 11px;">host namespaces · privileged · ↵ runs as-is</span>
+        </div>
+
+        <div style="border-top: 1px solid transparent; padding: 6px 0;">
+          <div style="display: grid; grid-template-columns: 16px 76px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span style="color: #a78bfa;">▸</span><span style="color: #55556e; font-size: 11px;">image</span>
+            <span style="color: #f0f0fa;">busybox:1.37<span style="color: #a78bfa;">▎</span> <span style="color: #44445c; font-size: 11px;">i edit</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 76px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">profile</span>
+            <span style="color: #e8c74a;">sysadmin <span style="color: #44445c; font-size: 11px;">p cycle · host pid + privileged</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 76px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">shell</span>
+            <span style="color: #d8d8e8;">chroot /host · bash, else sh <span style="color: #44445c; font-size: 11px;">you land on the node's filesystem, not the container's</span></span>
+          </div>
+          <div style="display: grid; grid-template-columns: 16px 76px minmax(0,1fr); gap: 0 12px; padding: 3px 14px;">
+            <span></span><span style="color: #55556e; font-size: 11px;">lands in</span>
+            <span style="color: #d8d8e8;">kube-system <span style="color: #44445c; font-size: 11px;">a real pod on this node · deleted when you exit</span></span>
+          </div>
+        </div>
+
+        <div style="padding: 6px 14px; border-top: 1px solid #1c1c2c; background: #14120c; font-size: 11px; color: #e8c74a;">⚑ root on worker-01 — 62 pods are running here</div>
+
+        <div style="padding: 7px 14px; border-top: 1px solid #1c1c2c; font-size: 11px; color: #55556e; white-space: pre; overflow: hidden;"><span style="color: #44445c;">will run</span>  <span style="color: #9a9ab2;">kubectl debug node/worker-01 -it --image=busybox:1.37 --profile=sysadmin -- chroot /host sh -c 'command -v bash &gt;/dev/null &amp;&amp; exec bash || exec sh'</span></div>
+
+        <div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid #26263a; background: #0e0e15; font-size: 11px; white-space: nowrap;">
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">root shell</span></span>
+          <span><span style="color: #a78bfa;">i</span> <span style="color: #676780;">image</span></span>
+          <span><span style="color: #a78bfa;">p</span> <span style="color: #676780;">profile</span></span>
+          <span style="margin-left: auto;"><span style="color: #a78bfa;">esc</span> <span style="color: #676780;">cancel</span></span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li><span style="color: #e9e2ff;">Replaces the legacy `s` node-shell.</span> That key ran a privileged root shell with <span style="color: #e9e2ff;">no will-run line and no PROD confirmation</span> — the most dangerous action in the app had the least friction — and a node-only second key contradicts `x` being the one shell key. The key goes; its command stays.</li>
+          <li><span style="color: #e9e2ff;">The entrypoint is the default, not homework.</span> `chroot /host` with bash-preferred, sh-fallback is what the legacy shell already did; the panel ships that shell instead of telling you to fix it after you land. One `shell` row states both facts.</li>
+          <li>Prefilled to exactly the legacy defaults, so <span style="color: #e9e2ff;">`x ↵` is the old `s`</span> — one extra key buys the will-run line and the PROD `y/N`. The panel is a receipt you can override, not a form to fill.</li>
+          <li>The node's <span style="color: #e9e2ff;">pod count is the warning</span> — a number from the data, not a scare string. In PROD contexts ↵ takes an inline `y/N`; the red modal still belongs only to delete and drain (<a href="#8b">8b</a>).</li>
+          <li>Suspend/restore and the keybar failure line (`node shell exited: …`) carry over from `s` verbatim — same handoff as exec (<a href="#10a">10a</a>).</li>
+          <li>Fits the nodes verb set next to `C` cordon and `D` drain, so the escalation ladder reads on one keybar.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+    <!-- ══════════════════ OPTION 41E ══════════════════ -->
+    <div id="41e" data-screen-label="41e Ephemeral containers in pod detail" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: baseline; gap: 10px;">
+        <span style="border: 1px solid #a78bfa; color: #a78bfa; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">41e</span>
+        <span style="font-size: 14px; font-weight: 700; color: #f0f0fa;">After the fact — debug containers are state, so they show up</span>
+        <span style="font-size: 12px; color: #676780;">fragment of pod detail (<a href="#5a">5a</a>) · the group exists only while one does</span>
+      </div>
+
+      <div style="width: 880px; background: #0b0b10; border: 1px solid #26263a; border-radius: 8px; overflow: hidden; font-size: 12.5px; line-height: 1.5;">
+        <div style="padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-bottom: 1px solid #1c1c2c;">CONTAINERS</div>
+        <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 90px 48px; gap: 0 12px; padding: 4px 14px;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">gateway <span style="color: #55556e; font-size: 11px;">distroless/static</span></span><span style="color: #34d17b;">Running</span><span style="color: #676780; text-align: right;">0</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 90px 48px; gap: 0 12px; padding: 4px 14px;">
+          <span style="color: #34d17b;">●</span><span style="color: #d8d8e8;">istio-proxy <span style="color: #55556e; font-size: 11px;">sidecar</span></span><span style="color: #34d17b;">Running</span><span style="color: #676780; text-align: right;">0</span>
+        </div>
+
+        <div style="display: flex; align-items: baseline; gap: 10px; padding: 5px 14px; color: #55556e; font-size: 11px; letter-spacing: 0.06em; border-top: 1px solid #1c1c2c; background: #0c0c12;">
+          <span style="color: #c4b5fd;">EPHEMERAL</span>
+          <span style="letter-spacing: 0; color: #44445c;">attached by debug · not part of the spec</span>
+          <span style="margin-left: auto; letter-spacing: 0;">1</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 16px minmax(0,1fr) 90px 48px; gap: 0 12px; padding: 4px 14px; background: #1d1633; border-left: 2px solid #a78bfa;">
+          <span style="color: #a78bfa;">⚑</span>
+          <span style="color: #f0f0fa;">debugger-7xk2 <span style="color: #55556e; font-size: 11px;">nicolaka/netshoot → gateway</span></span>
+          <span style="color: #34d17b;">Running</span><span style="color: #676780; text-align: right;">4m</span>
+        </div>
+        <div style="padding: 4px 14px 6px 32px; font-size: 11px; color: #44445c;">cannot be removed — it leaves when the pod does</div>
+
+        <div style="display: flex; gap: 14px; padding: 6px 14px; border-top: 1px solid #26263a; background: #0e0e15; font-size: 11px; white-space: nowrap;">
+          <span><span style="color: #a78bfa;">↵</span> <span style="color: #676780;">re-attach</span></span>
+          <span><span style="color: #a78bfa;">l</span> <span style="color: #676780;">logs</span></span>
+          <span><span style="color: #a78bfa;">↹</span> <span style="color: #676780;">cycle container</span></span>
+          <span style="margin-left: auto; color: #55556e;">⚑ also tags the row in the pods table, while it exists</span>
+        </div>
+      </div>
+
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #9a9ab2; max-width: 900px; line-height: 1.7;">
+          <li>An ephemeral container is <span style="color: #e9e2ff;">permanent state on someone's pod</span> — hiding it would be the dishonest option. It joins the containers grid as its own group, with the same `↹`/logs treatment as any container.</li>
+          <li><span style="color: #e9e2ff;">Zero chrome until earned</span> (<a href="#13d">13d</a>): no ephemeral containers, no group, no `⚑` in the table. One appears, both do.</li>
+          <li>Re-attach is `↵`, so a dropped connection costs one key instead of a second injected container.</li>
+        </ul>
+      </sc-if>
+    </div>
+
+  </div>
+</section>
+
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;showNotes&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Presentation&quot;},
+  &quot;statusBadges&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;1a table&quot;, &quot;description&quot;: &quot;Render STATUS as a tinted pill instead of plain colored text&quot;}
+}">
+class Component extends DCLogic {
+  renderVals() {
+    const showNotes = this.props.showNotes ?? true;
+    const statusBadges = this.props.statusBadges ?? false;
+
+    const green = "#34d17b", yellow = "#e8c74a", red = "#ef6a6a", blue = "#6aa8ef", dim = "#676780", purple = "#a78bfa";
+    const row = (name, ready, status, restarts, cpu, mem, node, age, opts = {}) => {
+      const colors = { Running: green, Pending: yellow, CrashLoopBackOff: red, Completed: blue };
+      const c = colors[status] || dim;
+      const barColor = v => v >= 70 ? yellow : purple;
+      return {
+        name, ready, status, restarts: String(restarts), node, age,
+        dotColor: c, statusColor: c,
+        badgeBg: c + "22",
+        nameColor: opts.selected ? "#f0f0fa" : (status === "CrashLoopBackOff" ? "#f0b7b7" : "#d8d8e8"),
+        restartColor: restarts > 0 ? yellow : dim,
+        rowBg: opts.selected ? "#1d1633" : "transparent",
+        rowBorder: opts.selected ? purple : "transparent",
+        cpuW: cpu == null ? "0%" : cpu + "%", cpuTxt: cpu == null ? "–" : cpu + "%",
+        cpuColor: cpu == null ? "transparent" : barColor(cpu),
+        memW: mem == null ? "0%" : mem + "%", memTxt: mem == null ? "–" : mem + "%",
+        memColor: mem == null ? "transparent" : barColor(mem),
+      };
+    };
+
+    const podsA = [
+      row("aim-bp-api-7d89f", "1/1", "Running", 0, 12, 34, "worker-02", "12d", { selected: true }),
+      row("aim-bp-app-558b7", "1/1", "Running", 1, 8, 41, "worker-01", "12d"),
+      row("aim-cc-api-6cf94", "0/1", "Pending", 0, null, null, "worker-01", "18s"),
+      row("aim-worker-9k2ss", "0/1", "CrashLoopBackOff", 6, null, null, "worker-01", "3h"),
+      row("aim-ms-api-5f7c8", "1/1", "Running", 0, 19, 55, "worker-02", "11d"),
+      row("aim-gw-proxy-2m4d", "2/2", "Running", 0, 27, 63, "worker-02", "8d"),
+      row("aim-cron-hourly-x1", "0/1", "Completed", 0, null, null, "worker-03", "42m"),
+      row("redis-0", "1/1", "Running", 0, 4, 22, "worker-03", "23d"),
+      row("postgres-0", "1/1", "Running", 0, 9, 78, "worker-03", "23d"),
+    ];
+
+    const skeletonRows = [
+      { nameW: "62%", opacity: 1 },
+      { nameW: "48%", opacity: 0.9 },
+      { nameW: "70%", opacity: 0.78 },
+      { nameW: "55%", opacity: 0.64 },
+      { nameW: "66%", opacity: 0.5 },
+      { nameW: "44%", opacity: 0.36 },
+      { nameW: "58%", opacity: 0.22 },
+    ];
+
+    return { podsA, skeletonRows, showNotes, statusBadges, statusPlain: !statusBadges };
+  }
+}
+</script>
+</body>
+</html>

@@ -65,14 +65,41 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// README.md §52). Unlike the list screens this one can't lean on a
 		// keybar note the user is already looking at — the connection may
 		// well have dropped after the picker was pushed — so it says so in
-		// the panel's own feedback line.
+		// the panel's own feedback line. The same gate covers the debug
+		// fork below: both are kubectl subprocess handoffs.
 		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
 			m.feedback = "Exec is disabled while offline."
 			return m, nil
 		}
+		// §41a's fork: a container this picker already knows has no shell
+		// routes to the debug panel instead of a dead exec attempt — "a
+		// shell-less row is a route, not a dead ↵" (docs/design
+		// v.0.11.0.dc.html §41a).
+		if m.selectedShellless() {
+			if m.openDebug == nil {
+				m.feedback = "no sh or bash in this container — nothing to exec into"
+				return m, nil
+			}
+			task, cmd := m.openDebug(m.namespace, m.podName, m.containers, m.containers[m.selected].Name, m.width, m.height)
+			if task != nil {
+				return task, cmd
+			}
+			return m, cmd
+		}
 		return m, m.execSelected()
 	}
 	return m, nil
+}
+
+// selectedShellless reports whether the highlighted row's detection is a
+// real "no shell" answer (nil err, empty shells — distroless) rather than
+// unresolved/unknown (still probing, or the probe itself failed).
+func (m Model) selectedShellless() bool {
+	if m.selected < 0 || m.selected >= len(m.containers) {
+		return false
+	}
+	res, ok := m.detected[m.containers[m.selected].Name]
+	return ok && res.err == nil && len(res.shells) == 0
 }
 
 func (m *Model) moveSelection(delta int) {

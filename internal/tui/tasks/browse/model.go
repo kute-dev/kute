@@ -130,6 +130,20 @@ type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, 
 // Deployment row (docs/design README.md §13a).
 type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Model, tea.Cmd)
 
+// OpenDebugFunc pushes tasks/debugpanel (§41b/§41c) for a Pod with no shell
+// in any container, or one that won't stay running — the shell pre-check
+// (exec.go's detectPodShellsCmd) decides when to call this instead of
+// OpenExec/execCmd; podPhase/waiting are how the panel picks its own
+// default mode (attach vs. copy) and hard-disables attach when it can't
+// work.
+type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
+
+// OpenNodeDebugFunc pushes tasks/debugpanel (§41d) for a Node row's 'x' —
+// replaces the retired standalone NodeShell verb ('s'), see verbs.go's
+// NodeDebug doc comment. podCount is the live pod count browse's Nodes
+// columns already carry.
+type OpenNodeDebugFunc func(name string, podCount, width, height int) (tea.Model, tea.Cmd)
+
 // OpenObjectDetailFunc pushes tasks/objectdetail (14d) for a discovered CRD
 // kind's row (resources.Descriptor.Custom) — siblings/index are the current
 // visible list's ordered names + the selected row's position, same shape as
@@ -232,11 +246,21 @@ type OpenFluxTreeFunc func(width, height int) (tea.Model, tea.Cmd)
 // (package-local Config struct, interface-typed fields, New fills zero
 // values).
 type Config struct {
-	Session             *tui.Session
-	Lister              resources.RawLister
-	Metrics             MetricsReader
-	NodeMetrics         NodeMetricsReader
-	Mutator             kube.Mutator
+	Session     *tui.Session
+	Lister      resources.RawLister
+	Metrics     MetricsReader
+	NodeMetrics NodeMetricsReader
+	Mutator     kube.Mutator
+	// Shells answers which shells a container actually has (debug.go's
+	// detectPodShellsCmd) — a nil value falls back to openSelectedExec's
+	// old synchronous single-vs-multi-container routing, so 'x' still
+	// works with this seam unwired, just without §41a's distroless fork.
+	Shells ShellDetector
+	// RBAC answers §41a's "capability is checked before ↵" pre-check for
+	// the debug fork — nil disables the check entirely (the panel opens
+	// unconditionally, the pre-existing behavior) rather than failing
+	// closed, matching Shells' own nil-disables convention.
+	RBAC                RBACChecker
 	OpenLogs            OpenLogsFunc
 	OpenNodeDetail      OpenNodeDetailFunc
 	OpenPodDetail       OpenPodDetailFunc
@@ -245,6 +269,8 @@ type Config struct {
 	OpenTimeline        OpenTimelineFunc
 	OpenObjectTimeline  OpenObjectTimelineFunc
 	OpenExec            OpenExecFunc
+	OpenDebug           OpenDebugFunc
+	OpenNodeDebug       OpenNodeDebugFunc
 	OpenForward         OpenForwardFunc
 	OpenObjectDetail    OpenObjectDetailFunc
 	OpenRouteTable      OpenRouteTableFunc
@@ -286,6 +312,8 @@ type Model struct {
 	metrics             MetricsReader
 	nodeMetricsSrc      NodeMetricsReader
 	mutator             kube.Mutator
+	shells              ShellDetector
+	rbac                RBACChecker
 	actions             actions.Controller
 	openLogs            OpenLogsFunc
 	openNodeDetail      OpenNodeDetailFunc
@@ -295,6 +323,8 @@ type Model struct {
 	openTimeline        OpenTimelineFunc
 	openObjectTimeline  OpenObjectTimelineFunc
 	openExec            OpenExecFunc
+	openDebug           OpenDebugFunc
+	openNodeDebug       OpenNodeDebugFunc
 	openForward         OpenForwardFunc
 	openObjectDetail    OpenObjectDetailFunc
 	openRouteTable      OpenRouteTableFunc
@@ -389,6 +419,13 @@ type Model struct {
 	// action has no single ResourceName for actions.Controller's own
 	// y/N/type-name shapes to key off.
 	pendingBulkDelete *bulkDeleteTarget
+	// pendingDebugDenial is non-nil after §41a's RBAC pre-check (debug.go)
+	// found the create verb kubectl debug's chosen mode needs denied —
+	// enough for 'w' to open tasks/whocan pre-filled with the exact query
+	// that was denied. Sticky like execFeedback (the reason it's paired
+	// with): left set until 'w' consumes it or a later 'x' overwrites it,
+	// same as row.NodeShellUnavailable's own reason.
+	pendingDebugDenial *debugDenial
 
 	kind      kube.ResourceKind
 	namespace string
@@ -769,6 +806,8 @@ func New(cfg Config) Model {
 		metrics:             cfg.Metrics,
 		nodeMetricsSrc:      cfg.NodeMetrics,
 		mutator:             cfg.Mutator,
+		shells:              cfg.Shells,
+		rbac:                cfg.RBAC,
 		actions:             actions.New(cfg.Mutator),
 		openLogs:            cfg.OpenLogs,
 		openNodeDetail:      cfg.OpenNodeDetail,
@@ -778,6 +817,8 @@ func New(cfg Config) Model {
 		openTimeline:        cfg.OpenTimeline,
 		openObjectTimeline:  cfg.OpenObjectTimeline,
 		openExec:            cfg.OpenExec,
+		openDebug:           cfg.OpenDebug,
+		openNodeDebug:       cfg.OpenNodeDebug,
 		openForward:         cfg.OpenForward,
 		openObjectDetail:    cfg.OpenObjectDetail,
 		openRouteTable:      cfg.OpenRouteTable,

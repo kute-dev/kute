@@ -16,7 +16,7 @@ import (
 
 // CurrentVersion is the schema version stamped on every save. Bump it and
 // extend migrate whenever the schema changes.
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 // MaxRecent caps every Recent* list, most-recent-first. 11, not some
 // rounder number: 6a/7a's numbered recent-pick (tui.recentNumbers) excludes
@@ -41,6 +41,13 @@ type PerContext struct {
 	Kind             string   `json:"kind,omitempty"`
 	Filter           string   `json:"filter,omitempty"`
 	RecentNamespaces []string `json:"recentNamespaces,omitempty"`
+	// RecentDebugImages is the debug panel's (§41b/§41c) most-recent-first
+	// image list — schema v3. Per-context, not global, the same reasoning
+	// RecentNamespaces already gives: a registry that makes sense in one
+	// cluster's context may be unreachable from another. Only the image
+	// field gets recents; target/profile/entrypoint don't per the design
+	// mockup.
+	RecentDebugImages []string `json:"recentDebugImages,omitempty"`
 }
 
 // State is the persisted document. RecentKinds/RecentContexts are
@@ -127,6 +134,7 @@ func normalize(s State) State {
 	s.RecentContexts = capRecent(s.RecentContexts)
 	for name, pc := range s.PerContext {
 		pc.RecentNamespaces = capRecent(pc.RecentNamespaces)
+		pc.RecentDebugImages = capRecent(pc.RecentDebugImages)
 		s.PerContext[name] = pc
 	}
 	return s
@@ -139,11 +147,12 @@ func capRecent(items []string) []string {
 	return items
 }
 
-// migrate upgrades s to CurrentVersion. v1 -> v2 (UpdateCheck, 28a/28b) adds
-// no field that needs a data transform — JSON decoding a v1 file already
-// leaves UpdateCheck at its zero value — so, like every bump so far, this
-// is just the version stamp; the hook is here for the next bump that
-// actually needs to transform something.
+// migrate upgrades s to CurrentVersion. v1 -> v2 (UpdateCheck, 28a/28b) and
+// v2 -> v3 (PerContext.RecentDebugImages, §41b/§41c) both add no field that
+// needs a data transform — JSON decoding an older file already leaves the
+// new field at its zero value — so, like every bump so far, this is just
+// the version stamp; the hook is here for the next bump that actually needs
+// to transform something.
 func migrate(s State) State {
 	s.Version = CurrentVersion
 	return s

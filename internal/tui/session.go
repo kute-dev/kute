@@ -82,6 +82,12 @@ type Session struct {
 	// forwards survive one (docs/design README.md §13d: "global across
 	// context switches"). Nil when no cluster is reachable.
 	Forwards *kube.ForwardManager
+	// DebugCopies tracks §41c's "copy pod" debug-mode pods kute itself
+	// created this session — same placement/lifetime as Forwards (built
+	// once at the composition root, survives context switches, since a
+	// copy pod's identity is stable regardless of which context/namespace
+	// the user is currently browsing). Nil when no cluster is reachable.
+	DebugCopies *kube.DebugCopyRegistry
 	// Charts is the local Helm repo cache behind 18a's LATEST column, built
 	// once at the composition root and — like Forwards — never rebuilt on a
 	// context switch: it describes the user's own disk, not the cluster.

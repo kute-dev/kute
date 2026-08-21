@@ -27,6 +27,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/configmapdata"
 	"github.com/kute-dev/kute/internal/tui/tasks/cronjobdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/cronjobschedule"
+	"github.com/kute-dev/kute/internal/tui/tasks/debugpanel"
 	"github.com/kute-dev/kute/internal/tui/tasks/events"
 	"github.com/kute-dev/kute/internal/tui/tasks/execpicker"
 	"github.com/kute-dev/kute/internal/tui/tasks/fluxdetail"
@@ -515,6 +516,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 	switch {
 	case cluster != nil:
 		sess.Forwards = kube.NewForwardManager()
+		sess.DebugCopies = kube.NewDebugCopyRegistry()
 		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
 		sess.Metrics = cluster
 		// Snapshot before buildBrowseTask: browse.New's own KindEvent
@@ -560,6 +562,7 @@ func NewModel(cfg Config) (tui.Model, *kube.Cluster, *fake.Cluster) {
 		sess.Location.Namespace = namespace
 		sess.Registry, sess.Groups = resources.BuildDiscoveredRegistry(demoCluster.DiscoveredKinds(), demoCluster)
 		sess.Forwards = kube.NewForwardManager()
+		sess.DebugCopies = kube.NewDebugCopyRegistry()
 		// The demo's chart versions are fixtures too — reading the running
 		// machine's real ~/.cache/helm would make --demo render differently
 		// on every laptop, and mostly render "–".
@@ -612,10 +615,13 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	lister := newSessionLister(cluster, sess.Forwards, sess.Charts)
 	openLogs := openLogsFunc(sess, cluster, streamer, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, cluster)
-	openExec := openExecFunc(sess, kubectlShellDetector{})
+	openDebug := openDebugFunc(sess, cluster)
+	openExecDebug := openExecDebugFunc(sess, cluster)
+	openNodeDebug := openNodeDebugFunc(sess, cluster)
+	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug)
 	openForward := openForwardFunc(sess, lister, cluster)
-	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward)
-	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward)
+	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug, openWhoCanFunc(sess, cluster))
+	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, cluster, openYAML)
 	openTimeline := openTimelineFunc(sess, cluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, cluster, openYAML)
@@ -635,6 +641,10 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenTimeline:        openTimeline,
 		OpenObjectTimeline:  browse.OpenObjectTimelineFunc(openObjectTimeline),
 		OpenExec:            browse.OpenExecFunc(openExec),
+		OpenDebug:           browse.OpenDebugFunc(openDebug),
+		OpenNodeDebug:       browse.OpenNodeDebugFunc(openNodeDebug),
+		Shells:              kubectlShellDetector{},
+		RBAC:                cluster,
 		OpenForward:         openForward,
 		OpenObjectDetail:    openObjectDetailFunc(sess, cluster, openYAML),
 		OpenFluxDetail:      openFluxDetailFunc(sess, cluster, openYAML),
@@ -696,10 +706,13 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
 	openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, demoCluster)
-	openExec := openExecFunc(sess, demoCluster)
+	openDebug := openDebugFunc(sess, demoCluster)
+	openExecDebug := openExecDebugFunc(sess, demoCluster)
+	openNodeDebug := openNodeDebugFunc(sess, demoCluster)
+	openExec := openExecFunc(sess, demoCluster, openExecDebug)
 	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
-	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward)
-	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward)
+	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug, openWhoCanFunc(sess, demoCluster))
+	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, demoCluster, openYAML)
 	openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
@@ -719,6 +732,10 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenTimeline:        openTimeline,
 		OpenObjectTimeline:  browse.OpenObjectTimelineFunc(openObjectTimeline),
 		OpenExec:            browse.OpenExecFunc(openExec),
+		OpenDebug:           browse.OpenDebugFunc(openDebug),
+		OpenNodeDebug:       browse.OpenNodeDebugFunc(openNodeDebug),
+		Shells:              demoCluster,
+		RBAC:                demoCluster,
 		OpenForward:         openForward,
 		OpenObjectDetail:    openObjectDetailFunc(sess, demoCluster, openYAML),
 		OpenFluxDetail:      openFluxDetailFunc(sess, demoCluster, openYAML),
@@ -783,6 +800,9 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 		if sess.Forwards == nil {
 			sess.Forwards = kube.NewForwardManager()
 		}
+		if sess.DebugCopies == nil {
+			sess.DebugCopies = kube.NewDebugCopyRegistry()
+		}
 		sess.Cluster = cluster
 		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
 		sess.Metrics = cluster
@@ -833,6 +853,9 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 
 		if sess.Forwards == nil {
 			sess.Forwards = kube.NewForwardManager()
+		}
+		if sess.DebugCopies == nil {
+			sess.DebugCopies = kube.NewDebugCopyRegistry()
 		}
 		sess.Cluster = cluster
 		sess.Lister = newSessionLister(cluster, sess.Forwards, sess.Charts)
@@ -889,7 +912,7 @@ func kubeconfigPathOrEmpty() string {
 // = [pod.Name]), so poddetail's j/k is inert from this entry point; wiring
 // real prev/next through nodedetail's own pod table is a natural follow-up,
 // not required here.
-func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc) browse.OpenNodeDetailFunc {
+func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, openNodeDebug func(name string, podCount, width, height int) (tea.Model, tea.Cmd)) browse.OpenNodeDetailFunc {
 	openPod := func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd) {
 		return openPodDetail(pod, []string{pod.Name}, 0, width, height)
 	}
@@ -897,18 +920,19 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
 	return func(nodeName string, width, height int) (tea.Model, tea.Cmd) {
 		nd := nodedetail.New(nodedetail.Config{
-			Session:      sess,
-			Lister:       active,
-			Metrics:      active,
-			Mutator:      active,
-			OpenPod:      nodedetail.OpenPodFunc(openPod),
-			OpenLogs:     nodedetail.OpenLogsFunc(openLogs),
-			OpenExec:     nodedetail.OpenExecFunc(openExec),
-			OpenYAML:     nodedetail.OpenYAMLFunc(openYAML),
-			OpenEvents:   nodedetail.OpenEventsFunc(openObjectEvents),
-			OpenTimeline: nodedetail.OpenTimelineFunc(openObjectTimeline),
-			OpenForward:  nodedetail.OpenForwardFunc(openForward),
-			NodeName:     nodeName,
+			Session:       sess,
+			Lister:        active,
+			Metrics:       active,
+			Mutator:       active,
+			OpenPod:       nodedetail.OpenPodFunc(openPod),
+			OpenLogs:      nodedetail.OpenLogsFunc(openLogs),
+			OpenExec:      nodedetail.OpenExecFunc(openExec),
+			OpenYAML:      nodedetail.OpenYAMLFunc(openYAML),
+			OpenEvents:    nodedetail.OpenEventsFunc(openObjectEvents),
+			OpenTimeline:  nodedetail.OpenTimelineFunc(openObjectTimeline),
+			OpenForward:   nodedetail.OpenForwardFunc(openForward),
+			OpenNodeDebug: nodedetail.OpenNodeDebugFunc(openNodeDebug),
+			NodeName:      nodeName,
 		})
 		nd.SetSize(width, height)
 		return &nd, nd.Init()
@@ -916,8 +940,13 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 }
 
 // openPodDetailFunc pushes tasks/poddetail (5a) for a pod, wiring it against
-// the same seams active already satisfies for browse/nodedetail.
-func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc) browse.OpenPodDetailFunc {
+// the same seams active already satisfies for browse/nodedetail. shells/
+// openDebug wire §41a/§41b/§41c's shell pre-check (debug.go); openWhoCan
+// backs the same pre-check's RBAC-denial 'w' handoff — active alone would
+// satisfy poddetail.RBACChecker directly, but the push still needs a
+// whocan.New closure, so it's threaded in like every other Open*Func rather
+// than reconstructed here.
+func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, shells poddetail.ShellDetector, openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd), openWhoCan browse.OpenWhoCanFunc) browse.OpenPodDetailFunc {
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
 	return func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd) {
@@ -926,6 +955,10 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 			Lister:       active,
 			Metrics:      active,
 			Events:       active,
+			Shells:       shells,
+			OpenDebug:    poddetail.OpenDebugFunc(openDebug),
+			RBAC:         active,
+			OpenWhoCan:   poddetail.OpenWhoCanFunc(openWhoCan),
 			Mutator:      active,
 			OpenLogs:     poddetail.OpenLogsFunc(openLogs),
 			OpenYAML:     poddetail.OpenYAMLFunc(openYAML),
@@ -1284,8 +1317,9 @@ func openHelmValuesFunc(sess *tui.Session) browse.OpenHelmValuesFunc {
 // this file's other Open*Func builders it takes no `active seams` argument —
 // the picker never reads from the cluster; it spawns a kubectl subprocess to
 // exec, and probes each container's shells through the shells seam (real:
-// kubectlShellDetector, demo: *fake.Cluster).
-func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
+// kubectlShellDetector, demo: *fake.Cluster). openDebug wires §41a's fork —
+// enter on a row already known to have no shell.
+func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug execpicker.OpenDebugFunc) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 	return func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 		ep := execpicker.New(execpicker.Config{
 			Session:    sess,
@@ -1293,9 +1327,70 @@ func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector) func(names
 			PodName:    name,
 			Containers: containers,
 			Shells:     shells,
+			OpenDebug:  openDebug,
 		})
 		ep.SetSize(width, height)
 		return &ep, ep.Init()
+	}
+}
+
+// openDebugFunc pushes tasks/debugpanel (§41b/§41c) for a pod — the
+// browse/poddetail-shaped seam (podPhase/waiting decide the panel's default
+// mode). mutator backs §41c's cleanup delete only; the debug launch itself
+// is a tea.ExecProcess handoff, never a Mutator call.
+func openDebugFunc(sess *tui.Session, mutator kube.Mutator) func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
+	return func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
+		dp := debugpanel.New(debugpanel.Config{
+			Session:    sess,
+			Mutator:    mutator,
+			Namespace:  namespace,
+			Name:       name,
+			Containers: containers,
+			PodPhase:   podPhase,
+			Waiting:    waiting,
+		})
+		dp.SetSize(width, height)
+		return &dp, dp.Init()
+	}
+}
+
+// openExecDebugFunc pushes tasks/debugpanel in attach mode from
+// tasks/execpicker's own §41a fork — target pre-selects the specific
+// container the picker already knows has no shell. PodPhase/Waiting stay
+// unset: the picker is only ever reached when at least one other container
+// in the pod does have a shell, so attach is always the right default here
+// (debugpanel.New's own mode gate needs neither field to pick it).
+func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator) execpicker.OpenDebugFunc {
+	return func(namespace, podName string, containers []kube.ContainerInfo, target string, width, height int) (tea.Model, tea.Cmd) {
+		dp := debugpanel.New(debugpanel.Config{
+			Session:                sess,
+			Mutator:                mutator,
+			Namespace:              namespace,
+			Name:                   podName,
+			Containers:             containers,
+			InitialTargetContainer: target,
+		})
+		dp.SetSize(width, height)
+		return &dp, dp.Init()
+	}
+}
+
+// openNodeDebugFunc pushes tasks/debugpanel (§41d) for a node — replaces
+// the retired standalone NodeShell verb (verbs.go's NodeDebug/
+// NodeDebugDetail doc comments). Shared by browse's 'x' on a Node row and
+// nodedetail's own 's'.
+func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
+	return func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
+		dp := debugpanel.New(debugpanel.Config{
+			Session:        sess,
+			Mutator:        mutator,
+			IsNode:         true,
+			Name:           name,
+			NodePodCount:   podCount,
+			NodeShellImage: sess.Config.NodeShellImage,
+		})
+		dp.SetSize(width, height)
+		return &dp, dp.Init()
 	}
 }
 

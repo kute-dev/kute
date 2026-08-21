@@ -99,6 +99,25 @@ func TestLoadMigratesV1FileToV2(t *testing.T) {
 	}
 }
 
+func TestLoadMigratesV2FileToV3(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "state.json")
+	v2 := `{"version": 2, "perContext": {"dev": {"namespace": "default", "recentNamespaces": ["default"]}}}`
+	if err := os.WriteFile(path, []byte(v2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := loadFrom(path)
+	if got.Version != CurrentVersion {
+		t.Fatalf("Version = %d, want %d", got.Version, CurrentVersion)
+	}
+	if got.PerContext["dev"].Namespace != "default" {
+		t.Fatalf("PerContext[dev].Namespace = %q, want migrated data preserved", got.PerContext["dev"].Namespace)
+	}
+	if len(got.PerContext["dev"].RecentDebugImages) != 0 {
+		t.Fatalf("RecentDebugImages = %v, want zero value from a v2 file", got.PerContext["dev"].RecentDebugImages)
+	}
+}
+
 func TestMarkUpdateSeenIsIdempotent(t *testing.T) {
 	t.Parallel()
 	var s State

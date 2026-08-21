@@ -1,0 +1,221 @@
+// Package debugpanel is §41b/§41c/§41d (docs/design v.0.11.0.dc.html §41):
+// the centered panel `x` pushes for a Pod with no shell in any container, a
+// Pod that won't stay running, or a Node — three sub-screens sharing one
+// panel shell (in-place fields, a "will run" line, a PROD-only inline y/N
+// gate, tea.ExecProcess launch) with a target (pod/node) and, for a pod, a
+// mode (attach/copy) discriminant. §41a's fork on tasks/execpicker's own
+// shell-less row, and browse/poddetail's own shell-precheck, decide when
+// this package opens instead of execpicker/execCmd — this package itself
+// only renders and launches whatever it was told to.
+package debugpanel
+
+import (
+	"time"
+
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
+)
+
+// target discriminates which of §41's objects this panel is debugging.
+type target int
+
+const (
+	targetPod target = iota
+	targetNode
+)
+
+// podMode discriminates §41b (attach) from §41c (copy) — pod target only.
+type podMode int
+
+const (
+	modeAttach podMode = iota
+	modeCopy
+)
+
+// fieldID names the one free-text field a given target/mode combination
+// ever has open at once — every other field (target/container/profile/
+// mode/share-processes) is a single-key cycle, never a text buffer.
+type fieldID int
+
+const (
+	fieldNone fieldID = iota
+	fieldImage
+	fieldCopyName
+	fieldEntrypoint
+)
+
+// Config are debugpanel's dependencies and the target object's own data,
+// per repo convention (package-local Config struct, New fills zero
+// values).
+type Config struct {
+	Session *tui.Session
+	Mutator kube.Mutator // §41c's cleanup delete only — the launch itself never calls it
+
+	// Pod target
+	Namespace  string
+	Name       string
+	Containers []kube.ContainerInfo
+	// PodPhase/Waiting pick the default mode (CrashLoopBackOff, or a
+	// Waiting container, default to modeCopy and hard-disable attach — the
+	// confirmed decision, docs/design v.0.11.0.dc.html §41c) and are also
+	// used to re-evaluate that gate live if the row's state changes while
+	// the panel is open.
+	PodPhase string
+	Waiting  bool
+	// InitialTargetContainer pre-selects the attach mode's target-container
+	// field — set by tasks/execpicker's own §41a fork, which already knows
+	// which specific container has no shell (the one the cursor was on).
+	// Empty falls back to the first non-sidecar container, same as opening
+	// the panel any other way.
+	InitialTargetContainer string
+
+	// Node target
+	NodePodCount int
+	// NodeShellImage is the caller's configured override for the
+	// node-debug default image (config.Config.NodeShellImage, the retired
+	// NodeShell verb's own knob). Empty falls back to
+	// kube.DefaultNodeShellImage, same as before this field existed.
+	NodeShellImage string
+
+	// Target selects which of the two shapes above applies. Namespace is
+	// ignored for a Node target (kubectl debug node/X takes no -n).
+	IsNode bool
+}
+
+// cleanupPrompt is §41c's post-exit "CLEAN UP" band — set once a copy-mode
+// launch exits cleanly, cleared by either a completed ctrl-d delete or esc
+// ("keep").
+type cleanupPrompt struct {
+	name      string
+	startedAt time.Time
+}
+
+type Model struct {
+	width, height int
+
+	session *tui.Session
+	mutator kube.Mutator
+
+	tgt target
+
+	// Pod target
+	namespace, podName string
+	containers         []kube.ContainerInfo
+	podPhase           string
+	waiting            bool
+
+	mode podMode
+
+	attachImage     string
+	attachTargetIdx int
+	attachProfile   kube.DebugProfile
+
+	copyName           string
+	copyContainerIdx   int
+	copyEntrypoint     string
+	copyShareProcesses bool
+
+	// Node target
+	nodeName     string
+	nodeImage    string
+	nodeProfile  kube.DebugProfile
+	nodePodCount int
+
+	editingField fieldID
+	editInput    textinput.Model
+
+	launchPending bool
+	cleanup       *cleanupPrompt
+	actions       actions.Controller // cleanup delete only (verbs.Delete/kube.Mutator) — the debug launch itself is a bespoke gate (launchPending), never routed through this
+
+	feedback string
+	conn     kube.ConnState
+}
+
+func New(cfg Config) Model {
+	m := Model{
+		width:   tui.DefaultWidth,
+		height:  tui.DefaultHeight,
+		session: cfg.Session,
+		mutator: cfg.Mutator,
+		actions: actions.New(cfg.Mutator),
+	}
+	if cfg.IsNode {
+		m.tgt = targetNode
+		m.nodeName = cfg.Name
+		m.nodeImage = cfg.NodeShellImage
+		if m.nodeImage == "" {
+			m.nodeImage = kube.DefaultNodeShellImage
+		}
+		m.nodeProfile = kube.ProfileSysadmin
+		m.nodePodCount = cfg.NodePodCount
+		return m
+	}
+	m.tgt = targetPod
+	m.namespace = cfg.Namespace
+	m.podName = cfg.Name
+	m.containers = cfg.Containers
+	m.podPhase = cfg.PodPhase
+	m.waiting = cfg.Waiting
+
+	m.attachImage = kube.DefaultDebugImage
+	m.attachTargetIdx = containerIndexOrDefault(cfg.Containers, cfg.InitialTargetContainer)
+	m.attachProfile = kube.ProfileGeneral
+
+	m.copyName = kube.DefaultDebugCopyName(cfg.Name)
+	m.copyContainerIdx = firstNonSidecarIndex(cfg.Containers)
+	m.copyEntrypoint = kube.DefaultDebugCopyEntrypoint
+	m.copyShareProcesses = true
+
+	if m.podWontStayRunning() {
+		m.mode = modeCopy
+	} else {
+		m.mode = modeAttach
+	}
+	return m
+}
+
+// firstNonSidecarIndex is the panel's default target/container selection —
+// the pod's first ordinary container, matching how browse's own
+// openSelectedExec picks a default before a picker/panel ever opens.
+func firstNonSidecarIndex(containers []kube.ContainerInfo) int {
+	for i, c := range containers {
+		if !c.IsSidecar {
+			return i
+		}
+	}
+	return 0
+}
+
+// containerIndexOrDefault resolves name to its index in containers, falling
+// back to firstNonSidecarIndex when name is empty or not found — the
+// tasks/execpicker fork (§41a) pre-selects the specific shell-less
+// container the cursor was on; every other entry point leaves name empty.
+func containerIndexOrDefault(containers []kube.ContainerInfo, name string) int {
+	if name != "" {
+		for i, c := range containers {
+			if c.Name == name {
+				return i
+			}
+		}
+	}
+	return firstNonSidecarIndex(containers)
+}
+
+// podWontStayRunning reports whether §41c's copy-only gate applies —
+// CrashLoopBackOff or a Waiting container means an ephemeral attach has
+// nothing running to attach to.
+func (m Model) podWontStayRunning() bool {
+	return kube.PodWontStayRunning(m.podPhase, m.waiting)
+}
+
+func (m *Model) SetSize(width, height int) {
+	size := tui.NormalizeSize(width, height)
+	m.width, m.height = size.Width, size.Height
+}
+
+func (m Model) Init() tea.Cmd { return nil }

@@ -105,7 +105,11 @@ type Row struct {
 
 	// NameSuffix is appended after the NAME cell's text (dim, not part of
 	// the filter/sort-relevant Name itself) — 11a's inline control-plane
-	// role tag, e.g. "node-1 (control-plane)".
+	// role tag ("node-1 (control-plane)"), and §41e/§41c's Pod ⚑ tags: a
+	// real ephemeral container attached (projectPod, from the object's own
+	// status) or a debug copy kute itself created (browse's own
+	// post-projection decoration from Session.DebugCopies, since that fact
+	// isn't on the object at all — see applyRowsLoaded).
 	NameSuffix string
 
 	// Key is an opaque identifier for verbs that need to reference the

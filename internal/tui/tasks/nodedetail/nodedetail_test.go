@@ -379,14 +379,14 @@ func TestKeybarGoesOfflineAndHidesCordonDrain(t *testing.T) {
 	for _, g := range kb.Groups {
 		for _, h := range g {
 			switch h.Key {
-			case verbs.Cordon.Key, verbs.Drain.Key, verbs.Exec.Key, verbs.NodeShell.Key:
+			case verbs.Cordon.Key, verbs.Drain.Key, verbs.Exec.Key, verbs.NodeDebugDetail.Key:
 				t.Fatalf("expected mutating hints hidden while offline, got groups %+v", kb.Groups)
 			}
 		}
 	}
 	// The keys themselves are refused, not just un-advertised — 's' in
 	// particular would otherwise create a privileged node-debugger pod.
-	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.NodeShell.Key}); cmd != nil {
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.NodeDebugDetail.Key}); cmd != nil {
 		t.Error("'s' spawned a node-debugger pod while offline")
 	}
 	if _, cmd := m.Update(tea.KeyPressMsg{Text: verbs.Exec.Key}); cmd != nil {

@@ -200,6 +200,15 @@ func TestKeyboardReferenceCoversVerbs(t *testing.T) {
 		// to the keyboard reference once Phase 6 lands.
 		"cronjob-focus-timezone":     "0.8.0 Phase 6 — tasks/cronjobschedule not yet built",
 		"cronjob-schedule-full-edit": "0.8.0 Phase 6 — tasks/cronjobschedule not yet built",
+		// node-debug-detail is the same §41d debug panel as node-debug ('x',
+		// already documented under Nodes), reachable via 's' only inside
+		// tasks/nodedetail specifically — that screen's own pods table
+		// already claims 'x' for Exec on a pod row (verbs.go's
+		// NodeDebugDetail doc comment explains the collision). It's an
+		// implementation-scoped variant of an already-documented action, the
+		// same category as the two service-copy actions above, not a
+		// separate concept a new user needs taught.
+		"node-debug-detail": "same action as node-debug ('x'), reachable via 's' only inside nodedetail's own pods-table screen",
 	}
 
 	for _, v := range verbs.All {

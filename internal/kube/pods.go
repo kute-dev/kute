@@ -41,17 +41,44 @@ type Pod struct {
 	// Detail fields (5a pod detail), populated by PodFromObject; browse's
 	// list rows leave these at their zero value rather than paying to
 	// compute them for every row.
-	IP              string
-	QoSClass        string
-	Labels          map[string]string
-	Tolerations     []string // formatted "key=value:Effect" / "key (exists):Effect"
-	ContainerInfos  []ContainerInfo
-	LastTermination *LastTermination // nil when no container has ever terminated abnormally (see findLastTermination)
+	IP             string
+	QoSClass       string
+	Labels         map[string]string
+	Tolerations    []string // formatted "key=value:Effect" / "key (exists):Effect"
+	ContainerInfos []ContainerInfo
+	// EphemeralContainerInfos is empty on almost every pod — only non-empty
+	// once a debug session (§41b/§41c, or `kubectl debug` run outside kute
+	// entirely) has attached at least one ephemeral container. Drives 5a's
+	// EPHEMERAL group and the pods-table ⚑ tag (resources.projectPod).
+	EphemeralContainerInfos []EphemeralContainerInfo
+	LastTermination         *LastTermination // nil when no container has ever terminated abnormally (see findLastTermination)
 	// GracePeriodSeconds is Spec.TerminationGracePeriodSeconds, or the
 	// cluster default (30) when unset — 8b's delete confirm shows this
 	// concrete figure instead of a generic "default grace period applies"
 	// (docs/design README.md §8b: "30s").
 	GracePeriodSeconds int64
+}
+
+// EphemeralContainerInfo is one row of 5a's EPHEMERAL group (§41e) — a
+// debug container kubectl debug attached to a running pod. Unlike
+// ContainerInfo, it's never part of the pod's own spec.containers; it
+// exists only once at least one has actually been attached (13d: "zero
+// chrome until earned").
+type EphemeralContainerInfo struct {
+	Name  string
+	Image string
+	// TargetContainer is the container whose process namespace this one
+	// shares (EphemeralContainerCommon.TargetContainerName) — "" means it
+	// shares none, the pod's own default.
+	TargetContainer string
+	State           string // "Running", "Waiting", "Terminated"
+	Reason          string
+	Ready           bool
+	// Age is how long ago the container started running, snapshotted at
+	// projection time (metav1.Now(), the same one-shot "not a render-time
+	// clock read" convention LastTermination.Age already uses) — zero when
+	// it hasn't started yet (still Waiting, or no status reported).
+	Age time.Duration
 }
 
 // ContainerInfo is one row of the 5a CONTAINERS grid (and 10a's exec
@@ -153,12 +180,13 @@ func PodFromObject(pod *corev1.Pod) Pod {
 		MEMRequestBytes: memReq,
 		MEMLimitBytes:   memLim,
 
-		IP:              pod.Status.PodIP,
-		QoSClass:        string(pod.Status.QOSClass),
-		Labels:          pod.Labels,
-		Tolerations:     formatTolerations(pod.Spec.Tolerations),
-		ContainerInfos:  buildContainerInfos(pod),
-		LastTermination: findLastTermination(pod.Status.ContainerStatuses),
+		IP:                      pod.Status.PodIP,
+		QoSClass:                string(pod.Status.QOSClass),
+		Labels:                  pod.Labels,
+		Tolerations:             formatTolerations(pod.Spec.Tolerations),
+		ContainerInfos:          buildContainerInfos(pod),
+		EphemeralContainerInfos: buildEphemeralContainerInfos(pod),
+		LastTermination:         findLastTermination(pod.Status.ContainerStatuses),
 		GracePeriodSeconds: func() int64 {
 			if pod.Spec.TerminationGracePeriodSeconds != nil {
 				return *pod.Spec.TerminationGracePeriodSeconds
@@ -221,6 +249,43 @@ func buildContainerInfos(pod *corev1.Pod) []ContainerInfo {
 		info := ContainerInfo{Name: c.Name, Image: c.Image, IsSidecar: true}
 		if s, ok := initByName[c.Name]; ok {
 			applyContainerStatus(&info, s)
+		}
+		out = append(out, info)
+	}
+	return out
+}
+
+// buildEphemeralContainerInfos merges spec.ephemeralContainers (name/image/
+// target) with status.ephemeralContainerStatuses (state/ready), the same
+// shape buildContainerInfos uses for the ordinary grid. Matched by name —
+// the ephemeral container's own status entries use the same
+// corev1.ContainerStatus shape as the primary grid's.
+func buildEphemeralContainerInfos(pod *corev1.Pod) []EphemeralContainerInfo {
+	byName := make(map[string]corev1.ContainerStatus, len(pod.Status.EphemeralContainerStatuses))
+	for _, s := range pod.Status.EphemeralContainerStatuses {
+		byName[s.Name] = s
+	}
+	out := make([]EphemeralContainerInfo, 0, len(pod.Spec.EphemeralContainers))
+	for _, c := range pod.Spec.EphemeralContainers {
+		info := EphemeralContainerInfo{
+			Name:            c.Name,
+			Image:           c.Image,
+			TargetContainer: c.TargetContainerName,
+		}
+		if s, ok := byName[c.Name]; ok {
+			info.Ready = s.Ready
+			switch {
+			case s.State.Running != nil:
+				info.State = "Running"
+				info.Age = metav1.Now().Sub(s.State.Running.StartedAt.Time).Round(0)
+			case s.State.Terminated != nil:
+				info.State = "Terminated"
+				info.Reason = s.State.Terminated.Reason
+				info.Age = metav1.Now().Sub(s.State.Terminated.StartedAt.Time).Round(0)
+			case s.State.Waiting != nil:
+				info.State = "Waiting"
+				info.Reason = s.State.Waiting.Reason
+			}
 		}
 		out = append(out, info)
 	}

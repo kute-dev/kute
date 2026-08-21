@@ -496,6 +496,51 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - A rerun of a cronjob-owned Job is always a standalone copy: Kute's own CronJob-association annotations are stripped from the clone (never carried over via the cloned annotation map), so it never counts toward that CronJob's history limits or garbage collection, and it reads `manual · <creator>` in SOURCE (37a) rather than a stale `cronjob/x`.
 - Keys (staged): `↑↓ create/replace · ↵ commit · esc cancel`. Keybar pill `RERUN`.
 
+### 41a — Exec picker on a shell-less container (the debug fork)
+- **No new top-level key.** `x` means "get me a shell near this object"; the object's kind + state decide which kubectl subcommand delivers it — a **shell-provider declaration in the command table** (exec / ephemeral / copy / node), not a new screen. Declared per kind alongside the other verbs.
+- The exec picker (10a) already detects shells. A container with none renders its right-hand cell as `no shell` (`Warn`) instead of a shell list, and the panel's explain block reads `no sh or bash in gateway — nothing to exec into` + `debug attaches a shell alongside it, sharing the pod's process namespace`.
+- **`↵` follows the cursor and never dead-ends:** on a shell-less row the key label is `↵ debug <container>` (routes to 41b); on a row with a shell it stays `↵ open shell`. Keybar pill stays `EXEC`.
+- If **no** container in the pod has a shell, skip this panel and open 41b directly — a picker with nothing to pick is chrome.
+- **Capability is checked before `↵`, never after:** if `create pods/ephemeralcontainers` is denied (or the server predates the subresource), the explain block carries the verbatim reason and offers `w who-can` (22a). Same discipline as helm-missing-from-PATH (18a).
+
+### 41b — Debug panel · ephemeral container on a running pod
+- Same centered-panel recipe as 10a/13a, ~880px-equivalent wide (the `will run` line must not clip). Header: `⚑ debug › <pod>` + right `pod running · ephemeral container`. Keybar pill `DEBUG`.
+- **MODE is two selectable rows, not a form** — `attach ephemeral` (`shares this pod's namespaces · nothing restarts`, tagged `default`) and `copy pod` (`a new pod from this spec · for pods that won't stay up`, key `m`). Pod state picks the default; `m` overrides. Each row states when it applies.
+- **Fields edited in place on their row** (13a's local-port idiom), label in `TextFaint`, value bright, hint in `TextGhost`: `image nicolaka/netshoot▎` (`i` edit · recents), `target gateway` (`t` cycle · "shares the process namespace, so its pid is visible"), `profile general` (`p` cycle · netadmin · sysadmin · restricted). Image recents are remembered per context in the existing persisted state — **no image registry, no config file, no wizard**.
+- **Profile is shown, never hidden** — `general` default; `sysadmin`/`netadmin` are visible escalations.
+- **Warn-tinted caution line** above `will run`: `⚑ becomes part of this pod — an ephemeral container cannot be removed, only outlived`.
+- `will run`: `kubectl debug -it <pod> -n <ns> --image=<img> --target=<container> --profile=general`.
+- **Friction tier:** irreversible mutation of a live pod earns the panel + the `will run` line, not a modal; PROD contexts add an inline `y/N` in the keybar on `↵`. The red border stays reserved for delete and drain (8b).
+- Handoff is exec's: kute suspends, `kubectl debug` owns the tty, exit lands back on the same pod. No embedded terminal.
+- Keys: `↵ start · m mode · i image · t target · p profile · esc cancel`.
+
+### 41c — Debug panel · copy mode (the pod won't stay up)
+- `x` on a not-running pod (CrashLoopBackOff etc.) opens the panel **directly in copy mode** — exec and ephemeral attach are both impossible. Header right: `✕ CrashLoopBackOff · ↺ 6 · copy mode`.
+- **The impossible tier stays listed and dim with its reason** (`attach ephemeral — needs a running container — this one is in backoff`) rather than vanishing; the panel teaches which tool applies when.
+- Fields: `copy name <pod>-debug` (edited in place), `container worker` (`t` cycle — image kept, so you debug the real thing), **`entrypoint sh` in `Warn` — "replaces the command — that is what stops the crash loop"** (the whole trick, on a row, not buried in a flag), `processes shared` (`s` toggle).
+- Caution line: `⚑ creates a real pod — it counts against quota and it is yours to delete`.
+- `will run`: `kubectl debug -it <pod> -n <ns> --copy-to=<pod>-debug --container=worker --share-processes -- sh`.
+- **Cleanup is named, not silent:** on exit, an inline keybar prompt (never a modal) — pill `CLEAN UP` + `<pod>-debug still running · 4m` + `ctrl-d delete it` (key `BadSoft`) / `esc keep`. The copy also carries a `⚑ debug copy` tag in the pods table for the rest of the session (session registry, same as forwards 13c).
+- Copy mode is a create and the result is deletable → 8b's reversible tier: inline `y/N` in PROD, no type-the-name.
+- Keys: `↵ create + attach · m mode · t container · s processes · esc cancel`.
+
+### 41d — Node debug (`x` on a node) · **replaces the legacy `s` node-shell**
+- Exec on a node is meaningless, so on Nodes (11a/11b) `x` means `kubectl debug node/…`. Header: `⚑ debug › node/<name>` + right `host namespaces · privileged · ↵ runs as-is`.
+- **Removal of `s`:** the legacy NodeShell key ran a privileged root shell with no will-run line and no PROD confirmation — the most dangerous action in the app had the least friction — and a node-only second key contradicts `x` being the one shell key. **The key goes; its command becomes this screen's default.** Nothing else about it was ever specified, so there is no other behavior to preserve.
+- Rows: `image busybox:1.37` (`i` edit), `profile sysadmin` in `Warn` (`p` cycle · host pid + privileged), **`shell chroot /host · bash, else sh`** — "you land on the node's filesystem, not the container's", `lands in kube-system` — "a real pod on this node · deleted when you exit".
+- **The entrypoint is the default, not homework.** `chroot /host` + bash-preferred/sh-fallback is what `s` already did; the panel ships that shell rather than instructing the user to chroot after landing. The `shell` row is descriptive — the entrypoint is fixed, not an editable field.
+- **The node's own pod count is the warning** — `⚑ root on worker-01 — 62 pods are running here` — a number from the data, not a scare string.
+- `will run`: `kubectl debug node/<name> -it --image=busybox:1.37 --profile=sysadmin -- chroot /host sh -c 'command -v bash >/dev/null && exec bash || exec sh'` (panel is ~940px-equivalent so this does not clip). PROD adds the inline `y/N`; the red modal still belongs only to delete and drain.
+- Prefilled to exactly the legacy defaults, so **`x ↵` is the old `s`** — one extra keystroke buys the visible command and the PROD confirmation. Keys: `↵ root shell · i image · p profile · esc cancel`.
+- Suspend/restore and the keybar failure line `node shell exited: …` carry over from `s` verbatim — same handoff as exec (10a).
+- Sits in the nodes verb set next to `C` cordon and `D` drain, so the escalation ladder reads on one keybar.
+
+### 41e — Ephemeral containers in pod detail (after the fact)
+- An ephemeral container is **permanent state on someone's pod**, so pod detail (5a) grows an `EPHEMERAL` group under CONTAINERS: heading in `AccentHi` + `attached by debug · not part of the spec` + right-aligned count.
+- Row: `⚑` glyph (`Accent`) · name `debugger-7xk2` · `<image> → <target>` dim · state · age; under it, one `TextGhost` line: `cannot be removed — it leaves when the pod does`.
+- **Zero chrome until earned** (13d): no ephemeral containers → no group, and no `⚑` tag on the pods-table row. One exists → both appear.
+- `↵ re-attach` (a dropped connection costs one key, not a second injected container) · `l logs` · `↹ cycle container`. Ephemeral containers participate in the container cycle and the log view's container list like any other container.
+
 ## Interactions & Behavior (system-wide)
 - **One palette shell, three scopes:** `g` (anything) · `n` (namespaces) · `c` (contexts). Opening any of them pre-selects the most recently visited *other* entry of that scope (alt-tab semantics, like editor Ctrl-Tab), so `↵` with no typing toggles straight back to it — same two keystrokes the old double-tap used, now visible through the palette. All share the same fuzzy input, selection treatment, and keybar footer.
 - `g` opens the jump palette anywhere. Empty query = alias letters + ranked daily kinds (12a); typing = fuzzy results across kinds/resources/namespaces/contexts (2b/12b). `esc` closes; `↵` jumps.

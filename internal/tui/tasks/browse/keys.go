@@ -392,7 +392,7 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.kind == kube.KindNode {
 		nodeGroup := []tui.KeyHint{}
-		nodeGroup = append(nodeGroup, verbs.NodeShell.Hint())
+		nodeGroup = append(nodeGroup, verbs.NodeDebug.Hint())
 		groups = append(groups, nodeGroup)
 		if m.mutator != nil {
 			groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})

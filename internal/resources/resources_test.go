@@ -141,6 +141,32 @@ func TestProjectPodClassifiesHealth(t *testing.T) {
 	}
 }
 
+func TestProjectPodTagsEphemeralContainerWithFlag(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+		Status: corev1.PodStatus{
+			Phase:                      corev1.PodRunning,
+			ContainerStatuses:          []corev1.ContainerStatus{{Ready: true}},
+			EphemeralContainerStatuses: []corev1.ContainerStatus{{Name: "debugger-7xk2", Ready: true}},
+		},
+	}
+	if row := projectPod(pod); row.NameSuffix != " ⚑" {
+		t.Fatalf("NameSuffix = %q, want %q for a pod with an ephemeral container", row.NameSuffix, " ⚑")
+	}
+}
+
+func TestProjectPodNoEphemeralContainerNoFlag(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "web"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
+	}
+	if row := projectPod(pod); row.NameSuffix != "" {
+		t.Fatalf("NameSuffix = %q, want empty — 13d: no chrome until earned", row.NameSuffix)
+	}
+}
+
 func TestProjectPodHonorsFalseReadyConditionOverContainerReady(t *testing.T) {
 	// All containers report Ready, but the pod's own Ready condition is
 	// False (e.g. a readiness-gate check failing). k9s colors this red;

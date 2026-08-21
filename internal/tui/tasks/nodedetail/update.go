@@ -90,12 +90,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.execFeedback = ""
 		}
-	case nodeShellResultMsg:
-		if msg.err != nil {
-			m.execFeedback = "node shell exited: " + msg.err.Error()
-		} else {
-			m.execFeedback = ""
-		}
 	case editResultMsg:
 		if msg.err != nil {
 			m.execFeedback = "edit exited: " + msg.err.Error()
@@ -113,14 +107,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // execResultMsg, duplicated per the repo's package-local-seam convention.
 type execResultMsg struct{ err error }
 
-// nodeShellResultMsg carries the node-shell kubectl debug's exit outcome —
-// same feedback channel as execResultMsg, kept as its own type so the
-// keybar note can say which of the two exited.
-type nodeShellResultMsg struct{ err error }
-
 // editResultMsg carries a kubectl edit exit outcome (edit.go) — same
-// feedback channel as execResultMsg/nodeShellResultMsg, kept as its own type
-// for the same reason.
+// feedback channel as execResultMsg, kept as its own type for the same
+// reason.
 type editResultMsg struct{ err error }
 
 func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
@@ -272,9 +261,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "s":
-		// A node shell creates a privileged node-debugger pod, so it's a
-		// write before the user types anything — gated like cordon/drain.
-		if verbs.NodeShell.HiddenWhileOffline(m.conn.Offline()) {
+		// The debug panel launches a privileged node-debugger pod, so it's
+		// gated like cordon/drain (verbs.NodeDebugDetail.HiddenWhileOffline).
+		if verbs.NodeDebugDetail.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}
 		if m.node != nil {
@@ -287,7 +276,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		return m, m.nodeShellCmd()
+		if task, cmd, ok := m.openSelectedNodeDebug(); ok {
+			return task, cmd
+		}
 	case "C":
 		return m, m.beginCordon()
 	case "ctrl+d":
@@ -475,22 +466,16 @@ func execCmd(namespace, pod, container string) tea.Cmd {
 	})
 }
 
-// nodeShellCmd suspends the program and hands the tty to kubectl debug for
-// the node itself ('s', kube.NodeShellSpec over tea.ExecProcess) — the same
-// tty-handoff path the pod rows' exec takes, duplicated per the repo's
-// package-local-seam convention. Nil (no-op) until the node has loaded.
-func (m Model) nodeShellCmd() tea.Cmd {
-	if m.node == nil {
-		return nil
+// openSelectedNodeDebug pushes tasks/debugpanel (§41d) for the loaded node —
+// 's' here (verbs.NodeDebugDetail), not NodeDebug's 'x' (see that verb's own
+// doc comment for why). ok is false until the node has loaded or the
+// callback isn't wired.
+func (m Model) openSelectedNodeDebug() (tea.Model, tea.Cmd, bool) {
+	if m.openNodeDebug == nil || m.node == nil {
+		return nil, nil, false
 	}
-	image := ""
-	if m.session != nil {
-		image = m.session.Config.NodeShellImage
-	}
-	spec := kube.NodeShellSpec(m.nodeName, image)
-	return tea.ExecProcess(spec, func(err error) tea.Msg {
-		return nodeShellResultMsg{err: err}
-	})
+	task, cmd := m.openNodeDebug(m.nodeName, len(m.allPods), m.width, m.height)
+	return task, cmd, task != nil
 }
 
 // openSelectedYAML pushes 8a for the node itself.

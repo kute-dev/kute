@@ -206,6 +206,16 @@ func projectPod(obj runtime.Object) Row {
 	if node == "" {
 		node = "–"
 	}
+	// nameSuffix: §41e's ⚑ tag for a pod carrying at least one ephemeral
+	// (kubectl debug-attached) container — real API state, so it belongs at
+	// projection time (13d: "zero chrome until earned", no tag when there's
+	// nothing to tag). §41c's debug-copy ⚑ is a different case: kute's own
+	// client-side fact, not on the object, applied as a post-projection
+	// decoration in browse's applyRowsLoaded instead.
+	nameSuffix := ""
+	if len(p.Status.EphemeralContainerStatuses) > 0 {
+		nameSuffix = " ⚑"
+	}
 	// CPU/MEM are placeholders: live usage isn't on the object, browse fills
 	// them in from a separate metrics poll (resources.Cells' metrics param).
 	return Row{
@@ -215,6 +225,7 @@ func projectPod(obj runtime.Object) Row {
 		Status:     class,
 		Glyph:      glyph,
 		GlyphClass: class,
+		NameSuffix: nameSuffix,
 	}
 }
 

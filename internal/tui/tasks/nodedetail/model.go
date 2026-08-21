@@ -69,22 +69,30 @@ type OpenTimelineFunc func(kind kube.ResourceKind, namespace, name string, width
 // pod rows.
 type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Model, tea.Cmd)
 
+// OpenNodeDebugFunc pushes tasks/debugpanel (§41d) for the loaded node —
+// same shape as browse.OpenNodeDebugFunc, duplicated per the repo's
+// package-local-seam convention. Bound to 's' here rather than NodeDebug's
+// 'x' (verbs.NodeDebugDetail's own doc comment explains why: this screen's
+// pods table already claims 'x' for Exec on a pod row, a different object).
+type OpenNodeDebugFunc func(name string, podCount, width, height int) (tea.Model, tea.Cmd)
+
 // Config are nodedetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values).
 type Config struct {
-	Session      *tui.Session
-	Lister       resources.RawLister
-	Metrics      MetricsReader
-	Mutator      kube.Mutator
-	OpenPod      OpenPodFunc
-	OpenLogs     OpenLogsFunc
-	OpenExec     OpenExecFunc
-	OpenYAML     OpenYAMLFunc
-	OpenEvents   OpenEventsFunc
-	OpenTimeline OpenTimelineFunc
-	OpenForward  OpenForwardFunc
-	NodeName     string
-	LoadTimeout  time.Duration
+	Session       *tui.Session
+	Lister        resources.RawLister
+	Metrics       MetricsReader
+	Mutator       kube.Mutator
+	OpenPod       OpenPodFunc
+	OpenLogs      OpenLogsFunc
+	OpenExec      OpenExecFunc
+	OpenYAML      OpenYAMLFunc
+	OpenEvents    OpenEventsFunc
+	OpenTimeline  OpenTimelineFunc
+	OpenForward   OpenForwardFunc
+	OpenNodeDebug OpenNodeDebugFunc
+	NodeName      string
+	LoadTimeout   time.Duration
 }
 
 // allocation is one CPU/MEM/Pods triple — used for the node/allocatable
@@ -108,19 +116,20 @@ type nodePodRow struct {
 type Model struct {
 	width, height int
 
-	session      *tui.Session
-	lister       resources.RawLister
-	metrics      MetricsReader
-	mutator      kube.Mutator
-	actions      actions.Controller
-	openPod      OpenPodFunc
-	openLogs     OpenLogsFunc
-	openExec     OpenExecFunc
-	openYAML     OpenYAMLFunc
-	openEvents   OpenEventsFunc
-	openTimeline OpenTimelineFunc
-	openForward  OpenForwardFunc
-	timeout      time.Duration
+	session       *tui.Session
+	lister        resources.RawLister
+	metrics       MetricsReader
+	mutator       kube.Mutator
+	actions       actions.Controller
+	openPod       OpenPodFunc
+	openLogs      OpenLogsFunc
+	openExec      OpenExecFunc
+	openYAML      OpenYAMLFunc
+	openEvents    OpenEventsFunc
+	openTimeline  OpenTimelineFunc
+	openForward   OpenForwardFunc
+	openNodeDebug OpenNodeDebugFunc
+	timeout       time.Duration
 
 	nodeName string
 
@@ -203,6 +212,7 @@ func New(cfg Config) Model {
 		openEvents:    cfg.OpenEvents,
 		openTimeline:  cfg.OpenTimeline,
 		openForward:   cfg.OpenForward,
+		openNodeDebug: cfg.OpenNodeDebug,
 		timeout:       cfg.LoadTimeout,
 		nodeName:      cfg.NodeName,
 		state:         state,

@@ -1,0 +1,407 @@
+package debugpanel
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/verbs"
+)
+
+// launchResultMsg carries a kubectl debug tea.ExecProcess's exit outcome.
+// tgt/mode distinguish which of the three launches produced it, since a
+// clean exit means something different for each: a node/attach launch pops
+// back (same contract as tasks/execpicker's execResultMsg), a copy launch
+// stays on the panel to show §41c's CLEAN UP prompt.
+type launchResultMsg struct {
+	err      error
+	tgt      target
+	mode     podMode
+	copyName string
+}
+
+// isProd mirrors every other screen's package-local seam (e.g.
+// nodedetail/edit.go's isProd): whether the active context is tagged prod
+// in ~/.config/kute/config.yaml.
+func (m Model) isProd() bool {
+	if m.session == nil {
+		return false
+	}
+	return m.session.Config.IsProd(m.session.Location.Context)
+}
+
+// pasteTarget is the open free-text field, if any — mirrors forwardpicker's
+// own resolver.
+func (m *Model) pasteTarget() tui.PasteTarget {
+	if m.editingField == fieldNone {
+		return nil
+	}
+	return tui.PasteInto(&m.editInput)
+}
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := tui.RoutePaste(msg, m.pasteTarget()); ok {
+		return m, cmd
+	}
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.SetSize(msg.Width, msg.Height)
+	case kube.ConnStateMsg:
+		m.conn = kube.ConnState(msg)
+	case launchResultMsg:
+		return m.handleLaunchResult(msg)
+	case actions.ResultMsg:
+		return m.handleActionResult(msg)
+	case tea.KeyPressMsg:
+		return m.updateKey(msg)
+	}
+	return m, nil
+}
+
+func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.editingField != fieldNone {
+		return m.updateEditKey(msg)
+	}
+	if m.actions.Active() {
+		return m.updateActionsConfirmKey(msg)
+	}
+	if m.launchPending {
+		return m.updateLaunchConfirmKey(msg)
+	}
+	switch msg.String() {
+	case "ctrl+q", "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		return m, func() tea.Msg { return tui.BackMsg{} }
+	case "enter":
+		return m, m.beginLaunch()
+	case "m":
+		if m.tgt == targetPod {
+			m.cycleMode()
+		}
+	case "i":
+		m.beginImageOrCopyNameEdit()
+	case "t":
+		m.cycleTargetOrContainer()
+	case "p":
+		m.cycleProfile()
+	case "e":
+		if m.tgt == targetPod && m.mode == modeCopy {
+			m.beginEntrypointEdit()
+		}
+	case "s":
+		if m.tgt == targetPod && m.mode == modeCopy {
+			m.copyShareProcesses = !m.copyShareProcesses
+		}
+	case "ctrl+d":
+		if m.cleanup != nil {
+			return m, m.beginCleanupDelete()
+		}
+	}
+	return m, nil
+}
+
+// beginImageOrCopyNameEdit opens 'i's one free-text field for the current
+// target/mode — image for an attach or node launch, copy name for a copy
+// launch (the mode's only freeform field; entrypoint has its own key).
+func (m *Model) beginImageOrCopyNameEdit() {
+	switch {
+	case m.tgt == targetNode:
+		m.beginFieldEdit(fieldImage, m.nodeImage)
+	case m.mode == modeAttach:
+		m.beginFieldEdit(fieldImage, m.attachImage)
+	default:
+		m.beginFieldEdit(fieldCopyName, m.copyName)
+	}
+}
+
+func (m *Model) beginEntrypointEdit() {
+	m.beginFieldEdit(fieldEntrypoint, m.copyEntrypoint)
+}
+
+func (m *Model) beginFieldEdit(field fieldID, value string) {
+	m.editingField = field
+	m.editInput = tui.NewTextInput(m.Theme())
+	m.editInput.SetValue(value)
+	m.editInput.CursorEnd()
+	m.editInput.Focus()
+}
+
+func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.editingField = fieldNone
+		m.editInput.Blur()
+		return m, nil
+	case "enter":
+		m.commitFieldEdit()
+		return m, nil
+	case "tab":
+		// Recents only ever apply to the image field (state schema v3,
+		// PerContext.RecentDebugImages) — copy name and entrypoint don't
+		// get them, per that field's own doc comment. A non-image field
+		// falls through to the default branch below, same as any other
+		// key it doesn't special-case.
+		if m.editingField == fieldImage {
+			m.cycleRecentImage()
+			return m, nil
+		}
+	}
+	var cmd tea.Cmd
+	m.editInput, cmd = m.editInput.Update(msg)
+	return m, cmd
+}
+
+// recentImages is this context's persisted image recents (state schema v3,
+// PerContext.RecentDebugImages) — most-recent-first, image only.
+func (m Model) recentImages() []string {
+	if m.session == nil {
+		return nil
+	}
+	return m.session.State.PerContext[m.session.Location.Context].RecentDebugImages
+}
+
+// cycleRecentImage is 'tab' inside the open image field — advances the
+// buffer to the recent image after whichever one is currently showing,
+// wrapping back to the most-recent entry once the list is exhausted. A
+// buffer that doesn't match any recent (the field's default, or a value
+// the user is mid-typing) jumps straight to the most-recent entry.
+func (m *Model) cycleRecentImage() {
+	recents := m.recentImages()
+	if len(recents) == 0 {
+		return
+	}
+	current := m.editInput.Value()
+	next := recents[0]
+	for i, r := range recents {
+		if r == current && i+1 < len(recents) {
+			next = recents[i+1]
+			break
+		}
+	}
+	m.editInput.SetValue(next)
+	m.editInput.CursorEnd()
+}
+
+// pushRecentImage records image as this context's most-recent debug image
+// (state schema v3, PerContext.RecentDebugImages) — called from launchCmd
+// for the two target/mode combinations that have an image field (node
+// debug, pod attach). Copy mode reuses the pod's own container image, so
+// it never has one to record.
+func (m Model) pushRecentImage(image string) {
+	if m.session == nil || image == "" {
+		return
+	}
+	ctx := m.session.Location.Context
+	if m.session.State.PerContext == nil {
+		m.session.State.PerContext = map[string]state.PerContext{}
+	}
+	pc := m.session.State.PerContext[ctx]
+	pc.RecentDebugImages = state.PushRecent(pc.RecentDebugImages, image)
+	m.session.State.PerContext[ctx] = pc
+}
+
+// commitFieldEdit closes the open field, keeping the previous value on an
+// empty commit rather than accepting a blank image/copy-name/entrypoint.
+func (m *Model) commitFieldEdit() {
+	value := strings.TrimSpace(m.editInput.Value())
+	if value != "" {
+		switch m.editingField {
+		case fieldImage:
+			if m.tgt == targetNode {
+				m.nodeImage = value
+			} else {
+				m.attachImage = value
+			}
+		case fieldCopyName:
+			m.copyName = value
+		case fieldEntrypoint:
+			m.copyEntrypoint = value
+		}
+	}
+	m.editingField = fieldNone
+	m.editInput.Blur()
+}
+
+// cycleTargetOrContainer is 't' — the attach mode's target-container field
+// and the copy mode's container field are mutually exclusive (one panel
+// state at a time), so one key serves both.
+func (m *Model) cycleTargetOrContainer() {
+	if m.tgt != targetPod {
+		return
+	}
+	if m.mode == modeAttach {
+		m.cycleAttachTarget()
+	} else {
+		m.cycleCopyContainer()
+	}
+}
+
+// cycleProfile is 'p' — a no-op in copy mode, which has no profile field.
+func (m *Model) cycleProfile() {
+	switch {
+	case m.tgt == targetNode:
+		m.cycleNodeProfile()
+	case m.mode == modeAttach:
+		m.cycleAttachProfile()
+	}
+}
+
+// beginLaunch resolves 'enter': verbs.TierForDebug(isProd) decides whether
+// to launch immediately (TierNone, outside PROD — reproduces the retired
+// 's' NodeShell verb's zero-friction launch for an unmodified node target)
+// or stage launchPending for one inline y/N line first (TierInline, PROD
+// only) — the same bespoke, non-actions.Controller gate
+// nodedetail/edit.go's beginEdit uses, since the actual launch is a
+// tea.ExecProcess handoff, never a Mutator call.
+func (m *Model) beginLaunch() tea.Cmd {
+	if verbs.TierForDebug(m.isProd()) == actions.TierNone {
+		return m.launchCmd()
+	}
+	m.launchPending = true
+	return nil
+}
+
+func (m *Model) updateLaunchConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y":
+		m.launchPending = false
+		return m, m.launchCmd()
+	case "n", "esc":
+		m.launchPending = false
+	}
+	return m, nil
+}
+
+// launchCmd suspends the program and hands the tty to kubectl (tea.ExecProcess),
+// dispatching to whichever of the three debug builders (internal/kube/debug.go)
+// applies to the current target/mode.
+func (m Model) launchCmd() tea.Cmd {
+	if m.tgt == targetNode {
+		m.pushRecentImage(m.nodeImage)
+		spec := kube.NodeDebugSpec(m.nodeName, m.nodeImage, m.nodeProfile)
+		return tea.ExecProcess(spec, func(err error) tea.Msg {
+			return launchResultMsg{err: err, tgt: targetNode}
+		})
+	}
+	if m.mode == modeAttach {
+		m.pushRecentImage(m.attachImage)
+		target := m.attachTargetContainer().Name
+		spec := kube.PodDebugAttachSpec(m.namespace, m.podName, m.attachImage, target, m.attachProfile)
+		return tea.ExecProcess(spec, func(err error) tea.Msg {
+			return launchResultMsg{err: err, tgt: targetPod, mode: modeAttach}
+		})
+	}
+	container := m.copyContainer().Name
+	copyName := m.copyName
+	spec := kube.PodDebugCopySpec(m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses)
+	return tea.ExecProcess(spec, func(err error) tea.Msg {
+		return launchResultMsg{err: err, tgt: targetPod, mode: modeCopy, copyName: copyName}
+	})
+}
+
+// handleLaunchResult routes a completed launch per target/mode (docs/design
+// v.0.11.0.dc.html §41b/§41c/§41d): attach/node pop back on a clean exit,
+// matching execpicker's own execResultMsg contract; copy mode stays on the
+// panel to show the CLEAN UP prompt instead, registering the new pod with
+// Session.DebugCopies so the pods table can tag it for the rest of the
+// session. The node-target error string is the retired 's' NodeShell verb's
+// exact wording, reused verbatim rather than reworded.
+func (m *Model) handleLaunchResult(msg launchResultMsg) (tea.Model, tea.Cmd) {
+	if msg.tgt == targetNode {
+		if msg.err != nil {
+			m.feedback = "node shell exited: " + msg.err.Error()
+			return m, nil
+		}
+		return m, func() tea.Msg { return tui.BackMsg{} }
+	}
+	if msg.mode == modeCopy {
+		if msg.err != nil {
+			m.feedback = "debug exited: " + msg.err.Error()
+			return m, nil
+		}
+		if m.session != nil && m.session.DebugCopies != nil {
+			m.session.DebugCopies.Add(m.namespace, msg.copyName)
+		}
+		m.feedback = ""
+		m.cleanup = &cleanupPrompt{name: msg.copyName, startedAt: time.Now()}
+		return m, nil
+	}
+	if msg.err != nil {
+		m.feedback = "debug exited: " + msg.err.Error()
+		return m, nil
+	}
+	return m, func() tea.Msg { return tui.BackMsg{} }
+}
+
+// beginCleanupDelete resolves ctrl-d on the CLEAN UP prompt — an ordinary
+// kube.Mutator.DeleteResource call, so unlike the launch itself this routes
+// through the shared verbs.Delete/actions.Controller path exactly as
+// browse's own pod delete does (PROD escalates to the type-the-name modal
+// the same way).
+func (m *Model) beginCleanupDelete() tea.Cmd {
+	if m.cleanup == nil {
+		return nil
+	}
+	tier := verbs.TierFor(verbs.Delete, m.isProd())
+	return m.actions.Begin(tier, tui.TaskAction{
+		ID:    "delete-" + string(kube.KindPod) + "-" + m.namespace + "/" + m.cleanup.name,
+		Label: fmt.Sprintf("Delete Pod %s?", m.cleanup.name),
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindPod),
+			ResourceName: m.cleanup.name,
+			Namespace:    m.namespace,
+			Verb:         "delete",
+			IsMutating:   true,
+		},
+	})
+}
+
+// updateActionsConfirmKey routes keys while the cleanup delete's confirm is
+// showing — the ordinary y/n/esc inline confirm outside PROD, or the
+// type-the-name modal in PROD (actions.RequiresTypedName's "delete" entry),
+// mirroring browse's own updateConfirmKey/updateModalConfirmKey split.
+func (m *Model) updateActionsConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.actions.Tier() == actions.TierModal {
+		switch msg.String() {
+		case "esc":
+			m.actions.Cancel()
+		case "enter":
+			if m.actions.NameMatches() {
+				return m, m.actions.Confirm()
+			}
+		default:
+			return m, m.actions.HandleTypeKey(msg)
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "y":
+		return m, m.actions.Confirm()
+	case "n", "esc":
+		m.actions.Cancel()
+	}
+	return m, nil
+}
+
+// handleActionResult applies the cleanup delete's outcome — success clears
+// cleanup, removes the DebugCopies tag, and pops back; failure leaves the
+// CLEAN UP prompt showing with the server's error (actions.Controller's own
+// HandleResult already surfaces it).
+func (m *Model) handleActionResult(msg actions.ResultMsg) (tea.Model, tea.Cmd) {
+	m.actions.HandleResult(msg)
+	if msg.Err == nil && m.cleanup != nil {
+		if m.session != nil && m.session.DebugCopies != nil {
+			m.session.DebugCopies.Remove(m.namespace, m.cleanup.name)
+		}
+		m.cleanup = nil
+		return m, func() tea.Msg { return tui.BackMsg{} }
+	}
+	return m, nil
+}

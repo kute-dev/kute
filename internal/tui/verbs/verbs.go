@@ -93,13 +93,29 @@ var (
 	// only fails at the handoff with a raw kubectl error (docs/design
 	// README.md §52: OFFLINE disables mutating actions).
 	Exec = Verb{ID: "exec", Key: "x", Label: "exec", Mutating: true, Kinds: []kube.ResourceKind{kube.KindPod}}
-	// NodeShell is 's' on a node — a root shell on the node itself via a
-	// kubectl debug subprocess (kube.NodeShellSpec over tea.ExecProcess),
-	// the same tty-handoff path, TierNone for the same reason, and Mutating
-	// for a stronger version of Exec's: kubectl debug creates a privileged
-	// node-debugger pod, so this writes to the cluster before the user has
-	// typed anything.
-	NodeShell = Verb{ID: "node-shell", Key: "s", Label: "node shell", Mutating: true, Kinds: []kube.ResourceKind{kube.KindNode}}
+	// NodeDebug is 'x' on a Node row (§41d) — retired the former standalone
+	// 's' NodeShell verb rather than sitting alongside it: a privileged
+	// root shell on a node with no will-run line and no PROD confirmation
+	// was the one dangerous action in the app with the least friction, it
+	// predates the design spec (shipped-but-undesigned), and a second
+	// node-only key for "get a shell on this object" contradicted §41's own
+	// rule that x alone decides the provider. The debug panel it opens
+	// (tasks/debugpanel) absorbs the retired verb's exact command — same
+	// image/profile defaults, same chroot/shell-fallback entrypoint,
+	// same tea.ExecProcess handoff — behind a will-run line and, in PROD, a
+	// confirmation the old key never had. Tier is a nominal placeholder:
+	// TierForDebug resolves the real policy, since the launch is a
+	// tea.ExecProcess handoff, never a Mutator call.
+	NodeDebug = Verb{ID: "node-debug", Key: "x", Label: "debug", Mutating: true, Kinds: []kube.ResourceKind{kube.KindNode}}
+	// NodeDebugDetail is tasks/nodedetail's own key for the identical §41d
+	// panel — 's', not NodeDebug's 'x'. Unlike browse's Nodes list, nodedetail
+	// shows a pods table alongside the loaded node, and that table's own row
+	// verb is Exec's 'x' on a different object (the pod row, not the node the
+	// screen is about) — the two coexist on one screen, so the node action
+	// keeps the key it already had rather than colliding. Same target
+	// (tasks/debugpanel, node), same TierForDebug policy as NodeDebug; only
+	// the physical key differs, and only in this one screen.
+	NodeDebugDetail = Verb{ID: "node-debug-detail", Key: "s", Label: "debug node", Mutating: true, Kinds: []kube.ResourceKind{kube.KindNode}}
 	// Edit is 'E' on any row, any kind — kubectl edit (kube.EditSpec) over
 	// tea.ExecProcess, the same tty-handoff path as Exec/NodeShell, and
 	// Mutating for the plainest reason of the three: it applies whatever the
@@ -572,7 +588,7 @@ var (
 // All is every registered verb, for the help overlay's fixed SCOPE/GLOBAL
 // columns and for ByID lookups.
 var All = []Verb{
-	Goto, Filter, Open, Logs, YAML, Exec, NodeShell, Edit, Events,
+	Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
 	FluxReconcile, FluxSuspend, FluxSource,
@@ -629,6 +645,21 @@ func TierFor(v Verb, isProd bool) actions.Tier {
 // to TierInline (one y/N line, not the type-the-name modal — editing isn't
 // delete/drain-grade destructive) only in PROD contexts.
 func TierForEdit(isProd bool) actions.Tier {
+	if isProd {
+		return actions.TierInline
+	}
+	return actions.TierNone
+}
+
+// TierForDebug resolves the debug panel's launch policy (§41b/§41c/§41d,
+// tasks/debugpanel) — the same TierNone-outside-PROD/TierInline-in-PROD
+// shape as TierForEdit, for the same reason: kubectl debug owns the tty
+// once kute suspends via tea.ExecProcess, so this never reaches
+// actions.Controller's own TierFor escalation. One resolver covers all
+// three sub-screens (pod attach, pod copy, node debug) — the friction
+// policy doesn't vary by target/mode, only the command that eventually
+// runs does.
+func TierForDebug(isProd bool) actions.Tier {
 	if isProd {
 		return actions.TierInline
 	}

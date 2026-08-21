@@ -106,6 +106,9 @@ func (m Model) readyBody(width, height int) string {
 	}
 	main = append(main, "", m.metaGrid(theme))
 	main = append(main, "", m.containersBlock(theme, mainWidth))
+	if len(m.pod.EphemeralContainerInfos) > 0 {
+		main = append(main, "", m.ephemeralBlock(theme, mainWidth))
+	}
 	main = append(main, "", m.eventsBlock(theme, mainWidth))
 
 	mainBlock := strings.Join(main, "\n")
@@ -357,7 +360,7 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 	// too, not just the cell text (components.Table.renderRowV2's own doc
 	// comment on the class of bug this avoids).
 	selected := -1
-	if len(m.pod.ContainerInfos) > 1 {
+	if m.totalContainerRows() > 1 && m.selectedContainer < len(m.pod.ContainerInfos) {
 		selected = m.selectedContainer
 	}
 	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
@@ -377,6 +380,79 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 	hr := rule.Render(strings.Repeat("─", width))
 	bars := m.barsLine(theme)
 	return title + "\n" + hr + "\n" + t.Render() + "\n" + hr + "\n" + bars + "\n" + hr
+}
+
+// ephemeralBlock renders §41e's EPHEMERAL group — a debug container
+// kubectl debug attached to this pod, real and permanent state (13d: this
+// group exists only while at least one does — callers only call this when
+// EphemeralContainerInfos is non-empty). Selection shares the CONTAINERS
+// grid's combined index space (totalContainerRows); this table's own
+// Selected is that index re-based to its own row range.
+func (m Model) ephemeralBlock(theme tui.Theme, width int) string {
+	title := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true).Render("EPHEMERAL")
+	caption := lipgloss.NewStyle().Foreground(theme.TextGhost).Render("attached by debug · not part of the spec · cannot be removed — it leaves when the pod does")
+
+	cols := []components.Column{
+		{Title: "", Min: 1},
+		{Title: "Name", Min: 10, Flex: true},
+		{Title: "Target", Min: 10, Flex: true},
+		{Title: "State", Min: 16},
+		{Title: "Age", Min: 6, Align: components.AlignRight},
+	}
+	rows := make([]components.Row, 0, len(m.pod.EphemeralContainerInfos))
+	for _, e := range m.pod.EphemeralContainerInfos {
+		glyph := lipgloss.NewStyle().Foreground(theme.Accent).Render("⚑")
+		var stateStyle lipgloss.Style
+		stateText := e.State
+		switch e.State {
+		case "Waiting":
+			stateStyle = lipgloss.NewStyle().Foreground(theme.Warn)
+			if e.Reason != "" {
+				stateText = "Waiting · " + e.Reason
+			}
+		case "Terminated":
+			stateStyle = lipgloss.NewStyle().Foreground(theme.Warn)
+			if e.Reason != "" {
+				stateText = "Terminated · " + e.Reason
+			}
+		case "Running":
+			stateStyle = lipgloss.NewStyle().Foreground(theme.Good)
+		default:
+			stateStyle = lipgloss.NewStyle().Foreground(theme.TextDim)
+			stateText = "–"
+		}
+		target := e.TargetContainer
+		if target == "" {
+			target = "–"
+		}
+		rows = append(rows, components.Row{Cells: []components.Cell{
+			{Text: glyph},
+			{Text: e.Name + " " + e.Image, Style: lipgloss.NewStyle().Foreground(theme.TextPrimary)},
+			{Text: target, Style: lipgloss.NewStyle().Foreground(theme.TextDim)},
+			{Text: stateText, Style: stateStyle},
+			{Text: shortDur(e.Age), Style: lipgloss.NewStyle().Foreground(theme.TextDim)},
+		}})
+	}
+	selected := -1
+	if m.selectedContainer >= len(m.pod.ContainerInfos) {
+		selected = m.selectedContainer - len(m.pod.ContainerInfos)
+	}
+	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
+	t := components.Table{
+		Columns:        cols,
+		Rows:           rows,
+		Selected:       selected,
+		Width:          width,
+		Height:         len(rows) + 2,
+		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint),
+		FooterStyle:    lipgloss.NewStyle().Foreground(theme.TextGhost),
+		SelBarStyle:    lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg),
+		SelRowStyle:    lipgloss.NewStyle().Background(theme.SelBg),
+		ShowHeaderRule: true,
+		RuleStyle:      rule,
+	}
+	hr := rule.Render(strings.Repeat("─", width))
+	return title + "\n" + hr + "\n" + t.Render() + "\n" + caption
 }
 
 // barsLine renders the CPU/MEM bars vs each container's summed limits, side

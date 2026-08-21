@@ -1,43 +1,16 @@
 package kube
 
 import (
-	"os/exec"
 	"strings"
 )
 
-// DefaultNodeShellImage is the debug-container image used when the user
-// config's nodeShellImage is unset. The image only needs a `chroot` binary —
-// the shell itself resolves against the host root, not the image.
+// DefaultNodeShellImage is the node-debug panel's default image (§41d) —
+// the image only needs a `chroot` binary, since the shell itself resolves
+// against the host root, not the image. Formerly the fixed image of the
+// standalone 's' NodeShell verb, retired in favor of 'x' opening the debug
+// panel (tasks/debugpanel) prefilled with this same default — see
+// NodeDebugSpec (debug.go).
 const DefaultNodeShellImage = "busybox:1.37"
-
-// nodeShellArgs builds the kubectl debug argv for NodeShellSpec.
-// --profile=sysadmin runs the debug container privileged with host
-// namespaces (a node shell without root access on the node would be
-// pointless), and `chroot /host` pivots into the node's root mount, with the
-// same static bash-then-sh fallback ExecSpec uses — resolved against the
-// host filesystem.
-func nodeShellArgs(node, image string) []string {
-	if image == "" {
-		image = DefaultNodeShellImage
-	}
-	return []string{
-		"debug", "node/" + node, "-it",
-		"--image", image,
-		"--profile", "sysadmin",
-		"--", "chroot", "/host",
-		"sh", "-c", "command -v bash >/dev/null && exec bash || exec sh",
-	}
-}
-
-// NodeShellSpec builds the kubectl debug command for the node-shell verb
-// ('s' on a Nodes row / in tasks/nodedetail). Bubble Tea suspends and hands
-// the tty to this process (tea.ExecProcess), the same handoff as ExecSpec.
-// kubectl leaves the node-debugger pod behind in a Completed state after
-// exit — its own documented behavior; it prints the pod name on entry, so
-// cleanup stays visible to (and with) the user for MVP.
-func NodeShellSpec(node, image string) *exec.Cmd {
-	return exec.Command("kubectl", nodeShellArgs(node, image)...)
-}
 
 // Node labels the two managed platforms that can't host a node shell set on
 // their own nodes.
@@ -77,8 +50,9 @@ const (
 // verb, so the name check only applies to nodes already known to be GKE's.
 //
 // This is a message, not a gate: docs/managed-clusters.md §3 asks for "a
-// clear error naming the reason, not a hidden key", so 's' stays on the
-// keybar and explains itself when pressed.
+// clear error naming the reason, not a hidden key", so 'x' stays on a
+// Node's keybar and explains itself when pressed (the debug panel it opens
+// — tasks/debugpanel, §41d — never launches).
 func NodeShellUnavailable(name string, labels map[string]string) string {
 	if labels[fargateComputeTypeLabel] == "fargate" {
 		return "node shell is unavailable on EKS Fargate: the pod has no node to attach to"

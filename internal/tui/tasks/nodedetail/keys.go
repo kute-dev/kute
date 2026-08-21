@@ -55,8 +55,8 @@ func (m Model) Keybar() tui.Keybar {
 		}
 		groups = append(groups, podGroup)
 	}
-	if !verbs.NodeShell.HiddenWhileOffline(offline) {
-		groups = append(groups, []tui.KeyHint{verbs.NodeShell.Hint()})
+	if !verbs.NodeDebugDetail.HiddenWhileOffline(offline) {
+		groups = append(groups, []tui.KeyHint{verbs.NodeDebugDetail.Hint()})
 	}
 	if m.mutator != nil && !verbs.Cordon.HiddenWhileOffline(offline) && !verbs.Drain.HiddenWhileOffline(offline) {
 		groups = append(groups, []tui.KeyHint{verbs.Cordon.Hint(), verbs.Drain.Hint()})

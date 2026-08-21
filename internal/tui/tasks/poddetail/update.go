@@ -84,6 +84,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.execFeedback = ""
 		}
+	case podShellsProbedMsg:
+		return m.routePodShellsProbed(msg)
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -122,8 +124,8 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.eventsErr = msg.eventsErr
 	m.controller = msg.controller
 	m.related = msg.related
-	if m.selectedContainer >= len(m.pod.ContainerInfos) {
-		m.selectedContainer = max(len(m.pod.ContainerInfos)-1, 0)
+	if total := m.totalContainerRows(); m.selectedContainer >= total {
+		m.selectedContainer = max(total-1, 0)
 	}
 	m.state = tui.TaskStateReady
 	m.feedback = ""
@@ -171,6 +173,18 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
 		}
+	case "enter":
+		// §41e: re-attach to an already-created ephemeral container — a
+		// real container in the pod once attached, exec'd into the same
+		// way any other container is (kube.ExecSpec), no new kube
+		// function needed. No-op anywhere else in this grid; enter has no
+		// other meaning on an ordinary CONTAINERS row.
+		if eph, ok := m.selectedEphemeralContainer(); ok {
+			if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
+				return m, nil
+			}
+			return m, execCmd(m.namespace, m.name, eph.Name)
+		}
 	case "y":
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
@@ -194,11 +208,24 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}
-		if task, cmd, ok := m.openSelectedExec(); ok {
+		if task, cmd, ok := m.beginExecOrDebug(); ok {
 			if task != nil {
 				return task, cmd
 			}
 			return m, cmd
+		}
+	case "w":
+		// §41a's RBAC pre-check offers this handoff for a denied debug
+		// launch — pre-filled with the exact create/resource/namespace
+		// query that came back denied (docs/design v.0.11.0.dc.html §41a:
+		// "offers w who-can").
+		if m.pendingDebugDenial != nil && m.openWhoCan != nil {
+			d := m.pendingDebugDenial
+			task, cmd := m.openWhoCan(d.verb, d.resource, d.namespace, m.width, m.height)
+			if task != nil {
+				m.pendingDebugDenial = nil
+				return task, cmd
+			}
 		}
 	case "f":
 		if task, cmd, ok := m.openSelectedForward(); ok {
@@ -310,11 +337,29 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
-// moveContainerSelection shifts the CONTAINERS grid's selected row by delta,
-// clamped rather than wrapping — same as browse's own moveSelection (j/k ≡
-// ↑↓ everywhere, CLAUDE.md convention).
+// totalContainerRows is the combined CONTAINERS + EPHEMERAL selection space
+// (§41e) — ephemeral rows come after the ordinary ones, so index arithmetic
+// stays a single offset rather than two independent cursors.
+func (m Model) totalContainerRows() int {
+	return len(m.pod.ContainerInfos) + len(m.pod.EphemeralContainerInfos)
+}
+
+// selectedEphemeralContainer resolves m.selectedContainer to an
+// EphemeralContainerInfo when the cursor is on the EPHEMERAL group, ok
+// false otherwise.
+func (m Model) selectedEphemeralContainer() (kube.EphemeralContainerInfo, bool) {
+	i := m.selectedContainer - len(m.pod.ContainerInfos)
+	if i < 0 || i >= len(m.pod.EphemeralContainerInfos) {
+		return kube.EphemeralContainerInfo{}, false
+	}
+	return m.pod.EphemeralContainerInfos[i], true
+}
+
+// moveContainerSelection shifts the combined CONTAINERS/EPHEMERAL
+// selection by delta, clamped rather than wrapping — same as browse's own
+// moveSelection (j/k ≡ ↑↓ everywhere, CLAUDE.md convention).
 func (m *Model) moveContainerSelection(delta int) {
-	n := len(m.pod.ContainerInfos)
+	n := m.totalContainerRows()
 	if n == 0 {
 		return
 	}
@@ -329,7 +374,8 @@ func (m *Model) moveContainerSelection(delta int) {
 }
 
 func (m *Model) moveContainerHalfPage(direction int) {
-	position := components.MoveHalfPage(m.selectedContainer, 0, max(len(m.pod.ContainerInfos), 1), len(m.pod.ContainerInfos), direction)
+	n := m.totalContainerRows()
+	position := components.MoveHalfPage(m.selectedContainer, 0, max(n, 1), n, direction)
 	m.selectedContainer = position.Selected
 }
 
@@ -346,6 +392,8 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	container := ""
 	if m.selectedContainer < len(m.pod.ContainerInfos) {
 		container = m.pod.ContainerInfos[m.selectedContainer].Name
+	} else if eph, ok := m.selectedEphemeralContainer(); ok {
+		container = eph.Name
 	}
 	task, cmd := m.openLogs(m.pod, container, m.width, m.height)
 	return task, cmd, task != nil
