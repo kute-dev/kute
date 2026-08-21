@@ -84,6 +84,10 @@ type Config struct {
 	// Target selects which of the two shapes above applies. Namespace is
 	// ignored for a Node target (kubectl debug node/X takes no -n).
 	IsNode bool
+
+	// Demo is true for --demo — see browse.Config.Demo's doc comment;
+	// launchCmd checks it before building a real kubectl debug command.
+	Demo bool
 }
 
 // cleanupPrompt is §41c's post-exit "CLEAN UP" band — set once a copy-mode
@@ -134,6 +138,7 @@ type Model struct {
 
 	feedback string
 	conn     kube.ConnState
+	demo     bool
 }
 
 func New(cfg Config) Model {
@@ -143,6 +148,7 @@ func New(cfg Config) Model {
 		session: cfg.Session,
 		mutator: cfg.Mutator,
 		actions: actions.New(cfg.Mutator),
+		demo:    cfg.Demo,
 	}
 	if cfg.IsNode {
 		m.tgt = targetNode

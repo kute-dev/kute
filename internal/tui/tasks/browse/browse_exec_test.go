@@ -1,6 +1,7 @@
 package browse
 
 import (
+	"errors"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -79,6 +80,34 @@ func TestExecMultiContainerPushesPicker(t *testing.T) {
 	}
 	if len(gotContainers) != 2 {
 		t.Fatalf("expected both containers handed to OpenExec, got %v", gotContainers)
+	}
+}
+
+// TestExecSingleContainerDemoModeSkipsRealKubectl confirms 'x' on a
+// single-container pod never builds a real kubectl exec subprocess when
+// Config.Demo is set — it resolves synchronously to kube.ErrDemoUnavailable
+// instead, since there's no real cluster behind kube/fake for a tty to
+// attach to (kute-dev/kute issue: --demo pods other than the one
+// multi-container fixture failed with a raw "connection refused" from a
+// real kubectl exec attempt).
+func TestExecSingleContainerDemoModeSkipsRealKubectl(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Demo: true})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd")
+	}
+	msg, ok := cmd().(execResultMsg)
+	if !ok {
+		t.Fatalf("expected execResultMsg, got %T", msg)
+	}
+	if !errors.Is(msg.err, kube.ErrDemoUnavailable) {
+		t.Fatalf("expected kube.ErrDemoUnavailable, got %v", msg.err)
 	}
 }
 

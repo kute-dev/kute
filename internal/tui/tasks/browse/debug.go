@@ -206,7 +206,7 @@ func (m *Model) routePodShellsProbed(msg podShellsProbedMsg) (tea.Model, tea.Cmd
 		return m, cmd
 	}
 	if len(msg.containers) == 1 {
-		return m, execCmd(msg.namespace, msg.podName, msg.containers[0].Name)
+		return m, execCmd(msg.namespace, msg.podName, msg.containers[0].Name, m.demo)
 	}
 	if m.openExec == nil {
 		return m, nil

@@ -302,6 +302,13 @@ type Config struct {
 	// surfaced verbatim instead of a generic message when set. Phase 4's
 	// tasks/setup screen replaces this with the real 4c/10b recovery flow.
 	InitErr error
+	// Demo is true for --demo (app.go's buildDemoBrowseTask) — guards
+	// execCmd's single-container fast path (openSelectedExec, debug.go's
+	// routePodShellsProbed) so 'x' never shells out to a real kubectl
+	// against a fake pod: Shells is faked (kube/fake/shells.go) so the
+	// shell pre-check still renders realistic states, but the actual exec
+	// is a live tty handoff with no real cluster on the other end.
+	Demo bool
 }
 
 type Model struct {
@@ -344,6 +351,7 @@ type Model struct {
 	retrier             ConnRetrier
 	timeout             time.Duration
 	currentUser         string
+	demo                bool
 	// execFeedback carries a non-zero kubectl-exec exit's message (docs/design
 	// README.md §10a: "exit returns to the same pod with a feedback line on
 	// non-zero exit") — single-container pods exec directly from browse
@@ -838,6 +846,7 @@ func New(cfg Config) Model {
 		retrier:             cfg.Retrier,
 		timeout:             cfg.LoadTimeout,
 		currentUser:         cfg.CurrentUser,
+		demo:                cfg.Demo,
 		kind:                kind,
 		namespace:           namespace,
 		desc:                desc,

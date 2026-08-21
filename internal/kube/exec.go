@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"slices"
 	"strings"
@@ -12,6 +13,25 @@ import (
 // kute wouldn't actually run would make the picker's shells column disagree
 // with its own "will run" line.
 var ShellCandidates = []string{"bash", "sh"}
+
+// ErrDemoUnavailable is what every tea.ExecProcess handoff (exec, kubectl
+// debug) reports in --demo mode instead of actually shelling out. kube/fake
+// stays feature-complete for what a screen *displays* (CLAUDE.md), but a
+// tty handoff needs a real API server on the other end to attach to — there
+// is nothing honest for kube/fake to fake here, so browse/execpicker/
+// debugpanel short-circuit before ever building a kubectl command, rather
+// than let a real kubectl process fail loudly against whatever (or no)
+// kubeconfig context happens to be active.
+//
+// Kept deliberately short: browse renders this behind an "exec exited: "/
+// "node shell exited: " prefix on the same keybar row as the update chip
+// and the "? help" hint (RightNote + RightHints, chrome.go's
+// renderKeybarV2), and insetChromeLine drops the *entire* right side —
+// including "? help" — rather than truncating when the combined text
+// overflows the row (same quirk browse/keys.go's pendingScale comment
+// documents). A longer message here doesn't get cut off; it silently
+// erases the help hint next to it.
+var ErrDemoUnavailable = errors.New("no cluster (demo)")
 
 // shellProbeScript lists whichever ShellCandidates exist on PATH, one per
 // line. Built from ShellCandidates rather than spelled out, so the probe

@@ -615,10 +615,10 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	lister := newSessionLister(cluster, sess.Forwards, sess.Charts)
 	openLogs := openLogsFunc(sess, cluster, streamer, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, cluster)
-	openDebug := openDebugFunc(sess, cluster)
-	openExecDebug := openExecDebugFunc(sess, cluster)
-	openNodeDebug := openNodeDebugFunc(sess, cluster)
-	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug)
+	openDebug := openDebugFunc(sess, cluster, false)
+	openExecDebug := openExecDebugFunc(sess, cluster, false)
+	openNodeDebug := openNodeDebugFunc(sess, cluster, false)
+	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug, false)
 	openForward := openForwardFunc(sess, lister, cluster)
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug, openWhoCanFunc(sess, cluster))
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
@@ -663,6 +663,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		Forwards:            sess.Forwards,
 		Retrier:             cluster,
 		CurrentUser:         cluster.Context.UserName,
+		Demo:                false,
 	})
 	return &b
 }
@@ -706,10 +707,10 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	lister := newSessionLister(demoCluster, sess.Forwards, sess.Charts)
 	openLogs := openLogsFunc(sess, demoCluster, demoCluster, clusterName, namespace)
 	openYAML := openYAMLFunc(sess, demoCluster)
-	openDebug := openDebugFunc(sess, demoCluster)
-	openExecDebug := openExecDebugFunc(sess, demoCluster)
-	openNodeDebug := openNodeDebugFunc(sess, demoCluster)
-	openExec := openExecFunc(sess, demoCluster, openExecDebug)
+	openDebug := openDebugFunc(sess, demoCluster, true)
+	openExecDebug := openExecDebugFunc(sess, demoCluster, true)
+	openNodeDebug := openNodeDebugFunc(sess, demoCluster, true)
+	openExec := openExecFunc(sess, demoCluster, openExecDebug, true)
 	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
 	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug, openWhoCanFunc(sess, demoCluster))
 	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
@@ -754,6 +755,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		Forwards:            sess.Forwards,
 		Retrier:             demoCluster,
 		CurrentUser:         demoCluster.CurrentUser(),
+		Demo:                true,
 	})
 	return &b
 }
@@ -1319,7 +1321,7 @@ func openHelmValuesFunc(sess *tui.Session) browse.OpenHelmValuesFunc {
 // exec, and probes each container's shells through the shells seam (real:
 // kubectlShellDetector, demo: *fake.Cluster). openDebug wires §41a's fork —
 // enter on a row already known to have no shell.
-func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug execpicker.OpenDebugFunc) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
+func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug execpicker.OpenDebugFunc, demo bool) func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 	return func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd) {
 		ep := execpicker.New(execpicker.Config{
 			Session:    sess,
@@ -1328,6 +1330,7 @@ func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug 
 			Containers: containers,
 			Shells:     shells,
 			OpenDebug:  openDebug,
+			Demo:       demo,
 		})
 		ep.SetSize(width, height)
 		return &ep, ep.Init()
@@ -1338,7 +1341,7 @@ func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug 
 // browse/poddetail-shaped seam (podPhase/waiting decide the panel's default
 // mode). mutator backs §41c's cleanup delete only; the debug launch itself
 // is a tea.ExecProcess handoff, never a Mutator call.
-func openDebugFunc(sess *tui.Session, mutator kube.Mutator) func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
+func openDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
 	return func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:    sess,
@@ -1348,6 +1351,7 @@ func openDebugFunc(sess *tui.Session, mutator kube.Mutator) func(namespace, name
 			Containers: containers,
 			PodPhase:   podPhase,
 			Waiting:    waiting,
+			Demo:       demo,
 		})
 		dp.SetSize(width, height)
 		return &dp, dp.Init()
@@ -1360,7 +1364,7 @@ func openDebugFunc(sess *tui.Session, mutator kube.Mutator) func(namespace, name
 // unset: the picker is only ever reached when at least one other container
 // in the pod does have a shell, so attach is always the right default here
 // (debugpanel.New's own mode gate needs neither field to pick it).
-func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator) execpicker.OpenDebugFunc {
+func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) execpicker.OpenDebugFunc {
 	return func(namespace, podName string, containers []kube.ContainerInfo, target string, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:                sess,
@@ -1369,6 +1373,7 @@ func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator) execpicker.OpenD
 			Name:                   podName,
 			Containers:             containers,
 			InitialTargetContainer: target,
+			Demo:                   demo,
 		})
 		dp.SetSize(width, height)
 		return &dp, dp.Init()
@@ -1379,7 +1384,7 @@ func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator) execpicker.OpenD
 // the retired standalone NodeShell verb (verbs.go's NodeDebug/
 // NodeDebugDetail doc comments). Shared by browse's 'x' on a Node row and
 // nodedetail's own 's'.
-func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
+func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 	return func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:        sess,
@@ -1388,6 +1393,7 @@ func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator) func(name string
 			Name:           name,
 			NodePodCount:   podCount,
 			NodeShellImage: sess.Config.NodeShellImage,
+			Demo:           demo,
 		})
 		dp.SetSize(width, height)
 		return &dp, dp.Init()

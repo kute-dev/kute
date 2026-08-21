@@ -128,6 +128,9 @@ func (m Model) execSelected() tea.Cmd {
 	if m.selected < 0 || m.selected >= len(m.containers) {
 		return nil
 	}
+	if m.demo {
+		return func() tea.Msg { return execResultMsg{err: kube.ErrDemoUnavailable} }
+	}
 	container := m.containers[m.selected].Name
 	cmd := kube.ExecSpec(m.namespace, m.podName, container, m.preferredShell(m.selected))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {

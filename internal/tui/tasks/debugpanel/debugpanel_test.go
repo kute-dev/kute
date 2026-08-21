@@ -1,6 +1,7 @@
 package debugpanel
 
 import (
+	"errors"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -163,6 +164,39 @@ func TestBeginLaunchNonProdRunsImmediately(t *testing.T) {
 	}
 	if m.launchPending {
 		t.Error("launchPending should stay false outside PROD")
+	}
+}
+
+// TestLaunchCmdDemoModeSkipsRealKubectl confirms launchCmd never builds a
+// real kubectl debug subprocess when Config.Demo is set, for all three
+// launch shapes (node, attach, copy) — each resolves synchronously to
+// kube.ErrDemoUnavailable instead, since there's no real cluster behind
+// kube/fake to attach a tty to.
+func TestLaunchCmdDemoModeSkipsRealKubectl(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"node", Config{Session: nonProdSession(), Demo: true, IsNode: true, Name: "node-a"}},
+		{"attach", Config{Session: nonProdSession(), Demo: true, Namespace: "default", Name: "api-0", Containers: podContainers()}},
+		{"copy", Config{Session: nonProdSession(), Demo: true, Namespace: "default", Name: "worker-0", Containers: podContainers(), Waiting: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New(tc.cfg)
+			cmd := m.launchCmd()
+			if cmd == nil {
+				t.Fatal("expected a non-nil Cmd")
+			}
+			msg, ok := cmd().(launchResultMsg)
+			if !ok {
+				t.Fatalf("expected launchResultMsg, got %T", msg)
+			}
+			if !errors.Is(msg.err, kube.ErrDemoUnavailable) {
+				t.Fatalf("expected kube.ErrDemoUnavailable, got %v", msg.err)
+			}
+		})
 	}
 }
 

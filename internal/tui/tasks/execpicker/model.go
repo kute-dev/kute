@@ -61,6 +61,9 @@ type Config struct {
 	Containers []kube.ContainerInfo
 	Shells     ShellDetector
 	OpenDebug  OpenDebugFunc
+	// Demo is true for --demo — see browse.Config.Demo's doc comment;
+	// execSelected checks it before building a real kubectl command.
+	Demo bool
 }
 
 type Model struct {
@@ -74,6 +77,7 @@ type Model struct {
 	shells    ShellDetector
 	openDebug OpenDebugFunc
 	detected  map[string]shellResult
+	demo      bool
 
 	selected int
 	// feedback is set after a non-zero kubectl exec exit (docs/design
@@ -97,6 +101,7 @@ func New(cfg Config) Model {
 		shells:     cfg.Shells,
 		openDebug:  cfg.OpenDebug,
 		detected:   map[string]shellResult{},
+		demo:       cfg.Demo,
 	}
 }
 

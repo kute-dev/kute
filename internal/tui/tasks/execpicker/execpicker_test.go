@@ -90,6 +90,29 @@ func TestEnterExecsSelectedContainer(t *testing.T) {
 	}
 }
 
+// TestEnterDemoModeSkipsRealKubectl confirms the picker's own exec (chosen
+// from the multi-container list) never builds a real kubectl subprocess
+// when Config.Demo is set — same guard as browse's direct single-container
+// fast path, since there's no real cluster behind kube/fake to attach a tty
+// to.
+func TestEnterDemoModeSkipsRealKubectl(t *testing.T) {
+	t.Parallel()
+	m := newModel()
+	m.demo = true
+	m.selected = 1
+	cmd := m.execSelected()
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd")
+	}
+	msg, ok := cmd().(execResultMsg)
+	if !ok {
+		t.Fatalf("expected execResultMsg, got %T", msg)
+	}
+	if !errors.Is(msg.err, kube.ErrDemoUnavailable) {
+		t.Fatalf("expected kube.ErrDemoUnavailable, got %v", msg.err)
+	}
+}
+
 func TestExecResultSuccessPopsBack(t *testing.T) {
 	t.Parallel()
 	m := newModel()

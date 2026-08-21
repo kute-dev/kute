@@ -1324,7 +1324,7 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, false
 	}
 	if len(pod.ContainerInfos) == 1 {
-		return nil, execCmd(pod.Namespace, pod.Name, pod.ContainerInfos[0].Name), true
+		return nil, execCmd(pod.Namespace, pod.Name, pod.ContainerInfos[0].Name, m.demo), true
 	}
 	if m.openExec == nil {
 		return nil, nil, false
@@ -1336,8 +1336,13 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 // execCmd suspends the program and hands the tty to kubectl for container
 // (tea.ExecProcess over kube.ExecSpec) — shared shape with
 // tasks/execpicker's own execSelected, duplicated per the repo's
-// package-local-seam convention.
-func execCmd(namespace, pod, container string) tea.Cmd {
+// package-local-seam convention. demo short-circuits before building a real
+// kubectl command (kube.ErrDemoUnavailable's own doc comment): there's no
+// cluster behind kube/fake for a real tty to attach to.
+func execCmd(namespace, pod, container string, demo bool) tea.Cmd {
+	if demo {
+		return func() tea.Msg { return execResultMsg{err: kube.ErrDemoUnavailable} }
+	}
 	spec := kube.ExecSpec(namespace, pod, container, "")
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return execResultMsg{err: err}

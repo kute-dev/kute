@@ -281,10 +281,15 @@ func (m *Model) updateLaunchConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 
 // launchCmd suspends the program and hands the tty to kubectl (tea.ExecProcess),
 // dispatching to whichever of the three debug builders (internal/kube/debug.go)
-// applies to the current target/mode.
+// applies to the current target/mode. demo short-circuits before building a
+// real kubectl command (kube.ErrDemoUnavailable's own doc comment): there's
+// no cluster behind kube/fake for a real tty to attach to.
 func (m Model) launchCmd() tea.Cmd {
 	if m.tgt == targetNode {
 		m.pushRecentImage(m.nodeImage)
+		if m.demo {
+			return demoLaunchResultCmd(launchResultMsg{tgt: targetNode})
+		}
 		spec := kube.NodeDebugSpec(m.nodeName, m.nodeImage, m.nodeProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
 			return launchResultMsg{err: err, tgt: targetNode}
@@ -293,6 +298,9 @@ func (m Model) launchCmd() tea.Cmd {
 	if m.mode == modeAttach {
 		m.pushRecentImage(m.attachImage)
 		target := m.attachTargetContainer().Name
+		if m.demo {
+			return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeAttach})
+		}
 		spec := kube.PodDebugAttachSpec(m.namespace, m.podName, m.attachImage, target, m.attachProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
 			return launchResultMsg{err: err, tgt: targetPod, mode: modeAttach}
@@ -300,10 +308,23 @@ func (m Model) launchCmd() tea.Cmd {
 	}
 	container := m.copyContainer().Name
 	copyName := m.copyName
+	if m.demo {
+		return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeCopy, copyName: copyName})
+	}
 	spec := kube.PodDebugCopySpec(m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses)
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return launchResultMsg{err: err, tgt: targetPod, mode: modeCopy, copyName: copyName}
 	})
+}
+
+// demoLaunchResultCmd stamps kube.ErrDemoUnavailable onto an otherwise
+// fully-populated launchResultMsg, so handleLaunchResult's per-target/mode
+// routing (attach/node pop back, copy shows CLEAN UP) never has to special-
+// case demo mode — it only ever sees the same message shape a real launch
+// would produce, just with a non-nil err.
+func demoLaunchResultCmd(msg launchResultMsg) tea.Cmd {
+	msg.err = kube.ErrDemoUnavailable
+	return func() tea.Msg { return msg }
 }
 
 // handleLaunchResult routes a completed launch per target/mode (docs/design
