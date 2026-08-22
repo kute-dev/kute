@@ -778,3 +778,33 @@ type fakeTask struct{}
 func (f *fakeTask) Init() tea.Cmd                       { return nil }
 func (f *fakeTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return f, nil }
 func (f *fakeTask) View() tea.View                      { return tea.NewView("") }
+
+// TestMajorityVersionIsStableAcrossTies pins the tie-break.
+//
+// The count map is iterated in Go's randomised map order, so an evenly split
+// cluster used to pick a different "majority" version on each call — and the
+// nodes list marks every node that differs from it, so the markers moved with
+// it between redraws. Repeated calls must agree.
+func TestMajorityVersionIsStableAcrossTies(t *testing.T) {
+	t.Parallel()
+	counts := map[string]int{
+		"v1.31.0": 2,
+		"v1.32.0": 2,
+		"v1.30.0": 2,
+		"v1.29.0": 1,
+	}
+	first := majorityVersion(counts)
+	if first == "" {
+		t.Fatal("majorityVersion returned empty for a populated map")
+	}
+	for range 200 {
+		if got := majorityVersion(counts); got != first {
+			t.Fatalf("majorityVersion is unstable: got %q then %q", first, got)
+		}
+	}
+	// A clear winner must still win outright, tie-break or not.
+	counts["v1.32.0"] = 9
+	if got := majorityVersion(counts); got != "v1.32.0" {
+		t.Fatalf("majorityVersion = %q, want the outright majority v1.32.0", got)
+	}
+}

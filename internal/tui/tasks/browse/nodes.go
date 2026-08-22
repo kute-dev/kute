@@ -232,9 +232,13 @@ func (m Model) nodeMajorityVersion() string {
 			counts[r.Cells[idx]]++
 		}
 	}
+	// The tie-break is load-bearing, not tidiness: map iteration order is
+	// randomised, so a cluster split evenly across two kubelet versions used
+	// to pick a different "majority" on each redraw and move the ▲ markers
+	// with it. Lowest version wins a tie — arbitrary, but stable.
 	best, bestN := "", 0
 	for v, n := range counts {
-		if n > bestN {
+		if n > bestN || (n == bestN && v < best) {
 			best, bestN = v, n
 		}
 	}

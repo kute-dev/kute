@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -592,3 +593,40 @@ type stubTask struct{}
 func (stubTask) Init() tea.Cmd                       { return nil }
 func (stubTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return stubTask{}, nil }
 func (stubTask) View() tea.View                      { return tea.NewView("") }
+
+// TestNodeMajorityVersionIsStableAcrossTies pins the tie-break — see
+// tasks/overview's own copy of this algorithm and test.
+//
+// Map iteration order is randomised, so an evenly split cluster used to pick a
+// different "majority" version per call, and 11a's ▲ markers (which flag every
+// node differing from it) moved between redraws.
+func TestNodeMajorityVersionIsStableAcrossTies(t *testing.T) {
+	t.Parallel()
+	m := Model{
+		desc: resources.Descriptor{Columns: []string{"Name", "Version"}},
+		rows: []resources.Row{
+			{Cells: []string{"node-a", "v1.31.0"}},
+			{Cells: []string{"node-b", "v1.31.0"}},
+			{Cells: []string{"node-c", "v1.32.0"}},
+			{Cells: []string{"node-d", "v1.32.0"}},
+			{Cells: []string{"node-e", "v1.30.0"}},
+			{Cells: []string{"node-f", "v1.30.0"}},
+		},
+	}
+
+	first := m.nodeMajorityVersion()
+	if first == "" {
+		t.Fatal("nodeMajorityVersion returned empty for populated rows")
+	}
+	for range 200 {
+		if got := m.nodeMajorityVersion(); got != first {
+			t.Fatalf("nodeMajorityVersion is unstable: got %q then %q", first, got)
+		}
+	}
+
+	// An outright majority must still win.
+	m.rows = append(m.rows, resources.Row{Cells: []string{"node-g", "v1.32.0"}})
+	if got := m.nodeMajorityVersion(); got != "v1.32.0" {
+		t.Fatalf("nodeMajorityVersion = %q, want the outright majority v1.32.0", got)
+	}
+}
