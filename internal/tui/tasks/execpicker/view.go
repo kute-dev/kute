@@ -76,10 +76,12 @@ func (m Model) Body(width, height int) string {
 }
 
 // panelContent builds 10a's picker panel: an inner header ("exec › pod" +
-// container count), the container list, the "will run" documentation line
-// for the highlighted container, and a blank feedback line reserved for a
-// non-zero exec exit (kept even when empty so the panel's height doesn't
-// jump between attempts).
+// container count), the container list, then either the "will run"
+// documentation line for the highlighted container or — when that container
+// is already known to have no shell — §41a's "no sh or bash" note in its
+// place (a kubectl exec preview would be a lie there), and a blank feedback
+// line reserved for a non-zero exec exit (kept even when empty so the
+// panel's height doesn't jump between attempts).
 func (m Model) panelContent(theme tui.Theme) string {
 	var lines []string
 	lines = append(lines, m.panelHeader(theme))
@@ -88,7 +90,11 @@ func (m Model) panelContent(theme tui.Theme) string {
 		lines = append(lines, m.containerLine(theme, i, c))
 	}
 	lines = append(lines, "")
-	lines = append(lines, m.willRunLine(theme))
+	if m.selectedShellless() {
+		lines = append(lines, m.noShellLine(theme)...)
+	} else {
+		lines = append(lines, m.willRunLine(theme))
+	}
 	if m.feedback != "" {
 		lines = append(lines, "", lipgloss.NewStyle().Foreground(theme.Bad).Render(ellipsize(m.feedback, panelWidth)))
 	}
@@ -103,6 +109,18 @@ func (m Model) panelHeader(theme tui.Theme) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
+// Container row columns — fixed widths so STATUS and SHELLS start at the
+// same column on every row regardless of how long a container's name+image
+// or status/shells text happens to be (docs/design v.0.11.0.dc.html §41a:
+// container statuses "one under another"). Only the name+image column
+// flexes/truncates; marker(2) + nameColWidth + 2 + statusColWidth + 2 +
+// shellsColWidth sums to panelWidth.
+const (
+	nameColWidth   = 26
+	statusColWidth = 13
+	shellsColWidth = 11
+)
+
 func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) string {
 	selected := i == m.selected
 	// rowFill paints the row's gap cells with the row's own background —
@@ -115,7 +133,11 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 	nameStyle := lipgloss.NewStyle().Foreground(theme.Text)
 	imgStyle := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	stateStyle := lipgloss.NewStyle().Foreground(theme.Good)
+	shellsText := m.shellsText(c.Name)
 	shellStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
+	if shellsText == "no shell" {
+		shellStyle = lipgloss.NewStyle().Foreground(theme.Warn)
+	}
 	if selected {
 		rowFill = lipgloss.NewStyle().Background(theme.SelBg)
 		marker = lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg).Render("▸ ")
@@ -148,13 +170,32 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 	if c.IsSidecar {
 		img += " sidecar"
 	}
-	name := nameStyle.Render(c.Name) + fill(2) + imgStyle.Render(img)
-	state := stateStyle.Render(glyph + " " + text)
-	shells := shellStyle.Render(m.shellsText(c.Name))
+	name, nameWidth := nameImageCell(nameStyle, imgStyle, c.Name, img)
+	state := components.Truncate(glyph+" "+text, statusColWidth)
+	shells := components.Truncate(shellsText, shellsColWidth)
 
 	left := marker + name
-	gap := max(panelWidth-lipgloss.Width(left)-lipgloss.Width(state)-lipgloss.Width(shells)-2, 1)
-	return left + fill(gap) + state + fill(2) + shells
+	return left + fill(nameColWidth-nameWidth) + fill(2) +
+		stateStyle.Render(state) + fill(statusColWidth-lipgloss.Width(state)) + fill(2) +
+		fill(shellsColWidth-lipgloss.Width(shells)) + shellStyle.Render(shells)
+}
+
+// nameImageCell renders the fixed-width name+image column — the name in
+// nameStyle, two spaces, then the image in imgStyle — truncated as one unit
+// to nameColWidth so a long image never pushes STATUS/SHELLS out of their
+// own columns, and reports the cell's true display width so the caller can
+// pad out the rest of the column. Byte-slicing the truncated combined string
+// at len(name) is safe here: components.Truncate only ever cuts inside or
+// after the image portion (the name itself is always short enough to fit
+// well within nameColWidth), never partway through the name.
+func nameImageCell(nameStyle, imgStyle lipgloss.Style, name, img string) (string, int) {
+	raw := name + "  " + img
+	truncated := components.Truncate(raw, nameColWidth)
+	width := lipgloss.Width(truncated)
+	if len(truncated) <= len(name) {
+		return nameStyle.Render(truncated), width
+	}
+	return nameStyle.Render(name) + imgStyle.Render(truncated[len(name):]), width
 }
 
 // shellsText renders one row's right-aligned shells cell (docs/design
@@ -205,6 +246,27 @@ func (m Model) willRunLine(theme tui.Theme) string {
 		lines[i] = prefix + cmdStyle.Render(strings.TrimRight(l, " "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// noShellLine replaces willRunLine when the highlighted container is
+// already known to have no shell (docs/design v.0.11.0.dc.html §41a: a
+// kubectl exec preview would be a lie there) — the fork's own explanation:
+// which container has nothing to exec into, and that debug attaches a shell
+// alongside it rather than replacing anything.
+func (m Model) noShellLine(theme tui.Theme) []string {
+	container := m.selectedContainerName()
+	warn := lipgloss.NewStyle().Foreground(theme.Warn)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	notice := fmt.Sprintf("no sh or bash in %s — nothing to exec into", container)
+	explain := "debug attaches a shell alongside it, sharing the pod's process namespace"
+	var lines []string
+	for _, l := range components.Wrap(notice, panelWidth) {
+		lines = append(lines, warn.Render(strings.TrimRight(l, " ")))
+	}
+	for _, l := range components.Wrap(explain, panelWidth) {
+		lines = append(lines, dim.Render(strings.TrimRight(l, " ")))
+	}
+	return lines
 }
 
 func ellipsize(s string, width int) string {

@@ -1,6 +1,8 @@
 package execpicker
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -76,11 +78,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// shell-less row is a route, not a dead ↵" (docs/design
 		// v.0.11.0.dc.html §41a).
 		if m.selectedShellless() {
+			container := m.containers[m.selected].Name
 			if m.openDebug == nil {
-				m.feedback = "no sh or bash in this container — nothing to exec into"
+				m.feedback = fmt.Sprintf("no sh or bash in %s — nothing to exec into", container)
 				return m, nil
 			}
-			task, cmd := m.openDebug(m.namespace, m.podName, m.containers, m.containers[m.selected].Name, m.width, m.height)
+			task, cmd := m.openDebug(m.namespace, m.podName, m.containers, container, m.width, m.height)
 			if task != nil {
 				return task, cmd
 			}

@@ -10,17 +10,19 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
-// goldenExecPickerModel builds a deterministic 10a screen: a two-container
-// pod (a regular "gateway" container plus an IsSidecar "istio-proxy"), both
-// Running, with the sidecar (row 1) selected so the "will run" line exercises
-// a non-default selection (docs/design README.md §10a: "kubectl exec -it
-// <pod> -c <container> -- bash").
+// goldenExecPickerModel builds a deterministic 10a screen: a three-container
+// pod (a regular "gateway" container, an IsSidecar "istio-proxy", and a
+// shell-less "distroless" container), with the sidecar (row 1) selected so
+// the "will run" line exercises a non-default selection (docs/design
+// README.md §10a: "kubectl exec -it <pod> -c <container> -- bash").
 //
 // Detection results are seeded directly rather than probed, so the fixtures
-// stay deterministic (no Init, no kubectl) while still pinning two different
-// shells-column answers: the app container has bash and sh, the sidecar only
-// sh — which is also why the selected row's "will run" line names `sh`
-// concretely instead of the in-container fallback one-liner.
+// stay deterministic (no Init, no kubectl) while still pinning three
+// different shells-column answers: the app container has bash and sh, the
+// sidecar only sh (so the selected row's "will run" line names `sh`
+// concretely instead of the in-container fallback one-liner), and the third
+// container has none at all — pinning §41a's fixed-column row alignment and
+// the "no shell" warn color against a real fixture.
 func goldenExecPickerModel(width, height int) Model {
 	sess := &tui.Session{Theme: tui.Dark()}
 	sess.Location.Context = "nva-stage-cluster"
@@ -31,6 +33,7 @@ func goldenExecPickerModel(width, height int) Model {
 		Containers: []kube.ContainerInfo{
 			{Name: "gateway", Image: "nva-gateway:1.19.0", State: "Running"},
 			{Name: "istio-proxy", Image: "sidecar:v1.2", State: "Running", IsSidecar: true},
+			{Name: "distroless", Image: "distroless/static", State: "Running"},
 		},
 		Shells: stubShellDetector{},
 	})
@@ -39,6 +42,7 @@ func goldenExecPickerModel(width, height int) Model {
 	m.detected = map[string]shellResult{
 		"gateway":     {shells: []string{"bash", "sh"}},
 		"istio-proxy": {shells: []string{"sh"}},
+		"distroless":  {},
 	}
 	return m
 }

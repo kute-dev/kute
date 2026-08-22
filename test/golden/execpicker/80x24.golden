@@ -6,16 +6,16 @@
                                                                                 
          ╭────────────────────────────────────────────────────────────╮         
          │                                                            │         
-         │  exec › nva-gateway-2b81x                    2 containers  │         
+         │  exec › nva-gateway-2b81x                    3 containers  │         
          │                                                            │         
-         │    gateway  nva-gateway:1.19.0        ● running  bash, sh  │         
-         │  ▸ istio-proxy  sidecar:v1.2 sidecar        ● running  sh  │         
+         │    gateway  nva-gateway:1.19…  ● running         bash, sh  │         
+         │  ▸ istio-proxy  sidecar:v1.2…  ● running               sh  │         
+         │    distroless  distroless/st…  ● running         no shell  │         
          │                                                            │         
          │  will run  kubectl exec -it nva-gateway-2b81x -n nva-      │         
          │            stage -c istio-proxy -- sh                      │         
          │                                                            │         
          ╰────────────────────────────────────────────────────────────╯         
-                                                                                
                                                                                 
                                                                                 
                                                                                 
