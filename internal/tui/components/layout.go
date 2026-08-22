@@ -52,6 +52,16 @@ func Pad(value string, width int) string {
 	return value + strings.Repeat(" ", width-cellWidth)
 }
 
+// Wrap word-wraps plain (unstyled) s to width-wide lines via lipgloss's own
+// Width-based reflow — s must stay ANSI-free going in for the wrap width
+// math to be accurate. Callers style each returned line individually.
+func Wrap(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	return strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
+}
+
 func NonColorMarker(active bool) string {
 	if active {
 		return "▸"

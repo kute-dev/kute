@@ -575,9 +575,9 @@ func (m Model) feedLines(theme tui.Theme, width, height int) []string {
 func (m Model) rowLineCount(e kube.TimelineEntry, width int) int {
 	whatW := m.feedWhatWidth(width)
 	if e.Kind == kube.TimelineRollout {
-		return len(wrapText(m.rolloutBodyText(e), whatW)) + 1 // +1: the trailing rule line
+		return len(components.Wrap(m.rolloutBodyText(e), whatW)) + 1 // +1: the trailing rule line
 	}
-	return len(wrapText(entrySummary(e), whatW))
+	return len(components.Wrap(entrySummary(e), whatW))
 }
 
 // foldedNormalLine is 9b's "▸ normal · N normal events — reason1 ·
@@ -688,7 +688,7 @@ func feedSelBarStyle(theme tui.Theme) lipgloss.Style {
 // anchors, not ordinary rows, docs/design README.md §16a) for a
 // TimelineRollout entry, or the ordinary WHEN/glyph/[+CHANGE/]WHAT/[OBJECT]
 // layout for everything else. WHAT text that doesn't fit the column wraps
-// onto continuation lines (wrapText) rather than ellipsizing — the WHEN/
+// onto continuation lines (components.Wrap) rather than ellipsizing — the WHEN/
 // glyph/+CHANGE/OBJECT columns stay blank on those so the wrapped text
 // reads as a continuation of the same row, not a new one. A selected row
 // gets the app-wide "▎" bar (feedSelBarStyle) in its 2-cell left marker
@@ -734,7 +734,7 @@ func (m Model) renderRow(theme tui.Theme, e kube.TimelineEntry, selected bool, w
 	blankLeft := marker + dim.Render(padRight("", feedWhenW)) + gap(2) + dim.Render(padRight("", feedGlyphW))
 
 	whatW := m.feedWhatWidth(width)
-	whatLines := wrapText(entrySummary(e), whatW)
+	whatLines := components.Wrap(entrySummary(e), whatW)
 
 	if m.objectScoped() {
 		lines := make([]string, len(whatLines))
@@ -840,7 +840,7 @@ func (m Model) rolloutBodyText(e kube.TimelineEntry) string {
 // "▎" bar (feedSelBarStyle) + gap()-routed backgrounds renderRow uses, so
 // the bar color and the solidness of the selected background match every
 // other row in the feed (and every other list in the app). Long bodies
-// wrap onto continuation lines (wrapText) the same way renderRow's WHAT
+// wrap onto continuation lines (components.Wrap) the same way renderRow's WHAT
 // column does, rather than ellipsizing.
 func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selected bool, width int) []string {
 	bg := lipgloss.NewStyle()
@@ -861,7 +861,7 @@ func (m Model) renderRolloutDivider(theme tui.Theme, e kube.TimelineEntry, selec
 		marker = feedSelBarStyle(theme).Render(tui.GlyphSelBar) + gap(1)
 	}
 
-	bodyLines := wrapText(m.rolloutBodyText(e), m.feedWhatWidth(width))
+	bodyLines := components.Wrap(m.rolloutBodyText(e), m.feedWhatWidth(width))
 	lines := make([]string, 0, len(bodyLines)+1)
 	for i, bl := range bodyLines {
 		// marker (not a bare gap(2)) on every line, including
@@ -1036,19 +1036,4 @@ func padLeft(s string, width int) string {
 		return strings.Repeat(" ", width-w) + s
 	}
 	return s
-}
-
-// wrapText word-wraps plain (unstyled) s to width-wide, right-padded lines
-// — reused by renderRow's WHAT column and the ROLLOUT divider's own body so
-// long text grows the row onto another line instead of ellipsizing (unlike
-// components.Truncate, which every other fixed-width column in the feed
-// still uses). Reuses lipgloss's own Width-based reflow rather than
-// hand-rolling a wrap algorithm; callers style each returned line
-// individually since s must stay ANSI-free going in for the wrap width math
-// to be accurate.
-func wrapText(s string, width int) []string {
-	if width < 1 {
-		width = 1
-	}
-	return strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
 }

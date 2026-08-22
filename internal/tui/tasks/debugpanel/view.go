@@ -280,7 +280,8 @@ func (m Model) warningLine(theme tui.Theme) string {
 // longer than the panel wraps onto continuation lines indented under the
 // label rather than ellipsizing — every debug command is meant to be
 // copyable, and a truncated one silently drops its tail (e.g. profile
-// flags on a long image name).
+// flags on a long image name). execpicker and forwardpicker's own
+// willRunLine follow the same shape.
 func (m Model) willRunLine(theme tui.Theme) string {
 	const labelText = "will run  "
 	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(labelText)
@@ -295,7 +296,7 @@ func (m Model) willRunLine(theme tui.Theme) string {
 	}
 	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	indent := strings.Repeat(" ", lipgloss.Width(labelText))
-	wrapped := wrapText(cmdText, panelWidth-lipgloss.Width(labelText))
+	wrapped := components.Wrap(cmdText, panelWidth-lipgloss.Width(labelText))
 	lines := make([]string, len(wrapped))
 	for i, l := range wrapped {
 		prefix := label
@@ -305,16 +306,6 @@ func (m Model) willRunLine(theme tui.Theme) string {
 		lines[i] = prefix + cmdStyle.Render(strings.TrimRight(l, " "))
 	}
 	return strings.Join(lines, "\n")
-}
-
-// wrapText word-wraps plain (unstyled) s to width-wide lines, reusing
-// lipgloss's own Width-based reflow (timeline's wrapText does the same) —
-// s must stay ANSI-free going in for the wrap width math to be accurate.
-func wrapText(s string, width int) []string {
-	if width < 1 {
-		width = 1
-	}
-	return strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
 }
 
 func ellipsize(s string, width int) string {

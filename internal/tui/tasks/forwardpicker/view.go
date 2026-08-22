@@ -157,9 +157,13 @@ func (m Model) localPortText(row portRow) string {
 // willRunLine shows the exact kubectl invocation the highlighted port's
 // enter key is equivalent to (docs/design README.md §13a: "no magic,
 // copyable documentation") — the real dial goes through client-go, not this
-// subprocess, but the pod/ports it names are exact.
+// subprocess, but the pod/ports it names are exact. A command longer than
+// the panel wraps onto continuation lines indented under the label rather
+// than ellipsizing, matching debugpanel's willRunLine — the command is
+// meant to be copyable, and truncating it silently drops real content.
 func (m Model) willRunLine(theme tui.Theme) string {
-	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render("will run  ")
+	const labelText = "will run  "
+	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(labelText)
 	if m.selected < 0 || m.selected >= len(m.rows) {
 		return label
 	}
@@ -168,7 +172,18 @@ func (m Model) willRunLine(theme tui.Theme) string {
 	}
 	row := m.rows[m.selected]
 	cmdText := kube.PortForwardCommandString(m.target.Namespace, m.resolvedPod, row.localPort, row.Port)
-	return label + lipgloss.NewStyle().Foreground(theme.TextSecondary).Render(ellipsize(cmdText, panelWidth-10))
+	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	indent := strings.Repeat(" ", lipgloss.Width(labelText))
+	wrapped := components.Wrap(cmdText, panelWidth-lipgloss.Width(labelText))
+	lines := make([]string, len(wrapped))
+	for i, l := range wrapped {
+		prefix := label
+		if i > 0 {
+			prefix = indent
+		}
+		lines[i] = prefix + cmdStyle.Render(strings.TrimRight(l, " "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func ellipsize(s string, width int) string {

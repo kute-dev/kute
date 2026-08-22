@@ -180,15 +180,31 @@ func (m Model) shellsText(container string) string {
 
 // willRunLine shows the exact kubectl command the highlighted container's
 // enter key will run (docs/design README.md §10a: "no magic, copyable
-// documentation").
+// documentation"). A command longer than the panel wraps onto continuation
+// lines indented under the label rather than ellipsizing, matching
+// debugpanel's willRunLine — the command is meant to be copyable, and
+// truncating it silently drops real content (e.g. the shell path on a long
+// namespace/pod/container name).
 func (m Model) willRunLine(theme tui.Theme) string {
-	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render("will run  ")
+	const labelText = "will run  "
+	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(labelText)
 	if m.selected < 0 || m.selected >= len(m.containers) {
 		return label
 	}
 	container := m.containers[m.selected].Name
 	cmdText := kube.ExecCommandString(m.namespace, m.podName, container, m.preferredShell(m.selected))
-	return label + lipgloss.NewStyle().Foreground(theme.TextSecondary).Render(ellipsize(cmdText, panelWidth-10))
+	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	indent := strings.Repeat(" ", lipgloss.Width(labelText))
+	wrapped := components.Wrap(cmdText, panelWidth-lipgloss.Width(labelText))
+	lines := make([]string, len(wrapped))
+	for i, l := range wrapped {
+		prefix := label
+		if i > 0 {
+			prefix = indent
+		}
+		lines[i] = prefix + cmdStyle.Render(strings.TrimRight(l, " "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func ellipsize(s string, width int) string {
