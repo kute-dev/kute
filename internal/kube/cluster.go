@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -23,6 +24,17 @@ import (
 // defaultResync is the informer resync period; watch events drive updates, so
 // this only backstops missed notifications.
 const defaultResync = 5 * time.Minute
+
+// ErrClusterStopped is returned by Start for a Cluster that Stop has already
+// torn down. Stop's sentinel for that is a nil stopCh, which the ensure* paths
+// already refuse on; Start refuses on it too rather than starting informers
+// that could never be stopped.
+var ErrClusterStopped = errors.New("cluster is stopped")
+
+// ErrCacheSyncFailed is returned by Start when the eager informer caches never
+// settle — including the legitimate case of a Stop landing mid-connect, which
+// closes the wait early rather than hanging.
+var ErrCacheSyncFailed = errors.New("informer caches failed to sync")
 
 // newTypedFactory builds the shared informer factory every cluster-wide typed
 // cache comes from. The one construction site, so the cache transform can't
@@ -363,6 +375,14 @@ func (c *Cluster) Start(ctx context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
+	// A nil stopCh is Stop's "this cluster is dead" sentinel, the same one
+	// ensureKind/ensureDynamicKind/ensureHelmSecrets refuse on. Starting
+	// informers against it would hand every one of them a stop channel that
+	// never closes, and hand the health loop a nil channel to select on.
+	if c.stopCh == nil {
+		c.mu.Unlock()
+		return ErrClusterStopped
+	}
 	c.started = true
 	c.generation++
 
@@ -372,12 +392,19 @@ func (c *Cluster) Start(ctx context.Context) error {
 	c.registerTypedWatchLocked(KindPod, podScope, podFactory)
 	c.eagerKeys = []scopeKey{{KindNamespace, ""}, {KindNode, ""}, {KindPod, podScope}}
 
-	c.factory.Start(c.stopCh)
+	// Snapshot stopCh while the lock is still held. Every writer of the
+	// field (Stop, SwitchContext) holds c.mu, and the three uses below
+	// outlive this critical section — reading the field again after the
+	// Unlock is a data race, and one Stop wins by installing nil, which
+	// panics the health loop and hangs the cache wait forever.
+	stopCh := c.stopCh
+
+	c.factory.Start(stopCh)
 	if podScope != "" {
-		podFactory.Start(c.stopCh)
+		podFactory.Start(stopCh)
 	}
 	c.mu.Unlock()
-	go c.startHealthLoop(c.stopCh)
+	go c.startHealthLoop(stopCh)
 
 	// Wait on the eager informers by name rather than calling
 	// factory.WaitForCacheSync, which waits on whatever is started at the
@@ -388,19 +415,12 @@ func (c *Cluster) Start(ctx context.Context) error {
 	// No dynamic informer is waited on, because none is started here any
 	// more — discovery reads the API directly (refreshDiscovery) and the
 	// CRD informer starts only if the 14b CRDs list is opened.
-	var synced bool
-	done := make(chan struct{})
-	go func() {
-		synced = cache.WaitForCacheSync(c.stopCh, c.eagerHasSynced()...)
-		close(done)
-	}()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-done:
+	synced, err := waitForCacheSync(ctx, stopCh, c.eagerHasSynced()...)
+	if err != nil {
+		return err
 	}
 	if !synced {
-		return fmt.Errorf("informer caches failed to sync")
+		return ErrCacheSyncFailed
 	}
 	c.mu.Lock()
 	c.synced = true
@@ -420,6 +440,47 @@ func (c *Cluster) Start(ctx context.Context) error {
 // Namespace or Node cache (the common shape under a namespace-bound
 // identity) stops startup from ever completing, because it is a missing
 // capability, not a failed connection.
+// waitForCacheSync waits for synced to settle, returning early — and without
+// stranding a goroutine — if ctx is done or stopCh closes first.
+//
+// cache.WaitForCacheSync knows nothing about context: it returns when its
+// caches settle or when the stop channel it was given closes, and nothing
+// else. Handing it a cluster's own stopCh therefore left its goroutine blocked
+// past every cancelled connect, which is the *normal* path whenever
+// SwitchContext's or attemptReconnect's timeout expires against a slow
+// cluster — blocked until the whole cluster was torn down, still writing a
+// result nobody would read.
+//
+// So it gets a private stop channel instead, closed on whichever of ctx,
+// stopCh, or this function's own return comes first. Both goroutines below are
+// bounded by the call.
+func waitForCacheSync(ctx context.Context, stopCh <-chan struct{}, synced ...cache.InformerSynced) (bool, error) {
+	waitCh := make(chan struct{})
+	stopWaiting := sync.OnceFunc(func() { close(waitCh) })
+	defer stopWaiting()
+	go func() {
+		defer stopWaiting()
+		select {
+		case <-ctx.Done():
+		case <-stopCh:
+		case <-waitCh:
+		}
+	}()
+
+	// Buffered so the waiter can always deposit its result and exit, even
+	// once this function has already returned on the ctx branch.
+	done := make(chan bool, 1)
+	go func() {
+		done <- cache.WaitForCacheSync(waitCh, synced...)
+	}()
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case ok := <-done:
+		return ok, nil
+	}
+}
+
 func (c *Cluster) eagerHasSynced() []cache.InformerSynced {
 	c.mu.Lock()
 	keys := append([]scopeKey(nil), c.eagerKeys...)
