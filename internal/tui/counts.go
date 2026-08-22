@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -144,8 +145,14 @@ func fetchGotoCountsCmd(sess *Session, gen int) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), countFetchTimeout)
 		defer cancel()
 
-		sem := make(chan struct{}, countFetchConcurrency)
-		var wg sync.WaitGroup
+		// SetLimit blocks at g.Go, so this bounds goroutines and not just
+		// requests in flight. The hand-rolled semaphore it replaces was
+		// acquired *inside* the goroutine, which meant a cluster with a few
+		// hundred discovered CRDs spawned a few hundred goroutines the moment
+		// the palette opened — and queued ones ignored ctx, outliving
+		// countFetchTimeout instead of bailing.
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(countFetchConcurrency)
 		for _, kind := range kinds {
 			desc, ok := sess.Registry.Descriptor(kind)
 			if !ok {
@@ -158,19 +165,17 @@ func fetchGotoCountsCmd(sess *Session, gen int) tea.Cmd {
 			if _, fresh := sess.counts.get(kind, scope); fresh {
 				continue
 			}
-			wg.Add(1)
-			go func(kind kube.ResourceKind, scope string) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				n, err := counter.CountLive(ctx, kind, scope)
-				if err != nil {
-					return // leaves the count unknown, rendered as a dash
+			g.Go(func() error {
+				if n, err := counter.CountLive(gctx, kind, scope); err == nil {
+					sess.counts.put(kind, scope, n)
 				}
-				sess.counts.put(kind, scope, n)
-			}(kind, scope)
+				// A count that failed is simply unknown, rendered as a dash.
+				// It must not cancel its siblings, so no error ever leaves
+				// this task and g.Wait can only ever report nil.
+				return nil
+			})
 		}
-		wg.Wait()
+		_ = g.Wait()
 		return gotoCountsMsg{gen: gen}
 	}
 }

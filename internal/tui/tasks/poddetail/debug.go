@@ -103,14 +103,12 @@ func detectPodShellsCmd(namespace, podName string, containers []kube.ContainerIn
 		results := make([]podShellDetection, len(containers))
 		var wg sync.WaitGroup
 		for i, c := range containers {
-			wg.Add(1)
-			go func(i int, name string) {
-				defer wg.Done()
+			wg.Go(func() {
 				ctx, cancel := context.WithTimeout(context.Background(), shellProbeTimeout)
 				defer cancel()
-				shells, err := detector.DetectShells(ctx, namespace, podName, name)
-				results[i] = podShellDetection{container: name, shells: shells, err: err}
-			}(i, c.Name)
+				shells, err := detector.DetectShells(ctx, namespace, podName, c.Name)
+				results[i] = podShellDetection{container: c.Name, shells: shells, err: err}
+			})
 		}
 		wg.Wait()
 		return podShellsProbedMsg{namespace: namespace, podName: podName, containers: containers, results: results}

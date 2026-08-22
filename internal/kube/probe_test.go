@@ -3,7 +3,10 @@ package kube
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -28,25 +31,69 @@ func TestProbeContextsFansOutAllNames(t *testing.T) {
 	}
 }
 
+// TestProbeContextsRunsConcurrently asserts the fan-out is a fan-out.
+//
+// In a synctest bubble the clock is fake and advances only when every
+// goroutine is blocked, so a concurrent fan-out takes *exactly* one probe's
+// worth of time. Against the real clock this had to be written as "faster than
+// serial", which is a threshold that CI load can cross for reasons that have
+// nothing to do with the code.
 func TestProbeContextsRunsConcurrently(t *testing.T) {
-	t.Parallel()
-	names := []string{"a", "b", "c", "d"}
-	const perProbe = 40 * time.Millisecond
-	probe := func(_ context.Context, name string) (time.Duration, error) {
-		time.Sleep(perProbe)
-		return perProbe, nil
-	}
+	synctest.Test(t, func(t *testing.T) {
+		names := []string{"a", "b", "c", "d"}
+		const perProbe = 40 * time.Millisecond
+		probe := func(_ context.Context, name string) (time.Duration, error) {
+			time.Sleep(perProbe)
+			return perProbe, nil
+		}
 
-	start := time.Now()
-	for range probeContextsWith(context.Background(), names, probe) {
-	}
-	elapsed := time.Since(start)
+		start := time.Now()
+		for range probeContextsWith(context.Background(), names, probe) {
+		}
+		if elapsed := time.Since(start); elapsed != perProbe {
+			t.Fatalf("elapsed = %v, want exactly %v for a fan-out of %d", elapsed, perProbe, len(names))
+		}
+	})
+}
 
-	// Serial execution would take len(names)*perProbe (~160ms); concurrent
-	// execution should finish well under that.
-	if elapsed >= time.Duration(len(names))*perProbe {
-		t.Fatalf("elapsed = %v, expected concurrent fan-out to finish faster than serial %v", elapsed, time.Duration(len(names))*perProbe)
-	}
+// TestProbeContextsBoundsConcurrency pins the limit on the fan-out itself.
+//
+// Every probe builds its own rest.Config and does its own TLS handshake, so an
+// unbounded fan-out meant a large corporate kubeconfig opened one connection
+// per context the instant the palette was opened. Fake time makes the peak
+// exact: each batch starts together, sleeps together, and finishes together.
+func TestProbeContextsBoundsConcurrency(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		names := make([]string, 5*probeConcurrency)
+		for i := range names {
+			names[i] = fmt.Sprintf("ctx-%d", i)
+		}
+
+		var mu sync.Mutex
+		var inFlight, peak int
+		probe := func(_ context.Context, _ string) (time.Duration, error) {
+			mu.Lock()
+			inFlight++
+			peak = max(peak, inFlight)
+			mu.Unlock()
+			time.Sleep(time.Millisecond)
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+			return time.Millisecond, nil
+		}
+
+		var got int
+		for range probeContextsWith(context.Background(), names, probe) {
+			got++
+		}
+		if got != len(names) {
+			t.Fatalf("got %d results, want %d", got, len(names))
+		}
+		if peak > probeConcurrency {
+			t.Errorf("peak concurrency = %d, want at most %d", peak, probeConcurrency)
+		}
+	})
 }
 
 func TestProbeContextsPropagatesPerContextError(t *testing.T) {

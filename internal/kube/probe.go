@@ -2,8 +2,9 @@ package kube
 
 import (
 	"context"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ProbeResult is one kubeconfig context's reachability check.
@@ -20,6 +21,11 @@ type ProbeResult struct {
 // whereas a tight deadline costs a *wrong* one — an "unreachable" label on a
 // context that works fine.
 const probeTimeout = 6 * time.Second
+
+// probeConcurrency bounds how many contexts are probed at once. Each probe is
+// a fresh client plus a TLS handshake, and a large corporate kubeconfig is the
+// case this exists for.
+const probeConcurrency = 8
 
 // ProbeContexts probes every named kubeconfig context concurrently — for
 // each, build a rest.Config (no caching; this is a one-shot check, not a
@@ -39,17 +45,22 @@ type probeFunc func(ctx context.Context, name string) (time.Duration, error)
 
 func probeContextsWith(ctx context.Context, names []string, probe probeFunc) <-chan ProbeResult {
 	out := make(chan ProbeResult, len(names))
-	var wg sync.WaitGroup
+	// Bounded: every probe past the first builds its own rest.Config and does
+	// its own TLS handshake, so an unbounded fan-out meant a 50-context
+	// corporate kubeconfig opened 50 concurrent handshakes the instant the
+	// context palette was opened. SetLimit blocks at g.Go, so the bound is on
+	// goroutines, not just on requests in flight.
+	g := new(errgroup.Group)
+	g.SetLimit(probeConcurrency)
 	for _, name := range names {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
+		g.Go(func() error {
 			latency, err := probe(ctx, name)
 			out <- ProbeResult{Name: name, Latency: latency, Err: err}
-		}(name)
+			return nil
+		})
 	}
 	go func() {
-		wg.Wait()
+		_ = g.Wait() // every probe reports through out, never through error
 		close(out)
 	}()
 	return out
