@@ -147,7 +147,7 @@ func (m Model) prefetchAuxKinds() tea.Cmd {
 	lister, namespace := m.lister, m.namespace
 	return func() tea.Msg {
 		for _, kind := range kinds {
-			//nolint:errcheck // warming a cache; a failure just means the read happens later
+			// Warming a cache; a failure just means the read happens later.
 			_, _ = lister.ListRaw(context.Background(), kind, namespace)
 		}
 		return nil

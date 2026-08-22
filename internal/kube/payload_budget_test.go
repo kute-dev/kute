@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -245,7 +244,7 @@ func TestConnectPayloadStaysWithinBudget(t *testing.T) {
 
 	c, cs, dyn := newBudgetCluster(crds, objs...)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	waitFor(t, "the eager caches to fill", func() bool { return c.Synced() })
@@ -289,10 +288,10 @@ func TestHelmReleaseReadPaysForOneNamespace(t *testing.T) {
 
 	scoped, csScoped, _ := newBudgetCluster(nil, objs...)
 	defer scoped.Stop()
-	if err := scoped.Start(context.Background()); err != nil {
+	if err := scoped.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if _, err := scoped.ListHelmReleaseSecrets(context.Background(), "prod"); err != nil {
+	if _, err := scoped.ListHelmReleaseSecrets(t.Context(), "prod"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the prod release cache to fill", func() bool { return scoped.KindSynced(KindHelmRelease, "prod") })
@@ -302,10 +301,10 @@ func TestHelmReleaseReadPaysForOneNamespace(t *testing.T) {
 	// namespace, and is the price the scoped read is being compared against.
 	wide, csWide, _ := newBudgetCluster(nil, objs...)
 	defer wide.Stop()
-	if err := wide.Start(context.Background()); err != nil {
+	if err := wide.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if _, err := wide.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
+	if _, err := wide.ListHelmReleaseSecrets(t.Context(), ""); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the cluster-wide release cache to fill", func() bool { return wide.KindSynced(KindHelmRelease, "") })
@@ -346,12 +345,12 @@ func TestPodCacheDropsManagedFields(t *testing.T) {
 
 	c, cs, _ := newBudgetCluster(nil, objs...)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	waitFor(t, "the pod cache to fill", func() bool { return c.KindSynced(KindPod, "") })
 
-	cached, err := c.ListRaw(context.Background(), KindPod, "default")
+	cached, err := c.ListRaw(t.Context(), KindPod, "default")
 	if err != nil {
 		t.Fatalf("ListRaw: %v", err)
 	}

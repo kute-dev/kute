@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -55,7 +54,7 @@ func TestResolveServiceBackend(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state := ResolveServiceBackend(context.Background(), lister, "default", tt.service)
+			state := ResolveServiceBackend(t.Context(), lister, "default", tt.service)
 			if state.Exists != tt.wantExists {
 				t.Fatalf("Exists = %v, want %v", state.Exists, tt.wantExists)
 			}
@@ -78,7 +77,7 @@ func TestResolveServiceBackendZeroReady(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindService: {serviceWithSelector("ghost-svc", "default", sel)},
 	}}
-	state := ResolveServiceBackend(context.Background(), lister, "default", "ghost-svc")
+	state := ResolveServiceBackend(t.Context(), lister, "default", "ghost-svc")
 	if !state.Exists || state.Ready != 0 || state.Total != 0 {
 		t.Fatalf("unexpected state: %+v", state)
 	}
@@ -89,7 +88,7 @@ func TestResolveServiceBackendZeroReady(t *testing.T) {
 }
 
 func TestResolveServiceBackendNilLister(t *testing.T) {
-	state := ResolveServiceBackend(context.Background(), nil, "default", "web")
+	state := ResolveServiceBackend(t.Context(), nil, "default", "web")
 	if state.Exists {
 		t.Fatalf("expected zero-value state for a nil lister, got %+v", state)
 	}

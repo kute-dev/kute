@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -85,7 +84,7 @@ func TestListRawReadsThroughTheTable(t *testing.T) {
 	c.factory.Start(c.stopCh)
 	c.factory.WaitForCacheSync(c.stopCh)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for kind := range typedKinds {
 		if _, err := c.ListRaw(ctx, kind, ""); err != nil {
 			t.Errorf("ListRaw(%s, all namespaces): %v", kind, err)
@@ -110,7 +109,7 @@ func TestListRawReadsThroughTheTable(t *testing.T) {
 func TestListRawUnknownKindErrors(t *testing.T) {
 	t.Parallel()
 	c := &Cluster{}
-	if _, err := c.ListRaw(context.Background(), ResourceKind("Nonexistent"), ""); err == nil {
+	if _, err := c.ListRaw(t.Context(), ResourceKind("Nonexistent"), ""); err == nil {
 		t.Fatal("expected an error for a kind with no informer, got nil")
 	}
 }
@@ -130,7 +129,7 @@ func TestListRawIsRaceFreeAgainstFactorySwap(t *testing.T) {
 	}
 	defer close(c.stopCh)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 

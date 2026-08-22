@@ -50,7 +50,7 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 	// The dynamic factory takes no transform option, so set it per informer
 	// — which must happen before it starts. Same reasoning as the typed
 	// factory's: managedFields is bookkeeping nothing here reads.
-	//nolint:errcheck // best-effort: a failure just means this cache keeps managedFields
+	// Best-effort: a failure just means this cache keeps managedFields.
 	_ = informer.Informer().SetTransform(stripManagedFields)
 	k := kind
 	gen := c.generation
@@ -58,13 +58,14 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 	// (registerTypedWatchLocked): a discovered kind can be forbidden, or
 	// its initial LIST can keep failing, and without this the only symptom
 	// is a screen that never leaves its spinner.
-	//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
+	// Best-effort: a failed registration just means no health signal from
+	// this informer.
 	// recordWatchError re-checks gen atomically with both the state write
 	// and the health.onWatchError call — see its doc comment.
 	_ = informer.Informer().SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		c.recordWatchError(gen, k, scope, err)
 	})
-	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
+	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { c.notify(gen, k) },
 		UpdateFunc: func(any, any) { c.notify(gen, k) },

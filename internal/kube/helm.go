@@ -534,7 +534,7 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	)
 	informer := factory.Core().V1().Secrets().Informer()
 	gen := c.generation
-	//nolint:errcheck // best-effort: a failed registration just means no health signal here
+	// Best-effort: a failed registration just means no health signal here.
 	// Runs later, on the reflector's goroutine — so it takes the lock
 	// itself rather than assuming the one held here. recordWatchError
 	// re-checks gen atomically with both the state write and the
@@ -542,7 +542,7 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		c.recordWatchError(gen, KindHelmRelease, namespace, err)
 	})
-	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
+	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { c.notify(gen, KindHelmRelease) },
 		UpdateFunc: func(any, any) { c.notify(gen, KindHelmRelease) },

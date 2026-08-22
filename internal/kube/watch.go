@@ -297,7 +297,8 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 	}
 	informer := tk.informer(f)
 	gen := c.generation
-	//nolint:errcheck // best-effort: a failed registration just means no health signal from this informer
+	// Best-effort: a failed registration just means no health signal from
+	// this informer.
 	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		// recordWatchError re-checks gen itself, atomically with both the
 		// kindFailed/kindStalled write and the health.onWatchError call —
@@ -306,7 +307,7 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 		// context's state, health included.
 		c.recordWatchError(gen, kind, scope, err)
 	})
-	//nolint:errcheck // handler registration errors are non-fatal for a read-only UI
+	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { c.notify(gen, kind) },
 		UpdateFunc: func(any, any) { c.notify(gen, kind) },

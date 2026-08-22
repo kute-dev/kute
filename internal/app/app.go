@@ -1604,7 +1604,7 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 	if err != nil {
 		return err
 	}
-	defer sink.Close() //nolint:errcheck // a close error at exit helps nobody
+	defer sink.Close() // a close error at exit helps nobody
 	configureKlog(sink)
 	defer installPanicHandler(sink)()
 

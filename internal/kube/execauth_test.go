@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,7 +99,7 @@ func (a *authRecorder) seen() []string {
 
 func livez(t *testing.T, c Client) error {
 	t.Helper()
-	return c.Interface.Discovery().RESTClient().Get().AbsPath("/livez").Do(context.Background()).Error()
+	return c.Interface.Discovery().RESTClient().Get().AbsPath("/livez").Do(t.Context()).Error()
 }
 
 // The fix itself: every exec provider kute builds a client for is told that

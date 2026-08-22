@@ -97,7 +97,7 @@ func TestStreamContainerEmitsLinesThenReconnectsWithBoundary(t *testing.T) {
 	model.streamer = streamer
 	model.pod.Restarts = 3
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	var entries []LogEntry
 	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
 		entries = append(entries, e)
@@ -146,7 +146,7 @@ func TestStreamContainerFallsBackToRecentHistoryWhenSinceWindowIsEmpty(t *testin
 	model := testModel()
 	model.streamer = streamer
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var entries []LogEntry
 	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
@@ -180,7 +180,7 @@ func TestStreamContainerStopsAfterEmptyRecentHistoryFallback(t *testing.T) {
 	streamer := &fakeStreamer{connects: map[string][]string{"app": {"", ""}}}
 	model := testModel()
 	model.streamer = streamer
-	if err := model.streamContainer(context.Background(), "app", func(LogEntry) bool { return true }); err != nil {
+	if err := model.streamContainer(t.Context(), "app", func(LogEntry) bool { return true }); err != nil {
 		t.Fatalf("streamContainer error = %v", err)
 	}
 	if len(streamer.requests) != 2 {
@@ -206,7 +206,7 @@ func TestStreamContainerWaitsForActualRestartBeforeReconnecting(t *testing.T) {
 	model.streamer = streamer
 	model.lister = &fakeRestartLister{podName: "api", container: "app", restarts: 3}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(700*time.Millisecond, cancel) // let one reconnectDelay tick pass with no restart
 
 	var entries []LogEntry
@@ -239,7 +239,7 @@ func TestStreamContainerReconnectsAfterActualRestartDetected(t *testing.T) {
 	model.streamer = streamer
 	model.lister = lister
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	var entries []LogEntry
 	err := model.streamContainer(ctx, "app", func(e LogEntry) bool {
 		entries = append(entries, e)
@@ -273,7 +273,7 @@ func TestStreamContainerStopsOnContextCancel(t *testing.T) {
 	model := testModel()
 	model.streamer = streamer
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	err := model.streamContainer(ctx, "app", func(LogEntry) bool { return true })
 	if err != nil {
@@ -301,7 +301,7 @@ func TestStreamContainerStopsOnUnretrievableLogsLine(t *testing.T) {
 	model.streamer = streamer
 
 	var entries []LogEntry
-	err := model.streamContainer(context.Background(), "app", func(e LogEntry) bool {
+	err := model.streamContainer(t.Context(), "app", func(e LogEntry) bool {
 		entries = append(entries, e)
 		return true
 	})
@@ -321,7 +321,7 @@ func TestStreamContainerReturnsConnectError(t *testing.T) {
 
 	model := testModel()
 	model.streamer = &fakeStreamer{err: errors.New("boom")}
-	err := model.streamContainer(context.Background(), "app", func(LogEntry) bool { return true })
+	err := model.streamContainer(t.Context(), "app", func(LogEntry) bool { return true })
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("err = %v", err)
 	}
@@ -332,7 +332,7 @@ func TestCurrentRestartCountFallsBackWithoutLister(t *testing.T) {
 
 	model := testModel()
 	model.pod.Restarts = 7
-	if got := model.currentRestartCount(context.Background()); got != 7 {
+	if got := model.currentRestartCount(t.Context()); got != 7 {
 		t.Fatalf("restart count = %d, want 7", got)
 	}
 }

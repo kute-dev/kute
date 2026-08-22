@@ -34,7 +34,7 @@ func TestStartStopConcurrentlyIsRaceFree(t *testing.T) {
 			// refuses the dead cluster; or Stop lands mid-connect and cuts the
 			// cache wait short. Anything else — a panic, a nil stop channel
 			// reaching an informer, a hang — is the bug.
-			err := c.Start(context.Background())
+			err := c.Start(t.Context())
 			if err != nil && !errors.Is(err, ErrClusterStopped) && !errors.Is(err, ErrCacheSyncFailed) {
 				t.Errorf("Start: %v", err)
 			}
@@ -71,7 +71,7 @@ func TestWaitForCacheSyncReleasesOnContextCancel(t *testing.T) {
 		// and hide the leak.
 		stopCh := make(chan struct{})
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		synced, err := waitForCacheSync(ctx, stopCh, neverSyncs)
@@ -93,7 +93,7 @@ func TestWaitForCacheSyncReleasesOnStopChannel(t *testing.T) {
 		stopCh := make(chan struct{})
 		close(stopCh)
 
-		synced, err := waitForCacheSync(context.Background(), stopCh, neverSyncs)
+		synced, err := waitForCacheSync(t.Context(), stopCh, neverSyncs)
 		if err != nil {
 			t.Fatalf("waitForCacheSync err = %v, want nil", err)
 		}

@@ -1,7 +1,6 @@
 package fake
 
 import (
-	"context"
 	"net"
 	"strconv"
 	"testing"
@@ -18,7 +17,7 @@ func TestPodResolverResolvesPodDirectly(t *testing.T) {
 	t.Parallel()
 	c := New("default", "test")
 	r := NewPodResolver(c)
-	pod, err := r.ResolveForwardPod(context.Background(), kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "web-1"})
+	pod, err := r.ResolveForwardPod(t.Context(), kube.ForwardTarget{Kind: kube.KindPod, Namespace: "default", Name: "web-1"})
 	if err != nil || pod != "web-1" {
 		t.Fatalf("ResolveForwardPod(pod) = %q, %v", pod, err)
 	}
@@ -37,7 +36,7 @@ func TestPodResolverResolvesServiceSelector(t *testing.T) {
 	)
 
 	r := NewPodResolver(c)
-	pod, err := r.ResolveForwardPod(context.Background(), kube.ForwardTarget{Kind: kube.KindService, Namespace: "default", Name: "web"})
+	pod, err := r.ResolveForwardPod(t.Context(), kube.ForwardTarget{Kind: kube.KindService, Namespace: "default", Name: "web"})
 	if err != nil || pod != "web-2" {
 		t.Fatalf("ResolveForwardPod(service) = %q, %v, want web-2", pod, err)
 	}
@@ -55,7 +54,7 @@ func TestPodResolverResolvesDeploymentSelector(t *testing.T) {
 	)
 
 	r := NewPodResolver(c)
-	pod, err := r.ResolveForwardPod(context.Background(), kube.ForwardTarget{Kind: kube.KindDeployment, Namespace: "default", Name: "api"})
+	pod, err := r.ResolveForwardPod(t.Context(), kube.ForwardTarget{Kind: kube.KindDeployment, Namespace: "default", Name: "api"})
 	if err != nil || pod != "api-1" {
 		t.Fatalf("ResolveForwardPod(deployment) = %q, %v, want api-1", pod, err)
 	}
@@ -65,7 +64,7 @@ func TestPodResolverServiceNotFound(t *testing.T) {
 	t.Parallel()
 	c := New("default", "test")
 	r := NewPodResolver(c)
-	if _, err := r.ResolveForwardPod(context.Background(), kube.ForwardTarget{Kind: kube.KindService, Namespace: "default", Name: "missing"}); err == nil {
+	if _, err := r.ResolveForwardPod(t.Context(), kube.ForwardTarget{Kind: kube.KindService, Namespace: "default", Name: "missing"}); err == nil {
 		t.Fatal("expected an error resolving a missing service")
 	}
 }

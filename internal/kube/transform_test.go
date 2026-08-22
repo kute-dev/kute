@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -90,11 +89,11 @@ func TestStripManagedFieldsIsIdempotent(t *testing.T) {
 func TestInformerCacheStripsManagedFields(t *testing.T) {
 	c, _ := newLazyTestCluster(podWithManagedFields())
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	objs, err := c.ListRaw(context.Background(), KindPod, "default")
+	objs, err := c.ListRaw(t.Context(), KindPod, "default")
 	if err != nil {
 		t.Fatalf("ListRaw: %v", err)
 	}

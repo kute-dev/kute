@@ -99,7 +99,7 @@ func TestCrashCatcherRecordsWhereTheUserWas(t *testing.T) {
 	var model tea.Model = newCrashCatcher(root, sink, live)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 
-	path := catchPanic(t, func() { model.Update(tea.KeyPressMsg{}) }) //nolint:errcheck // panics
+	path := catchPanic(t, func() { model.Update(tea.KeyPressMsg{}) }) // panics
 	if path != "boom in update" {
 		t.Fatalf("recovered %q, want the original panic value to keep travelling", path)
 	}
@@ -177,7 +177,7 @@ func TestCrashCatcherLogsConnectionChanges(t *testing.T) {
 
 	var model tea.Model = newCrashCatcher(root, sink, live)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
-	model.Update(tea.WindowSizeMsg{Width: 120, Height: 36}) //nolint:errcheck // same state again
+	model.Update(tea.WindowSizeMsg{Width: 120, Height: 36}) // same state again
 
 	var logged []string
 	for _, line := range sink.Recent() {
@@ -233,7 +233,10 @@ func TestReportProgramCrashReusesTheRecordedReport(t *testing.T) {
 	captureCrashOut(t)
 	first := sink.Report(diag.Crash{Cause: "update", Value: "boom"})
 
-	reportProgramCrash(sink, errors.Join(tea.ErrProgramKilled, tea.ErrProgramPanic)) //nolint:errcheck
+	// The returned path is deliberately ignored: this test asserts on
+	// LastReport() precisely because the call must *not* produce a new one.
+	//nolint:errcheck // the assertion below is about LastReport, not this return
+	reportProgramCrash(sink, errors.Join(tea.ErrProgramKilled, tea.ErrProgramPanic))
 	if sink.LastReport() != first {
 		t.Errorf("LastReport() = %q, want the already-written %q", sink.LastReport(), first)
 	}
@@ -270,7 +273,7 @@ func TestCrashTestEnvCrashesOnPurpose(t *testing.T) {
 	sink := newTestSink(t, live)
 	model := newCrashCatcher(stubRoot{sess: sessionAt("dev", "default", kube.KindPod)}, sink, live)
 
-	got := catchPanic(t, func() { model.Update(tea.KeyPressMsg{}) }) //nolint:errcheck
+	got := catchPanic(t, func() { model.Update(tea.KeyPressMsg{}) })
 	if !strings.Contains(got, crashTestEnv) {
 		t.Errorf("panic value = %q, want it to name %s", got, crashTestEnv)
 	}

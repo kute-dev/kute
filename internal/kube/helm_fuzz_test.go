@@ -51,7 +51,7 @@ func FuzzDecodeHelmReleases(f *testing.F) {
 	f.Add([]byte(base64.StdEncoding.EncodeToString(gzipped([]byte(
 		`{"name":"x","namespace":"","chart":{"metadata":null},"config":{"a":[1,{"b":null}]}}`)))))
 	// A gzip header with a truncated body — a half-written revision Secret.
-	f.Add([]byte(base64.StdEncoding.EncodeToString(gzipped([]byte(`{"name":"x"}`))[:10]))) //nolint:gosec // seed only
+	f.Add([]byte(base64.StdEncoding.EncodeToString(gzipped([]byte(`{"name":"x"}`))[:10])))
 
 	f.Fuzz(func(t *testing.T, payload []byte) {
 		secret := &corev1.Secret{

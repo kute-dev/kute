@@ -1,7 +1,6 @@
 package fake
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -31,10 +30,10 @@ func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
 		}}}},
 	})
 
-	if err := c.SetImage(context.Background(), kube.KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
-	objs, _ := c.ListRaw(context.Background(), kube.KindDeployment, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindDeployment, "default")
 	deploy := objs[0].(*appsv1.Deployment)
 	if deploy.Spec.Template.Spec.Containers[0].Image != "app:2.0" {
 		t.Fatalf("app image = %q, want app:2.0", deploy.Spec.Template.Spec.Containers[0].Image)
@@ -51,7 +50,7 @@ func TestSetImageRejectsUnknownContainer(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}}}},
 	})
-	if err := c.SetImage(context.Background(), kube.KindDeployment, "default", "api", "missing", "app:2.0"); err == nil {
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "missing", "app:2.0"); err == nil {
 		t.Fatalf("expected an error for an unknown container name")
 	}
 }
@@ -94,17 +93,17 @@ func TestRolloutUndoPatchesTemplateAndAppendsNewRevision(t *testing.T) {
 		},
 	)
 
-	if err := c.RolloutUndo(context.Background(), "default", "api", 4); err != nil {
+	if err := c.RolloutUndo(t.Context(), "default", "api", 4); err != nil {
 		t.Fatalf("RolloutUndo: %v", err)
 	}
 
-	deployObjs, _ := c.ListRaw(context.Background(), kube.KindDeployment, "default")
+	deployObjs, _ := c.ListRaw(t.Context(), kube.KindDeployment, "default")
 	deploy := deployObjs[0].(*appsv1.Deployment)
 	if deploy.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
 		t.Fatalf("expected the deployment's template patched to revision 4's image, got %q", deploy.Spec.Template.Spec.Containers[0].Image)
 	}
 
-	rsObjs, _ := c.ListRaw(context.Background(), kube.KindReplicaSet, "default")
+	rsObjs, _ := c.ListRaw(t.Context(), kube.KindReplicaSet, "default")
 	if len(rsObjs) != 3 {
 		t.Fatalf("expected a new synthesized ReplicaSet appended (3 total), got %d", len(rsObjs))
 	}
@@ -126,7 +125,7 @@ func TestRolloutUndoPatchesTemplateAndAppendsNewRevision(t *testing.T) {
 func TestRolloutUndoRejectsUnknownDeployment(t *testing.T) {
 	t.Parallel()
 	c := New("default", "dev")
-	if err := c.RolloutUndo(context.Background(), "default", "missing", 1); err == nil {
+	if err := c.RolloutUndo(t.Context(), "default", "missing", 1); err == nil {
 		t.Fatalf("expected an error for an unknown deployment")
 	}
 }
@@ -139,11 +138,11 @@ func TestListRawFiltersByNamespace(t *testing.T) {
 		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "other"}},
 	)
 
-	all, err := c.ListRaw(context.Background(), kube.KindPod, "")
+	all, err := c.ListRaw(t.Context(), kube.KindPod, "")
 	if err != nil || len(all) != 2 {
 		t.Fatalf("ListRaw(all) = %v, %v, want 2 objects", all, err)
 	}
-	scoped, err := c.ListRaw(context.Background(), kube.KindPod, "default")
+	scoped, err := c.ListRaw(t.Context(), kube.KindPod, "default")
 	if err != nil || len(scoped) != 1 {
 		t.Fatalf("ListRaw(default) = %v, %v, want 1 object", scoped, err)
 	}
@@ -154,10 +153,10 @@ func TestDeleteResourceRemovesAndNotifies(t *testing.T) {
 	c := New("default", "dev")
 	c.Seed(kube.KindPod, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}})
 
-	if err := c.DeleteResource(context.Background(), kube.KindPod, "default", "a"); err != nil {
+	if err := c.DeleteResource(t.Context(), kube.KindPod, "default", "a"); err != nil {
 		t.Fatalf("DeleteResource: %v", err)
 	}
-	remaining, _ := c.ListRaw(context.Background(), kube.KindPod, "default")
+	remaining, _ := c.ListRaw(t.Context(), kube.KindPod, "default")
 	if len(remaining) != 0 {
 		t.Fatalf("expected pod removed, got %d remaining", len(remaining))
 	}
@@ -174,7 +173,7 @@ func TestDeleteResourceRemovesAndNotifies(t *testing.T) {
 func TestDeleteResourceMissingReturnsError(t *testing.T) {
 	t.Parallel()
 	c := New("default", "dev")
-	if err := c.DeleteResource(context.Background(), kube.KindPod, "default", "missing"); err == nil {
+	if err := c.DeleteResource(t.Context(), kube.KindPod, "default", "missing"); err == nil {
 		t.Fatalf("expected an error deleting a nonexistent pod")
 	}
 }
@@ -191,14 +190,14 @@ func TestCordonAndDrainSkipDaemonSetAndMirrorPods(t *testing.T) {
 		},
 	)
 
-	evicted, err := c.Drain(context.Background(), "node-1")
+	evicted, err := c.Drain(t.Context(), "node-1")
 	if err != nil {
 		t.Fatalf("Drain: %v", err)
 	}
 	if evicted != 1 {
 		t.Fatalf("evicted = %d, want 1", evicted)
 	}
-	remaining, _ := c.ListRaw(context.Background(), kube.KindPod, "default")
+	remaining, _ := c.ListRaw(t.Context(), kube.KindPod, "default")
 	if len(remaining) != 1 {
 		t.Fatalf("expected the DaemonSet pod to survive, got %d pods remaining", len(remaining))
 	}
@@ -227,11 +226,11 @@ func TestTriggerCronJobStampsManualAnnotationsAndNotifies(t *testing.T) {
 	})
 
 	at := time.Date(2026, 3, 4, 2, 30, 0, 0, time.UTC)
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "operator@example.com", at); err != nil {
+	if err := c.TriggerCronJob(t.Context(), "default", "nightly", "nightly-manual-0230", "operator@example.com", at); err != nil {
 		t.Fatalf("TriggerCronJob: %v", err)
 	}
 
-	objs, _ := c.ListRaw(context.Background(), kube.KindJob, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindJob, "default")
 	if len(objs) != 1 {
 		t.Fatalf("expected one triggered Job, got %d", len(objs))
 	}
@@ -290,10 +289,10 @@ func TestTriggerCronJobDeepCopiesTemplate(t *testing.T) {
 		},
 	})
 
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "op", time.Now()); err != nil {
+	if err := c.TriggerCronJob(t.Context(), "default", "nightly", "nightly-manual-0230", "op", time.Now()); err != nil {
 		t.Fatalf("TriggerCronJob: %v", err)
 	}
-	objs, _ := c.ListRaw(context.Background(), kube.KindJob, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindJob, "default")
 	job := objs[0].(*batchv1.Job)
 
 	// Mutate the created Job's own copies...
@@ -302,7 +301,7 @@ func TestTriggerCronJobDeepCopiesTemplate(t *testing.T) {
 	job.Spec.Template.Spec.Containers[0].Env[0].Value = "mutated"
 
 	// ...and confirm the source CronJob's own template is untouched.
-	cjObjs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	cjObjs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	tpl := cjObjs[0].(*batchv1.CronJob).Spec.JobTemplate
 	if tpl.Labels["app"] != "batch" {
 		t.Errorf("source template Labels mutated through the created Job's own copy: %+v", tpl.Labels)
@@ -324,7 +323,7 @@ func TestTriggerCronJobRejectsDuplicateName(t *testing.T) {
 	c.Seed(kube.KindCronJob, &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
 	c.Seed(kube.KindJob, &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-manual-0230", Namespace: "default"}})
 
-	err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0230", "op", time.Now())
+	err := c.TriggerCronJob(t.Context(), "default", "nightly", "nightly-manual-0230", "op", time.Now())
 	if err == nil {
 		t.Fatal("expected an error for a name already taken")
 	}
@@ -344,10 +343,10 @@ func TestSetCronJobSuspendStampsAndClearsAnnotations(t *testing.T) {
 	})
 
 	at := time.Date(2026, 5, 1, 9, 30, 0, 0, time.UTC)
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "1", 3, at); err != nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", true, "1", 3, at); err != nil {
 		t.Fatalf("SetCronJobSuspend(true): %v", err)
 	}
-	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	cj := objs[0].(*batchv1.CronJob)
 	if cj.Spec.Suspend == nil || !*cj.Spec.Suspend {
 		t.Fatalf("Spec.Suspend = %v, want true", cj.Spec.Suspend)
@@ -366,10 +365,10 @@ func TestSetCronJobSuspendStampsAndClearsAnnotations(t *testing.T) {
 		t.Errorf("expected resourceVersion bumped past the original %q", "1")
 	}
 
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", false, suspendedRV, 4, time.Time{}); err != nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", false, suspendedRV, 4, time.Time{}); err != nil {
 		t.Fatalf("SetCronJobSuspend(false): %v", err)
 	}
-	objs, _ = c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	objs, _ = c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	cj = objs[0].(*batchv1.CronJob)
 	if cj.Spec.Suspend == nil || *cj.Spec.Suspend {
 		t.Fatalf("Spec.Suspend after resume = %v, want false", cj.Spec.Suspend)
@@ -395,14 +394,14 @@ func TestSetCronJobSuspendConflictsOnStaleResourceVersion(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5", Generation: 1},
 	})
 
-	err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "stale", 1, time.Now())
+	err := c.SetCronJobSuspend(t.Context(), "default", "nightly", true, "stale", 1, time.Now())
 	if err == nil {
 		t.Fatal("expected an error for a stale resourceVersion")
 	}
 	if !apierrors.IsConflict(err) {
 		t.Fatalf("expected apierrors.IsConflict(err), got %v", err)
 	}
-	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	cj := objs[0].(*batchv1.CronJob)
 	if cj.Spec.Suspend != nil {
 		t.Errorf("expected Spec.Suspend untouched after a conflict, got %v", cj.Spec.Suspend)
@@ -425,7 +424,7 @@ func TestSetCronJobScheduleConflictsAgainstFakeCluster(t *testing.T) {
 		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
 	})
 
-	_, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+	_, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", kube.CronJobScheduleEdit{
 		Schedule: "*/15 * * * *", ResourceVersion: "stale",
 	})
 	if err == nil {
@@ -434,7 +433,7 @@ func TestSetCronJobScheduleConflictsAgainstFakeCluster(t *testing.T) {
 	if !apierrors.IsConflict(err) {
 		t.Fatalf("expected apierrors.IsConflict(err), got %v", err)
 	}
-	objs, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	objs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	cj := objs[0].(*batchv1.CronJob)
 	if cj.Spec.Schedule != "0 2 * * *" {
 		t.Errorf("expected Spec.Schedule untouched after a conflict, got %q", cj.Spec.Schedule)
@@ -455,7 +454,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	})
 
 	tz := "America/New_York"
-	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+	result, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", kube.CronJobScheduleEdit{
 		Schedule: "0 2 * * *", TimeZone: &tz, ResourceVersion: "1",
 	})
 	if err != nil {
@@ -475,7 +474,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 
 	// A nil TimeZone (schedule-only edit) must never touch the existing
 	// value.
-	result2, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+	result2, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", kube.CronJobScheduleEdit{
 		Schedule: "*/30 * * * *", ResourceVersion: result.ResourceVersion,
 	})
 	if err != nil {
@@ -487,7 +486,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 
 	// An explicit clear removes it.
 	emptyTZ := ""
-	result3, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", kube.CronJobScheduleEdit{
+	result3, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", kube.CronJobScheduleEdit{
 		Schedule: "*/30 * * * *", TimeZone: &emptyTZ, ResourceVersion: result2.ResourceVersion,
 	})
 	if err != nil {
@@ -508,7 +507,7 @@ func TestGetYAMLStripsManagedFields(t *testing.T) {
 		},
 	})
 
-	yaml, rv, err := c.GetYAML(context.Background(), kube.KindPod, "default", "api")
+	yaml, rv, err := c.GetYAML(t.Context(), kube.KindPod, "default", "api")
 	if err != nil {
 		t.Fatalf("GetYAML: %v", err)
 	}
@@ -538,7 +537,7 @@ func TestObjectEventsFiltersByInvolvedObject(t *testing.T) {
 		},
 	)
 
-	got, err := c.ObjectEvents(context.Background(), "default", kube.KindPod, "api")
+	got, err := c.ObjectEvents(t.Context(), "default", kube.KindPod, "api")
 	if err != nil {
 		t.Fatalf("ObjectEvents: %v", err)
 	}
@@ -557,14 +556,14 @@ func TestSwitchNamespaceAndContext(t *testing.T) {
 		t.Fatalf("CurrentNamespace = %q, want kube-system", c.CurrentNamespace())
 	}
 
-	if err := c.SwitchContext(context.Background(), "prod"); err != nil {
+	if err := c.SwitchContext(t.Context(), "prod"); err != nil {
 		t.Fatalf("SwitchContext: %v", err)
 	}
 	if c.CurrentContext() != "prod" || c.CurrentNamespace() != "prod-ns" {
 		t.Fatalf("after SwitchContext: context=%q namespace=%q, want prod/prod-ns", c.CurrentContext(), c.CurrentNamespace())
 	}
 
-	if err := c.SwitchContext(context.Background(), "does-not-exist"); err == nil {
+	if err := c.SwitchContext(t.Context(), "does-not-exist"); err == nil {
 		t.Fatalf("expected an error switching to an unknown context")
 	}
 }
@@ -574,7 +573,7 @@ func TestStreamPodLogsReplaysSeededLines(t *testing.T) {
 	c := New("default", "dev")
 	c.SeedLogs("default", "api", []string{"line one", "line two"})
 
-	rc, err := c.StreamPodLogs(context.Background(), kube.LogStreamRequest{Namespace: "default", PodName: "api"})
+	rc, err := c.StreamPodLogs(t.Context(), kube.LogStreamRequest{Namespace: "default", PodName: "api"})
 	if err != nil {
 		t.Fatalf("StreamPodLogs: %v", err)
 	}
@@ -608,7 +607,7 @@ func TestSetConnStateEmitsOnChannel(t *testing.T) {
 func TestNewDemoIsFeatureComplete(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	pods, err := c.ListRaw(ctx, kube.KindPod, "")
 	if err != nil || len(pods) != 31 {
@@ -666,7 +665,7 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 func TestNewDemoCoversEveryCronJobOutcome(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cronJobs, err := c.ListRaw(ctx, kube.KindCronJob, "")
 	if err != nil || len(cronJobs) != 5 {
@@ -773,7 +772,7 @@ func TestNewDemoCoversEveryCronJobOutcome(t *testing.T) {
 func TestPodAndNodeMetricsAreDeterministicNotNA(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	first, err := c.PodMetricsByNamespace(ctx, "default")
 	if err != nil {
@@ -856,7 +855,7 @@ var _ kube.Mutator = (*Cluster)(nil)
 func TestDemoSeedsFluxKinds(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for kind, wantMin := range map[kube.ResourceKind]int{
 		"Kustomization":          5,
@@ -923,7 +922,7 @@ func TestDemoSeedsFluxKinds(t *testing.T) {
 func TestDemoFluxEventsCarryTheRevisionAnnotation(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	events, err := c.NamespaceEvents(context.Background(), "flux-system")
+	events, err := c.NamespaceEvents(t.Context(), "flux-system")
 	if err != nil {
 		t.Fatalf("NamespaceEvents: %v", err)
 	}

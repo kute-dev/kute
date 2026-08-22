@@ -23,6 +23,23 @@ linters:
     - exhaustive
     - copyloopvar
     - perfsprint
+    # nolintlint keeps the suppressions honest. Two had already rotted before
+    # it was enabled: one naming a linter that is not in this list at all (so
+    # it suppressed nothing), and one with no reason attached.
+    - nolintlint
+    # usetesting flags context.Background()/TODO() in tests, where t.Context()
+    # is cancelled at cleanup and takes the goroutines with it.
+    - usetesting
+
+    # Deliberately *not* enabled: noctx. It was tried, and every one of its
+    # seven findings here was a suppression waiting to happen — the three
+    # kubectl spawns in debug.go are interactive tty handoffs (tea.ExecProcess
+    # suspends the TUI and the process runs until the *user* exits it, so
+    # there is no cancellation anyone wants), and the fake's net.Listen sits
+    # behind the fixed ForwardDialer interface, which has no ctx to pass. It
+    # also flags inconsistently: exec.go's and edit.go's byte-identical
+    # exec.Command("kubectl", ...) calls are not reported. A linter whose
+    # every finding becomes a //nolint is noise, not coverage.
 
   settings:
     exhaustive:
@@ -50,6 +67,17 @@ linters:
     perfsprint:
       # fmt.Errorf with a %w is error wrapping, not string formatting.
       errorf: false
+    usetesting:
+      # Both off by default. These are the checks that matter here: a test's
+      # own ctx is cancelled at cleanup, so the goroutines it started go with
+      # it instead of outliving the test.
+      context-background: true
+      context-todo: true
+    nolintlint:
+      # A suppression without a reason is a suppression nobody can review.
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
 
   exclusions:
     generated: lax

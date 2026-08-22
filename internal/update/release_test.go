@@ -1,7 +1,6 @@
 package update
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,7 +27,7 @@ func TestGitHubCheckerLatest(t *testing.T) {
 	defer srv.Close()
 
 	c := GitHubChecker{Repo: "kute-dev/kute", BaseURL: srv.URL}
-	rel, err := c.Latest(context.Background())
+	rel, err := c.Latest(t.Context())
 	if err != nil {
 		t.Fatalf("Latest: %v", err)
 	}
@@ -55,7 +54,7 @@ func TestGitHubCheckerLatestNoChangelogAsset(t *testing.T) {
 	defer srv.Close()
 
 	c := GitHubChecker{Repo: "kute-dev/kute", BaseURL: srv.URL}
-	rel, err := c.Latest(context.Background())
+	rel, err := c.Latest(t.Context())
 	if err != nil {
 		t.Fatalf("Latest: %v", err)
 	}
@@ -71,7 +70,7 @@ func TestGitHubCheckerLatestNotFound(t *testing.T) {
 	defer srv.Close()
 
 	c := GitHubChecker{Repo: "kute-dev/kute", BaseURL: srv.URL}
-	if _, err := c.Latest(context.Background()); err == nil {
+	if _, err := c.Latest(t.Context()); err == nil {
 		t.Fatal("Latest: expected an error for a 404 response")
 	}
 }
@@ -83,7 +82,7 @@ func TestGitHubCheckerLatestMalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	c := GitHubChecker{Repo: "kute-dev/kute", BaseURL: srv.URL}
-	if _, err := c.Latest(context.Background()); err == nil {
+	if _, err := c.Latest(t.Context()); err == nil {
 		t.Fatal("Latest: expected an error for malformed JSON")
 	}
 }
@@ -100,7 +99,7 @@ func TestGitHubCheckerChangelog(t *testing.T) {
 	defer srv.Close()
 
 	c := GitHubChecker{Repo: "kute-dev/kute"}
-	entries, err := c.Changelog(context.Background(), Release{ChangelogURL: srv.URL + "/changelog.json"})
+	entries, err := c.Changelog(t.Context(), Release{ChangelogURL: srv.URL + "/changelog.json"})
 	if err != nil {
 		t.Fatalf("Changelog: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestGitHubCheckerChangelog(t *testing.T) {
 
 func TestGitHubCheckerChangelogEmptyURL(t *testing.T) {
 	c := GitHubChecker{Repo: "kute-dev/kute"}
-	entries, err := c.Changelog(context.Background(), Release{})
+	entries, err := c.Changelog(t.Context(), Release{})
 	if err != nil || entries != nil {
 		t.Fatalf("Changelog with no asset = (%v, %v), want (nil, nil)", entries, err)
 	}

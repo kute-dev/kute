@@ -18,7 +18,7 @@ func TestProbeContextsFansOutAllNames(t *testing.T) {
 	}
 
 	seen := map[string]ProbeResult{}
-	for r := range probeContextsWith(context.Background(), names, probe) {
+	for r := range probeContextsWith(t.Context(), names, probe) {
 		seen[r.Name] = r
 	}
 	if len(seen) != len(names) {
@@ -48,7 +48,7 @@ func TestProbeContextsRunsConcurrently(t *testing.T) {
 		}
 
 		start := time.Now()
-		for range probeContextsWith(context.Background(), names, probe) {
+		for range probeContextsWith(t.Context(), names, probe) {
 		}
 		if elapsed := time.Since(start); elapsed != perProbe {
 			t.Fatalf("elapsed = %v, want exactly %v for a fan-out of %d", elapsed, perProbe, len(names))
@@ -84,7 +84,7 @@ func TestProbeContextsBoundsConcurrency(t *testing.T) {
 		}
 
 		var got int
-		for range probeContextsWith(context.Background(), names, probe) {
+		for range probeContextsWith(t.Context(), names, probe) {
 			got++
 		}
 		if got != len(names) {
@@ -108,7 +108,7 @@ func TestProbeContextsPropagatesPerContextError(t *testing.T) {
 	}
 
 	results := map[string]ProbeResult{}
-	for r := range probeContextsWith(context.Background(), names, probe) {
+	for r := range probeContextsWith(t.Context(), names, probe) {
 		results[r.Name] = r
 	}
 	if results["reachable"].Err != nil {
@@ -121,7 +121,7 @@ func TestProbeContextsPropagatesPerContextError(t *testing.T) {
 
 func TestProbeContextsEmptyNamesClosesImmediately(t *testing.T) {
 	t.Parallel()
-	ch := probeContextsWith(context.Background(), nil, defaultProbe)
+	ch := probeContextsWith(t.Context(), nil, defaultProbe)
 	count := 0
 	for range ch {
 		count++

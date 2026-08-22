@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -115,7 +114,7 @@ func TestKindSyncedForHelmReleasesTracksItsOwnCache(t *testing.T) {
 		t.Fatal("the shared Secret cache wrongly vouched for HelmRelease")
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), ""); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	deadline := time.Now().Add(2 * time.Second)

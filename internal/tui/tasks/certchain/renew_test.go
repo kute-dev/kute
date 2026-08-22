@@ -1,7 +1,6 @@
 package certchain
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -94,7 +93,7 @@ func TestCertRenewCancelsOnN(t *testing.T) {
 // package's own dynamic-client tests use.
 func certReadyStatus(t *testing.T, c *fake.Cluster, namespace, name string) string {
 	t.Helper()
-	objs, err := c.ListRaw(context.Background(), kube.KindCertificate, namespace)
+	objs, err := c.ListRaw(t.Context(), kube.KindCertificate, namespace)
 	if err != nil {
 		t.Fatalf("ListRaw: %v", err)
 	}

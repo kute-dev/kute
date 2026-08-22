@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -47,11 +46,11 @@ func TestListHelmReleaseSecretsFiltersServerSide(t *testing.T) {
 		secretOfType("tls-cert", "default", corev1.SecretTypeTLS),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the release-secret informer to list", func() bool {
@@ -74,11 +73,11 @@ func TestListHelmReleaseSecretsDoesNotStartTheSharedSecretCache(t *testing.T) {
 		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the release-secret informer to list", func() bool {
@@ -108,11 +107,11 @@ func TestSharedSecretCacheStaysUnfiltered(t *testing.T) {
 		secretOfType("registry-creds", "default", corev1.SecretTypeDockerConfigJson),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListRaw(context.Background(), KindSecret, "default"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindSecret, "default"); err != nil {
 		t.Fatalf("ListRaw(Secret): %v", err)
 	}
 	waitFor(t, "the shared Secret informer to list", func() bool {
@@ -154,11 +153,11 @@ func TestListHelmReleaseSecretsScopesToTheNamespace(t *testing.T) {
 		secretOfType("sh.helm.release.v1.api.v1", "other", HelmReleaseSecretType),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the release-secret informer to list", func() bool {
@@ -181,11 +180,11 @@ func TestListHelmReleaseSecretsAllNamespacesStaysClusterWide(t *testing.T) {
 		secretOfType("sh.helm.release.v1.api.v1", "other", HelmReleaseSecretType),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), ""); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), ""); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the release-secret informer to list", func() bool {
@@ -200,7 +199,7 @@ func TestListHelmReleaseSecretsAllNamespacesStaysClusterWide(t *testing.T) {
 			t.Fatalf("all-namespaces release list was scoped to %q", ns)
 		}
 	}
-	objs, err := c.ListHelmReleaseSecrets(context.Background(), "")
+	objs, err := c.ListHelmReleaseSecrets(t.Context(), "")
 	if err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
@@ -218,11 +217,11 @@ func TestKindSyncedFollowsTheScopeOfTheLastRead(t *testing.T) {
 		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
 	)
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets: %v", err)
 	}
 	waitFor(t, "the default-namespace release cache to fill", func() bool {
@@ -242,13 +241,13 @@ func TestHelmReleaseSecretsAfterStop(t *testing.T) {
 	c, cs := newLazyTestCluster(
 		secretOfType("sh.helm.release.v1.web.v1", "default", HelmReleaseSecretType),
 	)
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	c.Stop()
 
 	before := len(cs.Actions())
-	if _, err := c.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := c.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets after Stop should read empty, not error: %v", err)
 	}
 	if got := len(cs.Actions()); got != before {

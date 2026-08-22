@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -47,7 +46,7 @@ func TestOpenCronJobDetailFuncDemoPushesARealScreen(t *testing.T) {
 // reaches kube.AnnotationTriggeredBy, not just that the parameter compiles.
 func TestOpenCronJobDetailFuncDemoRunNowStampsTheWiredCreator(t *testing.T) {
 	task, demoCluster := demoCronJobDetailTask(t, "nightly-backup")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	before, err := demoCluster.ListRaw(ctx, kube.KindJob, "default")
 	if err != nil {

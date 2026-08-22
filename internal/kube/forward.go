@@ -27,7 +27,9 @@ import (
 	// take apimachinery's httpstream.Dialer, not the k8s.io/streaming replacement
 	// — that's only wired through the parallel NewForStreaming/NewDialerForStreaming
 	// pair, which isn't interface-compatible.
-	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck
+	//nolint:staticcheck // deprecated, but see the note above: the replacement
+	// is not interface-compatible with the portforward/spdy pair this file uses.
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"

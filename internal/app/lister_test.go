@@ -119,7 +119,7 @@ func TestListedReleasesCarryTheAvailableChartVersion(t *testing.T) {
 	}}
 	lister := newSessionLister(cluster, kube.NewForwardManager(), chartCache(t, "cert-manager", "1.16.2"))
 
-	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default")
+	objs, err := lister.ListRaw(t.Context(), kube.KindHelmRelease, "default")
 	if err != nil {
 		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
 	}
@@ -171,7 +171,7 @@ func TestListedReleasesCarryTheirWorkloadRolloutState(t *testing.T) {
 			workloads: map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {d}},
 		}
 		lister := newSessionLister(cluster, kube.NewForwardManager(), nil)
-		objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "nva")
+		objs, err := lister.ListRaw(t.Context(), kube.KindHelmRelease, "nva")
 		if err != nil {
 			t.Fatalf("ListRaw(KindHelmRelease): %v", err)
 		}
@@ -199,7 +199,7 @@ func TestDemoHelmReleaseCarriesItsRolloutState(t *testing.T) {
 	demo := fake.NewDemo()
 	lister := newSessionLister(demo, kube.NewForwardManager(), nil)
 
-	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "")
+	objs, err := lister.ListRaw(t.Context(), kube.KindHelmRelease, "")
 	if err != nil {
 		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
 	}
@@ -224,7 +224,7 @@ func TestListedReleasesWithoutAChartIndex(t *testing.T) {
 	}}
 	lister := newSessionLister(cluster, kube.NewForwardManager(), nil)
 
-	objs, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default")
+	objs, err := lister.ListRaw(t.Context(), kube.KindHelmRelease, "default")
 	if err != nil {
 		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
 	}
@@ -265,7 +265,7 @@ func TestListingHelmReleasesReadsTheReleaseCacheNotEverySecret(t *testing.T) {
 	rec := &recordingCluster{}
 	lister := newSessionLister(rec, kube.NewForwardManager(), nil)
 
-	if _, err := lister.ListRaw(context.Background(), kube.KindHelmRelease, "default"); err != nil {
+	if _, err := lister.ListRaw(t.Context(), kube.KindHelmRelease, "default"); err != nil {
 		t.Fatalf("ListRaw(KindHelmRelease): %v", err)
 	}
 
@@ -323,7 +323,7 @@ func TestKindSyncAndErrorForwardTheNamespaceArgument(t *testing.T) {
 	if len(rec.syncedAskedNS) != 1 || rec.syncedAskedNS[0] != "team-a" {
 		t.Fatalf("KindSynced forwarded namespace %v, want [\"team-a\"]", rec.syncedAskedNS)
 	}
-	if _, err := lister.ListRaw(context.Background(), kube.KindPod, "team-a"); err != nil {
+	if _, err := lister.ListRaw(t.Context(), kube.KindPod, "team-a"); err != nil {
 		t.Fatalf("ListRaw: %v", err)
 	}
 	if err := lister.KindError(kube.KindPod, "team-b"); err == nil {
@@ -377,7 +377,7 @@ func TestDecoratedListerFallsBackWithoutTheReleaseCache(t *testing.T) {
 	plain := &narrowlessCluster{}
 	lister := newSessionLister(plain, kube.NewForwardManager(), nil)
 
-	if _, err := lister.ListHelmReleaseSecrets(context.Background(), "default"); err != nil {
+	if _, err := lister.ListHelmReleaseSecrets(t.Context(), "default"); err != nil {
 		t.Fatalf("ListHelmReleaseSecrets should degrade to the shared cache, got: %v", err)
 	}
 	if len(plain.listedKinds) != 1 || plain.listedKinds[0] != kube.KindSecret {

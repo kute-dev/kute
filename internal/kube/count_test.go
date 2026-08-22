@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +36,7 @@ func TestCountLiveCountsWithoutAnInformer(t *testing.T) {
 		partial(secretGVK, "other", "c"),
 	)
 
-	n, err := c.CountLive(context.Background(), KindSecret, "default")
+	n, err := c.CountLive(t.Context(), KindSecret, "default")
 	if err != nil {
 		t.Fatalf("CountLive: %v", err)
 	}
@@ -58,7 +57,7 @@ func TestCountLiveIgnoresNamespaceForClusterScopedKinds(t *testing.T) {
 	nodeGVK := schema.GroupVersionKind{Version: "v1", Kind: "Node"}
 	c := newCountTestCluster(partial(nodeGVK, "", "node-1"), partial(nodeGVK, "", "node-2"))
 
-	n, err := c.CountLive(context.Background(), KindNode, "default")
+	n, err := c.CountLive(t.Context(), KindNode, "default")
 	if err != nil {
 		t.Fatalf("CountLive: %v", err)
 	}
@@ -69,7 +68,7 @@ func TestCountLiveIgnoresNamespaceForClusterScopedKinds(t *testing.T) {
 
 func TestCountLiveUnknownKindErrors(t *testing.T) {
 	c := newCountTestCluster()
-	if _, err := c.CountLive(context.Background(), ResourceKind("Nonexistent"), ""); err == nil {
+	if _, err := c.CountLive(t.Context(), ResourceKind("Nonexistent"), ""); err == nil {
 		t.Fatal("expected an error for a kind with no known API resource")
 	}
 }

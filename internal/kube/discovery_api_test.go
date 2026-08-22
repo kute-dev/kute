@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,7 +72,7 @@ func TestRefreshDiscoveryUsesTheDiscoveryAPI(t *testing.T) {
 		crdMeta("clusterissuers.cert-manager.io"),
 	)
 
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	got := c.DiscoveredKinds()
 	if len(got) != 2 {
@@ -131,7 +130,7 @@ func TestRefreshDiscoveryIgnoresBuiltInGroups(t *testing.T) {
 		crdMeta("httproutes.gateway.networking.k8s.io"),
 	)
 
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	got := c.DiscoveredKinds()
 	if len(got) != 1 || got[0].Kind != "HTTPRoute" {
@@ -157,7 +156,7 @@ func TestRefreshDiscoveryDedupesMultiVersionCRDs(t *testing.T) {
 		crdMeta("widgets.example.com"),
 	)
 
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	got := c.DiscoveredKinds()
 	if len(got) != 1 {
@@ -180,7 +179,7 @@ func TestDiscoveredKindsStartWithoutPrinterColumns(t *testing.T) {
 		crdMeta("widgets.example.com"),
 	)
 
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	got := c.DiscoveredKinds()
 	if len(got) != 1 {
@@ -220,7 +219,7 @@ func TestRefreshDiscoveryWithNoCRDsDiscoversNothing(t *testing.T) {
 		{GroupVersion: "apps/v1", APIResources: []metav1.APIResource{{Name: "deployments", Kind: "Deployment"}}},
 	})
 
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	if got := c.DiscoveredKinds(); len(got) != 0 {
 		t.Fatalf("discovered %+v on a cluster with no CRDs", got)
@@ -279,7 +278,7 @@ func TestEnsurePrinterColumnsFetchesOneCRD(t *testing.T) {
 		crdMeta("widgets.example.com"),
 	)
 	c.dynClient = dyn
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	if cols := c.DiscoveredKinds()[0].PrinterColumns; len(cols) != 0 {
 		t.Fatalf("precondition: discovery should not have fetched columns, got %+v", cols)
@@ -287,7 +286,7 @@ func TestEnsurePrinterColumnsFetchesOneCRD(t *testing.T) {
 
 	// Synchronous half, so the assertion doesn't race the goroutine
 	// ensurePrinterColumns spawns.
-	if changed := c.fetchPrinterColumns(context.Background(), c.generation, "Widget"); !changed {
+	if changed := c.fetchPrinterColumns(t.Context(), c.generation, "Widget"); !changed {
 		t.Fatal("fetchPrinterColumns reported no change despite the CRD declaring two columns")
 	}
 	got := c.DiscoveredKinds()[0].PrinterColumns
@@ -320,10 +319,10 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 		crdMeta("widgets.example.com"),
 	)
 	c.dynClient = dyn
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	for i := 0; i < 10; i++ {
-		c.fetchPrinterColumns(context.Background(), c.generation, "Widget")
+		c.fetchPrinterColumns(t.Context(), c.generation, "Widget")
 	}
 
 	gets := 0
@@ -342,7 +341,7 @@ func TestEnsurePrinterColumnsFetchesOncePerKind(t *testing.T) {
 func TestEnsurePrinterColumnsUnknownKindIsANoOp(t *testing.T) {
 	t.Parallel()
 	c := newDiscoveryTestCluster(nil)
-	if c.fetchPrinterColumns(context.Background(), c.generation, "Nonexistent") {
+	if c.fetchPrinterColumns(t.Context(), c.generation, "Nonexistent") {
 		t.Fatal("reported a change for a kind discovery never saw")
 	}
 }
@@ -374,12 +373,12 @@ func TestFetchPrinterColumnsDropsStaleGeneration(t *testing.T) {
 		crdMeta("widgets.example.com"),
 	)
 	c.dynClient = dyn
-	c.refreshDiscovery(context.Background())
+	c.refreshDiscovery(t.Context())
 
 	staleGen := c.generation
 	c.generation++ // simulates a SwitchContext that ran while this Get was in flight
 
-	if changed := c.fetchPrinterColumns(context.Background(), staleGen, "Widget"); changed {
+	if changed := c.fetchPrinterColumns(t.Context(), staleGen, "Widget"); changed {
 		t.Fatal("fetchPrinterColumns reported a change for a stale generation")
 	}
 	if got := c.DiscoveredKinds()[0].PrinterColumns; len(got) != 0 {

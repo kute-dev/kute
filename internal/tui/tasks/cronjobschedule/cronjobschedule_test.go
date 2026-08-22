@@ -240,7 +240,7 @@ func TestCommitApplySuccessRemainsReadyAndOffersUndo(t *testing.T) {
 		t.Fatalf("accepted.schedule = %q, want the newly applied schedule", m.accepted.schedule)
 	}
 
-	got, err := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	got, err := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	if err != nil || len(got) != 1 {
 		t.Fatalf("ListRaw after apply: %v, %v", got, err)
 	}
@@ -263,7 +263,7 @@ func TestCommitApplyInvalidScheduleNeverCallsMutator(t *testing.T) {
 	if m.pendingCommit != nil {
 		t.Fatalf("expected enter to no-op while the schedule is invalid")
 	}
-	got, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	got, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	if cj := got[0].(*batchv1.CronJob); cj.Spec.Schedule != "0 2 * * *" {
 		t.Fatalf("server schedule changed to %q, want it untouched", cj.Spec.Schedule)
 	}
@@ -276,7 +276,7 @@ func TestCommitApplyConflictPreservesBufferAndExplainsWhy(t *testing.T) {
 
 	// Simulate a concurrent external edit: bump the server's resourceVersion
 	// out from under the still-loaded m.accepted.resourceVersion.
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, m.accepted.resourceVersion, m.accepted.generation, time.Now()); err != nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", true, m.accepted.resourceVersion, m.accepted.generation, time.Now()); err != nil {
 		t.Fatalf("SetCronJobSuspend (simulating a concurrent edit): %v", err)
 	}
 
@@ -321,7 +321,7 @@ func TestCommitUndoRestoresScheduleAndTimeZone(t *testing.T) {
 		t.Fatalf("expected the undo target cleared after undo itself applies (one step, not a stack)")
 	}
 
-	got, _ := c.ListRaw(context.Background(), kube.KindCronJob, "default")
+	got, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
 	cj := got[0].(*batchv1.CronJob)
 	if cj.Spec.Schedule != "0 2 * * *" || cj.Spec.TimeZone == nil || *cj.Spec.TimeZone != "America/New_York" {
 		t.Fatalf("server state after undo = schedule %q tz %v, want reverted", cj.Spec.Schedule, cj.Spec.TimeZone)

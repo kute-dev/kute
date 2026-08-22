@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,10 +32,10 @@ func TestRolloutRestartPatchesTemplateAnnotation(t *testing.T) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
 	c, cs := newTestCluster(deploy)
 
-	if err := c.RolloutRestart(context.Background(), KindDeployment, "default", "api"); err != nil {
+	if err := c.RolloutRestart(t.Context(), KindDeployment, "default", "api"); err != nil {
 		t.Fatalf("RolloutRestart: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -54,7 +53,7 @@ func TestRolloutRestartCoversStatefulSetAndDaemonSet(t *testing.T) {
 	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "default"}}
 	ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "agent", Namespace: "default"}}
 	c, cs := newTestCluster(sts, ds)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := c.RolloutRestart(ctx, KindStatefulSet, "default", "worker"); err != nil {
 		t.Fatalf("RolloutRestart statefulset: %v", err)
@@ -82,7 +81,7 @@ func TestRolloutRestartCoversStatefulSetAndDaemonSet(t *testing.T) {
 func TestRolloutRestartRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.RolloutRestart(context.Background(), KindDeployment, "default", ""); err == nil {
+	if err := c.RolloutRestart(t.Context(), KindDeployment, "default", ""); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -124,12 +123,12 @@ func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
 	c, cs := newTestCluster(job)
 
 	stagedAt := time.Date(2026, 3, 4, 2, 0, 0, 0, time.UTC)
-	if err := c.RetryJob(context.Background(), "default", "batch-1", "batch-1-retry-123", "operator@example.com", stagedAt); err != nil {
+	if err := c.RetryJob(t.Context(), "default", "batch-1", "batch-1-retry-123", "operator@example.com", stagedAt); err != nil {
 		t.Fatalf("RetryJob: %v", err)
 	}
 
 	// The source Job is untouched.
-	src, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1", metav1.GetOptions{})
+	src, err := cs.BatchV1().Jobs("default").Get(t.Context(), "batch-1", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get source: %v", err)
 	}
@@ -137,7 +136,7 @@ func TestRetryJobClonesSpecIntoNewJob(t *testing.T) {
 		t.Errorf("source Job's Status was touched: %+v", src.Status)
 	}
 
-	clone, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1-retry-123", metav1.GetOptions{})
+	clone, err := cs.BatchV1().Jobs("default").Get(t.Context(), "batch-1-retry-123", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get clone: %v", err)
 	}
@@ -189,10 +188,10 @@ func TestRetryJobStripsCronJobAssociation(t *testing.T) {
 		},
 	}
 	c, cs := newTestCluster(job)
-	if err := c.RetryJob(context.Background(), "default", "report-nightly-1", "report-nightly-1-rerun-1", "you", time.Now()); err != nil {
+	if err := c.RetryJob(t.Context(), "default", "report-nightly-1", "report-nightly-1-rerun-1", "you", time.Now()); err != nil {
 		t.Fatalf("RetryJob: %v", err)
 	}
-	clone, err := cs.BatchV1().Jobs("default").Get(context.Background(), "report-nightly-1-rerun-1", metav1.GetOptions{})
+	clone, err := cs.BatchV1().Jobs("default").Get(t.Context(), "report-nightly-1-rerun-1", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get clone: %v", err)
 	}
@@ -207,10 +206,10 @@ func TestRetryJobStripsCronJobAssociation(t *testing.T) {
 func TestRetryJobRejectsEmptyNames(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
-	if err := c.RetryJob(context.Background(), "default", "", "batch-1-retry-123", "you", time.Now()); err == nil {
+	if err := c.RetryJob(t.Context(), "default", "", "batch-1-retry-123", "you", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty source name")
 	}
-	if err := c.RetryJob(context.Background(), "default", "batch-1", "", "you", time.Now()); err == nil {
+	if err := c.RetryJob(t.Context(), "default", "batch-1", "", "you", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty target name")
 	}
 }
@@ -237,10 +236,10 @@ func TestReplaceJobDeletesThenRecreatesUnderSameName(t *testing.T) {
 		Status: batchv1.JobStatus{Failed: 1},
 	}
 	c, cs := newTestCluster(job)
-	if err := c.ReplaceJob(context.Background(), "default", "migrate-schema-v42"); err != nil {
+	if err := c.ReplaceJob(t.Context(), "default", "migrate-schema-v42"); err != nil {
 		t.Fatalf("ReplaceJob: %v", err)
 	}
-	replacement, err := cs.BatchV1().Jobs("default").Get(context.Background(), "migrate-schema-v42", metav1.GetOptions{})
+	replacement, err := cs.BatchV1().Jobs("default").Get(t.Context(), "migrate-schema-v42", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get replacement: %v", err)
 	}
@@ -255,7 +254,7 @@ func TestReplaceJobDeletesThenRecreatesUnderSameName(t *testing.T) {
 func TestReplaceJobRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
-	if err := c.ReplaceJob(context.Background(), "default", ""); err == nil {
+	if err := c.ReplaceJob(t.Context(), "default", ""); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -267,10 +266,10 @@ func TestSetJobSuspendPatchesSpecSuspend(t *testing.T) {
 	t.Parallel()
 	for _, suspend := range []bool{true, false} {
 		c, cs := newTestCluster(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "batch-1", Namespace: "default"}})
-		if err := c.SetJobSuspend(context.Background(), "default", "batch-1", suspend); err != nil {
+		if err := c.SetJobSuspend(t.Context(), "default", "batch-1", suspend); err != nil {
 			t.Fatalf("SetJobSuspend(%t): %v", suspend, err)
 		}
-		got, err := cs.BatchV1().Jobs("default").Get(context.Background(), "batch-1", metav1.GetOptions{})
+		got, err := cs.BatchV1().Jobs("default").Get(t.Context(), "batch-1", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
@@ -283,7 +282,7 @@ func TestSetJobSuspendPatchesSpecSuspend(t *testing.T) {
 func TestSetJobSuspendRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetJobSuspend(context.Background(), "default", "", true); err == nil {
+	if err := c.SetJobSuspend(t.Context(), "default", "", true); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -319,12 +318,12 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 	c, cs := newTestCluster(cj)
 
 	triggeredAt := time.Date(2026, 3, 4, 2, 0, 0, 0, time.UTC)
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0200", "operator@example.com", triggeredAt); err != nil {
+	if err := c.TriggerCronJob(t.Context(), "default", "nightly", "nightly-manual-0200", "operator@example.com", triggeredAt); err != nil {
 		t.Fatalf("TriggerCronJob: %v", err)
 	}
 
 	// The source CronJob is untouched.
-	src, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	src, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get source: %v", err)
 	}
@@ -332,7 +331,7 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 		t.Errorf("source CronJob's Status was touched: %+v", src.Status)
 	}
 
-	job, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-manual-0200", metav1.GetOptions{})
+	job, err := cs.BatchV1().Jobs("default").Get(t.Context(), "nightly-manual-0200", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get triggered job: %v", err)
 	}
@@ -368,10 +367,10 @@ func TestTriggerCronJobClonesJobTemplateIntoNewJob(t *testing.T) {
 func TestTriggerCronJobRejectsEmptyNames(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
-	if err := c.TriggerCronJob(context.Background(), "default", "", "nightly-manual-0200", "op", time.Now()); err == nil {
+	if err := c.TriggerCronJob(t.Context(), "default", "", "nightly-manual-0200", "op", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty source name")
 	}
-	if err := c.TriggerCronJob(context.Background(), "default", "nightly", "", "op", time.Now()); err == nil {
+	if err := c.TriggerCronJob(t.Context(), "default", "nightly", "", "op", time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty target name")
 	}
 }
@@ -387,7 +386,7 @@ func TestTriggerCronJobWrapsAlreadyExists(t *testing.T) {
 	existing := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-manual-0200", Namespace: "default"}}
 	c, _ := newTestCluster(cj, existing)
 
-	err := c.TriggerCronJob(context.Background(), "default", "nightly", "nightly-manual-0200", "op", time.Now())
+	err := c.TriggerCronJob(t.Context(), "default", "nightly", "nightly-manual-0200", "op", time.Now())
 	if err == nil {
 		t.Fatal("expected an error for a name already taken")
 	}
@@ -410,10 +409,10 @@ func TestSetCronJobSuspendPatchesSpecSuspend(t *testing.T) {
 	c, cs := newTestCluster(&batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "10", Generation: 3},
 	})
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "10", 3, at); err != nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", true, "10", 3, at); err != nil {
 		t.Fatalf("SetCronJobSuspend(true): %v", err)
 	}
-	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -439,10 +438,10 @@ func TestSetCronJobSuspendPatchesSpecSuspend(t *testing.T) {
 			},
 		},
 	})
-	if err := c2.SetCronJobSuspend(context.Background(), "default", "nightly", false, "20", 4, time.Time{}); err != nil {
+	if err := c2.SetCronJobSuspend(t.Context(), "default", "nightly", false, "20", 4, time.Time{}); err != nil {
 		t.Fatalf("SetCronJobSuspend(false): %v", err)
 	}
-	got2, err := cs2.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got2, err := cs2.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get after resume: %v", err)
 	}
@@ -470,10 +469,10 @@ func TestSetCronJobSuspendResumeLeavesActiveJobsUntouched(t *testing.T) {
 		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "1", Generation: 1}},
 		activeJob,
 	)
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", false, "1", 1, time.Time{}); err != nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", false, "1", 1, time.Time{}); err != nil {
 		t.Fatalf("SetCronJobSuspend(false): %v", err)
 	}
-	got, err := cs.BatchV1().Jobs("default").Get(context.Background(), "nightly-28112233", metav1.GetOptions{})
+	got, err := cs.BatchV1().Jobs("default").Get(t.Context(), "nightly-28112233", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get active job: %v", err)
 	}
@@ -485,7 +484,7 @@ func TestSetCronJobSuspendResumeLeavesActiveJobsUntouched(t *testing.T) {
 func TestSetCronJobSuspendRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetCronJobSuspend(context.Background(), "default", "", true, "1", 1, time.Now()); err == nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "", true, "1", 1, time.Now()); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -496,7 +495,7 @@ func TestSetCronJobSuspendRejectsEmptyName(t *testing.T) {
 func TestSetCronJobSuspendRequiresResourceVersion(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
-	if err := c.SetCronJobSuspend(context.Background(), "default", "nightly", true, "", 1, time.Now()); err == nil {
+	if err := c.SetCronJobSuspend(t.Context(), "default", "nightly", true, "", 1, time.Now()); err == nil {
 		t.Fatalf("expected an error for a missing resourceVersion precondition")
 	}
 }
@@ -510,13 +509,13 @@ func TestSetCronJobSchedulePatchesSpecSchedule(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", ResourceVersion: "5"},
 		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
 	})
-	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+	result, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{
 		Schedule: "*/15 * * * *", ResourceVersion: "5",
 	})
 	if err != nil {
 		t.Fatalf("SetCronJobSchedule: %v", err)
 	}
-	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -542,7 +541,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *"},
 	})
 	tz := "America/New_York"
-	result, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+	result, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{
 		Schedule: "0 2 * * *", TimeZone: &tz, ResourceVersion: "1",
 	})
 	if err != nil {
@@ -551,7 +550,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	if result.TimeZone != tz {
 		t.Errorf("result.TimeZone = %q, want %q", result.TimeZone, tz)
 	}
-	got, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -561,7 +560,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 
 	// A nil TimeZone (only the schedule changes) must never touch the
 	// existing value.
-	result2, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+	result2, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{
 		Schedule: "*/30 * * * *", ResourceVersion: got.ResourceVersion,
 	})
 	if err != nil {
@@ -570,7 +569,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	if result2.TimeZone != tz {
 		t.Errorf("result2.TimeZone = %q, want the untouched %q", result2.TimeZone, tz)
 	}
-	got2, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got2, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get after schedule-only edit: %v", err)
 	}
@@ -581,7 +580,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	// An explicit clear (pointer to "") removes it — never serialized as a
 	// stale timezone string.
 	emptyTZ := ""
-	result3, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+	result3, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{
 		Schedule: "*/30 * * * *", TimeZone: &emptyTZ, ResourceVersion: got2.ResourceVersion,
 	})
 	if err != nil {
@@ -590,7 +589,7 @@ func TestSetCronJobScheduleSetsAndClearsTimeZone(t *testing.T) {
 	if result3.TimeZone != "" {
 		t.Errorf("result3.TimeZone = %q, want cleared \"\"", result3.TimeZone)
 	}
-	got3, err := cs.BatchV1().CronJobs("default").Get(context.Background(), "nightly", metav1.GetOptions{})
+	got3, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get after clear: %v", err)
 	}
@@ -625,7 +624,7 @@ func TestCronJobSetScheduleCommandStringMirrorsPatchBody(t *testing.T) {
 func TestSetCronJobScheduleRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if _, err := c.SetCronJobSchedule(context.Background(), "default", "", CronJobScheduleEdit{Schedule: "*/15 * * * *", ResourceVersion: "1"}); err == nil {
+	if _, err := c.SetCronJobSchedule(t.Context(), "default", "", CronJobScheduleEdit{Schedule: "*/15 * * * *", ResourceVersion: "1"}); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -636,7 +635,7 @@ func TestSetCronJobScheduleRejectsEmptyName(t *testing.T) {
 func TestSetCronJobScheduleRequiresResourceVersion(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster(&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}})
-	if _, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{Schedule: "*/15 * * * *"}); err == nil {
+	if _, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{Schedule: "*/15 * * * *"}); err == nil {
 		t.Fatalf("expected an error for a missing resourceVersion precondition")
 	}
 }
@@ -661,7 +660,7 @@ func TestSetCronJobSchedulePropagatesConflict(t *testing.T) {
 			schema.GroupResource{Group: "batch", Resource: "cronjobs"}, "nightly",
 			fmt.Errorf("the object has been modified"))
 	})
-	_, err := c.SetCronJobSchedule(context.Background(), "default", "nightly", CronJobScheduleEdit{
+	_, err := c.SetCronJobSchedule(t.Context(), "default", "nightly", CronJobScheduleEdit{
 		Schedule: "*/15 * * * *", ResourceVersion: "1", // stale on purpose
 	})
 	if err == nil {
@@ -706,10 +705,10 @@ func TestRolloutUndoPatchesTemplateToTargetRevision(t *testing.T) {
 	}
 	c, cs := newTestCluster(deploy, rsOld, rsCurrent)
 
-	if err := c.RolloutUndo(context.Background(), "default", "api", 4); err != nil {
+	if err := c.RolloutUndo(t.Context(), "default", "api", 4); err != nil {
 		t.Fatalf("RolloutUndo: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -722,7 +721,7 @@ func TestRolloutUndoRejectsUnknownRevision(t *testing.T) {
 	t.Parallel()
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
 	c, _ := newTestCluster(deploy)
-	if err := c.RolloutUndo(context.Background(), "default", "api", 99); err == nil {
+	if err := c.RolloutUndo(t.Context(), "default", "api", 99); err == nil {
 		t.Fatalf("expected an error for a revision with no matching ReplicaSet")
 	}
 }
@@ -730,7 +729,7 @@ func TestRolloutUndoRejectsUnknownRevision(t *testing.T) {
 func TestRolloutUndoRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.RolloutUndo(context.Background(), "default", "", 1); err == nil {
+	if err := c.RolloutUndo(t.Context(), "default", "", 1); err == nil {
 		t.Fatalf("expected an error for an empty name")
 	}
 }
@@ -740,10 +739,10 @@ func TestCordonSetsUnschedulable(t *testing.T) {
 	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}
 	c, cs := newTestCluster(node)
 
-	if err := c.Cordon(context.Background(), "node-1", true); err != nil {
+	if err := c.Cordon(t.Context(), "node-1", true); err != nil {
 		t.Fatalf("Cordon: %v", err)
 	}
-	got, err := cs.CoreV1().Nodes().Get(context.Background(), "node-1", metav1.GetOptions{})
+	got, err := cs.CoreV1().Nodes().Get(t.Context(), "node-1", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -751,10 +750,10 @@ func TestCordonSetsUnschedulable(t *testing.T) {
 		t.Fatalf("expected node to be unschedulable after Cordon(true)")
 	}
 
-	if err := c.Cordon(context.Background(), "node-1", false); err != nil {
+	if err := c.Cordon(t.Context(), "node-1", false); err != nil {
 		t.Fatalf("Uncordon: %v", err)
 	}
-	got, _ = cs.CoreV1().Nodes().Get(context.Background(), "node-1", metav1.GetOptions{})
+	got, _ = cs.CoreV1().Nodes().Get(t.Context(), "node-1", metav1.GetOptions{})
 	if got.Spec.Unschedulable {
 		t.Fatalf("expected node schedulable after Cordon(false)")
 	}
@@ -787,7 +786,7 @@ func TestDrainCordonsAndSkipsDaemonSetAndMirrorPods(t *testing.T) {
 	}
 	c, cs := newTestCluster(node, evictable, daemonPod, mirrorPod, otherNodePod)
 
-	evicted, err := c.Drain(context.Background(), "node-1")
+	evicted, err := c.Drain(t.Context(), "node-1")
 	if err != nil {
 		t.Fatalf("Drain: %v", err)
 	}
@@ -795,7 +794,7 @@ func TestDrainCordonsAndSkipsDaemonSetAndMirrorPods(t *testing.T) {
 		t.Fatalf("evicted = %d, want 1 (only the non-daemonset, non-mirror pod)", evicted)
 	}
 
-	gotNode, _ := cs.CoreV1().Nodes().Get(context.Background(), "node-1", metav1.GetOptions{})
+	gotNode, _ := cs.CoreV1().Nodes().Get(t.Context(), "node-1", metav1.GetOptions{})
 	if !gotNode.Spec.Unschedulable {
 		t.Fatalf("expected Drain to cordon the node")
 	}
@@ -804,7 +803,7 @@ func TestDrainCordonsAndSkipsDaemonSetAndMirrorPods(t *testing.T) {
 func TestDrainRejectsEmptyNodeName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if _, err := c.Drain(context.Background(), ""); err == nil {
+	if _, err := c.Drain(t.Context(), ""); err == nil {
 		t.Fatalf("expected an error for an empty node name")
 	}
 }
@@ -814,10 +813,10 @@ func TestDeleteResourceForcedUsesZeroGracePeriod(t *testing.T) {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
 	c, cs := newTestCluster(pod)
 
-	if err := c.DeleteResourceForced(context.Background(), KindPod, "default", "api"); err != nil {
+	if err := c.DeleteResourceForced(t.Context(), KindPod, "default", "api"); err != nil {
 		t.Fatalf("DeleteResourceForced: %v", err)
 	}
-	if _, err := cs.CoreV1().Pods("default").Get(context.Background(), "api", metav1.GetOptions{}); err == nil {
+	if _, err := cs.CoreV1().Pods("default").Get(t.Context(), "api", metav1.GetOptions{}); err == nil {
 		t.Fatalf("expected pod to be deleted")
 	}
 }
@@ -833,10 +832,10 @@ func TestSetImagePatchesNamedContainer(t *testing.T) {
 	}
 	c, cs := newTestCluster(deploy)
 
-	if err := c.SetImage(context.Background(), KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -851,7 +850,7 @@ func TestSetImagePatchesNamedContainer(t *testing.T) {
 func TestSetImageRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetImage(context.Background(), KindDeployment, "default", "", "app", "app:2.0"); err == nil {
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "", "app", "app:2.0"); err == nil {
 		t.Fatalf("expected an error for an empty resource name")
 	}
 }
@@ -889,10 +888,10 @@ func TestSetResourcesPatchesRequestsAndLimits(t *testing.T) {
 	c, cs := newTestCluster(deploy)
 
 	edits := ResourceEdits{MEMLimit: strPtr("768Mi")}
-	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", edits, false); err != nil {
+	if err := c.SetResources(t.Context(), KindDeployment, "default", "api", "app", edits, false); err != nil {
 		t.Fatalf("SetResources: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -918,10 +917,10 @@ func TestSetResourcesUnsetsField(t *testing.T) {
 	c, cs := newTestCluster(deploy)
 
 	edits := ResourceEdits{CPULimit: strPtr("")}
-	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", edits, false); err != nil {
+	if err := c.SetResources(t.Context(), KindDeployment, "default", "api", "app", edits, false); err != nil {
 		t.Fatalf("SetResources: %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -933,7 +932,7 @@ func TestSetResourcesUnsetsField(t *testing.T) {
 func TestSetResourcesRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetResources(context.Background(), KindDeployment, "default", "", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, false); err == nil {
+	if err := c.SetResources(t.Context(), KindDeployment, "default", "", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, false); err == nil {
 		t.Fatalf("expected an error for an empty resource name")
 	}
 }
@@ -955,10 +954,10 @@ func TestSetResourcesDryRunStillMutatesFakeClientset(t *testing.T) {
 	}
 	c, cs := newTestCluster(deploy)
 
-	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, true); err != nil {
+	if err := c.SetResources(t.Context(), KindDeployment, "default", "api", "app", ResourceEdits{MEMLimit: strPtr("768Mi")}, true); err != nil {
 		t.Fatalf("SetResources(dryRun): %v", err)
 	}
-	got, err := cs.AppsV1().Deployments("default").Get(context.Background(), "api", metav1.GetOptions{})
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -971,7 +970,7 @@ func TestSetResourcesRejectsNoChangedFields(t *testing.T) {
 	t.Parallel()
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"}}
 	c, _ := newTestCluster(deploy)
-	if err := c.SetResources(context.Background(), KindDeployment, "default", "api", "app", ResourceEdits{}, false); err == nil {
+	if err := c.SetResources(t.Context(), KindDeployment, "default", "api", "app", ResourceEdits{}, false); err == nil {
 		t.Fatalf("expected an error when edits has no changed fields")
 	}
 }
@@ -1057,7 +1056,7 @@ func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
 		Name: "nva-worker", Namespace: "default", Labels: map[string]string{"env": "stage"},
 	}}
 	c, cs := newTestCluster(deploy)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := c.PatchMeta(ctx, KindDeployment, "default", "nva-worker", false, "env", "staging", false); err != nil {
 		t.Fatalf("PatchMeta set: %v", err)
@@ -1096,7 +1095,7 @@ func TestPatchMetaSetsAndRemovesLabelsAndAnnotations(t *testing.T) {
 func TestPatchMetaUnsupportedKindReturnsError(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", false, "k", "v", false); err == nil {
+	if err := c.PatchMeta(t.Context(), ResourceKind("Widget"), "default", "thing", false, "k", "v", false); err == nil {
 		t.Fatal("expected an error for a kind with no typed client and no discovered dynamic GVR")
 	}
 }
@@ -1137,10 +1136,10 @@ func TestDeleteResourceFallsBackToTheDynamicClient(t *testing.T) {
 	t.Parallel()
 	c, dyn := newDynTestCluster(newWidget("thing", "default"))
 
-	if err := c.DeleteResource(context.Background(), ResourceKind("Widget"), "default", "thing"); err != nil {
+	if err := c.DeleteResource(t.Context(), ResourceKind("Widget"), "default", "thing"); err != nil {
 		t.Fatalf("DeleteResource: %v", err)
 	}
-	if _, err := dyn.Resource(widgetGVR).Namespace("default").Get(context.Background(), "thing", metav1.GetOptions{}); err == nil {
+	if _, err := dyn.Resource(widgetGVR).Namespace("default").Get(t.Context(), "thing", metav1.GetOptions{}); err == nil {
 		t.Fatal("expected the custom resource to be gone")
 	}
 }
@@ -1156,11 +1155,11 @@ func TestPatchMetaReachesACustomResourceWithNoInformerStarted(t *testing.T) {
 	if _, ok := c.getDynKind(ResourceKind("Widget"), ""); ok {
 		t.Fatal("precondition: no informer should be registered for Widget")
 	}
-	err := c.PatchMeta(context.Background(), ResourceKind("Widget"), "default", "thing", true, "team", "platform", false)
+	err := c.PatchMeta(t.Context(), ResourceKind("Widget"), "default", "thing", true, "team", "platform", false)
 	if err != nil {
 		t.Fatalf("PatchMeta: %v", err)
 	}
-	got, err := dyn.Resource(widgetGVR).Namespace("default").Get(context.Background(), "thing", metav1.GetOptions{})
+	got, err := dyn.Resource(widgetGVR).Namespace("default").Get(t.Context(), "thing", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -1215,7 +1214,7 @@ func TestPatchSecretDataSetsAndRemovesKeys(t *testing.T) {
 		Data:       map[string][]byte{"DATABASE_URL": []byte("postgres://old")},
 	}
 	c, cs := newTestCluster(secret)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := c.PatchSecretData(ctx, "default", "nva-secrets", "SMTP_PASSWORD", "hunter2-staging", false); err != nil {
 		t.Fatalf("PatchSecretData add: %v", err)
@@ -1246,7 +1245,7 @@ func TestPatchSecretDataSetsAndRemovesKeys(t *testing.T) {
 func TestPatchSecretDataRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.PatchSecretData(context.Background(), "default", "", "k", "v", false); err == nil {
+	if err := c.PatchSecretData(t.Context(), "default", "", "k", "v", false); err == nil {
 		t.Fatal("expected an error for an empty secret name")
 	}
 }
@@ -1314,7 +1313,7 @@ func TestPatchConfigMapDataSetsAndRemovesKeys(t *testing.T) {
 		Data:       map[string]string{"LOG_LEVEL": "info"},
 	}
 	c, cs := newTestCluster(cm)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if err := c.PatchConfigMapData(ctx, "default", "nva-config", "FEATURE_X", "on", false); err != nil {
 		t.Fatalf("PatchConfigMapData add: %v", err)
@@ -1345,7 +1344,7 @@ func TestPatchConfigMapDataSetsAndRemovesKeys(t *testing.T) {
 func TestPatchConfigMapDataRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.PatchConfigMapData(context.Background(), "default", "", "k", "v", false); err == nil {
+	if err := c.PatchConfigMapData(t.Context(), "default", "", "k", "v", false); err == nil {
 		t.Fatal("expected an error for an empty configmap name")
 	}
 }
@@ -1397,7 +1396,7 @@ func TestSetFluxSuspendPatchesSpecSuspend(t *testing.T) {
 	t.Parallel()
 	for _, suspend := range []bool{true, false} {
 		c, dyn := newDynTestCluster(newWidget("podinfo", "flux-system"))
-		if err := c.SetFluxSuspend(context.Background(), ResourceKind("Widget"), "flux-system", "podinfo", suspend); err != nil {
+		if err := c.SetFluxSuspend(t.Context(), ResourceKind("Widget"), "flux-system", "podinfo", suspend); err != nil {
 			t.Fatalf("SetFluxSuspend(%v): %v", suspend, err)
 		}
 		var patched bool
@@ -1420,7 +1419,7 @@ func TestSetFluxSuspendPatchesSpecSuspend(t *testing.T) {
 		if !patched {
 			t.Fatal("no patch reached the dynamic client")
 		}
-		got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(context.Background(), "podinfo", metav1.GetOptions{})
+		got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(t.Context(), "podinfo", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
@@ -1438,10 +1437,10 @@ func TestRequestFluxReconcileStampsAFreshTimestamp(t *testing.T) {
 	c, dyn := newDynTestCluster(newWidget("podinfo", "flux-system"))
 	before := time.Now().Add(-time.Second)
 
-	if err := c.RequestFluxReconcile(context.Background(), ResourceKind("Widget"), "flux-system", "podinfo"); err != nil {
+	if err := c.RequestFluxReconcile(t.Context(), ResourceKind("Widget"), "flux-system", "podinfo"); err != nil {
 		t.Fatalf("RequestFluxReconcile: %v", err)
 	}
-	got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(context.Background(), "podinfo", metav1.GetOptions{})
+	got, err := dyn.Resource(widgetGVR).Namespace("flux-system").Get(t.Context(), "podinfo", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -1534,7 +1533,7 @@ func TestRenewCertificatePatchesStatusSubresource(t *testing.T) {
 	c, dyn := newCertDynTestCluster(newCertificate("web-tls", "default",
 		map[string]any{"type": "Ready", "status": "True"}))
 
-	if err := c.RenewCertificate(context.Background(), "default", "web-tls"); err != nil {
+	if err := c.RenewCertificate(t.Context(), "default", "web-tls"); err != nil {
 		t.Fatalf("RenewCertificate: %v", err)
 	}
 
@@ -1566,7 +1565,7 @@ func TestRenewCertificatePatchesStatusSubresource(t *testing.T) {
 func TestRenewCertificateRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newCertDynTestCluster()
-	if err := c.RenewCertificate(context.Background(), "default", ""); err == nil {
+	if err := c.RenewCertificate(t.Context(), "default", ""); err == nil {
 		t.Fatal("expected an error for an empty certificate name")
 	}
 }

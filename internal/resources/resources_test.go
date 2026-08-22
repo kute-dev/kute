@@ -605,7 +605,7 @@ func TestListProjectsAllObjects(t *testing.T) {
 			&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "c"}}}},
 		},
 	}}
-	rows, err := List(context.Background(), src, d, "web")
+	rows, err := List(t.Context(), src, d, "web")
 	if err != nil {
 		t.Fatalf("List error: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestListProjectsAllObjects(t *testing.T) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
-	n, err := Count(context.Background(), src, kube.KindPod, "web")
+	n, err := Count(t.Context(), src, kube.KindPod, "web")
 	if err != nil || n != 2 {
 		t.Fatalf("Count = %d, %v; want 2", n, err)
 	}

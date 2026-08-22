@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"testing"
@@ -76,7 +75,7 @@ func TestStartOnlyListsEagerKinds(t *testing.T) {
 	)
 	defer c.Stop()
 
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -97,7 +96,7 @@ func TestStartOnlyListsEagerKinds(t *testing.T) {
 func TestListRawStartsTheKindOnFirstRead(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -107,7 +106,7 @@ func TestListRawStartsTheKindOnFirstRead(t *testing.T) {
 		}
 	}
 
-	if _, err := c.ListRaw(context.Background(), KindSecret, "default"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindSecret, "default"); err != nil {
 		t.Fatalf("ListRaw(Secret): %v", err)
 	}
 
@@ -127,11 +126,11 @@ func TestListRawStartsTheKindOnFirstRead(t *testing.T) {
 func TestRepeatedReadsStartTheInformerOnce(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for i := 0; i < 20; i++ {
 		if _, err := c.ListRaw(ctx, KindConfigMap, ""); err != nil {
 			t.Fatalf("ListRaw(ConfigMap): %v", err)
@@ -164,11 +163,11 @@ func countListActions(cs *fake.Clientset, resource string) int {
 func TestLazyReadIsRaceFree(t *testing.T) {
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
@@ -187,13 +186,13 @@ func TestLazyReadIsRaceFree(t *testing.T) {
 // on the way out.
 func TestListRawAfterStopDoesNotStartInformers(t *testing.T) {
 	c, cs := newLazyTestCluster()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	c.Stop()
 
 	before := len(cs.Actions())
-	if _, err := c.ListRaw(context.Background(), KindSecret, "default"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindSecret, "default"); err != nil {
 		t.Fatalf("ListRaw after Stop should read an empty cache, not error: %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
@@ -216,7 +215,7 @@ func TestListRawAfterStopDoesNotStartInformers(t *testing.T) {
 func TestLazyStartReArmsTheConnectGrace(t *testing.T) {
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
@@ -242,11 +241,11 @@ func TestLazyStartReArmsTheConnectGrace(t *testing.T) {
 func TestStartIgnoresAStrayListerRegistration(t *testing.T) {
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListRaw(context.Background(), KindReplicaSet, ""); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindReplicaSet, ""); err != nil {
 		t.Fatalf("ListRaw(ReplicaSet): %v", err)
 	}
 	c.mu.Lock()
@@ -283,7 +282,7 @@ func TestStartDoesNotListCRDObjects(t *testing.T) {
 	dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
 	defer c.Stop()
 
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	// Give any stray informer a chance to fire before asserting a negative.
@@ -301,10 +300,10 @@ func TestCRDListStartsItsInformerOnDemand(t *testing.T) {
 	dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
 	defer c.Stop()
 
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if _, err := c.ListRaw(context.Background(), KindCustomResourceDefinition, ""); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindCustomResourceDefinition, ""); err != nil {
 		t.Fatalf("ListRaw(CustomResourceDefinition): %v", err)
 	}
 

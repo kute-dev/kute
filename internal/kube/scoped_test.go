@@ -39,7 +39,7 @@ func TestClusterWideModeNormalizesEveryScopeToEmpty(t *testing.T) {
 	t.Parallel()
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	for _, ns := range []string{"", "default", "team-a", "team-b"} {
@@ -57,7 +57,7 @@ func TestScopedModeEagerPodListCarriesTheNamespace(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	waitFor(t, "the eager pod list", func() bool { return countListActions(cs, "pods") > 0 })
@@ -86,11 +86,11 @@ func TestScopedModeFirstReadStartsExactlyOneScopedInformer(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for range 20 {
 		if _, err := c.ListRaw(ctx, KindConfigMap, "team-a"); err != nil {
 			t.Fatalf("ListRaw(ConfigMap): %v", err)
@@ -118,11 +118,11 @@ func TestScopedModeNamespacesAreIndependentCaches(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, ns := range []string{"team-a", "team-b", ""} {
 		if _, err := c.ListRaw(ctx, KindConfigMap, ns); err != nil {
 			t.Fatalf("ListRaw(ConfigMap, %q): %v", ns, err)
@@ -152,12 +152,12 @@ func TestScopedModeClusterScopedKindIgnoresNamespace(t *testing.T) {
 	c, cs := newLazyTestCluster()
 	defer c.Stop()
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	// Node is already eager at "" from Start; reading it again for a named
 	// namespace must not start a second, wrongly-scoped informer.
-	if _, err := c.ListRaw(context.Background(), KindNode, "team-a"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindNode, "team-a"); err != nil {
 		t.Fatalf("ListRaw(Node): %v", err)
 	}
 	waitFor(t, "the node list", func() bool { return countListActions(cs, "nodes") > 0 })
@@ -195,18 +195,18 @@ func TestScopedModeDenialInOneNamespaceDoesNotPoisonAnother(t *testing.T) {
 		return false, nil, nil
 	})
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	if _, err := c.ListRaw(context.Background(), KindConfigMap, "team-a"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindConfigMap, "team-a"); err != nil {
 		t.Fatalf("ListRaw(ConfigMap, team-a): %v", err)
 	}
 	waitFor(t, "team-a to be marked forbidden", func() bool {
 		return c.KindForbidden(KindConfigMap, "team-a") != nil
 	})
 
-	if _, err := c.ListRaw(context.Background(), KindConfigMap, "team-b"); err != nil {
+	if _, err := c.ListRaw(t.Context(), KindConfigMap, "team-b"); err != nil {
 		t.Fatalf("ListRaw(ConfigMap, team-b): %v", err)
 	}
 	waitFor(t, "team-b's cache to sync", func() bool { return c.KindSynced(KindConfigMap, "team-b") })
@@ -231,7 +231,7 @@ func TestStartToleratesEagerClusterScopedKindsForbidden(t *testing.T) {
 	cs.PrependReactor("list", "namespaces", forbidden)
 	cs.PrependReactor("list", "nodes", forbidden)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := c.Start(ctx); err != nil {
 		t.Fatalf("Start returned %v; a denied eager cache must not block startup", err)
@@ -260,7 +260,7 @@ func TestGenerationGuardDropsStaleCallbacks(t *testing.T) {
 	t.Parallel()
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	c.mu.Lock()
@@ -290,11 +290,11 @@ func TestScopedModeConcurrentFirstReadsAreRaceFree(t *testing.T) {
 	c, _ := newLazyTestCluster()
 	defer c.Stop()
 	c.SetNamespaceScope("team-a")
-	if err := c.Start(context.Background()); err != nil {
+	if err := c.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	done := make(chan struct{})
 	for i := 0; i < 8; i++ {
 		go func() {

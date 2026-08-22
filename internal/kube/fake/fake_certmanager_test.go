@@ -1,7 +1,6 @@
 package fake
 
 import (
-	"context"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,7 +26,7 @@ func ownedBy(t *testing.T, objs []*unstructured.Unstructured, kind, name string)
 
 func unstructuredList(t *testing.T, c *Cluster, kind kube.ResourceKind, ns string) []*unstructured.Unstructured {
 	t.Helper()
-	objs, err := c.ListRaw(context.Background(), kind, ns)
+	objs, err := c.ListRaw(t.Context(), kind, ns)
 	if err != nil {
 		t.Fatalf("ListRaw(%s): %v", kind, err)
 	}
@@ -87,7 +86,7 @@ func TestRenewCertificateFlipsReadyFalse(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
 
-	if err := c.RenewCertificate(context.Background(), "default", "admin-tls"); err != nil {
+	if err := c.RenewCertificate(t.Context(), "default", "admin-tls"); err != nil {
 		t.Fatalf("RenewCertificate: %v", err)
 	}
 
@@ -122,7 +121,7 @@ func TestRenewCertificateFlipsReadyFalse(t *testing.T) {
 func TestRenewCertificateUnknownName(t *testing.T) {
 	t.Parallel()
 	c := NewDemo()
-	if err := c.RenewCertificate(context.Background(), "default", "does-not-exist"); err == nil {
+	if err := c.RenewCertificate(t.Context(), "default", "does-not-exist"); err == nil {
 		t.Fatal("expected an error renewing an unseeded Certificate")
 	}
 }

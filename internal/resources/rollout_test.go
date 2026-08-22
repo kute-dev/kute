@@ -58,7 +58,7 @@ func TestUnsettledWorkloadsNamesOnlyTheMovingOnes(t *testing.T) {
 		kube.KindDaemonSet:   {settledSet, partialSet},
 	}}
 
-	got := UnsettledWorkloads(context.Background(), lister, "nva")
+	got := UnsettledWorkloads(t.Context(), lister, "nva")
 	want := []kube.WorkloadRef{
 		{Kind: kube.KindDeployment, Namespace: "nva", Name: "api"},
 		{Kind: kube.KindStatefulSet, Namespace: "nva", Name: "queue"},
@@ -80,7 +80,7 @@ func TestUnsettledWorkloadsNamesOnlyTheMovingOnes(t *testing.T) {
 // the lazy-informer rule forbids.
 func TestUnsettledWorkloadsReadsOnlyTheRollingKinds(t *testing.T) {
 	rec := &recordingLister{}
-	UnsettledWorkloads(context.Background(), rec, "nva")
+	UnsettledWorkloads(t.Context(), rec, "nva")
 
 	want := map[kube.ResourceKind]bool{
 		kube.KindDeployment: true, kube.KindStatefulSet: true, kube.KindDaemonSet: true,
@@ -100,10 +100,10 @@ func TestUnsettledWorkloadsReadsOnlyTheRollingKinds(t *testing.T) {
 // can't see would put a permanent ▸ on every release.
 func TestUnsettledWorkloadsDegradesQuietly(t *testing.T) {
 	lister := fakeLister{err: errNoCache}
-	if got := UnsettledWorkloads(context.Background(), lister, "nva"); len(got) != 0 {
+	if got := UnsettledWorkloads(t.Context(), lister, "nva"); len(got) != 0 {
 		t.Errorf("UnsettledWorkloads on a failing lister = %v, want empty", got)
 	}
-	if got := UnsettledWorkloads(context.Background(), nil, "nva"); len(got) != 0 {
+	if got := UnsettledWorkloads(t.Context(), nil, "nva"); len(got) != 0 {
 		t.Errorf("UnsettledWorkloads(nil lister) = %v, want empty", got)
 	}
 }
