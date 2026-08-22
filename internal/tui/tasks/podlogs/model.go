@@ -7,7 +7,6 @@ package podlogs
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
@@ -392,7 +391,12 @@ func (m Model) taskState() tui.TaskState {
 	case StreamEmpty:
 		return tui.TaskStateEmpty
 	case StreamError:
-		if kube.IsPermissionError(fmt.Errorf("%s", m.lastError)) {
+		// permDenied, not a re-classification of lastError: that field is
+		// only the error's *text*, and rebuilding an error from it threw away
+		// the *apierrors.StatusError, so IsPermissionError could never reach
+		// its apierrors.IsForbidden path here — only its substring fallback.
+		// update.go classifies the real error the moment it arrives.
+		if m.permDenied {
 			return tui.TaskStatePermissionDenied
 		}
 		return tui.TaskStateError

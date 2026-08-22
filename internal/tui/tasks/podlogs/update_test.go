@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -408,5 +410,38 @@ func TestRateTickUpdatesLastRateAndDropsStaleGeneration(t *testing.T) {
 	_, cmd = model.Update(rateTickMsg{gen: 1})
 	if model.lastRate != 3 || cmd != nil {
 		t.Fatalf("stale tick applied: lastRate=%d cmd=%v", model.lastRate, cmd)
+	}
+}
+
+// TestTypedForbiddenErrorReachesPermissionDeniedState pins that taskState
+// classifies the *real* error rather than a reconstruction of its text.
+//
+// taskState used to run kube.IsPermissionError over fmt.Errorf("%s",
+// m.lastError) — an error rebuilt from the message string, which had already
+// thrown the *apierrors.StatusError away. IsPermissionError's good
+// apierrors.IsForbidden path could therefore never fire there; only its
+// documented substring fallback could. This error is deliberately typed
+// Forbidden while carrying a message with neither "forbidden" nor
+// "permission" in it, so the substring path cannot rescue it.
+func TestTypedForbiddenErrorReachesPermissionDeniedState(t *testing.T) {
+	t.Parallel()
+	forbidden := &apierrors.StatusError{ErrStatus: metav1.Status{
+		Status:  metav1.StatusFailure,
+		Code:    403,
+		Reason:  metav1.StatusReasonForbidden,
+		Message: "denied by admission webhook",
+	}}
+	if strings.Contains(strings.ToLower(forbidden.Error()), "forbidden") {
+		t.Fatal("test fixture defeats its own purpose: message must not contain \"forbidden\"")
+	}
+
+	model := testModel()
+	_, _ = model.Update(streamErrorMsg{err: forbidden})
+
+	if model.stream != StreamError {
+		t.Fatalf("stream = %s, want error", model.stream)
+	}
+	if got := model.taskState(); got != tui.TaskStatePermissionDenied {
+		t.Fatalf("taskState = %s, want permission-denied", got)
 	}
 }
