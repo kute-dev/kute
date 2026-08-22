@@ -415,6 +415,18 @@ func (m *ForwardManager) run(ctx context.Context, id, initialPod string) {
 		}
 		if err == nil {
 			m.mu.Lock()
+			// A Stop or Restart can land while Dial is in flight, and this
+			// goroutine has been the doomed one ever since. Publishing the
+			// handle now would stomp the *replacement* goroutine's tunnel
+			// with this stale one: the live tunnel becomes unreachable and is
+			// never closed, leaking an SPDY connection and a local listening
+			// port for every restart that hits the window. The other two
+			// ctx.Err() checks in this loop bracket Run(), not Dial().
+			if ctx.Err() != nil {
+				m.mu.Unlock()
+				tunnel.Close()
+				return
+			}
 			if e, ok := m.sessions[id]; ok {
 				e.tunnel = tunnel
 				e.session.State = ForwardActive
@@ -529,9 +541,10 @@ func (m *ForwardManager) Restart(id string) {
 	}
 	pod := entry.session.ResolvedPod
 	entry.cancel()
-	if entry.tunnel != nil {
-		entry.tunnel.Close()
-	}
+	// Closed after the unlock below, not here: Tunnel.Close takes the
+	// tunnel's own lock, and Stop/StopAll both already release m.mu before
+	// cancelling and closing. Restart was the one that did not.
+	old := entry.tunnel
 	ctx, cancel := context.WithCancel(context.Background())
 	entry.cancel = cancel
 	entry.tunnel = nil
@@ -539,6 +552,9 @@ func (m *ForwardManager) Restart(id string) {
 	entry.session.Attempt = 0
 	entry.session.Err = ""
 	m.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
 	m.notify()
 	go m.run(ctx, id, pod)
 }

@@ -230,3 +230,105 @@ func TestForwardBackoffCapped(t *testing.T) {
 		t.Errorf("forwardBackoff(100) = %s, want capped at 30s", d)
 	}
 }
+
+// gatedDialer blocks its first Dial on gate, then serves later dials from
+// tunnels in order. It exists to hold one run() goroutine inside Dial while a
+// Restart replaces it.
+type gatedDialer struct {
+	gate    chan struct{}
+	entered chan struct{} // closed once the first Dial is actually parked
+	mu      sync.Mutex
+	dials   int
+	tunnels []*stubTunnel
+}
+
+func (d *gatedDialer) Dial(_ string, _ string, _ int, _ int32) (Tunnel, error) {
+	d.mu.Lock()
+	n := d.dials
+	d.dials++
+	d.mu.Unlock()
+	if n == 0 {
+		close(d.entered)
+		<-d.gate
+	}
+	if n < len(d.tunnels) {
+		return d.tunnels[n], nil
+	}
+	return nil, errors.New("no tunnel left")
+}
+
+// tunnelFor reads the live tunnel handle a session is holding.
+func (m *ForwardManager) tunnelFor(id string) Tunnel {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if e, ok := m.sessions[id]; ok {
+		return e.tunnel
+	}
+	return nil
+}
+
+func (s *stubTunnel) isClosed() bool {
+	select {
+	case <-s.closed:
+		return true
+	default:
+		return false
+	}
+}
+
+// TestForwardManagerRestartDoesNotOrphanTheReplacedTunnel pins the window
+// between Dial returning and the tunnel handle being published.
+//
+// run() checks ctx.Err() before dialing and after Run() returns, but not
+// between Dial and the write. A Restart landing inside that gap left the
+// doomed goroutine to publish its stale tunnel over the replacement's, so the
+// live tunnel became unreachable and was never closed — a leaked SPDY
+// connection and a leaked local listening port per restart.
+func TestForwardManagerRestartDoesNotOrphanTheReplacedTunnel(t *testing.T) {
+	t.Parallel()
+	stale, live := newStubTunnel(nil), newStubTunnel(nil)
+	dialer := &gatedDialer{
+		gate:    make(chan struct{}),
+		entered: make(chan struct{}),
+		tunnels: []*stubTunnel{stale, live},
+	}
+	mgr := NewForwardManager()
+	target := ForwardTarget{Kind: KindPod, Namespace: "default", Name: "web"}
+
+	session := mgr.Start(dialer, stubResolver{pod: "web"}, target, "web", 8080, 80, "")
+
+	// Wait until the first goroutine is genuinely parked inside Dial before
+	// replacing it — otherwise the replacement can be the one that gets the
+	// gated dial and the roles swap.
+	<-dialer.entered
+	mgr.Restart(session.ID)
+
+	// Wait for the replacement to publish its own tunnel before letting the
+	// doomed one out of Dial — that ordering is the whole point of the test.
+	deadline := time.Now().Add(2 * time.Second)
+	for mgr.tunnelFor(session.ID) != Tunnel(live) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := mgr.tunnelFor(session.ID); got != Tunnel(live) {
+		t.Fatalf("replacement never published its tunnel; holding %v", got)
+	}
+
+	close(dialer.gate)
+
+	// The doomed goroutine must close what it dialled and leave the live
+	// handle alone.
+	for !stale.isClosed() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !stale.isClosed() {
+		t.Error("the tunnel dialled by the replaced goroutine was never closed")
+	}
+	if got := mgr.tunnelFor(session.ID); got != Tunnel(live) {
+		t.Errorf("session is holding %v, want the live tunnel — the stale one stomped it", got)
+	}
+	if live.isClosed() {
+		t.Error("the live tunnel was closed")
+	}
+
+	mgr.Stop(session.ID)
+}
