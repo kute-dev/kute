@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -361,3 +362,55 @@ type fakeTask struct{}
 func (f *fakeTask) Init() tea.Cmd                       { return nil }
 func (f *fakeTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return f, nil }
 func (f *fakeTask) View() tea.View                      { return tea.NewView("") }
+
+// TestCacheSyncRetryTickEventuallyLeavesLoading drives the retry chain the two
+// tests above deliberately refuse to touch.
+//
+// Those two assert the *first* frame — loading, not a confident empty answer —
+// and stop there, because draining applyLoaded's retry cmd meant sleeping a
+// real CacheSyncRetryInterval per bounce. That left the half that matters
+// untested: the tick has to actually fire, reload, and let the screen out of
+// loading once the cache fills. tui.ScheduleCacheSyncRetry exists precisely
+// because a kind with genuinely zero objects syncs without ever emitting a
+// change event, so nothing else would ever wake the screen.
+//
+// Inside a synctest bubble the clock is fake and advances as soon as every
+// goroutine is blocked, so the whole chain drains instantly and exactly.
+func TestCacheSyncRetryTickEventuallyLeavesLoading(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rbac := &forbiddenRBAC{
+			fakeRBAC: fakeRBAC{result: kube.WhoCanResult{Subjects: []kube.WhoCanSubject{{Name: "bob", Kind: "User"}}}},
+			unsynced: kube.KindClusterRole,
+		}
+		m := New(Config{Session: newSession(), RBAC: rbac, Verb: "list", Resource: "pods", Namespace: "default"})
+		m.SetSize(120, 36)
+
+		updated, cmd := m.Update(m.load()())
+		m = *updated.(*Model)
+		if m.state != tui.TaskStateLoading {
+			t.Fatalf("state = %s, want loading while the ClusterRole cache reports unsynced", m.state)
+		}
+		if cmd == nil {
+			t.Fatal("no retry scheduled while the cache was unsynced — nothing would ever wake this screen")
+		}
+
+		// The cache fills while the retry is in flight, emitting no change
+		// event: the exact case the retry is for.
+		rbac.synced = true
+
+		for range 5 {
+			if cmd == nil {
+				break
+			}
+			updated, cmd = m.Update(cmd())
+			m = *updated.(*Model)
+		}
+
+		if m.state != tui.TaskStateReady {
+			t.Fatalf("state = %s, want ready once the cache synced and the retry fired", m.state)
+		}
+		if len(m.rows) == 0 {
+			t.Fatal("expected rows after the retry resolved")
+		}
+	})
+}

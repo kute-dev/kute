@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -83,31 +84,36 @@ func TestScopedModeEagerPodListCarriesTheNamespace(t *testing.T) {
 // started, scoped or not.
 func TestScopedModeFirstReadStartsExactlyOneScopedInformer(t *testing.T) {
 	t.Parallel()
-	c, cs := newLazyTestCluster()
-	defer c.Stop()
-	c.SetNamespaceScope("team-a")
-	if err := c.Start(t.Context()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		c, cs := newLazyTestCluster()
+		defer c.Stop()
+		c.SetNamespaceScope("team-a")
+		if err := c.Start(t.Context()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
 
-	ctx := t.Context()
-	for range 20 {
-		if _, err := c.ListRaw(ctx, KindConfigMap, "team-a"); err != nil {
-			t.Fatalf("ListRaw(ConfigMap): %v", err)
+		ctx := t.Context()
+		for range 20 {
+			if _, err := c.ListRaw(ctx, KindConfigMap, "team-a"); err != nil {
+				t.Fatalf("ListRaw(ConfigMap): %v", err)
+			}
 		}
-	}
-	waitFor(t, "the scoped ConfigMap informer to list", func() bool {
-		return countListActions(cs, "configmaps") > 0
+		waitFor(t, "the scoped ConfigMap informer to list", func() bool {
+			return countListActions(cs, "configmaps") > 0
+		})
+		// Wait, not a sleep: it returns once every goroutine in the bubble is
+		// blocked, which is exactly the "nothing more is going to happen"
+		// condition a negative assertion needs.
+		synctest.Wait()
+		if n := countListActions(cs, "configmaps"); n != 1 {
+			t.Fatalf("configmaps listed %d times across 20 reads, want exactly 1", n)
+		}
+		for _, ns := range listActionNamespaces(cs, "configmaps") {
+			if ns != "team-a" {
+				t.Fatalf("scoped ConfigMap list ran against namespace %q, want \"team-a\"", ns)
+			}
+		}
 	})
-	time.Sleep(50 * time.Millisecond)
-	if n := countListActions(cs, "configmaps"); n != 1 {
-		t.Fatalf("configmaps listed %d times across 20 reads, want exactly 1", n)
-	}
-	for _, ns := range listActionNamespaces(cs, "configmaps") {
-		if ns != "team-a" {
-			t.Fatalf("scoped ConfigMap list ran against namespace %q, want \"team-a\"", ns)
-		}
-	}
 }
 
 // TestScopedModeNamespacesAreIndependentCaches is §1's core claim: two named
@@ -149,34 +155,39 @@ func TestScopedModeNamespacesAreIndependentCaches(t *testing.T) {
 // informer per namespace touched.
 func TestScopedModeClusterScopedKindIgnoresNamespace(t *testing.T) {
 	t.Parallel()
-	c, cs := newLazyTestCluster()
-	defer c.Stop()
-	c.SetNamespaceScope("team-a")
-	if err := c.Start(t.Context()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	// Node is already eager at "" from Start; reading it again for a named
-	// namespace must not start a second, wrongly-scoped informer.
-	if _, err := c.ListRaw(t.Context(), KindNode, "team-a"); err != nil {
-		t.Fatalf("ListRaw(Node): %v", err)
-	}
-	waitFor(t, "the node list", func() bool { return countListActions(cs, "nodes") > 0 })
-	time.Sleep(50 * time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		c, cs := newLazyTestCluster()
+		defer c.Stop()
+		c.SetNamespaceScope("team-a")
+		if err := c.Start(t.Context()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		// Node is already eager at "" from Start; reading it again for a named
+		// namespace must not start a second, wrongly-scoped informer.
+		if _, err := c.ListRaw(t.Context(), KindNode, "team-a"); err != nil {
+			t.Fatalf("ListRaw(Node): %v", err)
+		}
+		waitFor(t, "the node list", func() bool { return countListActions(cs, "nodes") > 0 })
+		// Wait, not a sleep: it returns once every goroutine in the bubble is
+		// blocked, which is exactly the "nothing more is going to happen"
+		// condition a negative assertion needs.
+		synctest.Wait()
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	n := 0
-	for key := range c.kindInformers {
-		if key.kind == KindNode {
-			n++
-			if key.namespace != "" {
-				t.Errorf("Node informer registered at scope %q, want \"\"", key.namespace)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		n := 0
+		for key := range c.kindInformers {
+			if key.kind == KindNode {
+				n++
+				if key.namespace != "" {
+					t.Errorf("Node informer registered at scope %q, want \"\"", key.namespace)
+				}
 			}
 		}
-	}
-	if n != 1 {
-		t.Errorf("%d Node informers registered, want exactly 1", n)
-	}
+		if n != 1 {
+			t.Errorf("%d Node informers registered, want exactly 1", n)
+		}
+	})
 }
 
 // TestScopedModeDenialInOneNamespaceDoesNotPoisonAnother is §1's other core

@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -358,25 +360,56 @@ func (fakeTask) Init() tea.Cmd                       { return nil }
 func (fakeTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return fakeTask{}, nil }
 func (fakeTask) View() tea.View                      { return tea.NewView("") }
 
+// TestResourceChangedDebouncesReload asserts the reload really waits out the
+// debounce window, not merely that a watch event schedules something.
+//
+// The old version of this test called the returned command inline, which
+// worked — by blocking the test for a real 250ms and then asserting only on
+// the message type, never on the timing that is the whole point of a
+// debounce. Inside a synctest bubble the clock is fake and advances only once
+// every goroutine is blocked, so "has not fired yet at 249ms" and "has fired
+// at 251ms" are both exact statements, and the test costs no wall-clock time.
 func TestResourceChangedDebouncesReload(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {pod("default", "api-1")},
-	}}
-	m := New(Config{Session: newSession(), Lister: lister})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+	synctest.Test(t, func(t *testing.T) {
+		lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindPod: {pod("default", "api-1")},
+		}}
+		m := New(Config{Session: newSession(), Lister: lister})
+		m.SetSize(120, 36)
+		m = step(t, m, m.Init()())
 
-	updated, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindPod})
-	m = *updated.(*Model)
-	if cmd == nil {
-		t.Fatal("expected a scheduled reload command")
-	}
-	msg := cmd()
-	due, ok := msg.(reloadDueMsg)
-	if !ok {
-		t.Fatalf("expected reloadDueMsg, got %T", msg)
-	}
-	if due.epoch != m.reloadEpoch {
-		t.Fatalf("epoch = %d, want %d", due.epoch, m.reloadEpoch)
-	}
+		updated, cmd := m.Update(kube.ResourceChangedMsg{Kind: kube.KindPod})
+		m = *updated.(*Model)
+		if cmd == nil {
+			t.Fatal("expected a scheduled reload command")
+		}
+
+		fired := make(chan tea.Msg, 1)
+		go func() { fired <- cmd() }()
+
+		time.Sleep(reloadDebounce - time.Millisecond)
+		synctest.Wait()
+		select {
+		case msg := <-fired:
+			t.Fatalf("reload fired as %T before the %v debounce elapsed", msg, reloadDebounce)
+		default:
+		}
+
+		time.Sleep(2 * time.Millisecond)
+		synctest.Wait()
+		var msg tea.Msg
+		select {
+		case msg = <-fired:
+		default:
+			t.Fatalf("reload never fired after the %v debounce elapsed", reloadDebounce)
+		}
+
+		due, ok := msg.(reloadDueMsg)
+		if !ok {
+			t.Fatalf("expected reloadDueMsg, got %T", msg)
+		}
+		if due.epoch != m.reloadEpoch {
+			t.Fatalf("epoch = %d, want %d", due.epoch, m.reloadEpoch)
+		}
+	})
 }

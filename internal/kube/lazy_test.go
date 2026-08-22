@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -124,27 +125,29 @@ func TestListRawStartsTheKindOnFirstRead(t *testing.T) {
 // browse re-reads on every change event and every 250ms retry, so a
 // non-idempotent start would relist the world continuously.
 func TestRepeatedReadsStartTheInformerOnce(t *testing.T) {
-	c, cs := newLazyTestCluster()
-	defer c.Stop()
-	if err := c.Start(t.Context()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-
-	ctx := t.Context()
-	for i := 0; i < 20; i++ {
-		if _, err := c.ListRaw(ctx, KindConfigMap, ""); err != nil {
-			t.Fatalf("ListRaw(ConfigMap): %v", err)
+	synctest.Test(t, func(t *testing.T) {
+		c, cs := newLazyTestCluster()
+		defer c.Stop()
+		if err := c.Start(t.Context()); err != nil {
+			t.Fatalf("Start: %v", err)
 		}
-	}
-	waitFor(t, "the ConfigMap informer to list", func() bool {
-		return countListActions(cs, "configmaps") > 0
-	})
-	// Let any duplicate starts settle before counting.
-	time.Sleep(50 * time.Millisecond)
 
-	if n := countListActions(cs, "configmaps"); n != 1 {
-		t.Fatalf("configmaps listed %d times across 20 reads, want exactly 1", n)
-	}
+		ctx := t.Context()
+		for i := 0; i < 20; i++ {
+			if _, err := c.ListRaw(ctx, KindConfigMap, ""); err != nil {
+				t.Fatalf("ListRaw(ConfigMap): %v", err)
+			}
+		}
+		// Exactly, not approximately: Wait returns once every goroutine in the
+		// bubble is blocked, so a duplicate informer start has either happened
+		// by now or never will. The 50ms sleep this replaces was a guess that a
+		// loaded CI box could outrun.
+		synctest.Wait()
+
+		if n := countListActions(cs, "configmaps"); n != 1 {
+			t.Fatalf("configmaps listed %d times across 20 reads, want exactly 1", n)
+		}
+	})
 }
 
 func countListActions(cs *fake.Clientset, resource string) int {
@@ -185,27 +188,32 @@ func TestLazyReadIsRaceFree(t *testing.T) {
 // informer started with a nil channel would never stop — a goroutine leak
 // on the way out.
 func TestListRawAfterStopDoesNotStartInformers(t *testing.T) {
-	c, cs := newLazyTestCluster()
-	if err := c.Start(t.Context()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	c.Stop()
+	synctest.Test(t, func(t *testing.T) {
+		c, cs := newLazyTestCluster()
+		if err := c.Start(t.Context()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		c.Stop()
 
-	before := len(cs.Actions())
-	if _, err := c.ListRaw(t.Context(), KindSecret, "default"); err != nil {
-		t.Fatalf("ListRaw after Stop should read an empty cache, not error: %v", err)
-	}
-	time.Sleep(50 * time.Millisecond)
+		before := len(cs.Actions())
+		if _, err := c.ListRaw(t.Context(), KindSecret, "default"); err != nil {
+			t.Fatalf("ListRaw after Stop should read an empty cache, not error: %v", err)
+		}
+		// Wait, not a sleep: it returns once every goroutine in the bubble is
+		// blocked, which is exactly the "nothing more is going to happen"
+		// condition a negative assertion needs.
+		synctest.Wait()
 
-	if got := len(cs.Actions()); got != before {
-		t.Fatalf("ListRaw after Stop issued %d new API actions, want 0", got-before)
-	}
-	c.mu.Lock()
-	_, registered := c.kindInformers[scopeKey{KindSecret, ""}]
-	c.mu.Unlock()
-	if registered {
-		t.Fatal("ListRaw after Stop registered an informer that can never be stopped")
-	}
+		if got := len(cs.Actions()); got != before {
+			t.Fatalf("ListRaw after Stop issued %d new API actions, want 0", got-before)
+		}
+		c.mu.Lock()
+		_, registered := c.kindInformers[scopeKey{KindSecret, ""}]
+		c.mu.Unlock()
+		if registered {
+			t.Fatal("ListRaw after Stop registered an informer that can never be stopped")
+		}
+	})
 }
 
 // TestLazyStartReArmsTheConnectGrace pins the health companion fix. A lazy
@@ -278,19 +286,23 @@ func crdListActions(dyn *dynamicfake.FakeDynamicClient) int {
 // landed, the single largest thing a connect pulled — and 98% of it was
 // schema nothing reads.
 func TestStartDoesNotListCRDObjects(t *testing.T) {
-	c, _ := newLazyTestCluster()
-	dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
-	defer c.Stop()
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := newLazyTestCluster()
+		dyn := c.dynClient.(*dynamicfake.FakeDynamicClient)
+		defer c.Stop()
 
-	if err := c.Start(t.Context()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	// Give any stray informer a chance to fire before asserting a negative.
-	time.Sleep(50 * time.Millisecond)
+		if err := c.Start(t.Context()); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		// Wait, not a sleep: it returns once every goroutine in the bubble is
+		// blocked, which is exactly the "nothing more is going to happen"
+		// condition a negative assertion needs.
+		synctest.Wait()
 
-	if n := crdListActions(dyn); n != 0 {
-		t.Fatalf("connect issued %d full CRD list(s); discovery is supposed to read names and the discovery API instead", n)
-	}
+		if n := crdListActions(dyn); n != 0 {
+			t.Fatalf("connect issued %d full CRD list(s); discovery is supposed to read names and the discovery API instead", n)
+		}
+	})
 }
 
 // TestCRDListStartsItsInformerOnDemand: 14b is the one screen that wants
