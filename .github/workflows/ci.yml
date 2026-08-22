@@ -25,6 +25,12 @@ jobs:
         run: go vet ./...
       - name: golangci-lint
         run: golangci-lint run
+      # Also runs weekly on a cron (govulncheck.yml), which is what catches a
+      # vulnerability newly disclosed against code nobody touched. This copy
+      # is the gate: without it a PR introducing a vulnerable dependency
+      # merges clean and is only caught up to seven days later.
+      - name: govulncheck
+        run: govulncheck ./...
       # deploy-pages.yml renders the site on push to main, where a broken
       # template would fail after review rather than during it.
       - name: Render the website
@@ -34,8 +40,10 @@ jobs:
   # The release builds a windows/amd64 and windows/arm64 binary, so something
   # has to actually run one. mise rather than setup-go everywhere else, but
   # its Windows coverage for kubectl/golangci-lint is the weak link and none
-  # of that is needed to compile and unit-test — keep the go version in step
-  # with mise.toml by hand.
+  # of that is needed to compile and unit-test. The Go version is read out of
+  # mise.toml rather than pinned again here — three different numbers in
+  # go.mod, mise.toml and this file is exactly the drift that comment used to
+  # ask a human to prevent.
   windows:
     name: build + test (windows)
     runs-on: windows-latest
@@ -45,10 +53,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Read the pinned Go version
+        id: goversion
+        shell: bash
+        run: |
+          version=$(sed -n 's/^go[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' mise.toml | head -1)
+          [ -n "$version" ] || { echo "no go version found in mise.toml" >&2; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.5"
+          go-version: ${{ steps.goversion.outputs.version }}
       - name: go build
         run: go build ./...
       # No -race: it needs cgo, and the Windows runners have no gcc.
