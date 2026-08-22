@@ -1,6 +1,8 @@
 package kube
 
 import (
+	"errors"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -53,6 +55,42 @@ func TestExecCommandStringQuotesFallbackProbe(t *testing.T) {
 	want := "kubectl exec -it api-1 -n default -c worker -- sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
 	if got != want {
 		t.Fatalf("ExecCommandString = %q, want %q", got, want)
+	}
+}
+
+// runFailing runs a shell one-liner that writes msg to stderr and exits
+// non-zero, returning the *exec.ExitError .Output() produces — the same
+// shape a failed kubectl exec returns, with Stderr populated since Output()
+// captures it whenever Cmd.Stderr wasn't already set.
+func runFailing(t *testing.T, msg string) error {
+	t.Helper()
+	quoted := "'" + strings.ReplaceAll(msg, "'", `'\''`) + "'"
+	_, err := exec.Command("sh", "-c", "echo "+quoted+" >&2; exit 1").Output()
+	if err == nil {
+		t.Fatal("expected the command to fail")
+	}
+	return err
+}
+
+// TestMissingExecutableDetectsOCIRuntimeENOENT confirms the fork that
+// separates a genuinely shell-less container from a real probe failure: the
+// runtime's own "executable file not found" wording says the probed runner
+// itself isn't in the image, anything else (RBAC, connectivity) doesn't.
+func TestMissingExecutableDetectsOCIRuntimeENOENT(t *testing.T) {
+	t.Parallel()
+
+	ociErr := runFailing(t, `OCI runtime exec failed: exec failed: unable to start container process: exec: "sh": executable file not found in $PATH: unknown`)
+	if !missingExecutable(ociErr) {
+		t.Errorf("expected an OCI 'executable file not found' error to be detected as a missing runner")
+	}
+
+	deniedErr := runFailing(t, `Error from server (Forbidden): pods "api-1" is forbidden: User cannot create resource "pods/exec"`)
+	if missingExecutable(deniedErr) {
+		t.Errorf("expected an RBAC denial not to be mistaken for a missing runner")
+	}
+
+	if missingExecutable(errors.New("no such host")) {
+		t.Errorf("expected a non-ExitError to never count as a missing runner")
 	}
 }
 

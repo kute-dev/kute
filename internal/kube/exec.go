@@ -64,17 +64,47 @@ func DetectShells(ctx context.Context, namespace, pod, container string) ([]stri
 	// shell. bash is the fallback runner precisely because it's the other
 	// candidate.
 	var firstErr error
+	// A genuinely shell-less (distroless) container fails *both* attempts
+	// the same way a real probe failure would: kubectl exec exits non-zero.
+	// allMissing stays true only while every failure so far is the OCI
+	// runtime's own "the runner itself isn't in the container" error —
+	// which the probe script can't tell apart from "no pods/exec
+	// permission" any other way, since it never got a shell to run
+	// `command -v` through. Once both candidates fail that way, that *is*
+	// the answer: no shell, not an unknown probe result.
+	allMissing := true
 	for _, runner := range []string{"sh", "bash"} {
 		out, err := exec.CommandContext(ctx, "kubectl", shellProbeArgs(namespace, pod, container, runner)...).Output()
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
+			if !missingExecutable(err) {
+				allMissing = false
+			}
 			continue
 		}
 		return parseDetectedShells(string(out)), nil
 	}
+	if allMissing {
+		return nil, nil
+	}
 	return nil, firstErr
+}
+
+// missingExecutable reports whether a kubectl exec attempt failed because
+// the probed runner itself isn't present in the container — the container
+// runtime's own ENOENT wording ("executable file not found in $PATH"),
+// stable across docker/containerd/CRI-O since they all shell out through
+// runc. Distinct from a real probe failure (no kubectl on PATH, no
+// pods/exec permission, connection down): none of those mention a missing
+// executable.
+func missingExecutable(err error) bool {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return false
+	}
+	return strings.Contains(string(exitErr.Stderr), "executable file not found")
 }
 
 // shellProbeArgs builds the probe's kubectl argv. Deliberately not
