@@ -76,18 +76,20 @@ func (m Model) Body(width, height int) string {
 }
 
 // panelContent builds 10a's picker panel: an inner header ("exec › pod" +
-// container count), the container list, then either the "will run"
-// documentation line for the highlighted container or — when that container
-// is already known to have no shell — §41a's "no sh or bash" note in its
-// place (a kubectl exec preview would be a lie there), and a blank feedback
-// line reserved for a non-zero exec exit (kept even when empty so the
-// panel's height doesn't jump between attempts).
+// container count), the container list — name/state/shells on one line, the
+// image on its own line right below (so a long image never pushes STATUS/
+// SHELLS out of their fixed columns on the name line) — then either the
+// "will run" documentation line for the highlighted container or — when
+// that container is already known to have no shell — §41a's "no sh or
+// bash" note in its place (a kubectl exec preview would be a lie there), and
+// a blank feedback line reserved for a non-zero exec exit (kept even when
+// empty so the panel's height doesn't jump between attempts).
 func (m Model) panelContent(theme tui.Theme) string {
 	var lines []string
 	lines = append(lines, m.panelHeader(theme))
 	lines = append(lines, "")
 	for i, c := range m.containers {
-		lines = append(lines, m.containerLine(theme, i, c))
+		lines = append(lines, m.containerLines(theme, i, c)...)
 	}
 	lines = append(lines, "")
 	if m.selectedShellless() {
@@ -101,27 +103,45 @@ func (m Model) panelContent(theme tui.Theme) string {
 	return strings.Join(lines, "\n")
 }
 
+// panelHeader truncates the pod name so "exec › <pod>" plus the right-hand
+// count never exceeds panelWidth — every other line in the panel (container
+// rows, will-run, feedback) is already clamped to panelWidth, and Body's
+// panelStyle carries no explicit Width, so lipgloss sizes the card to its
+// widest line. A long pod name left unclamped here (real StatefulSet pods
+// routinely run past 40 characters) was the one line that could stretch the
+// whole card past panelWidth, leaving every fixed-width row below it short
+// with blank space trailing under "N containers".
 func (m Model) panelHeader(theme tui.Theme) string {
-	left := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true).Render("exec › ") +
-		lipgloss.NewStyle().Foreground(theme.TextPrimary).Render(m.podName)
+	const labelText = "exec › "
 	right := lipgloss.NewStyle().Foreground(theme.TextFaint).Render(fmt.Sprintf("%d containers", len(m.containers)))
+	avail := panelWidth - lipgloss.Width(labelText) - lipgloss.Width(right) - 1 // reserve >=1 gap
+	podName := components.Truncate(m.podName, max(avail, 1))
+	left := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true).Render(labelText) +
+		lipgloss.NewStyle().Foreground(theme.TextPrimary).Render(podName)
 	gap := max(panelWidth-lipgloss.Width(left)-lipgloss.Width(right), 1)
 	return left + strings.Repeat(" ", gap) + right
 }
 
 // Container row columns — fixed widths so STATUS and SHELLS start at the
-// same column on every row regardless of how long a container's name+image
-// or status/shells text happens to be (docs/design v.0.11.0.dc.html §41a:
-// container statuses "one under another"). Only the name+image column
-// flexes/truncates; marker(2) + nameColWidth + 2 + statusColWidth + 2 +
-// shellsColWidth sums to panelWidth.
+// same column on every row regardless of how long a container's name or
+// status/shells text happens to be (docs/design v.0.11.0.dc.html §41a:
+// container statuses "one under another"). Only the name column flexes/
+// truncates on the first line; marker(2) + nameColWidth + 2 + statusColWidth
+// + 2 + shellsColWidth sums to panelWidth. The image gets its own indented
+// line below the name so a long image reference never crowds STATUS/SHELLS
+// off their columns.
 const (
 	nameColWidth   = 26
 	statusColWidth = 13
 	shellsColWidth = 11
+	imageIndent    = 2
 )
 
-func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) string {
+// containerLines renders one container as two rows: name · state · shells,
+// then the image indented to align under the name. Both lines share the
+// same selection background so the highlighted container still reads as one
+// block.
+func (m Model) containerLines(theme tui.Theme, i int, c kube.ContainerInfo) []string {
 	selected := i == m.selected
 	// rowFill paints the row's gap cells with the row's own background —
 	// SelBg when selected, transparent (BgPalette is empty) otherwise —
@@ -166,36 +186,52 @@ func (m Model) containerLine(theme tui.Theme, i int, c kube.ContainerInfo) strin
 		}
 	}
 
+	name := components.Truncate(c.Name, nameColWidth)
+	nameWidth := lipgloss.Width(name)
+	state := components.Truncate(glyph+" "+text, statusColWidth)
+	shells := components.Truncate(shellsText, shellsColWidth)
+
+	nameLine := marker + nameStyle.Render(name) + fill(nameColWidth-nameWidth) + fill(2) +
+		stateStyle.Render(state) + fill(statusColWidth-lipgloss.Width(state)) + fill(2) +
+		fill(shellsColWidth-lipgloss.Width(shells)) + shellStyle.Render(shells)
+
 	img := c.Image
 	if c.IsSidecar {
 		img += " sidecar"
 	}
-	name, nameWidth := nameImageCell(nameStyle, imgStyle, c.Name, img)
-	state := components.Truncate(glyph+" "+text, statusColWidth)
-	shells := components.Truncate(shellsText, shellsColWidth)
+	imgAvail := panelWidth - imageIndent
+	img = truncateImageRef(img, imgAvail)
+	imgLine := fill(imageIndent) + imgStyle.Render(img) + fill(imgAvail-lipgloss.Width(img))
 
-	left := marker + name
-	return left + fill(nameColWidth-nameWidth) + fill(2) +
-		stateStyle.Render(state) + fill(statusColWidth-lipgloss.Width(state)) + fill(2) +
-		fill(shellsColWidth-lipgloss.Width(shells)) + shellStyle.Render(shells)
+	return []string{nameLine, imgLine}
 }
 
-// nameImageCell renders the fixed-width name+image column — the name in
-// nameStyle, two spaces, then the image in imgStyle — truncated as one unit
-// to nameColWidth so a long image never pushes STATUS/SHELLS out of their
-// own columns, and reports the cell's true display width so the caller can
-// pad out the rest of the column. Byte-slicing the truncated combined string
-// at len(name) is safe here: components.Truncate only ever cuts inside or
-// after the image portion (the name itself is always short enough to fit
-// well within nameColWidth), never partway through the name.
-func nameImageCell(nameStyle, imgStyle lipgloss.Style, name, img string) (string, int) {
-	raw := name + "  " + img
-	truncated := components.Truncate(raw, nameColWidth)
-	width := lipgloss.Width(truncated)
-	if len(truncated) <= len(name) {
-		return nameStyle.Render(truncated), width
+// truncateImageRef fits an image reference into width cells for the picker's
+// dedicated image line. A digest suffix (`@sha256:<64 hex chars>`, 71
+// characters no one reads at this width) is dropped whenever the reference
+// also carries an explicit tag — the tag is the version signal a reader
+// actually wants, and keeping both just to truncate one of them away is
+// worse than dropping the redundant one outright. What's left is ellipsized
+// from the front rather than the back: a long registry/repo path is the part
+// worth eliding, since the tag (or, lacking one, the digest) at the end is
+// what answers "which version is this".
+func truncateImageRef(img string, width int) string {
+	if at := strings.Index(img, "@sha256:"); at >= 0 {
+		if repo := img[:at]; strings.Contains(repo[strings.LastIndex(repo, "/")+1:], ":") {
+			img = repo
+		}
 	}
-	return nameStyle.Render(name) + imgStyle.Render(truncated[len(name):]), width
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(img) <= width {
+		return img
+	}
+	r := []rune(img)
+	if width <= 1 {
+		return "…"
+	}
+	return "…" + string(r[len(r)-(width-1):])
 }
 
 // shellsText renders one row's right-aligned shells cell (docs/design

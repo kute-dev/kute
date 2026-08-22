@@ -144,7 +144,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 10a — Exec container picker (`x` on a pod)
 - **Skipped entirely for single-container pods.** Small centered panel: header `exec › <pod>` + `2 containers`.
-- Rows: container name (+ image in `#55556e`; sidecars labeled `sidecar`) · state (`● running`) · detected shells right-aligned (`sh, bash` — bash preferred).
+- Rows: container name · state (`● running`) · detected shells right-aligned (`sh, bash` — bash preferred), with the image (`#55556e`; sidecars labeled `sidecar`) on its own indented line below the name — a long image reference (registry/repo path, or a digest) never crowds STATUS/SHELLS out of their fixed columns, and a still-too-long image ellipsizes from the front so the tag (or, lacking one, the digest) stays visible at the end.
 - **`will run` line** above the keybar shows the exact command: `kubectl exec -it <pod> -c <container> -- bash` in `#9a9ab2` — no magic, copyable documentation.
 - On `↵`: **kute suspends and hands the tty to kubectl exec** (like git → editor); no embedded terminal emulator in MVP. Exit returns to the same pod. Keybar pill `EXEC`.
 

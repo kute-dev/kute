@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -181,6 +182,37 @@ func TestViewLabelsSidecarContainers(t *testing.T) {
 	}
 }
 
+// TestPanelHeaderClampsLongPodName pins a real regression: a StatefulSet pod
+// name long enough to push "exec › <pod>" past panelWidth used to widen the
+// whole card (Body's panelStyle carries no explicit Width, so lipgloss sizes
+// it to its widest line), leaving every other fixed-width line — container
+// rows, will-run — short, with blank space trailing under "N containers".
+// The header must stay clamped to the same width as the rest of the panel.
+func TestPanelHeaderClampsLongPodName(t *testing.T) {
+	t.Parallel()
+	m := New(Config{
+		Session:   &tui.Session{Theme: tui.Dark()},
+		Namespace: "observability",
+		PodName:   "alertmanager-kube-prometheus-stack-alertmanager-0",
+		Containers: []kube.ContainerInfo{
+			{Name: "alertmanager", Image: "quay.io/prometheus/alertmanager:v0.33.1", State: "Running"},
+			{Name: "config-reloader", Image: "quay.io/prometheus-operator/prometheus-config-reloader:v0.92.1", State: "Running"},
+		},
+	})
+	theme := m.Theme()
+	header := ansi.Strip(m.panelHeader(theme))
+	row := ansi.Strip(m.containerLines(theme, 0, m.containers[0])[0])
+	if hw, rw := lipgloss.Width(header), lipgloss.Width(row); hw != rw {
+		t.Errorf("panel header width = %d, container row width = %d, want equal (header must clamp to panelWidth)", hw, rw)
+	}
+	if lipgloss.Width(header) > panelWidth {
+		t.Errorf("panel header width = %d, want <= panelWidth (%d)", lipgloss.Width(header), panelWidth)
+	}
+	if !strings.Contains(header, "2 containers") {
+		t.Errorf("panel header = %q, want it to still show the container count", header)
+	}
+}
+
 func TestViewRendersContainers(t *testing.T) {
 	t.Parallel()
 	m := newModel()
@@ -332,6 +364,32 @@ func TestWillRunCommandNamesDetectedShell(t *testing.T) {
 	got = kube.ExecCommandString(m.namespace, m.podName, "gateway", m.preferredShell(0))
 	if !strings.Contains(got, "command -v bash") {
 		t.Errorf("undetected will-run command = %q, want the in-container fallback probe", got)
+	}
+}
+
+// TestTruncateImageRefDropsRedundantDigest pins the image line's trim rule:
+// a digest is dropped when a tag already names the version, and whatever's
+// left ellipsizes from the front so the tag stays visible.
+func TestTruncateImageRefDropsRedundantDigest(t *testing.T) {
+	t.Parallel()
+	const img = "quay.io/prometheus-operator/prometheus-config-reloader:v0.91.0@sha256:7d9e4eea5f1139e602508871f422b011"
+	got := truncateImageRef(img, 40)
+	if strings.Contains(got, "sha256") {
+		t.Errorf("truncateImageRef(%q) = %q, want the redundant digest dropped", img, got)
+	}
+	if !strings.HasSuffix(got, "v0.91.0") {
+		t.Errorf("truncateImageRef(%q) = %q, want the tag to survive at the end", img, got)
+	}
+	if !strings.HasPrefix(got, "…") {
+		t.Errorf("truncateImageRef(%q) = %q, want it ellipsized from the front", got, got)
+	}
+
+	// No tag: the digest is the only version signal, so it's left alone
+	// (still ellipsized from the front if it doesn't fit, same as any other
+	// too-long reference — the point is it's never dropped outright).
+	const digestOnly = "gcr.io/distroless/static@sha256:7d9e4eea5f1139e602508871f422b011"
+	if got := truncateImageRef(digestOnly, 100); got != digestOnly {
+		t.Errorf("truncateImageRef(%q, 100) = %q, want the untrimmed digest kept when there's no tag", digestOnly, got)
 	}
 }
 
