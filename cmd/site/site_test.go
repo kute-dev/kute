@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -133,7 +133,7 @@ func TestTextContrastMeetsAA(t *testing.T) {
 			t.Fatalf("%s: --bg not found", tc.name)
 		}
 		names := append([]string(nil), text...)
-		sort.Strings(names)
+		slices.Sort(names)
 		for _, n := range names {
 			fg, ok := pal[n]
 			if !ok {

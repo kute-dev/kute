@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -79,7 +80,7 @@ func whoCanResourceItems(sess *Session, current string) []palette.Item {
 			items = append(items, item)
 		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Label < items[j].Label })
+	slices.SortFunc(items, func(a, b palette.Item) int { return cmp.Compare(a.Label, b.Label) })
 	return items
 }
 

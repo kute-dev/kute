@@ -2,7 +2,7 @@ package certchain
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -137,8 +137,8 @@ func newest(objs []*unstructured.Unstructured) (*unstructured.Unstructured, bool
 }
 
 func sortByCreation(objs []*unstructured.Unstructured) {
-	sort.Slice(objs, func(i, j int) bool {
-		return objs[i].GetCreationTimestamp().After(objs[j].GetCreationTimestamp().Time)
+	slices.SortFunc(objs, func(a, b *unstructured.Unstructured) int {
+		return b.GetCreationTimestamp().Compare(a.GetCreationTimestamp().Time)
 	})
 }
 

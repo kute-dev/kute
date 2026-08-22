@@ -15,8 +15,9 @@
 package resources
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -193,19 +194,17 @@ func BuildJobAttempts(job *batchv1.Job, pods []runtime.Object) (JobAttemptsSumma
 		}
 		owned = append(owned, p.DeepCopy())
 	}
-	sort.SliceStable(owned, func(i, k int) bool {
-		ti, tk := owned[i].Status.StartTime, owned[k].Status.StartTime
+	slices.SortStableFunc(owned, func(a, b *corev1.Pod) int {
+		ta, tb := a.Status.StartTime, b.Status.StartTime
 		switch {
-		case ti == nil && tk == nil:
-			return owned[i].Name < owned[k].Name
-		case ti == nil:
-			return true
-		case tk == nil:
-			return false
-		case !ti.Time.Equal(tk.Time):
-			return ti.Time.Before(tk.Time)
+		case ta == nil && tb == nil:
+			return cmp.Compare(a.Name, b.Name)
+		case ta == nil:
+			return -1
+		case tb == nil:
+			return 1
 		default:
-			return owned[i].Name < owned[k].Name
+			return cmp.Or(ta.Compare(tb.Time), cmp.Compare(a.Name, b.Name))
 		}
 	})
 
@@ -359,7 +358,7 @@ func ProjectJobIndexGrid(summary JobAttemptsSummary) []JobIndexCell {
 	cells := make([]JobIndexCell, total)
 	for i := int32(0); i < total; i++ {
 		attempts := byIndex[i]
-		sort.SliceStable(attempts, func(x, y int) bool { return attempts[x].Ordinal < attempts[y].Ordinal })
+		slices.SortStableFunc(attempts, func(a, b JobAttempt) int { return cmp.Compare(a.Ordinal, b.Ordinal) })
 		cells[i] = JobIndexCell{Index: i, Attempts: attempts}
 	}
 	return cells

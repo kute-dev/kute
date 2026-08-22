@@ -1,10 +1,11 @@
 package nodedetail
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,12 +90,11 @@ func (m Model) load() tea.Cmd {
 			}
 			rows = append(rows, nodePodRow{pod: pod, row: podDesc.Project(p)})
 		}
-		sort.SliceStable(rows, func(i, j int) bool {
-			ri, rj := healthRank(rows[i].row.Status), healthRank(rows[j].row.Status)
-			if ri != rj {
-				return ri < rj
-			}
-			return strings.Compare(strings.ToLower(rows[i].pod.Name), strings.ToLower(rows[j].pod.Name)) < 0
+		slices.SortStableFunc(rows, func(a, b nodePodRow) int {
+			return cmp.Or(
+				cmp.Compare(healthRank(a.row.Status), healthRank(b.row.Status)),
+				cmp.Compare(strings.ToLower(a.pod.Name), strings.ToLower(b.pod.Name)),
+			)
 		})
 
 		return loadedMsg{

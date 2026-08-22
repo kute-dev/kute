@@ -35,8 +35,9 @@
 package configmapdata
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -302,7 +303,7 @@ func configMapRowsFrom(data map[string]string) []configMapKeyRow {
 	for k, v := range data {
 		rows = append(rows, configMapKeyRow{key: k, value: v, size: len(v)})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].key < rows[j].key })
+	slices.SortFunc(rows, func(a, b configMapKeyRow) int { return cmp.Compare(a.key, b.key) })
 	return rows
 }
 
@@ -361,11 +362,11 @@ func findConfigMapConsumers(ctx context.Context, lister resources.RawLister, nam
 			})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Kind != out[j].Kind {
-			return out[i].Kind < out[j].Kind
-		}
-		return out[i].Name < out[j].Name
+	slices.SortFunc(out, func(a, b configMapConsumer) int {
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 	return out
 }

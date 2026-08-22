@@ -28,7 +28,7 @@ package resources
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -539,8 +539,8 @@ func BuildCronJobSummaries(cronJobs, jobs, pods []runtime.Object) []CronJobSumma
 		cj = cj.DeepCopy()
 
 		runs := append([]JobSummary(nil), jobsByCronJobKey[ownerKey(cj.Namespace, cj.UID, cj.Name)]...)
-		sort.SliceStable(runs, func(i, j int) bool {
-			return runTimestamp(runs[i]).After(runTimestamp(runs[j]))
+		slices.SortStableFunc(runs, func(a, b JobSummary) int {
+			return runTimestamp(b).Compare(runTimestamp(a))
 		})
 
 		summary := CronJobSummary{Object: cj, Runs: runs, SuspendedAt: suspendedAt(cj)}

@@ -21,7 +21,6 @@ import (
 	"maps"
 	"os/exec"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -392,7 +391,7 @@ func HelmReleaseHistory(all []HelmRelease, namespace, name string) []HelmRelease
 			out = append(out, r)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Revision > out[j].Revision })
+	slices.SortFunc(out, func(a, b HelmRelease) int { return cmp.Compare(b.Revision, a.Revision) })
 	return out
 }
 

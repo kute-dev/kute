@@ -16,11 +16,12 @@
 package helmrepo
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -242,11 +243,11 @@ func (i *Index) merge(repo string, entries map[string]string) {
 // runs over the same cache always answer identically.
 func (i *Index) sortCandidates() {
 	for name, candidates := range i.charts {
-		sort.SliceStable(candidates, func(a, b int) bool {
-			if c := semver.Compare(candidates[a].Version, candidates[b].Version); c != 0 {
-				return c > 0
-			}
-			return candidates[a].Repo < candidates[b].Repo
+		slices.SortStableFunc(candidates, func(a, b Chart) int {
+			return cmp.Or(
+				-semver.Compare(a.Version, b.Version),
+				cmp.Compare(a.Repo, b.Repo),
+			)
 		})
 		i.charts[name] = candidates
 	}

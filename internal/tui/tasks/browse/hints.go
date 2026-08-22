@@ -1,9 +1,10 @@
 package browse
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -158,7 +159,7 @@ func otherKindsIn(ctx context.Context, lister resources.RawLister, reg resources
 			found = append(found, otherKindHint{label: kindNoun(desc, n), count: n})
 		}
 	}
-	sort.SliceStable(found, func(i, j int) bool { return found[i].count > found[j].count })
+	slices.SortStableFunc(found, func(a, b otherKindHint) int { return cmp.Compare(b.count, a.count) })
 	if len(found) > 2 {
 		found = found[:2]
 	}

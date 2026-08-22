@@ -11,10 +11,11 @@ package kube
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -333,7 +334,7 @@ func (m *ForwardManager) List() []ForwardSession {
 	for _, e := range m.sessions {
 		out = append(out, e.session)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b ForwardSession) int { return cmp.Compare(a.ID, b.ID) })
 	return out
 }
 

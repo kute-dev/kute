@@ -1,7 +1,8 @@
 package browse
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -129,12 +130,11 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 		// docs/design README.md §14b: "sorted by group" — CRDDescriptor's
 		// own Cells[1] is the CRD's API group; Name breaks ties within a
 		// group so it stays deterministic.
-		sort.SliceStable(rows, func(i, j int) bool {
-			gi, gj := crdGroupCell(rows[i]), crdGroupCell(rows[j])
-			if gi != gj {
-				return gi < gj
-			}
-			return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
+		slices.SortStableFunc(rows, func(a, b resources.Row) int {
+			return cmp.Or(
+				cmp.Compare(crdGroupCell(a), crdGroupCell(b)),
+				cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+			)
 		})
 		return
 	}
@@ -147,29 +147,32 @@ func sortForDisplay(kind kube.ResourceKind, namespace string, rows []resources.R
 	}
 	grouped := namespace == ""
 	nsTrouble := namespaceTrouble(rows, grouped)
-	sort.SliceStable(rows, func(i, j int) bool {
-		if grouped && rows[i].Namespace != rows[j].Namespace {
-			ti, tj := nsTrouble[rows[i].Namespace], nsTrouble[rows[j].Namespace]
-			if ti != tj {
-				return ti // namespaces with trouble sort before fully-healthy ones
+	slices.SortStableFunc(rows, func(a, b resources.Row) int {
+		if grouped && a.Namespace != b.Namespace {
+			ta, tb := nsTrouble[a.Namespace], nsTrouble[b.Namespace]
+			if ta != tb {
+				// Namespaces with trouble sort before fully-healthy ones.
+				if ta {
+					return -1
+				}
+				return 1
 			}
-			return rows[i].Namespace < rows[j].Namespace
+			return cmp.Compare(a.Namespace, b.Namespace)
 		}
-		ri, rj := rank(rows[i]), rank(rows[j])
-		if ri != rj {
-			return ri < rj
+		if c := cmp.Compare(rank(a), rank(b)); c != 0 {
+			return c
 		}
 		if certRanked {
-			if t := certExpiryTiebreak(rows[i], rows[j]); t != 0 {
-				return t < 0
+			if t := certExpiryTiebreak(a, b); t != 0 {
+				return t
 			}
 		}
 		if jobRanked {
-			if t := jobAgeTiebreak(rows[i], rows[j]); t != 0 {
-				return t < 0
+			if t := jobAgeTiebreak(a, b); t != 0 {
+				return t
 			}
 		}
-		return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
+		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 }
 
@@ -245,11 +248,17 @@ func (m Model) applyUserSort(rows []resources.Row) {
 	}
 	less := m.cellLess(m.desc.Columns[idx], idx)
 	asc := m.sortAsc
-	sort.SliceStable(rows, func(i, j int) bool {
-		if asc {
-			return less(rows[i], rows[j])
+	slices.SortStableFunc(rows, func(a, b resources.Row) int {
+		if !asc {
+			a, b = b, a
 		}
-		return less(rows[j], rows[i])
+		switch {
+		case less(a, b):
+			return -1
+		case less(b, a):
+			return 1
+		}
+		return 0
 	})
 }
 

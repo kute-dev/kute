@@ -1,8 +1,9 @@
 package tui
 
 import (
+	"cmp"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -1010,8 +1011,8 @@ func promoteRecentItems(items []palette.Item) {
 			return 1 << 30
 		}
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		return priority(items[i]) < priority(items[j])
+	slices.SortStableFunc(items, func(a, b palette.Item) int {
+		return cmp.Compare(priority(a), priority(b))
 	})
 }
 

@@ -1,7 +1,7 @@
 package kube
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -51,7 +51,7 @@ func listedResources(cs *fake.Clientset) []string {
 	for r := range seen {
 		out = append(out, r)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

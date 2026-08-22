@@ -1,8 +1,9 @@
 package kube
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -201,7 +202,7 @@ func dedupeDiscovered(in []DiscoveredKind) []DiscoveredKind {
 		seen[dk.RegistryKind()] = true
 		out = append(out, dk)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
+	slices.SortFunc(out, func(a, b DiscoveredKind) int { return cmp.Compare(a.Kind, b.Kind) })
 	return out
 }
 

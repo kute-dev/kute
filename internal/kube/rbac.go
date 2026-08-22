@@ -1,9 +1,9 @@
 package kube
 
 import (
+	"cmp"
 	"context"
 	"slices"
-	"sort"
 	"strings"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -210,11 +210,11 @@ func ResolveWhoCan(
 		}
 	}
 
-	sort.Slice(subjects, func(i, j int) bool {
-		if subjects[i].Kind != subjects[j].Kind {
-			return subjects[i].Kind < subjects[j].Kind
-		}
-		return subjects[i].Name < subjects[j].Name
+	slices.SortFunc(subjects, func(a, b WhoCanSubject) int {
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 
 	result := WhoCanResult{Query: query, Subjects: subjects, CurrentUser: currentUser}

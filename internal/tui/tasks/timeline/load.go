@@ -1,8 +1,9 @@
 package timeline
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -254,7 +255,7 @@ func rolloutsForScope(ctx context.Context, lister resources.RawLister, namespace
 		return nil, nil, ""
 	}
 	revisionRail := append([]kube.TimelineEntry(nil), scoped...)
-	sort.Slice(revisionRail, func(i, j int) bool { return revisionRail[i].Revision > revisionRail[j].Revision })
+	slices.SortFunc(revisionRail, func(a, b kube.TimelineEntry) int { return cmp.Compare(b.Revision, a.Revision) })
 	attachLiveRolloutStatus(ctx, lister, namespace, depName, revisionRail)
 	return scoped, revisionRail, depName
 }

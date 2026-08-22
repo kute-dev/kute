@@ -36,11 +36,11 @@
 package browse
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -358,7 +358,7 @@ func serviceLabelJoins(lister resources.RawLister, namespace string, objLabels m
 	if len(matches) == 0 {
 		return nil
 	}
-	sort.Slice(matches, func(i, j int) bool { return matches[i].name < matches[j].name })
+	slices.SortFunc(matches, func(a, b svcMatch) int { return cmp.Compare(a.name, b.name) })
 
 	podObjs, _ := lister.ListRaw(context.Background(), kube.KindPod, namespace)
 	out := map[string]joinInfo{}

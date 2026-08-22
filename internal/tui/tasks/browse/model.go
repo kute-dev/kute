@@ -11,9 +11,9 @@
 package browse
 
 import (
+	"cmp"
 	"context"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -1430,12 +1430,12 @@ func loadCronJobRows(ctx context.Context, lister resources.RawLister, namespace 
 	// workloadKinds/unhealthyFirst sets (resources/cronjobs.go's own doc
 	// comment). applyRowsLoaded's own applySort call (update.go) layers a
 	// manual 1-9 sort on top of this when one is active.
-	sort.SliceStable(summaries, func(i, j int) bool {
-		a, b := summaries[i].Object, summaries[j].Object
-		if a.Namespace != b.Namespace {
-			return a.Namespace < b.Namespace
-		}
-		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) < 0
+	slices.SortStableFunc(summaries, func(x, y resources.CronJobSummary) int {
+		a, b := x.Object, y.Object
+		return cmp.Or(
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+		)
 	})
 
 	now := time.Now()
@@ -1473,12 +1473,12 @@ func loadJobRows(ctx context.Context, lister resources.RawLister, namespace stri
 	// applySort call layers §37a's real default (unhealthy-first, then
 	// newest — sort.go's jobRanked/jobAgeTiebreak) on top of this, the same
 	// two-step loadCronJobRows above already uses.
-	sort.SliceStable(summaries, func(i, j int) bool {
-		a, b := summaries[i].Object, summaries[j].Object
-		if a.Namespace != b.Namespace {
-			return a.Namespace < b.Namespace
-		}
-		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) < 0
+	slices.SortStableFunc(summaries, func(x, y resources.JobListSummary) int {
+		a, b := x.Object, y.Object
+		return cmp.Or(
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+		)
 	})
 
 	now := time.Now()

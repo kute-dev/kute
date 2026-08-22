@@ -1,8 +1,9 @@
 package poddetail
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -174,7 +175,7 @@ func resolveServiceAndIngressItems(ctx context.Context, lister resources.RawList
 			services = append(services, relatedItem{Kind: kube.KindService, Name: svc.Name, Label: string(kube.KindService) + "/" + svc.Name})
 		}
 	}
-	sort.Slice(services, func(i, j int) bool { return services[i].Name < services[j].Name })
+	slices.SortFunc(services, func(a, b relatedItem) int { return cmp.Compare(a.Name, b.Name) })
 	if len(matched) == 0 {
 		return services, nil
 	}
@@ -190,7 +191,7 @@ func resolveServiceAndIngressItems(ctx context.Context, lister resources.RawList
 		}
 		ingresses = append(ingresses, relatedItem{Kind: kube.KindIngress, Name: ing.Name, Label: string(kube.KindIngress) + "/" + ing.Name})
 	}
-	sort.Slice(ingresses, func(i, j int) bool { return ingresses[i].Name < ingresses[j].Name })
+	slices.SortFunc(ingresses, func(a, b relatedItem) int { return cmp.Compare(a.Name, b.Name) })
 	return services, ingresses
 }
 

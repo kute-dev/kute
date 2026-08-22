@@ -1,8 +1,9 @@
 package fluxtree
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,8 +132,8 @@ func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.Resourc
 			reconcilers = append(reconcilers, kind)
 		}
 	}
-	sort.Slice(sources, func(i, j int) bool { return sources[i] < sources[j] })
-	sort.Slice(reconcilers, func(i, j int) bool { return reconcilers[i] < reconcilers[j] })
+	slices.Sort(sources)
+	slices.Sort(reconcilers)
 	return sources, reconcilers
 }
 
@@ -346,15 +347,12 @@ func joinKey(kind kube.ResourceKind, namespace, name string) string {
 // sortRows orders a group's reconcilers unhealthy-first, then by name — the
 // same triage order §30a's list uses.
 func sortRows(rows []treeRow) {
-	sort.SliceStable(rows, func(i, j int) bool {
-		ri, rj := statusRank(rows[i].class), statusRank(rows[j].class)
-		if ri != rj {
-			return ri < rj
-		}
-		if rows[i].namespace != rows[j].namespace {
-			return rows[i].namespace < rows[j].namespace
-		}
-		return rows[i].name < rows[j].name
+	slices.SortStableFunc(rows, func(a, b treeRow) int {
+		return cmp.Or(
+			cmp.Compare(statusRank(a.class), statusRank(b.class)),
+			cmp.Compare(a.namespace, b.namespace),
+			cmp.Compare(a.name, b.name),
+		)
 	})
 }
 
@@ -362,15 +360,12 @@ func sortRows(rows []treeRow) {
 // anything unhealthy in it outranks a clean one, and among equals the worst
 // row decides.
 func sortGroups(groups []group) {
-	sort.SliceStable(groups, func(i, j int) bool {
-		ri, rj := groupRank(groups[i]), groupRank(groups[j])
-		if ri != rj {
-			return ri < rj
-		}
-		if groups[i].head.namespace != groups[j].head.namespace {
-			return groups[i].head.namespace < groups[j].head.namespace
-		}
-		return groups[i].head.name < groups[j].head.name
+	slices.SortStableFunc(groups, func(a, b group) int {
+		return cmp.Or(
+			cmp.Compare(groupRank(a), groupRank(b)),
+			cmp.Compare(a.head.namespace, b.head.namespace),
+			cmp.Compare(a.head.name, b.head.name),
+		)
 	})
 }
 

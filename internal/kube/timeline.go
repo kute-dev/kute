@@ -3,7 +3,7 @@ package kube
 import (
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -179,7 +179,7 @@ func MergeTimeline(sources ...[]TimelineEntry) []TimelineEntry {
 	for _, s := range sources {
 		out = append(out, s...)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
+	slices.SortFunc(out, func(a, b TimelineEntry) int { return b.Time.Compare(a.Time) })
 	return out
 }
 

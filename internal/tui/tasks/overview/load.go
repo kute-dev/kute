@@ -1,8 +1,9 @@
 package overview
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -163,14 +164,12 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 		// entries routinely share a timestamp (one `kubectl apply` touching
 		// several deployments), and the cache order behind them is unstable,
 		// so time alone leaves those runs reshuffling on every reload.
-		sort.SliceStable(data.changes, func(i, j int) bool {
-			if !data.changes[i].Time.Equal(data.changes[j].Time) {
-				return data.changes[i].Time.After(data.changes[j].Time)
-			}
-			if data.changes[i].Namespace != data.changes[j].Namespace {
-				return data.changes[i].Namespace < data.changes[j].Namespace
-			}
-			return data.changes[i].Object < data.changes[j].Object
+		slices.SortStableFunc(data.changes, func(a, b kube.TimelineEntry) int {
+			return cmp.Or(
+				b.Time.Compare(a.Time),
+				cmp.Compare(a.Namespace, b.Namespace),
+				cmp.Compare(a.Object, b.Object),
+			)
 		})
 	}
 
@@ -199,14 +198,12 @@ func sortTrouble(rows []resources.Row) {
 			return 2
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if ri, rj := rank(rows[i].Status), rank(rows[j].Status); ri != rj {
-			return ri < rj
-		}
-		if rows[i].Namespace != rows[j].Namespace {
-			return rows[i].Namespace < rows[j].Namespace
-		}
-		return strings.Compare(strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)) < 0
+	slices.SortStableFunc(rows, func(a, b resources.Row) int {
+		return cmp.Or(
+			cmp.Compare(rank(a.Status), rank(b.Status)),
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)),
+		)
 	})
 }
 

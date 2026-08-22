@@ -10,10 +10,11 @@
 package browse
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -478,7 +479,7 @@ func imageHistory(lister resources.RawLister, kind kube.ResourceKind, namespace,
 
 	entries := ownRevisionHistory(lister, kind, namespace, name, container, currentImage, created)
 	entries = append(entries, crossWorkloadHistory(lister, kind, namespace, name, repo, currentTag)...)
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].seenAt.After(entries[j].seenAt) })
+	slices.SortStableFunc(entries, func(a, b imageHistoryEntry) int { return b.seenAt.Compare(a.seenAt) })
 
 	seen := make(map[string]bool, len(entries))
 	out := make([]imageHistoryEntry, 0, min(len(entries), maxEntries))
@@ -619,7 +620,7 @@ func controllerRevisionContainerImage(cr *appsv1.ControllerRevision, container s
 // StatefulSet/DaemonSet's ControllerRevision-sourced ones so both label
 // identically.
 func labelRevisions(revs []revisionCandidate, kind kube.ResourceKind) []imageHistoryEntry {
-	sort.Slice(revs, func(i, j int) bool { return revs[i].n > revs[j].n })
+	slices.SortFunc(revs, func(a, b revisionCandidate) int { return cmp.Compare(b.n, a.n) })
 	out := make([]imageHistoryEntry, 0, len(revs))
 	for i, r := range revs {
 		e := imageHistoryEntry{tag: tagOf(r.image), seenAt: r.created}

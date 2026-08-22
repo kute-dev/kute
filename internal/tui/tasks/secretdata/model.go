@@ -22,8 +22,9 @@
 package secretdata
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
@@ -256,7 +257,7 @@ func secretRowsFrom(data map[string][]byte) []secretKeyRow {
 	for k, v := range data {
 		rows = append(rows, secretKeyRow{key: k, value: string(v), size: len(v)})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].key < rows[j].key })
+	slices.SortFunc(rows, func(a, b secretKeyRow) int { return cmp.Compare(a.key, b.key) })
 	return rows
 }
 

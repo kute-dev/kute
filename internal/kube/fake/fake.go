@@ -14,7 +14,6 @@ import (
 	"io"
 	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1157,7 +1156,7 @@ func (c *Cluster) ObjectEvents(ctx context.Context, namespace string, kind kube.
 			Annotations: ev.Annotations,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	slices.SortFunc(out, func(a, b kube.Event) int { return b.LastSeen.Compare(a.LastSeen) })
 	return out, nil
 }
 
@@ -1187,7 +1186,7 @@ func (c *Cluster) NamespaceEvents(ctx context.Context, namespace string) ([]kube
 			Annotations: ev.Annotations,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	slices.SortFunc(out, func(a, b kube.Event) int { return b.LastSeen.Compare(a.LastSeen) })
 	return out, nil
 }
 
