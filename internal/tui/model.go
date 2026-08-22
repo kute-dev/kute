@@ -1099,7 +1099,7 @@ func (m *Model) startContextProbe() tea.Cmd {
 	m.probes = map[string]kube.ProbeResult{}
 	m.probeGen++
 	m.refreshContextPalette()
-	return probeContextsCmd(m.probeGen, contextNames())
+	return probeContextsCmd(m.session.Context(), m.probeGen, contextNames())
 }
 
 // openUpdatePanel pushes the current task and swaps in 28b (buildUpdate) —

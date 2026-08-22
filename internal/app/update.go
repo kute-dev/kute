@@ -62,8 +62,9 @@ func updateCheckCmd(sess *tui.Session, checker update.Checker, force bool) tea.C
 	if !force && !last.IsZero() && time.Since(last) < updateCheckInterval {
 		return nil
 	}
+	parent := sess.Context() // the process context: a release check outlives any one kube-context
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
+		ctx, cancel := context.WithTimeout(parent, updateCheckTimeout)
 		defer cancel()
 
 		release, err := checker.Latest(ctx)

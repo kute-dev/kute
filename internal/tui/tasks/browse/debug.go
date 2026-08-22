@@ -78,7 +78,7 @@ func (m Model) debugCapabilityDenied(namespace, podPhase string, waiting bool) *
 		resource = kube.DebugCopyResource
 	}
 	const verb = "create"
-	result, err := m.rbac.WhoCan(context.Background(), kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace})
+	result, err := m.rbac.WhoCan(m.session.ClusterContext(), kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace})
 	if err != nil || result.CurrentUser == "" || result.CurrentUserGranted {
 		return nil
 	}
@@ -136,13 +136,13 @@ func (msg podShellsProbedMsg) allShellless() bool {
 // now paid on every 'x' press (not just the multi-container ones) so a
 // distroless single-container pod routes to the debug panel instead of a
 // dead exec attempt.
-func detectPodShellsCmd(namespace, podName string, containers []kube.ContainerInfo, detector ShellDetector) tea.Cmd {
+func detectPodShellsCmd(parent context.Context, namespace, podName string, containers []kube.ContainerInfo, detector ShellDetector) tea.Cmd {
 	return func() tea.Msg {
 		results := make([]podShellDetection, len(containers))
 		var wg sync.WaitGroup
 		for i, c := range containers {
 			wg.Go(func() {
-				ctx, cancel := context.WithTimeout(context.Background(), shellProbeTimeout)
+				ctx, cancel := context.WithTimeout(parent, shellProbeTimeout)
 				defer cancel()
 				shells, err := detector.DetectShells(ctx, namespace, podName, c.Name)
 				results[i] = podShellDetection{container: c.Name, shells: shells, err: err}
@@ -174,7 +174,7 @@ func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if !ok || len(pod.ContainerInfos) == 0 {
 		return nil, nil, false
 	}
-	return nil, detectPodShellsCmd(pod.Namespace, pod.Name, pod.ContainerInfos, m.shells), true
+	return nil, detectPodShellsCmd(m.session.ClusterContext(), pod.Namespace, pod.Name, pod.ContainerInfos, m.shells), true
 }
 
 // routePodShellsProbed decides, now that every container's probe result is

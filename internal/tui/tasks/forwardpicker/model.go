@@ -105,8 +105,9 @@ func (m Model) Init() tea.Cmd {
 	target := m.target
 	lister := m.lister
 	resolver := m.resolver
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 		objs, err := lister.ListRaw(ctx, target.Kind, target.Namespace)
 		if err != nil {

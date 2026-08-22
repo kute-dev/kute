@@ -30,8 +30,9 @@ func (m Model) load() tea.Cmd {
 	namespace := m.namespace
 	name := m.name
 	timeout := m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		objs, err := lister.ListRaw(ctx, kube.KindPod, namespace)

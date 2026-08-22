@@ -98,7 +98,7 @@ func (m *Model) copySelectedArgoDashboardURL() tea.Cmd {
 	if !ok || m.lister == nil {
 		return nil
 	}
-	base, ok := argoDashboardBaseURL(m.lister, row.Namespace)
+	base, ok := argoDashboardBaseURL(m.session.ClusterContext(), m.lister, row.Namespace)
 	if !ok {
 		m.execFeedback = "dashboard url not configured — argocd-cm has no url key in " + row.Namespace
 		return nil
@@ -111,8 +111,8 @@ func (m *Model) copySelectedArgoDashboardURL() tea.Cmd {
 // — Argo CD's control-plane ConfigMaps conventionally live in the same
 // namespace as the Applications they manage, the same assumption the demo
 // fixtures and §33a's own mockup make.
-func argoDashboardBaseURL(lister resources.RawLister, namespace string) (string, bool) {
-	objs, err := lister.ListRaw(context.Background(), kube.KindConfigMap, namespace)
+func argoDashboardBaseURL(ctx context.Context, lister resources.RawLister, namespace string) (string, bool) {
+	objs, err := lister.ListRaw(ctx, kube.KindConfigMap, namespace)
 	if err != nil {
 		return "", false
 	}

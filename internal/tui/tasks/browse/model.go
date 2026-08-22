@@ -986,8 +986,9 @@ func (m Model) load() tea.Cmd {
 	epoch := m.reloadEpoch
 	podDesc, _ := m.session.Registry.Descriptor(kube.KindPod)
 	currentUser := m.currentUser
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 		if kind == kube.KindCronJob {
 			// §36a bypasses resources.List/Descriptor.Project entirely

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -137,7 +136,7 @@ func namespaceCount(sess *Session) int {
 	if !ok {
 		return 0
 	}
-	n, err := resources.Count(context.Background(), sess.Lister, desc.Kind, "")
+	n, err := resources.Count(sess.ClusterContext(), sess.Lister, desc.Kind, "")
 	if err != nil {
 		return 0
 	}
@@ -286,7 +285,7 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 	if !ok {
 		return nil, nil
 	}
-	rows, err := resources.List(context.Background(), sess.Lister, nsDesc, "")
+	rows, err := resources.List(sess.ClusterContext(), sess.Lister, nsDesc, "")
 	if err != nil {
 		return nil, nil
 	}
@@ -300,7 +299,7 @@ func namespaceItems(sess *Session) ([]palette.Item, []resources.Row) {
 	scoped := sessionScoped(sess)
 
 	countDesc := namespaceCountDescriptor(sess)
-	ctx := context.Background()
+	ctx := sess.ClusterContext()
 	counts := make([]int, len(rows))
 	healths := make([]resources.HealthCounts, len(rows))
 	totalCount := 0
@@ -507,7 +506,7 @@ func namespaceCPUShares(sess *Session, rows []resources.Row) map[string]int {
 		// cell stays the ghost dash namespaceColsUnknown already set.
 		return nil
 	}
-	ctx := context.Background()
+	ctx := sess.ClusterContext()
 	milli := make(map[string]int64, len(rows))
 	var total int64
 	anyOK := false

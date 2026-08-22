@@ -63,8 +63,9 @@ func (m Model) loadMetricsCmd(epoch int) tea.Cmd {
 func (m Model) loadNodeMetrics(epoch int) tea.Cmd {
 	reader := m.nodeMetricsSrc
 	timeout := m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 		result, err := reader.NodeMetrics(ctx)
 		return nodeMetricsLoadedMsg{epoch: epoch, metrics: result, err: err}

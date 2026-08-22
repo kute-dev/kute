@@ -1,7 +1,6 @@
 package whocan
 
 import (
-	"context"
 	"fmt"
 
 	"charm.land/bubbles/v2/spinner"
@@ -98,8 +97,9 @@ func (m Model) load() tea.Cmd {
 	epoch := m.reloadEpoch
 	rbac := m.rbac
 	query := kube.WhoCanQuery{Verb: m.verb, Resource: m.resource, Namespace: m.namespace}
+	ctx := m.session.ClusterContext()
 	return func() tea.Msg {
-		result, err := rbac.WhoCan(context.Background(), query)
+		result, err := rbac.WhoCan(ctx, query)
 		return loadedMsg{epoch: epoch, result: result, err: err}
 	}
 }

@@ -14,8 +14,9 @@ func (m Model) loadMetrics(epoch int) tea.Cmd {
 	metrics := m.metrics
 	namespace := m.countNamespace()
 	timeout := m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 		result, err := metrics.PodMetricsByNamespace(ctx, namespace)
 		return podMetricsLoadedMsg{epoch: epoch, namespace: namespace, metrics: result, err: err}

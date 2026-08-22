@@ -94,7 +94,7 @@ func (s *Session) CachedCount(kind kube.ResourceKind, namespace string) int {
 	// whatever cache is already populated. That reads as 0 for a kind whose
 	// informer hasn't started, which is why it is only a fallback.
 	if s.Lister != nil && s.liveCounter() == nil {
-		if n, err := resources.Count(context.Background(), s.Lister, kind, namespace); err == nil {
+		if n, err := resources.Count(s.ClusterContext(), s.Lister, kind, namespace); err == nil {
 			return n
 		}
 	}
@@ -141,8 +141,9 @@ func fetchGotoCountsCmd(sess *Session, gen int) tea.Cmd {
 	}
 	kinds := sess.Registry.Kinds()
 	ns := gotoNamespace(sess)
+	parent := sess.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), countFetchTimeout)
+		ctx, cancel := context.WithTimeout(parent, countFetchTimeout)
 		defer cancel()
 
 		// SetLimit blocks at g.Go, so this bounds goroutines and not just

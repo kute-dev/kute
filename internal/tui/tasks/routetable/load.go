@@ -35,8 +35,9 @@ func (m Model) load() tea.Cmd {
 // and a TLS fact per Spec.TLS block.
 func (m Model) loadIngress() tea.Cmd {
 	lister, ns, name, timeout := m.lister, m.namespace, m.name, m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		objs, err := lister.ListRaw(ctx, kube.KindIngress, ns)
@@ -233,8 +234,9 @@ func resolveCertExpiry(ctx context.Context, lister resources.RawLister, ns, secr
 // erroring.
 func (m Model) loadRoute() tea.Cmd {
 	lister, kind, ns, name, timeout := m.lister, m.kind, m.namespace, m.name, m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		u, err := findUnstructured(ctx, lister, kind, ns, name)
@@ -497,8 +499,9 @@ func parentSummary(routeNamespace string, u *unstructured.Unstructured) (text st
 // count.
 func (m Model) loadGateway() tea.Cmd {
 	lister, ns, name, timeout := m.lister, m.namespace, m.name, m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		u, err := findUnstructured(ctx, lister, kube.KindGateway, ns, name)

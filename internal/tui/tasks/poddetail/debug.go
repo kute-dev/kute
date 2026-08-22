@@ -55,7 +55,7 @@ func (m Model) debugCapabilityDenied(namespace, podPhase string, waiting bool) *
 		resource = kube.DebugCopyResource
 	}
 	const verb = "create"
-	result, err := m.rbac.WhoCan(context.Background(), kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace})
+	result, err := m.rbac.WhoCan(m.session.ClusterContext(), kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace})
 	if err != nil || result.CurrentUser == "" || result.CurrentUserGranted {
 		return nil
 	}
@@ -98,13 +98,13 @@ func (msg podShellsProbedMsg) allShellless() bool {
 
 // detectPodShellsCmd probes every container in parallel — see browse's own
 // detectPodShellsCmd doc comment.
-func detectPodShellsCmd(namespace, podName string, containers []kube.ContainerInfo, detector ShellDetector) tea.Cmd {
+func detectPodShellsCmd(parent context.Context, namespace, podName string, containers []kube.ContainerInfo, detector ShellDetector) tea.Cmd {
 	return func() tea.Msg {
 		results := make([]podShellDetection, len(containers))
 		var wg sync.WaitGroup
 		for i, c := range containers {
 			wg.Go(func() {
-				ctx, cancel := context.WithTimeout(context.Background(), shellProbeTimeout)
+				ctx, cancel := context.WithTimeout(parent, shellProbeTimeout)
 				defer cancel()
 				shells, err := detector.DetectShells(ctx, namespace, podName, c.Name)
 				results[i] = podShellDetection{container: c.Name, shells: shells, err: err}
@@ -124,7 +124,7 @@ func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if m.shells == nil {
 		return m.openSelectedExec()
 	}
-	return nil, detectPodShellsCmd(m.namespace, m.name, m.pod.ContainerInfos, m.shells), true
+	return nil, detectPodShellsCmd(m.session.ClusterContext(), m.namespace, m.name, m.pod.ContainerInfos, m.shells), true
 }
 
 // routePodShellsProbed decides which of exec/execpicker/debugpanel 'x'

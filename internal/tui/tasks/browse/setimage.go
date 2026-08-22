@@ -155,7 +155,7 @@ func (m *Model) beginSetImage() bool {
 // passed in rather than re-derived from a row, since a set-image commit never
 // changes replica count and the row backing it may not have reloaded yet.
 func (m *Model) buildSetImageTarget(kind kube.ResourceKind, namespace, name string, desiredCount int32) (*setImageTarget, bool) {
-	obj, ok := workloadObject(m.lister, kind, namespace, name)
+	obj, ok := workloadObject(m.session.ClusterContext(), m.lister, kind, namespace, name)
 	if !ok {
 		return nil, false
 	}
@@ -189,7 +189,7 @@ func (m *Model) selectSetImageContainer(idx int) {
 	t := m.pendingSetImage
 	t.containerIdx = idx
 	resetSetImageBuffer(t)
-	t.history = imageHistory(m.lister, t.kind, t.namespace, t.name, t.activeContainer().Name, t.activeContainer().Image, t.created)
+	t.history = imageHistory(m.session.ClusterContext(), m.lister, t.kind, t.namespace, t.name, t.activeContainer().Name, t.activeContainer().Image, t.created)
 	t.historyIdx = matchHistoryIndex(t)
 }
 
@@ -415,11 +415,11 @@ func setImageWillRunLine(scope tui.TaskScope) string {
 // workloadObject finds the named raw object of kind in namespace via
 // lister.ListRaw — the same cache-read lookup shape scale.go's hpaManaging
 // already uses for the HPA-managed-workload lookup.
-func workloadObject(lister resources.RawLister, kind kube.ResourceKind, namespace, name string) (runtime.Object, bool) {
+func workloadObject(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name string) (runtime.Object, bool) {
 	if lister == nil {
 		return nil, false
 	}
-	objs, err := lister.ListRaw(context.Background(), kind, namespace)
+	objs, err := lister.ListRaw(ctx, kind, namespace)
 	if err != nil {
 		return nil, false
 	}
@@ -468,12 +468,12 @@ func workloadContainerInfos(obj runtime.Object) []kube.ContainerInfo {
 // cross-workload sightings of the same image repo, newest-seen-first,
 // deduped by tag (the most recent sighting of a tag wins regardless of
 // source), capped to a reasonable panel-scrollable count.
-func imageHistory(lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
+func imageHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
 	const maxEntries = 8
 	repo, currentTag := imageRepo(currentImage), tagOf(currentImage)
 
-	entries := ownRevisionHistory(lister, kind, namespace, name, container, currentImage, created)
-	entries = append(entries, crossWorkloadHistory(lister, kind, namespace, name, repo, currentTag)...)
+	entries := ownRevisionHistory(ctx, lister, kind, namespace, name, container, currentImage, created)
+	entries = append(entries, crossWorkloadHistory(ctx, lister, kind, namespace, name, repo, currentTag)...)
 	slices.SortStableFunc(entries, func(a, b imageHistoryEntry) int { return b.seenAt.Compare(a.seenAt) })
 
 	seen := make(map[string]bool, len(entries))
@@ -510,7 +510,7 @@ type revisionCandidate struct {
 // single "current" row (built from the workload's own creation time) when
 // no revision object has been seen yet — a fresh object, or the informer
 // cache still catching up.
-func ownRevisionHistory(lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
+func ownRevisionHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
 	fallback := []imageHistoryEntry{{
 		tag:       tagOf(currentImage),
 		seenAt:    created,
@@ -523,9 +523,9 @@ func ownRevisionHistory(lister resources.RawLister, kind kube.ResourceKind, name
 	var revs []revisionCandidate
 	switch kind {
 	case kube.KindDeployment:
-		revs = deploymentRevisions(lister, namespace, name, container)
+		revs = deploymentRevisions(ctx, lister, namespace, name, container)
 	case kube.KindStatefulSet, kube.KindDaemonSet:
-		revs = controllerRevisions(lister, kind, namespace, name, container)
+		revs = controllerRevisions(ctx, lister, kind, namespace, name, container)
 	default:
 		return fallback
 	}
@@ -537,8 +537,8 @@ func ownRevisionHistory(lister resources.RawLister, kind kube.ResourceKind, name
 
 // deploymentRevisions gathers revisionCandidates from a Deployment's owned
 // ReplicaSets — the source ownRevisionHistory's doc comment describes.
-func deploymentRevisions(lister resources.RawLister, namespace, name, container string) []revisionCandidate {
-	objs, err := lister.ListRaw(context.Background(), kube.KindReplicaSet, namespace)
+func deploymentRevisions(ctx context.Context, lister resources.RawLister, namespace, name, container string) []revisionCandidate {
+	objs, err := lister.ListRaw(ctx, kube.KindReplicaSet, namespace)
 	if err != nil {
 		return nil
 	}
@@ -570,8 +570,8 @@ func deploymentRevisions(lister resources.RawLister, namespace, name, container 
 // {"spec":{"template":{"spec":{"containers":[...]}}}} — the patch shape the
 // StatefulSet/DaemonSet controllers themselves generate for each revision
 // and `kubectl rollout history` decodes the same way.
-func controllerRevisions(lister resources.RawLister, kind kube.ResourceKind, namespace, name, container string) []revisionCandidate {
-	objs, err := lister.ListRaw(context.Background(), kube.KindControllerRevision, namespace)
+func controllerRevisions(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container string) []revisionCandidate {
+	objs, err := lister.ListRaw(ctx, kube.KindControllerRevision, namespace)
 	if err != nil {
 		return nil
 	}
@@ -640,13 +640,13 @@ func labelRevisions(revs []revisionCandidate, kind kube.ResourceKind) []imageHis
 // ownRevisionHistory resolves for the workload actually being edited would
 // need one extra ReplicaSet lookup per sighted Deployment; this stays a
 // single pass per kind).
-func crossWorkloadHistory(lister resources.RawLister, kind kube.ResourceKind, namespace, name, repo, currentTag string) []imageHistoryEntry {
+func crossWorkloadHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, repo, currentTag string) []imageHistoryEntry {
 	if lister == nil {
 		return nil
 	}
 	var out []imageHistoryEntry
 	for _, k := range []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet} {
-		objs, err := lister.ListRaw(context.Background(), k, "")
+		objs, err := lister.ListRaw(ctx, k, "")
 		if err != nil {
 			continue
 		}

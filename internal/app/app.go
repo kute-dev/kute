@@ -779,6 +779,11 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 		if path != "" {
 			_ = os.Setenv("KUBECONFIG", path)
 		}
+		// Same reasoning as tui.switchContextCmd's reset, and for the same
+		// window: cluster.Start below blocks while the new caches sync, and
+		// any read still running against the cluster just stopped would
+		// otherwise land in a screen that has moved on.
+		sess.ResetClusterContext()
 		if sess.Cluster != nil {
 			sess.Cluster.Stop()
 		}
@@ -795,7 +800,7 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 			cluster.SetNamespaceScope(cfg.ScopeNamespace)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), reconnectStartTimeout)
+		ctx, cancel := context.WithTimeout(sess.Context(), reconnectStartTimeout)
 		defer cancel()
 		_ = cluster.Start(ctx) // best-effort: an unreachable cluster still hands back ReplaceRootMsg; 4c's neverConnected watch takes over from there.
 
@@ -834,6 +839,7 @@ func attemptReconnect(cfg Config, sess *tui.Session, path string) tea.Cmd {
 // switches to it rather than retrying the same failing one.
 func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea.Cmd {
 	return func() tea.Msg {
+		sess.ResetClusterContext() // as in attemptReconnect, before the swap
 		if sess.Cluster != nil {
 			sess.Cluster.Stop()
 		}
@@ -849,7 +855,7 @@ func attemptSwitchContext(cfg Config, sess *tui.Session, contextName string) tea
 			cluster.SetNamespaceScope(cfg.ScopeNamespace)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), reconnectStartTimeout)
+		ctx, cancel := context.WithTimeout(sess.Context(), reconnectStartTimeout)
 		defer cancel()
 		_ = cluster.Start(ctx) // best-effort: an unreachable target still hands back ReplaceRootMsg; 4c's neverConnected watch takes over from there.
 
@@ -1613,6 +1619,15 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// The same ctx that stops the event-forwarding goroutines and the
+	// informer factories is what every screen's reads hang off (Session.
+	// SetContext, internal/tui/sessionctx.go) — so quitting cancels a
+	// half-finished list against a slow cluster instead of leaving it to run
+	// out its own timeout against a program that is already gone.
+	if sess := model.Session(); sess != nil {
+		sess.SetContext(ctx)
+	}
 
 	switch {
 	case cluster != nil:

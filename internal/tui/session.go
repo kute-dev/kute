@@ -60,6 +60,12 @@ type Session struct {
 	// corpus (mvp-plan.md Phase 2) without depending on a concrete cluster
 	// type. Nil when no cluster is reachable.
 	Lister resources.RawLister
+	// ctx carries the process-lifetime context the composition root installs
+	// (SetContext) plus the per-kube-context child every cluster read hangs
+	// off — see sessionctx.go for why there are two and which one a caller
+	// wants. Zero value works: both accessors fall back to
+	// context.Background() until a root is installed.
+	ctx sessionCtx
 	// counts memoizes the jump palette's per-kind counts for countTTL, so
 	// rebuilding the item list on every keystroke doesn't re-ask the
 	// cluster. Filled by fetchGotoCountsCmd off the Update loop; see

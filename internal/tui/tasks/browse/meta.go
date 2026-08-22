@@ -260,7 +260,7 @@ func (m *Model) beginMeta() bool {
 // the authoritative server state rather than an optimistic local patch,
 // exactly like the panel's very first open.
 func (m *Model) buildMetaTarget(kind kube.ResourceKind, namespace, name string) (*metaTarget, bool) {
-	obj, ok := workloadObject(m.lister, kind, namespace, name)
+	obj, ok := workloadObject(m.session.ClusterContext(), m.lister, kind, namespace, name)
 	if !ok {
 		return nil, false
 	}
@@ -275,7 +275,7 @@ func (m *Model) buildMetaTarget(kind kube.ResourceKind, namespace, name string) 
 	t.labels = buildMetaRows(objLabels, false, theme)
 	t.annotations = buildMetaRows(acc.GetAnnotations(), true, theme)
 
-	joins := serviceLabelJoins(m.lister, namespace, objLabels)
+	joins := serviceLabelJoins(m.session.ClusterContext(), m.lister, namespace, objLabels)
 	immutable := immutableSelectorKeys(obj)
 	helmOwned := objLabels["app.kubernetes.io/managed-by"] == "Helm"
 	for i := range t.labels {
@@ -331,11 +331,11 @@ type joinInfo struct {
 // in the namespace that Service currently selects (kind-independent of
 // whatever object is being edited), the exact "detaches N pods" figure the
 // confirm's warning line names.
-func serviceLabelJoins(lister resources.RawLister, namespace string, objLabels map[string]string) map[string]joinInfo {
+func serviceLabelJoins(ctx context.Context, lister resources.RawLister, namespace string, objLabels map[string]string) map[string]joinInfo {
 	if lister == nil || len(objLabels) == 0 {
 		return nil
 	}
-	svcObjs, err := lister.ListRaw(context.Background(), kube.KindService, namespace)
+	svcObjs, err := lister.ListRaw(ctx, kube.KindService, namespace)
 	if err != nil {
 		return nil
 	}
@@ -360,7 +360,7 @@ func serviceLabelJoins(lister resources.RawLister, namespace string, objLabels m
 	}
 	slices.SortFunc(matches, func(a, b svcMatch) int { return cmp.Compare(a.name, b.name) })
 
-	podObjs, _ := lister.ListRaw(context.Background(), kube.KindPod, namespace)
+	podObjs, _ := lister.ListRaw(ctx, kube.KindPod, namespace)
 	out := map[string]joinInfo{}
 	for key := range objLabels {
 		for _, sm := range matches {

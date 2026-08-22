@@ -82,11 +82,11 @@ func scaleValue(s string) int32 {
 // "HPA-managed workloads show managed by hpa/<name>"). Returns "" when
 // there's no lister, the list fails, or no HPA targets this row — never
 // blocks the scale prompt itself, purely informational.
-func hpaManaging(lister resources.RawLister, kind kube.ResourceKind, namespace, name string) string {
+func hpaManaging(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name string) string {
 	if lister == nil {
 		return ""
 	}
-	objs, err := lister.ListRaw(context.Background(), kube.KindHorizontalPodAutoscaler, namespace)
+	objs, err := lister.ListRaw(ctx, kube.KindHorizontalPodAutoscaler, namespace)
 	if err != nil {
 		return ""
 	}
@@ -124,7 +124,7 @@ func (m *Model) beginScale(delta int32) bool {
 	m.pendingScale = &scaleTarget{
 		kind: m.kind, namespace: row.Namespace, name: row.Name,
 		input:   input,
-		hpaName: hpaManaging(m.lister, m.kind, row.Namespace, row.Name),
+		hpaName: hpaManaging(m.session.ClusterContext(), m.lister, m.kind, row.Namespace, row.Name),
 	}
 	return true
 }

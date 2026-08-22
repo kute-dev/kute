@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -491,7 +490,7 @@ func gotoResourceItems(sess *Session) []palette.Item {
 		if !kindSynced(sess, kind, ns) {
 			continue
 		}
-		rows, err := resources.List(context.Background(), sess.Lister, desc, ns)
+		rows, err := resources.List(sess.ClusterContext(), sess.Lister, desc, ns)
 		if err != nil {
 			continue
 		}
@@ -575,7 +574,7 @@ func gotoNamespaceItems(sess *Session) []palette.Item {
 	if !ok {
 		return nil
 	}
-	rows, err := resources.List(context.Background(), sess.Lister, desc, "")
+	rows, err := resources.List(sess.ClusterContext(), sess.Lister, desc, "")
 	if err != nil {
 		return nil
 	}

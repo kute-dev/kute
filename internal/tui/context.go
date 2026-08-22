@@ -176,12 +176,14 @@ func probeTone(res kube.ProbeResult) palette.Tone {
 // and returns the first cmd in the drain chain (see waitForProbe) — mirrors
 // podlogs/stream.go's waitForStream pattern for turning a result channel
 // into a tea.Cmd stream. nil for an empty names list (no contexts to
-// probe).
-func probeContextsCmd(gen int, names []string) tea.Cmd {
+// probe). ctx is the session's *process* context, not its cluster one: a
+// probe run reaches every kubeconfig context, so switching between them is
+// no reason to abandon it — quitting is.
+func probeContextsCmd(ctx context.Context, gen int, names []string) tea.Cmd {
 	if len(names) == 0 {
 		return nil
 	}
-	ch := kube.ProbeContexts(context.Background(), names)
+	ch := kube.ProbeContexts(ctx, names)
 	return waitForProbe(gen, ch)
 }
 
@@ -302,8 +304,19 @@ func switchContextCmd(sess *Session, name string) tea.Cmd {
 	sess.State.RecentContexts = state.PushRecent(sess.State.RecentContexts, sess.Location.Context)
 	sess.State.RecentContexts = state.PushRecent(sess.State.RecentContexts, name)
 
+	// Every read still in flight belongs to the cluster being left; cancel
+	// them here, on the Update loop, rather than after the switch lands —
+	// SwitchContext below blocks for the whole cache re-sync, which is
+	// exactly how long a stale list would otherwise have to complete and
+	// deliver rows from the old cluster into a screen showing the new one.
+	// The rebuild itself is parented on the process context (Context, not
+	// ClusterContext): it must survive the reset it just performed, and only
+	// quitting should abandon it.
+	sess.ResetClusterContext()
+	parent := sess.Context()
+
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), switchContextTimeout)
+		ctx, cancel := context.WithTimeout(parent, switchContextTimeout)
 		defer cancel()
 		// restoreNS is threaded through so a scoped Cluster's eager Pod
 		// cache scopes to the namespace the UI is about to show (the

@@ -95,7 +95,12 @@ func (m *Model) connect(streamID int) tea.Cmd {
 		return nil
 	}
 	m.streamCh = make(chan tea.Msg, 128)
-	ctx, cancel := context.WithCancel(context.Background())
+	// Parented on the session's cluster context, not Background: this one is
+	// open-ended by design (a follow stream has no timeout to expire), so
+	// without a cancellable parent the goroutine and its HTTP connection
+	// outlive both quit and a context switch — the screen's own
+	// m.streamCancel only fires when the user leaves the screen.
+	ctx, cancel := context.WithCancel(m.session.ClusterContext())
 	m.streamCancel = cancel
 	model := *m
 	go model.runStream(ctx, streamID, m.streamCh)
@@ -116,8 +121,9 @@ func (m Model) checkContainerCmd(streamID int) tea.Cmd {
 	lister := m.lister
 	namespace := m.pod.Namespace
 	podName := m.pod.Name
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), containerCheckTimeout)
+		ctx, cancel := context.WithTimeout(parent, containerCheckTimeout)
 		defer cancel()
 		info, found := lookupContainerInfo(ctx, lister, namespace, podName, container)
 		if found && info.State != "" && info.State != "Waiting" {

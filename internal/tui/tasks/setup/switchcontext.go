@@ -27,11 +27,14 @@ type switchProbesDoneMsg struct{ gen int }
 
 // probeSwitchContextsCmd kicks off kube.ProbeContexts for names tagged with
 // gen, returning the first Cmd in the drain chain. nil for an empty list.
-func probeSwitchContextsCmd(gen int, names []string) tea.Cmd {
+// ctx is the session's process context, not its cluster one — the same
+// split tui/context.go's probeContextsCmd documents: this run reaches every
+// kubeconfig context, so only quitting should abandon it.
+func probeSwitchContextsCmd(ctx context.Context, gen int, names []string) tea.Cmd {
 	if len(names) == 0 {
 		return nil
 	}
-	ch := kube.ProbeContexts(context.Background(), names)
+	ch := kube.ProbeContexts(ctx, names)
 	return waitForSwitchProbe(gen, ch)
 }
 

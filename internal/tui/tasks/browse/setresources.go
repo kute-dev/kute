@@ -184,7 +184,7 @@ func (m *Model) beginSetResources() bool {
 	if !ok {
 		return false
 	}
-	obj, ok := workloadObject(m.lister, m.kind, row.Namespace, row.Name)
+	obj, ok := workloadObject(m.session.ClusterContext(), m.lister, m.kind, row.Namespace, row.Name)
 	if !ok {
 		return false
 	}
@@ -196,7 +196,7 @@ func (m *Model) beginSetResources() bool {
 		kind: m.kind, namespace: row.Namespace, name: row.Name,
 		obj: obj, containers: containers,
 		desiredCount:     currentReplicas(row),
-		pods:             workloadPods(m.lister, m.kind, row.Namespace, row.Name),
+		pods:             workloadPods(m.session.ClusterContext(), m.lister, m.kind, row.Namespace, row.Name),
 		containerMetrics: m.containerMetricsSnapshot(row.Namespace),
 	}
 	m.pendingSetResources = t
@@ -213,7 +213,7 @@ func (m *Model) containerMetricsSnapshot(namespace string) map[string]map[string
 	if m.metrics == nil {
 		return nil
 	}
-	metrics, err := m.metrics.ContainerMetricsByNamespace(context.Background(), namespace)
+	metrics, err := m.metrics.ContainerMetricsByNamespace(m.session.ClusterContext(), namespace)
 	if err != nil {
 		return nil
 	}
@@ -295,15 +295,15 @@ func workloadContainerResources(obj runtime.Object, container string) corev1.Res
 // those ReplicaSets (the same owner-matching setimage.go's
 // deploymentRevisions already does for its own revision history);
 // StatefulSet/DaemonSet → pods owned directly.
-func workloadPods(lister resources.RawLister, kind kube.ResourceKind, namespace, name string) []*corev1.Pod {
+func workloadPods(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name string) []*corev1.Pod {
 	if lister == nil {
 		return nil
 	}
-	podObjs, err := lister.ListRaw(context.Background(), kube.KindPod, namespace)
+	podObjs, err := lister.ListRaw(ctx, kube.KindPod, namespace)
 	if err != nil {
 		return nil
 	}
-	ownerKind, ownerNames := ownerSelector(lister, kind, namespace, name)
+	ownerKind, ownerNames := ownerSelector(ctx, lister, kind, namespace, name)
 	if ownerKind == "" {
 		return nil
 	}
@@ -325,10 +325,10 @@ func workloadPods(lister resources.RawLister, kind kube.ResourceKind, namespace,
 // carry in their OwnerReferences: a Deployment's pods are owned by its
 // ReplicaSets (plural — old revisions can still have terminating pods), a
 // StatefulSet/DaemonSet's pods are owned by it directly.
-func ownerSelector(lister resources.RawLister, kind kube.ResourceKind, namespace, name string) (ownerKind string, names map[string]bool) {
+func ownerSelector(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name string) (ownerKind string, names map[string]bool) {
 	switch kind {
 	case kube.KindDeployment:
-		return "ReplicaSet", ownedReplicaSetNames(lister, namespace, name)
+		return "ReplicaSet", ownedReplicaSetNames(ctx, lister, namespace, name)
 	case kube.KindStatefulSet, kube.KindDaemonSet:
 		return string(kind), map[string]bool{name: true}
 	default:
@@ -340,8 +340,8 @@ func ownerSelector(lister resources.RawLister, kind kube.ResourceKind, namespace
 // same owner-reference match setimage.go's deploymentRevisions uses,
 // reduced to just names since workloadPods only needs the set to filter
 // pods by.
-func ownedReplicaSetNames(lister resources.RawLister, namespace, deployment string) map[string]bool {
-	objs, err := lister.ListRaw(context.Background(), kube.KindReplicaSet, namespace)
+func ownedReplicaSetNames(ctx context.Context, lister resources.RawLister, namespace, deployment string) map[string]bool {
+	objs, err := lister.ListRaw(ctx, kube.KindReplicaSet, namespace)
 	if err != nil {
 		return nil
 	}

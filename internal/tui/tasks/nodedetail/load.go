@@ -52,8 +52,9 @@ func (m Model) load() tea.Cmd {
 	metrics := m.metrics
 	nodeName := m.nodeName
 	timeout := m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		node, err := findNode(ctx, lister, nodeName)

@@ -123,8 +123,9 @@ func (m Model) Init() tea.Cmd {
 // detectShellsCmd probes one container off the update loop.
 func (m Model) detectShellsCmd(container string) tea.Cmd {
 	detector, namespace, pod := m.shells, m.namespace, m.podName
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), shellProbeTimeout)
+		ctx, cancel := context.WithTimeout(parent, shellProbeTimeout)
 		defer cancel()
 		shells, err := detector.DetectShells(ctx, namespace, pod, container)
 		return shellsMsg{container: container, shells: shells, err: err}

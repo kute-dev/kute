@@ -1,7 +1,6 @@
 package browse
 
 import (
-	"context"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -141,10 +140,11 @@ func (m Model) prefetchAuxKinds() tea.Cmd {
 		return nil
 	}
 	lister, namespace := m.lister, m.namespace
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
 		for _, kind := range kinds {
 			// Warming a cache; a failure just means the read happens later.
-			_, _ = lister.ListRaw(context.Background(), kind, namespace)
+			_, _ = lister.ListRaw(parent, kind, namespace)
 		}
 		return nil
 	}

@@ -70,8 +70,9 @@ func (m Model) findNodeDebugPodCmd(after time.Time, attempt int) tea.Cmd {
 	if lister == nil {
 		return func() tea.Msg { return nodeDebugPodLookupMsg{after: after, attempt: attempt} }
 	}
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		defer cancel()
 		objs, err := lister.ListRaw(ctx, kube.KindPod, "")
 		if err != nil {

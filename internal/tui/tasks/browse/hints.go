@@ -50,8 +50,9 @@ func (m Model) loadEmptyHints() tea.Cmd {
 	timeout := m.timeout
 	epoch := m.reloadEpoch
 
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
 		hints := emptyHints{

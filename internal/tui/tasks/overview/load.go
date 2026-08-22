@@ -51,8 +51,9 @@ func (m Model) load() tea.Cmd {
 		registry = m.session.Registry
 	}
 	timeout := m.timeout
+	parent := m.session.ClusterContext()
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 		data, err := loadOverview(ctx, lister, nodeMetricsSrc, registry)
 		return loadedMsg{epoch: epoch, data: data, err: err}

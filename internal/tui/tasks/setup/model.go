@@ -134,7 +134,7 @@ func (m Model) Init() tea.Cmd {
 	// 4c: "pre-probed in the background" — kicks off as soon as the screen
 	// exists, not gated on any keypress.
 	if m.state == Unreachable && len(m.otherContexts) > 0 {
-		return probeSwitchContextsCmd(m.probeGen, m.otherContexts)
+		return probeSwitchContextsCmd(m.session.Context(), m.probeGen, m.otherContexts)
 	}
 	return nil
 }
