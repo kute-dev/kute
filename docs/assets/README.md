@@ -7,7 +7,8 @@ the hero and task menu on kute.dev. The dedicated `home-hero*.tape` pair
 captures the larger hero surface; the task menu captures cover all-namespaces
 triage, the Goto/Namespace/Context palettes, pod detail, timeline, CronJob and
 Job-attempt diagnosis, Helm releases and release history, Ingress and HTTPRoute
-routing, Flux, Argo CD, non-PROD/PROD confirmations, and certificate failure.
+routing, Flux, Argo CD, non-PROD/PROD confirmations, certificate failure, and
+the kubectl-debug panel (ephemeral attach, copy mode, node debug).
 Every checkpoint has a dark `home-<name>.png` and light
 `home-<name>-light.png`
 capture so the website screenshot follows its selected theme. The tapes output

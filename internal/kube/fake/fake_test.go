@@ -611,8 +611,8 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	ctx := context.Background()
 
 	pods, err := c.ListRaw(ctx, kube.KindPod, "")
-	if err != nil || len(pods) != 29 {
-		t.Fatalf("ListRaw(Pod) = %d, %v, want 29 fixture pods", len(pods), err)
+	if err != nil || len(pods) != 31 {
+		t.Fatalf("ListRaw(Pod) = %d, %v, want 31 fixture pods", len(pods), err)
 	}
 	if pod, ok := findPod(pods, "api-7d9f6c8-abcde"); !ok || len(pod.Spec.Containers) < 2 {
 		t.Fatalf("expected a multi-container pod (10a's exec-picker is otherwise unreachable in --demo), got %+v (ok=%v)", pod, ok)

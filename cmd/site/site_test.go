@@ -431,11 +431,13 @@ func TestHomeExplorerTabsHavePanels(t *testing.T) {
 		t.Errorf("homepage has %d initially selected explorer tabs, want 1", selected)
 	}
 
-	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 21 {
-		t.Errorf("homepage has %d explorer subpanels, want 21 grouped screens", got)
+	if got := strings.Count(body, `class="explorer-subpanel" role="tabpanel"`); got != 25 {
+		t.Errorf("homepage has %d explorer subpanels, want 25 grouped screens", got)
 	}
 	for _, id := range []string{
 		"incident-panel-cluster", "incident-panel-pod", "incident-panel-certificate", "incident-panel-timeline",
+		"incident-panel-debug",
+		"debug-panel-attach", "debug-panel-copy", "debug-panel-node",
 		"navigation-panel-goto", "navigation-panel-namespace", "navigation-panel-context",
 		"batch-panel-cronjob", "batch-panel-attempts",
 		"helm-panel-releases", "helm-panel-history",
@@ -489,6 +491,9 @@ func TestHomeScreenshotsHaveThemePairs(t *testing.T) {
 		"home-actions-setimage",
 		"home-actions-resources",
 		"home-actions-forward",
+		"home-debug-attach",
+		"home-debug-copy",
+		"home-debug-node",
 	}
 	for _, stem := range stems {
 		dark := `class="theme-shot theme-shot-dark" src="/assets/` + stem + `.png"`

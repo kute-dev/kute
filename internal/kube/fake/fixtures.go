@@ -95,11 +95,39 @@ func NewDemo() *Cluster {
 	workerPod.Spec.Containers[0].Name = "worker"
 	workerPod.Status.ContainerStatuses[0].Name = "worker"
 
+	// gatewayPod/gatewayCanaryPod are §41b/§41c's one demo exercise of the
+	// kubectl-debug fork (docs/design v.0.11.0.dc.html §41a-§41c): 'x' only
+	// ever routes to tasks/debugpanel when every container in the pod comes
+	// back genuinely shell-less (browse/debug.go's allShellless), and
+	// shells.go's DetectShells only answers "no shell" for a container
+	// *named* for a distroless image — no other seeded pod qualifies.
+	// "envoy-distroless" is a real Envoy Proxy image variant, not a
+	// contrived name. Deliberately bare (no Deployment/ReplicaSet/Service):
+	// unlike apiPod/workerPod these don't need an owning-workload chain for
+	// anything this pair demonstrates, and staying unowned keeps them out of
+	// every other screen's captured backdrop.
+	gatewayPod := demoPod("gateway-6f9c8d7b4-h2n8k", "default", age(6*24*time.Hour), corev1.PodRunning, corev1.PodQOSGuaranteed, "node-a", true, 0, nil)
+	gatewayPod.Labels = map[string]string{"app": "gateway"}
+	gatewayPod.Spec.Containers[0].Name = "envoy-distroless"
+	gatewayPod.Spec.Containers[0].Image = "envoyproxy/envoy-distroless:v1.30.1"
+	gatewayPod.Status.ContainerStatuses[0].Name = "envoy-distroless"
+
+	// gatewayCanaryPod: same shell-less container, a newer image tag that
+	// crash-loops — §41c's target, where 'x' skips straight to copy mode
+	// since the pod can't stay running for an ephemeral attach either.
+	gatewayCanaryPod := demoCrashLoopPod("gateway-canary-5d7f9c8b6-q7m3s", "default", age(12*time.Minute), "node-a")
+	gatewayCanaryPod.Labels = map[string]string{"app": "gateway", "track": "canary"}
+	gatewayCanaryPod.Spec.Containers[0].Name = "envoy-distroless"
+	gatewayCanaryPod.Spec.Containers[0].Image = "envoyproxy/envoy-distroless:v1.31.0"
+	gatewayCanaryPod.Status.ContainerStatuses[0].Name = "envoy-distroless"
+
 	c.Seed(kube.KindPod,
 		apiPod,
 		workerPod,
 		demoPendingPod("cache-0", "default", age(3*time.Minute)),
 		demoCompletedPod("migrate-job-x8z2p", "default", age(20*time.Minute)),
+		gatewayPod,
+		gatewayCanaryPod,
 	)
 
 	c.Seed(kube.KindDeployment, demoMidRolloutDeployment("api", "default", age(30*24*time.Hour)))
@@ -433,6 +461,18 @@ func demoRBACFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		demoClusterRole("admin", rbacAge,
 			rbacv1.PolicyRule{APIGroups: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"*"}},
 		),
+		// pod-debugger: the one narrow write "view" doesn't carry — real
+		// teams commonly grant exactly this on top of a read-only role so an
+		// SRE can `kubectl debug` without also getting delete/edit access.
+		// Without it, §41a's RBAC pre-check (debugCapabilityDenied) correctly
+		// denies dev-readonly and the debug panel never opens in --demo.
+		demoClusterRole("pod-debugger", rbacAge,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "pods/ephemeralcontainers"},
+				Verbs:     []string{"create"},
+			},
+		),
 	)
 
 	c.Seed(kube.KindRole,
@@ -444,6 +484,9 @@ func demoRBACFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 	c.Seed(kube.KindClusterRoleBinding,
 		demoClusterRoleBinding("cluster-admins", "admin", rbacAge,
 			rbacv1.Subject{Kind: rbacv1.UserKind, Name: "alice"},
+		),
+		demoClusterRoleBinding("dev-debuggers", "pod-debugger", rbacAge,
+			rbacv1.Subject{Kind: rbacv1.UserKind, Name: "dev-readonly"},
 		),
 	)
 

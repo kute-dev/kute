@@ -57,7 +57,7 @@
       <div class="explorer-tabs" role="tablist" aria-label="Ways to use kute" aria-orientation="vertical">
         <button id="explorer-tab-incident" class="explorer-tab" type="button" role="tab" aria-selected="true" aria-controls="explorer-panel-incident" tabindex="0">
           <span class="explorer-tab-title">Diagnose an incident</span>
-          <span class="explorer-tab-meta">cluster, pod, certificates, timeline</span>
+          <span class="explorer-tab-meta">cluster, pod, certificates, timeline, debug</span>
         </button>
         <button id="explorer-tab-navigation" class="explorer-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel-navigation" tabindex="-1">
           <span class="explorer-tab-title">Move without losing place</span>
@@ -97,6 +97,7 @@
             <button id="incident-tab-pod" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-pod" tabindex="-1">Pod diagnosis</button>
             <button id="incident-tab-certificate" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-certificate" tabindex="-1">Certificates</button>
             <button id="incident-tab-timeline" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-timeline" tabindex="-1">Timeline</button>
+            <button id="incident-tab-debug" type="button" role="tab" aria-selected="false" aria-controls="incident-panel-debug" tabindex="-1">Debug <code>x</code></button>
           </div>
           <div id="incident-panel-cluster" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-cluster">
             <p class="explorer-intro">Unhealthy namespaces sort first and healthy ones collapse to a single line - the whole cluster's problems arrive on one screen.</p>
@@ -133,6 +134,40 @@
             </div>
             <a class="explorer-fullsize theme-link-dark" href="/assets/home-timeline.png" target="_blank" rel="noopener">Open screenshot full size</a>
             <a class="explorer-fullsize theme-link-light" href="/assets/home-timeline-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+          </div>
+          <div id="incident-panel-debug" class="explorer-subpanel" role="tabpanel" aria-labelledby="incident-tab-debug" hidden>
+            <div class="explorer-subtabs" role="tablist" aria-label="Debug scenario">
+              <button id="debug-tab-attach" type="button" role="tab" aria-selected="true" aria-controls="debug-panel-attach" tabindex="0">Ephemeral attach</button>
+              <button id="debug-tab-copy" type="button" role="tab" aria-selected="false" aria-controls="debug-panel-copy" tabindex="-1">Copy mode</button>
+              <button id="debug-tab-node" type="button" role="tab" aria-selected="false" aria-controls="debug-panel-node" tabindex="-1">Node debug</button>
+            </div>
+            <div id="debug-panel-attach" class="explorer-subpanel" role="tabpanel" aria-labelledby="debug-tab-attach">
+              <p class="explorer-intro">A distroless gateway has no shell to exec into - <code>x</code> attaches an ephemeral debug container alongside it instead, sharing its process namespace.</p>
+              <div class="explorer-frame">
+                <img class="theme-shot theme-shot-dark" src="/assets/home-debug-attach.png" width="1632" height="900" loading="lazy" alt="kute debug panel attaching an ephemeral netshoot container to a shell-less distroless pod">
+                <img class="theme-shot theme-shot-light" src="/assets/home-debug-attach-light.png" width="1632" height="900" loading="lazy" alt="kute debug panel in the light theme attaching an ephemeral netshoot container to a shell-less distroless pod">
+              </div>
+              <a class="explorer-fullsize theme-link-dark" href="/assets/home-debug-attach.png" target="_blank" rel="noopener">Open screenshot full size</a>
+              <a class="explorer-fullsize theme-link-light" href="/assets/home-debug-attach-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            </div>
+            <div id="debug-panel-copy" class="explorer-subpanel" role="tabpanel" aria-labelledby="debug-tab-copy" hidden>
+              <p class="explorer-intro">A pod that won't stay running can't be exec'd or attached to either - <code>x</code> opens straight into copy mode, replacing the entrypoint with a shell on a throwaway copy.</p>
+              <div class="explorer-frame">
+                <img class="theme-shot theme-shot-dark" src="/assets/home-debug-copy.png" width="1632" height="900" loading="lazy" alt="kute debug panel in copy mode on a crash-looping canary pod, replacing its entrypoint with sh">
+                <img class="theme-shot theme-shot-light" src="/assets/home-debug-copy-light.png" width="1632" height="900" loading="lazy" alt="kute debug panel in the light theme in copy mode on a crash-looping canary pod, replacing its entrypoint with sh">
+              </div>
+              <a class="explorer-fullsize theme-link-dark" href="/assets/home-debug-copy.png" target="_blank" rel="noopener">Open screenshot full size</a>
+              <a class="explorer-fullsize theme-link-light" href="/assets/home-debug-copy-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            </div>
+            <div id="debug-panel-node" class="explorer-subpanel" role="tabpanel" aria-labelledby="debug-tab-node" hidden>
+              <p class="explorer-intro">The same <code>x</code> on a node replaces the old, confirmation-less shell shortcut with a visible <code>kubectl debug node/...</code> command.</p>
+              <div class="explorer-frame">
+                <img class="theme-shot theme-shot-dark" src="/assets/home-debug-node.png" width="1632" height="800" loading="lazy" alt="kute debug panel opening a privileged, chrooted shell on a node with the exact kubectl debug command shown">
+                <img class="theme-shot theme-shot-light" src="/assets/home-debug-node-light.png" width="1632" height="800" loading="lazy" alt="kute debug panel in the light theme opening a privileged, chrooted shell on a node with the exact kubectl debug command shown">
+              </div>
+              <a class="explorer-fullsize theme-link-dark" href="/assets/home-debug-node.png" target="_blank" rel="noopener">Open screenshot full size</a>
+              <a class="explorer-fullsize theme-link-light" href="/assets/home-debug-node-light.png" target="_blank" rel="noopener">Open screenshot full size</a>
+            </div>
           </div>
         </article>
 
