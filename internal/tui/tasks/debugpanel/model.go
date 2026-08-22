@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 )
@@ -53,7 +54,15 @@ const (
 // values).
 type Config struct {
 	Session *tui.Session
-	Mutator kube.Mutator // §41c's cleanup delete only — the launch itself never calls it
+	Mutator kube.Mutator // §41c/§41d's cleanup delete only — the launch itself never calls it
+
+	// Lister backs §41d's post-exit node-debug pod discovery only (node.go):
+	// kubectl auto-generates the node-debugger pod's name and never reports
+	// it back to the caller (unlike copy mode's caller-chosen --copy-to
+	// name), so the panel finds it by reading the already-warm cluster-wide
+	// Pod cache — one of the app's three eager informers — rather than a
+	// live API call. Unused for a Pod target.
+	Lister resources.RawLister
 
 	// Pod target
 	Namespace  string
@@ -90,10 +99,15 @@ type Config struct {
 	Demo bool
 }
 
-// cleanupPrompt is §41c's post-exit "CLEAN UP" band — set once a copy-mode
-// launch exits cleanly, cleared by either a completed ctrl-d delete or esc
-// ("keep").
+// cleanupPrompt is §41c/§41d's post-exit "CLEAN UP" band — set once a
+// copy-mode pod launch exits cleanly, or once a node-debug launch's
+// kubectl-generated pod is found in the Pod cache (node.go); cleared by
+// either a completed ctrl-d delete or esc ("keep"). namespace is carried
+// explicitly rather than falling back to the model's own m.namespace,
+// since a node-debug pod's namespace is only known once it's found —
+// m.namespace is unset for a Node target.
 type cleanupPrompt struct {
+	namespace string
 	name      string
 	startedAt time.Time
 }
@@ -103,6 +117,7 @@ type Model struct {
 
 	session *tui.Session
 	mutator kube.Mutator
+	lister  resources.RawLister
 
 	tgt target
 
@@ -147,6 +162,7 @@ func New(cfg Config) Model {
 		height:  tui.DefaultHeight,
 		session: cfg.Session,
 		mutator: cfg.Mutator,
+		lister:  cfg.Lister,
 		actions: actions.New(cfg.Mutator),
 		demo:    cfg.Demo,
 	}

@@ -16,14 +16,20 @@ import (
 
 // launchResultMsg carries a kubectl debug tea.ExecProcess's exit outcome.
 // tgt/mode distinguish which of the three launches produced it, since a
-// clean exit means something different for each: a node/attach launch pops
-// back (same contract as tasks/execpicker's execResultMsg), a copy launch
-// stays on the panel to show §41c's CLEAN UP prompt.
+// clean exit means something different for each: an attach launch pops
+// back (same contract as tasks/execpicker's execResultMsg), while a copy
+// launch and a node-debug launch both stay on the panel — copy already
+// knows the pod's name and shows §41c's CLEAN UP prompt immediately; node
+// debug doesn't (kubectl auto-generates it) and hands off to
+// findNodeDebugPodCmd (node.go) to find it in the Pod cache first.
 type launchResultMsg struct {
 	err      error
 	tgt      target
 	mode     podMode
 	copyName string
+	// launchedAt is the node target's own correlation floor for
+	// findNodeDebugPodCmd — unused for a Pod target.
+	launchedAt time.Time
 }
 
 // isProd mirrors every other screen's package-local seam (e.g.
@@ -56,6 +62,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.conn = kube.ConnState(msg)
 	case launchResultMsg:
 		return m.handleLaunchResult(msg)
+	case nodeDebugPodLookupMsg:
+		return m.handleNodeDebugPodLookup(msg)
+	case nodeDebugRetryDueMsg:
+		return m, m.findNodeDebugPodCmd(msg.after, msg.attempt)
 	case actions.ResultMsg:
 		return m.handleActionResult(msg)
 	case tea.KeyPressMsg:
@@ -290,9 +300,10 @@ func (m Model) launchCmd() tea.Cmd {
 		if m.demo {
 			return demoLaunchResultCmd(launchResultMsg{tgt: targetNode})
 		}
+		launchedAt := time.Now()
 		spec := kube.NodeDebugSpec(m.nodeName, m.nodeImage, m.nodeProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
-			return launchResultMsg{err: err, tgt: targetNode}
+			return launchResultMsg{err: err, tgt: targetNode, launchedAt: launchedAt}
 		})
 	}
 	if m.mode == modeAttach {
@@ -328,19 +339,24 @@ func demoLaunchResultCmd(msg launchResultMsg) tea.Cmd {
 }
 
 // handleLaunchResult routes a completed launch per target/mode (docs/design
-// v.0.11.0.dc.html §41b/§41c/§41d): attach/node pop back on a clean exit,
-// matching execpicker's own execResultMsg contract; copy mode stays on the
-// panel to show the CLEAN UP prompt instead, registering the new pod with
-// Session.DebugCopies so the pods table can tag it for the rest of the
-// session. The node-target error string is the retired 's' NodeShell verb's
-// exact wording, reused verbatim rather than reworded.
+// v.0.11.0.dc.html §41b/§41c/§41d): an attach-mode exit pops back, matching
+// execpicker's own execResultMsg contract; copy mode and node debug both
+// stay on the panel toward showing the CLEAN UP prompt instead — copy mode
+// already knows the pod's name and shows it right away, registering the
+// new pod with Session.DebugCopies so the pods table can tag it for the
+// rest of the session; node debug doesn't know the name yet (kubectl
+// auto-generates it) and hands off to findNodeDebugPodCmd (node.go) to
+// find it in the Pod cache first. The node-target error string is the
+// retired 's' NodeShell verb's exact wording, reused verbatim rather than
+// reworded.
 func (m *Model) handleLaunchResult(msg launchResultMsg) (tea.Model, tea.Cmd) {
 	if msg.tgt == targetNode {
 		if msg.err != nil {
 			m.feedback = "node shell exited: " + msg.err.Error()
 			return m, nil
 		}
-		return m, func() tea.Msg { return tui.BackMsg{} }
+		m.feedback = ""
+		return m, m.findNodeDebugPodCmd(msg.launchedAt, 0)
 	}
 	if msg.mode == modeCopy {
 		if msg.err != nil {
@@ -351,7 +367,7 @@ func (m *Model) handleLaunchResult(msg launchResultMsg) (tea.Model, tea.Cmd) {
 			m.session.DebugCopies.Add(m.namespace, msg.copyName)
 		}
 		m.feedback = ""
-		m.cleanup = &cleanupPrompt{name: msg.copyName, startedAt: time.Now()}
+		m.cleanup = &cleanupPrompt{namespace: m.namespace, name: msg.copyName, startedAt: time.Now()}
 		return m, nil
 	}
 	if msg.err != nil {
@@ -372,12 +388,12 @@ func (m *Model) beginCleanupDelete() tea.Cmd {
 	}
 	tier := verbs.TierFor(verbs.Delete, m.isProd())
 	return m.actions.Begin(tier, tui.TaskAction{
-		ID:    "delete-" + string(kube.KindPod) + "-" + m.namespace + "/" + m.cleanup.name,
+		ID:    "delete-" + string(kube.KindPod) + "-" + m.cleanup.namespace + "/" + m.cleanup.name,
 		Label: fmt.Sprintf("Delete Pod %s?", m.cleanup.name),
 		Scope: tui.TaskScope{
 			ResourceKind: string(kube.KindPod),
 			ResourceName: m.cleanup.name,
-			Namespace:    m.namespace,
+			Namespace:    m.cleanup.namespace,
 			Verb:         "delete",
 			IsMutating:   true,
 		},
@@ -412,14 +428,15 @@ func (m *Model) updateActionsConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 }
 
 // handleActionResult applies the cleanup delete's outcome — success clears
-// cleanup, removes the DebugCopies tag, and pops back; failure leaves the
-// CLEAN UP prompt showing with the server's error (actions.Controller's own
-// HandleResult already surfaces it).
+// cleanup, removes the DebugCopies tag (pod-copy mode only — a node-debug
+// pod was never added to it, since it isn't a copy of anything), and pops
+// back; failure leaves the CLEAN UP prompt showing with the server's error
+// (actions.Controller's own HandleResult already surfaces it).
 func (m *Model) handleActionResult(msg actions.ResultMsg) (tea.Model, tea.Cmd) {
 	m.actions.HandleResult(msg)
 	if msg.Err == nil && m.cleanup != nil {
-		if m.session != nil && m.session.DebugCopies != nil {
-			m.session.DebugCopies.Remove(m.namespace, m.cleanup.name)
+		if m.tgt == targetPod && m.session != nil && m.session.DebugCopies != nil {
+			m.session.DebugCopies.Remove(m.cleanup.namespace, m.cleanup.name)
 		}
 		m.cleanup = nil
 		return m, func() tea.Msg { return tui.BackMsg{} }

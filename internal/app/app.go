@@ -617,7 +617,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openYAML := openYAMLFunc(sess, cluster)
 	openDebug := openDebugFunc(sess, cluster, false)
 	openExecDebug := openExecDebugFunc(sess, cluster, false)
-	openNodeDebug := openNodeDebugFunc(sess, cluster, false)
+	openNodeDebug := openNodeDebugFunc(sess, cluster, cluster, false)
 	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug, false)
 	openForward := openForwardFunc(sess, lister, cluster)
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug, openWhoCanFunc(sess, cluster))
@@ -709,7 +709,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	openYAML := openYAMLFunc(sess, demoCluster)
 	openDebug := openDebugFunc(sess, demoCluster, true)
 	openExecDebug := openExecDebugFunc(sess, demoCluster, true)
-	openNodeDebug := openNodeDebugFunc(sess, demoCluster, true)
+	openNodeDebug := openNodeDebugFunc(sess, demoCluster, demoCluster, true)
 	openExec := openExecFunc(sess, demoCluster, openExecDebug, true)
 	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
 	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug, openWhoCanFunc(sess, demoCluster))
@@ -1383,12 +1383,16 @@ func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) execp
 // openNodeDebugFunc pushes tasks/debugpanel (§41d) for a node — replaces
 // the retired standalone NodeShell verb (verbs.go's NodeDebug/
 // NodeDebugDetail doc comments). Shared by browse's 'x' on a Node row and
-// nodedetail's own 's'.
-func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
+// nodedetail's own 's'. lister backs the panel's own post-exit "find the
+// pod kubectl just created" cleanup lookup (debugpanel/node.go) — always
+// the same *kube.Cluster/*fake.Cluster already passed in as mutator, which
+// also implements resources.RawLister.
+func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator, lister resources.RawLister, demo bool) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 	return func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:        sess,
 			Mutator:        mutator,
+			Lister:         lister,
 			IsNode:         true,
 			Name:           name,
 			NodePodCount:   podCount,

@@ -193,7 +193,7 @@ func (m Model) fieldLines(theme tui.Theme) []string {
 			m.fieldRow(theme, "image", fieldImage, m.nodeImage, "i edit · tab recents"),
 			m.fieldRow(theme, "profile", fieldNone, string(m.nodeProfile), "p cycle · "+profileHint(m.nodeProfile)),
 			m.fieldRow(theme, "rootfs", fieldNone, "/host", "chroot /host once you land"),
-			m.fieldRow(theme, "creates", fieldNone, "a real pod on this node", "deleted when you exit"),
+			m.fieldRow(theme, "creates", fieldNone, "a real pod on this node", "kute finds it and offers to delete it after"),
 		}
 	case m.mode == modeAttach:
 		return []string{
@@ -276,9 +276,14 @@ func (m Model) warningLine(theme tui.Theme) string {
 // willRunLine shows the exact kubectl invocation 'enter' will run (docs/
 // design README.md §10a's "no magic, copyable documentation" idiom, reused
 // here) — recomputed live off the in-place field buffers on every
-// keystroke, the same configmapdata's willRunStrip contract.
+// keystroke, the same configmapdata's willRunStrip contract. A command
+// longer than the panel wraps onto continuation lines indented under the
+// label rather than ellipsizing — every debug command is meant to be
+// copyable, and a truncated one silently drops its tail (e.g. profile
+// flags on a long image name).
 func (m Model) willRunLine(theme tui.Theme) string {
-	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render("will run  ")
+	const labelText = "will run  "
+	label := lipgloss.NewStyle().Foreground(theme.TextGhost).Render(labelText)
 	var cmdText string
 	switch {
 	case m.tgt == targetNode:
@@ -288,7 +293,28 @@ func (m Model) willRunLine(theme tui.Theme) string {
 	default:
 		cmdText = kube.PodDebugCopyCommandString(m.namespace, m.podName, m.copyName, m.copyContainer().Name, m.copyEntrypoint, m.copyShareProcesses)
 	}
-	return label + lipgloss.NewStyle().Foreground(theme.TextSecondary).Render(ellipsize(cmdText, panelWidth-10))
+	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+	indent := strings.Repeat(" ", lipgloss.Width(labelText))
+	wrapped := wrapText(cmdText, panelWidth-lipgloss.Width(labelText))
+	lines := make([]string, len(wrapped))
+	for i, l := range wrapped {
+		prefix := label
+		if i > 0 {
+			prefix = indent
+		}
+		lines[i] = prefix + cmdStyle.Render(strings.TrimRight(l, " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// wrapText word-wraps plain (unstyled) s to width-wide lines, reusing
+// lipgloss's own Width-based reflow (timeline's wrapText does the same) —
+// s must stay ANSI-free going in for the wrap width math to be accurate.
+func wrapText(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	return strings.Split(lipgloss.NewStyle().Width(width).Render(s), "\n")
 }
 
 func ellipsize(s string, width int) string {

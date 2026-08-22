@@ -1,16 +1,47 @@
 package debugpanel
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/tui"
 )
+
+// fakePodLister is a minimal resources.RawLister test double for §41d's
+// findNodeDebugPodCmd — only Pod is ever queried, so it ignores kind/
+// namespace entirely, mirroring nodedetail's own fakeLister.
+type fakePodLister struct {
+	pods []runtime.Object
+	err  error
+}
+
+func (f fakePodLister) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
+	return f.pods, f.err
+}
+
+// fakeMutator is a non-nil kube.Mutator stand-in for tests that only need
+// actions.Controller.Begin to get past its "mutator configured" check —
+// embedding the (nil) interface satisfies every method signature without
+// implementing any of them, which is fine as long as the test never
+// actually confirms the action.
+type fakeMutator struct{ kube.Mutator }
+
+func nodeDebuggerPod(namespace, name, node string, created time.Time) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, CreationTimestamp: metav1.Time{Time: created}},
+		Spec:       corev1.PodSpec{NodeName: node},
+	}
+}
 
 func nonProdSession() *tui.Session {
 	return &tui.Session{Theme: tui.Dark(), Location: tui.Location{Context: "dev"}}
@@ -373,5 +404,114 @@ func TestCycleRecentImageOnTab(t *testing.T) {
 	next = updated.(*Model)
 	if got := next.editInput.Value(); got != "myregistry/debug-tools:v2" {
 		t.Errorf("after third tab (wrap), value = %q, want myregistry/debug-tools:v2", got)
+	}
+}
+
+// TestHandleLaunchResultNodeCleanExitLooksUpPod confirms a clean node-debug
+// exit no longer pops back immediately (the bug report this feature fixes:
+// a node-debugger pod left running with no way back to it from kute) —
+// instead it kicks off findNodeDebugPodCmd.
+func TestHandleLaunchResultNodeCleanExitLooksUpPod(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), IsNode: true, Name: "node-a"})
+	updated, cmd := m.handleLaunchResult(launchResultMsg{tgt: targetNode})
+	next := updated.(*Model)
+	if next.cleanup != nil {
+		t.Error("cleanup must not be staged before the pod is found")
+	}
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd — the node-debug pod lookup")
+	}
+	msg, ok := cmd().(nodeDebugPodLookupMsg)
+	if !ok {
+		t.Fatalf("expected a nodeDebugPodLookupMsg, got %#v", cmd())
+	}
+	if msg.found {
+		t.Error("expected not-found with no lister wired")
+	}
+}
+
+// TestFindNodeDebugPodCmdFindsNewestMatch confirms the lookup picks the
+// newest node-debugger-<node>-* pod scheduled on the right node, created no
+// earlier than after — and skips an older orphaned one left on the same
+// node from a previous session (the exact leftover this feature is meant
+// to stop accumulating).
+func TestFindNodeDebugPodCmdFindsNewestMatch(t *testing.T) {
+	t.Parallel()
+	launchedAt := time.Now()
+	lister := fakePodLister{pods: []runtime.Object{
+		nodeDebuggerPod("kube-system", "node-debugger-node-a-old", "node-a", launchedAt.Add(-time.Hour)),
+		nodeDebuggerPod("kube-system", "node-debugger-node-b-fresh", "node-b", launchedAt.Add(time.Second)),
+		nodeDebuggerPod("default", "node-debugger-node-a-fresh", "node-a", launchedAt.Add(time.Second)),
+		nodeDebuggerPod("default", "unrelated-pod", "node-a", launchedAt.Add(time.Second)),
+	}}
+	m := New(Config{Session: nonProdSession(), IsNode: true, Name: "node-a", Lister: lister})
+	msg, ok := m.findNodeDebugPodCmd(launchedAt, 0)().(nodeDebugPodLookupMsg)
+	if !ok {
+		t.Fatalf("expected a nodeDebugPodLookupMsg, got %#v", msg)
+	}
+	if !msg.found {
+		t.Fatal("expected the fresh same-node pod to be found")
+	}
+	if msg.namespace != "default" || msg.name != "node-debugger-node-a-fresh" {
+		t.Errorf("found %s/%s, want default/node-debugger-node-a-fresh", msg.namespace, msg.name)
+	}
+}
+
+// TestHandleNodeDebugPodLookupFoundStagesCleanup confirms a successful
+// lookup stages §41d's own CLEAN UP prompt with the pod's discovered
+// namespace, mirroring §41c's copy-mode prompt.
+func TestHandleNodeDebugPodLookupFoundStagesCleanup(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), IsNode: true, Name: "node-a"})
+	updated, cmd := m.handleNodeDebugPodLookup(nodeDebugPodLookupMsg{namespace: "kube-system", name: "node-debugger-node-a-xyz", found: true})
+	next := updated.(*Model)
+	if cmd != nil {
+		t.Error("expected a nil Cmd once the prompt is staged")
+	}
+	if next.cleanup == nil || next.cleanup.namespace != "kube-system" || next.cleanup.name != "node-debugger-node-a-xyz" {
+		t.Fatalf("expected cleanup staged for kube-system/node-debugger-node-a-xyz, got %+v", next.cleanup)
+	}
+}
+
+// TestHandleNodeDebugPodLookupRetriesThenGivesUp confirms a not-found
+// result retries up to nodeDebugLookupMaxAttempts before finally popping
+// back, rather than retrying forever.
+func TestHandleNodeDebugPodLookupRetriesThenGivesUp(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), IsNode: true, Name: "node-a"})
+	updated, cmd := m.handleNodeDebugPodLookup(nodeDebugPodLookupMsg{attempt: nodeDebugLookupMaxAttempts - 1})
+	if updated.(*Model).cleanup != nil {
+		t.Error("cleanup must stay unset once the lookup gives up")
+	}
+	if cmd == nil {
+		t.Fatal("expected a non-nil Cmd (tui.BackMsg) once attempts are exhausted")
+	}
+	if msg := cmd(); msg != (tui.BackMsg{}) {
+		t.Errorf("expected tui.BackMsg, got %#v", msg)
+	}
+}
+
+// TestBeginCleanupDeleteUsesCleanupNamespace confirms the cleanup delete
+// targets the pod's own discovered namespace rather than m.namespace, which
+// is empty for a Node target — the field beginCleanupDelete used before
+// §41d's CLEAN UP prompt existed for nodes.
+func TestBeginCleanupDeleteUsesCleanupNamespace(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), Mutator: fakeMutator{}, IsNode: true, Name: "node-a"})
+	m.cleanup = &cleanupPrompt{namespace: "kube-system", name: "node-debugger-node-a-xyz"}
+	// TierInline (non-prod delete) stages a pending action and returns a
+	// nil Cmd — the confirm itself waits on 'y', which this test doesn't
+	// press — so the pending Scope is the thing to assert on here.
+	m.beginCleanupDelete()
+	if !m.actions.Active() {
+		t.Fatal("expected the cleanup delete confirm to be staged")
+	}
+	pending := m.actions.Pending()
+	if pending == nil {
+		t.Fatal("expected a pending action")
+	}
+	if pending.Scope.Namespace != "kube-system" || pending.Scope.ResourceName != "node-debugger-node-a-xyz" {
+		t.Errorf("Scope = %+v, want namespace kube-system, name node-debugger-node-a-xyz", pending.Scope)
 	}
 }
