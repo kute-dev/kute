@@ -2,6 +2,7 @@ package kube
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -108,7 +109,7 @@ func TestHelmReleaseWorkloadsToleratesJunk(t *testing.T) {
 // block scalar (a NOTES.txt, an embedded manifest in a ConfigMap) is data,
 // not a document boundary.
 func TestSplitYAMLDocumentsOnlySplitsAtColumnZero(t *testing.T) {
-	docs := splitYAMLDocuments("kind: ConfigMap\ndata:\n  extra: |\n    ---\n    nested\n---\nkind: Deployment\n")
+	docs := slices.Collect(splitYAMLDocuments("kind: ConfigMap\ndata:\n  extra: |\n    ---\n    nested\n---\nkind: Deployment\n"))
 	if len(docs) != 2 {
 		t.Fatalf("got %d documents, want 2: %q", len(docs), docs)
 	}

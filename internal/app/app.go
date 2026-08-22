@@ -127,7 +127,7 @@ func rolloutPending(r kube.HelmRelease, unsettled map[kube.WorkloadRef]struct{})
 	if len(unsettled) == 0 {
 		return false
 	}
-	for _, ref := range kube.HelmReleaseWorkloads(r) {
+	for ref := range kube.HelmReleaseWorkloadsSeq(r) {
 		if _, ok := unsettled[ref]; ok {
 			return true
 		}

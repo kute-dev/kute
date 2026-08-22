@@ -1,6 +1,8 @@
 package kube
 
 import (
+	"iter"
+	"slices"
 	"strings"
 
 	sigsyaml "sigs.k8s.io/yaml"
@@ -42,48 +44,65 @@ var helmWorkloadKinds = map[string]ResourceKind{
 // that don't parse are skipped rather than failing the list: an unreadable
 // manifest costs the signal, never the screen.
 func HelmReleaseWorkloads(r HelmRelease) []WorkloadRef {
-	var out []WorkloadRef
-	for _, doc := range splitYAMLDocuments(r.Manifest) {
-		kind, ok := helmWorkloadKinds[topLevelKind(doc)]
-		if !ok {
-			continue
+	return slices.Collect(HelmReleaseWorkloadsSeq(r))
+}
+
+// HelmReleaseWorkloadsSeq is the iterator behind HelmReleaseWorkloads, for the
+// callers that only want to know whether *some* workload matches.
+//
+// app.go's rolloutPending is the one that matters: it ranges this once and
+// returns on the first hit, so as a sequence the unmarshal of every later
+// workload document never happens. Splitting is lazy for the same reason —
+// the whole manifest no longer becomes a []string up front.
+func HelmReleaseWorkloadsSeq(r HelmRelease) iter.Seq[WorkloadRef] {
+	return func(yield func(WorkloadRef) bool) {
+		for doc := range splitYAMLDocuments(r.Manifest) {
+			kind, ok := helmWorkloadKinds[topLevelKind(doc)]
+			if !ok {
+				continue
+			}
+			var meta struct {
+				Metadata struct {
+					Name      string `json:"name"`
+					Namespace string `json:"namespace"`
+				} `json:"metadata"`
+			}
+			if err := sigsyaml.Unmarshal([]byte(doc), &meta); err != nil || meta.Metadata.Name == "" {
+				continue
+			}
+			namespace := meta.Metadata.Namespace
+			if namespace == "" {
+				// A chart that doesn't template metadata.namespace lands in
+				// the release's namespace, which is what `helm install -n`
+				// means.
+				namespace = r.Namespace
+			}
+			if !yield(WorkloadRef{Kind: kind, Namespace: namespace, Name: meta.Metadata.Name}) {
+				return
+			}
 		}
-		var meta struct {
-			Metadata struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-		}
-		if err := sigsyaml.Unmarshal([]byte(doc), &meta); err != nil || meta.Metadata.Name == "" {
-			continue
-		}
-		namespace := meta.Metadata.Namespace
-		if namespace == "" {
-			// A chart that doesn't template metadata.namespace lands in the
-			// release's namespace, which is what `helm install -n` means.
-			namespace = r.Namespace
-		}
-		out = append(out, WorkloadRef{Kind: kind, Namespace: namespace, Name: meta.Metadata.Name})
 	}
-	return out
 }
 
 // splitYAMLDocuments splits a multi-document manifest on its `---`
 // separators. Only a separator at column 0 counts, so an indented `---`
 // inside a block scalar doesn't split a document in half.
-func splitYAMLDocuments(manifest string) []string {
-	var docs []string
-	var cur strings.Builder
-	for _, line := range strings.Split(manifest, "\n") {
-		if strings.TrimRight(line, " \t\r") == "---" {
-			docs = append(docs, cur.String())
-			cur.Reset()
-			continue
+func splitYAMLDocuments(manifest string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		var cur strings.Builder
+		for line := range strings.SplitSeq(manifest, "\n") {
+			if strings.TrimRight(line, " \t\r") == "---" {
+				if !yield(cur.String()) {
+					return
+				}
+				cur.Reset()
+				continue
+			}
+			cur.WriteString(line)
+			cur.WriteString("\n")
 		}
-		cur.WriteString(line)
-		cur.WriteString("\n")
+		yield(cur.String())
 	}
-	return append(docs, cur.String())
 }
 
 // topLevelKind reads a document's `kind:` without parsing it. Only an
