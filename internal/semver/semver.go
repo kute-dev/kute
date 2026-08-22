@@ -12,6 +12,7 @@
 package semver
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 )
@@ -120,21 +121,11 @@ func compareIdentifier(a, b string) int {
 	bn, bErr := strconv.Atoi(b)
 	switch {
 	case aErr == nil && bErr == nil:
-		return cmpInt(an, bn)
+		return cmp.Compare(an, bn)
 	case aErr == nil:
 		return -1 // numeric identifiers always rank below alphanumeric ones
 	case bErr == nil:
 		return 1
 	}
 	return strings.Compare(a, b)
-}
-
-func cmpInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
 }

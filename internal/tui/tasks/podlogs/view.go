@@ -208,7 +208,7 @@ func (m Model) waitingBody(width, height int) string {
 func decorativeBars(width, height int, first, rest lipgloss.Style) string {
 	rows := max(height-2, 1)
 	lines := make([]string, 0, rows)
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		bar := strings.Repeat("━", max(width/3-(i%3)*2, 8))
 		style := rest
 		if i == 0 {

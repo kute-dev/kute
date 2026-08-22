@@ -3,7 +3,7 @@ package helmrepo
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,7 +109,7 @@ func (l Loader) signature() string {
 			names = append(names, e.Name())
 		}
 	}
-	sort.Strings(names) // ReadDir is already sorted, but the signature must not depend on that
+	slices.Sort(names) // ReadDir is already sorted, but the signature must not depend on that
 	for _, name := range names {
 		info, err := os.Stat(filepath.Join(cachePath, name))
 		if err != nil {

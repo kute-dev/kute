@@ -89,6 +89,8 @@ func renderLines(lines []string, folded map[string]bool) []renderLine {
 	}
 
 	var out []renderLine
+	// A C-style loop on purpose: the body advances i past a folded block, which
+	// range-over-int cannot do (its index is a fresh copy each iteration).
 	for i := 0; i < len(lines); i++ {
 		if b, ok := blockAt[i]; ok && folded[b.key] {
 			out = append(out, renderLine{

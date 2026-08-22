@@ -38,6 +38,8 @@ package browse
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -301,11 +303,7 @@ func (m *Model) buildMetaTarget(kind kube.ResourceKind, namespace, name string) 
 // metadata maps carry no meaningful iteration order of their own) and
 // prefills each row's buffer to its current value.
 func buildMetaRows(values map[string]string, isAnnotation bool, theme tui.Theme) []metaRow {
-	keys := make([]string, 0, len(values))
-	for k := range values {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(values))
 	styles := metaInputStyles(theme)
 	rows := make([]metaRow, 0, len(keys))
 	for _, k := range keys {

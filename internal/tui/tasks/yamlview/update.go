@@ -266,7 +266,7 @@ func (m *Model) jumpToMatch() {
 			return
 		}
 	}
-	for i := 0; i < m.cursor; i++ {
+	for i := range m.cursor {
 		if strings.Contains(strings.ToLower(rendered[i].Text), query) {
 			m.cursor = i
 			m.clampOffset()

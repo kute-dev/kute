@@ -11,13 +11,16 @@ package kube
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -335,15 +338,12 @@ func LatestHelmReleases(all []HelmRelease) []HelmRelease {
 			latest[key] = r
 		}
 	}
-	out := make([]HelmRelease, 0, len(latest))
-	for _, r := range latest {
-		out = append(out, r)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Namespace != out[j].Namespace {
-			return out[i].Namespace < out[j].Namespace
-		}
-		return out[i].Name < out[j].Name
+	out := slices.Collect(maps.Values(latest))
+	slices.SortFunc(out, func(a, b HelmRelease) int {
+		return cmp.Or(
+			cmp.Compare(a.Namespace, b.Namespace),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 	return out
 }

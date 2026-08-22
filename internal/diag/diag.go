@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -171,9 +172,7 @@ func (s *Sink) Recent() []string {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]string, len(s.ring))
-	copy(out, s.ring)
-	return out
+	return slices.Clone(s.ring)
 }
 
 // LastReport returns the path of the most recently written crash report,
@@ -210,7 +209,7 @@ func (s *Sink) appendLineLocked(line string) {
 	}
 	s.ring = append(s.ring, line)
 	if len(s.ring) > ringLines {
-		s.ring = append(s.ring[:0], s.ring[len(s.ring)-ringLines:]...)
+		s.ring = slices.Delete(s.ring, 0, len(s.ring)-ringLines)
 	}
 }
 

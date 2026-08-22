@@ -82,7 +82,7 @@ func CenterLines(lines []string, width, height int) string {
 	}
 	out := make([]string, 0, top+len(lines))
 	blank := style.Render("")
-	for i := 0; i < top; i++ {
+	for range top {
 		out = append(out, blank)
 	}
 	for _, l := range lines {

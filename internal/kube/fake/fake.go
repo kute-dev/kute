@@ -167,9 +167,7 @@ func (c *Cluster) ListRaw(_ context.Context, kind kube.ResourceKind, namespace s
 	defer c.mu.Unlock()
 	all := c.objects[kind]
 	if namespace == "" {
-		out := make([]runtime.Object, len(all))
-		copy(out, all)
-		return out, nil
+		return slices.Clone(all), nil
 	}
 	out := make([]runtime.Object, 0, len(all))
 	for _, obj := range all {

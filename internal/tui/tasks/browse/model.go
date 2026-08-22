@@ -12,6 +12,7 @@ package browse
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1225,8 +1226,7 @@ func (m *Model) cacheCurrentRows() {
 	if m.rowCache == nil {
 		m.rowCache = make(map[browseCacheKey]cachedRows)
 	}
-	cp := make([]resources.Row, len(m.rows))
-	copy(cp, m.rows)
+	cp := slices.Clone(m.rows)
 	m.rowCache[browseCacheKey{m.kind, m.namespace}] = cachedRows{rows: cp, columns: m.rowColumns}
 }
 

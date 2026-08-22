@@ -3,6 +3,8 @@ package poddetail
 import (
 	"fmt"
 	"image/color"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -663,16 +665,7 @@ func (m Model) deleteConfirmModal(width, height int) string {
 }
 
 func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
-			keys[j], keys[j-1] = keys[j-1], keys[j]
-		}
-	}
-	return keys
+	return slices.Sorted(maps.Keys(m))
 }
 
 func padTo(s string, width int) string {

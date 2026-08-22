@@ -137,7 +137,7 @@ func (m *Model) moveSelection(delta int) {
 		return
 	}
 	next := m.selected
-	for step := 0; step < len(m.display); step++ {
+	for range len(m.display) {
 		cand := clamp(next+delta, 0, len(m.display)-1)
 		if cand == next {
 			break

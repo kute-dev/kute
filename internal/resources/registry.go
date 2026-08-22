@@ -1,6 +1,11 @@
 package resources
 
-import "github.com/kute-dev/kute/internal/kube"
+import (
+	"maps"
+	"slices"
+
+	"github.com/kute-dev/kute/internal/kube"
+)
 
 // Registry maps resource kinds to their descriptors.
 type Registry struct {
@@ -23,11 +28,7 @@ func (r Registry) Has(kind kube.ResourceKind) bool {
 // that need to do something per kind (counting them all, say) rather than
 // look one up.
 func (r Registry) Kinds() []kube.ResourceKind {
-	out := make([]kube.ResourceKind, 0, len(r.byKind))
-	for kind := range r.byKind {
-		out = append(out, kind)
-	}
-	return out
+	return slices.Collect(maps.Keys(r.byKind))
 }
 
 // Register adds or replaces d's entry — how discovered kinds (14a) and the

@@ -4,9 +4,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 
 	"k8s.io/client-go/kubernetes"
@@ -306,10 +307,6 @@ func AvailableContexts() (names []string, current string, err error) {
 	if err != nil {
 		return nil, "", err
 	}
-	names = make([]string, 0, len(raw.Contexts))
-	for name := range raw.Contexts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names = slices.Sorted(maps.Keys(raw.Contexts))
 	return names, raw.CurrentContext, nil
 }

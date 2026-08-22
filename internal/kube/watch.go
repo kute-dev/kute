@@ -6,6 +6,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
+	"maps"
+	"slices"
 )
 
 // typedKind is one built-in kind's entry in the typedKinds table: how to
@@ -271,10 +273,7 @@ func (c *Cluster) registerWatches(kinds ...ResourceKind) {
 // Passing no kinds registers every kind in typedKinds. c.mu must be held.
 func (c *Cluster) registerWatchesLocked(kinds ...ResourceKind) {
 	if len(kinds) == 0 {
-		kinds = make([]ResourceKind, 0, len(typedKinds))
-		for kind := range typedKinds {
-			kinds = append(kinds, kind)
-		}
+		kinds = slices.Collect(maps.Keys(typedKinds))
 	}
 	for _, kind := range kinds {
 		if _, ok := typedKinds[kind]; !ok {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"image/color"
 	"slices"
@@ -171,7 +172,7 @@ func helpColumnWidths(natural [4]int, available, floor int) [4]int {
 		return widths // pathologically narrow terminal; Truncate saves every cell
 	}
 	order := []int{0, 1, 2, 3}
-	slices.SortFunc(order, func(a, b int) int { return natural[a] - natural[b] })
+	slices.SortFunc(order, func(a, b int) int { return cmp.Compare(natural[a], natural[b]) })
 	for _, i := range order {
 		need := natural[i] - floor
 		if need <= 0 {

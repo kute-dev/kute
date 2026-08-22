@@ -321,7 +321,7 @@ func (m Model) timelineBody(theme tui.Theme, width, height int) string {
 
 	divider := lipgloss.NewStyle().Foreground(theme.TextGhost2).Render("│")
 	lines := make([]string, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		lines[i] = rail[i] + divider + feed[i]
 	}
 	return strings.Join(lines, "\n")

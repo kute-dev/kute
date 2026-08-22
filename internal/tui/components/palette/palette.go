@@ -7,6 +7,7 @@
 package palette
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -347,7 +348,7 @@ func (m *Model) Move(delta int) {
 		m.Sel = 0
 		return
 	}
-	pos := max(indexOf(sel, m.Sel), 0)
+	pos := max(slices.Index(sel, m.Sel), 0)
 	pos = clampInt(pos+delta, 0, len(sel)-1)
 	m.Sel = sel[pos]
 }
@@ -360,15 +361,6 @@ func selectableIndexes(items []Item) []int {
 		}
 	}
 	return out
-}
-
-func indexOf(xs []int, v int) int {
-	for i, x := range xs {
-		if x == v {
-			return i
-		}
-	}
-	return -1
 }
 
 func clampInt(v, lo, hi int) int {

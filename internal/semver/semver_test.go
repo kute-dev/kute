@@ -1,6 +1,9 @@
 package semver
 
-import "testing"
+import (
+	"cmp"
+	"testing"
+)
 
 func TestIsNewer(t *testing.T) {
 	tests := []struct {
@@ -52,7 +55,7 @@ func TestComparePrerelease(t *testing.T) {
 	}
 	for i := range ordered {
 		for j := range ordered {
-			want := cmpInt(i, j)
+			want := cmp.Compare(i, j)
 			if got := Compare(ordered[i], ordered[j]); got != want {
 				t.Errorf("Compare(%q, %q) = %d, want %d", ordered[i], ordered[j], got, want)
 			}
