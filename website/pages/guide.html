@@ -300,9 +300,48 @@
       <ul class="deepdive-list">
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>m</code> edits labels and annotations on any object, showing you which Services select on the label you are about to change before you change it. Keys a controller owns stay read-only.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>y</code> shows the object's YAML, syntax-highlighted, with the noise folded away. <code>E</code> opens it in your <code>$EDITOR</code> — kute steps aside and gives the terminal to <code>kubectl edit</code>, then puts you back exactly where you were.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>x</code> execs into a pod the same way — a real shell, handed the terminal, with the container picker only appearing when there is more than one to choose.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>f</code> starts a port-forward without suspending anything: a chip appears in the header and stays live while you keep browsing. <code>s</code> on a node opens a root shell on the node itself.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>x</code> execs into a pod — a real shell, handed the terminal, with the container picker only appearing when there is more than one to choose. On a container with no shell, or a pod that will not stay running, the same key opens <code>kubectl debug</code> instead — see below.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>f</code> starts a port-forward without suspending anything: a chip appears in the header and stays live while you keep browsing.</li>
       </ul>
+
+      <h3>Debugging without a shell</h3>
+      <p><code>x</code> is one key for "get me a shell near this object" — what runs behind it depends on what you pressed it on:</p>
+      <ul class="deepdive-list">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>A distroless or otherwise shell-less container still shows up in the exec picker — its row just reads <code>no shell</code> instead of listing one — and <code>↵</code> on it opens a debug panel that attaches an ephemeral debug container alongside it, sharing its process namespace. If no container in the pod has a shell, kute skips the picker and opens the panel directly.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>A pod that will not stay up — crash-looping, or stuck waiting — cannot be exec'd or attached to either, so <code>x</code> opens the panel straight into copy mode: a throwaway copy of the same pod spec with its entrypoint replaced by a shell, which is what actually stops the crash loop. The original keeps running untouched, and on exit kute offers to delete the copy for you.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><code>x</code> on a node opens the same panel for a privileged, chrooted shell on the node itself — <code>kubectl debug node/…</code>, with the image and profile visible and editable before anything runs.</li>
+      </ul>
+      <p>Every path through the panel prints the exact command on a <strong>will run</strong> line first, the fields it is built from — image, target container, profile — are edited right on their row, and in a production context <code>↵</code> takes an inline <code>y/N</code> before it launches. kute suspends, <code>kubectl debug</code> owns the terminal, and exiting puts you back exactly where you were.</p>
+
+      <div class="term reveal" role="img" aria-label="kute's debug panel attaching an ephemeral netshoot container to a distroless pod with no shell in any container, showing mode, image, target and profile fields and the exact kubectl debug command before it runs">
+        <div class="term-header">
+          <span class="term-crumb"><span class="app">kute</span> <span class="dim">│</span> nebula-stage <span class="sep">›</span> pod/nebula-gateway-2b81x <span class="sep">›</span> <span class="kind">Debug</span></span>
+          <span class="term-status"><span class="live">● connected</span></span>
+        </div>
+        <div class="term-strip">
+          <span>no sh or bash in <strong style="color:var(--text-primary)">gateway</strong> — nothing to exec into</span>
+          <span class="g-warn">no shell</span>
+        </div>
+        <div class="term-body">
+          <div class="term-section-label">mode</div>
+          <div class="term-kv-row"><span class="k">attach ephemeral</span><span class="v">shares this pod's namespaces · nothing restarts <span class="dim">(default)</span></span></div>
+          <div class="term-kv-row"><span class="k">copy pod</span><span class="v">a new pod from this spec <span class="dim"><span class="key">m</span> to switch</span></span></div>
+
+          <div class="term-section-label">fields</div>
+          <div class="term-kv-row"><span class="k">image</span><span class="v">nicolaka/netshoot <span class="dim"><span class="key">i</span> edit · recents remembered per context</span></span></div>
+          <div class="term-kv-row"><span class="k">target</span><span class="v">gateway <span class="dim"><span class="key">t</span> cycle</span></span></div>
+          <div class="term-kv-row"><span class="k">profile</span><span class="v">general <span class="dim"><span class="key">p</span> cycle · sysadmin · netadmin</span></span></div>
+          <div class="term-subline" style="color:var(--warn); white-space:normal; padding:6px 16px 10px;">⚑ becomes part of this pod — an ephemeral container cannot be removed, only outlived</div>
+        </div>
+        <div class="term-keybar">
+          <span><span class="key">↵</span> start · <span class="key">m</span> mode · <span class="key">i</span> image · <span class="key">t</span> target · <span class="key">p</span> profile</span>
+          <span><span class="key">esc</span> cancel</span>
+        </div>
+      </div>
+      <div class="trust-cmd"><span class="label">will run</span> <code>kubectl debug -it nebula-gateway-2b81x -n nebula-stage --image=nicolaka/netshoot --target=gateway --profile=general</code></div>
+      <p class="term-caption">The fork lives on one key: a shell-less container routes <code>x</code> to <code>kubectl debug</code> instead of failing.</p>
+
+      <p>An ephemeral debug container is permanent state on someone's pod, so kute never hides it: once one is attached, pod detail grows an <strong>EPHEMERAL</strong> group under CONTAINERS, tagged <code>⚑</code>, with <code>↵</code> to re-attach if the connection drops. The same tag follows the pod's row in the list for as long as the container exists. A copy-mode pod gets the same honesty in reverse — it is a real pod that counts against quota, so kute tags it in the table and reminds you it is still running when you leave the panel.</p>
 
       <h3>Helm releases</h3>
       <p>Helm releases are just another kind in the list — you can browse them, read their values with <code>v</code>, and open the revision history with <code>h</code>, all without the <code>helm</code> binary installed. Rolling back with <code>R</code> is the one thing that shells out to real <code>helm</code>.</p>
@@ -435,7 +474,7 @@
       <p>How much kute asks of you scales with how hard the thing is to undo, and it asks for more in production.</p>
       <div class="friction-list">
         <div class="friction-item"><span class="tier rev">reversible</span> cordon runs straight away — you can uncordon with the same key</div>
-        <div class="friction-item"><span class="tier del">delete, restart, rollback</span> a <code>y/N</code> in the keybar, under the command that is about to run — no modal in the way</div>
+        <div class="friction-item"><span class="tier del">delete, restart, rollback, debug</span> a <code>y/N</code> in the keybar, under the command that is about to run — no modal in the way</div>
         <div class="friction-item"><span class="tier prod">prod, drain, force delete</span> type the object's name to confirm; drain and force delete always ask this, everywhere</div>
       </div>
       <p>In a production context, the ordinary <code>y/N</code> confirmations become type-the-name confirmations too. A red border is used for exactly one thing in kute — a confirmation that will destroy something — so if you see red, stop and read.</p>
@@ -551,7 +590,7 @@
       <table class="keyref">
         <tbody>
           <tr><td><kbd>l</kbd></td><td>logs — follow, filter, jump across restarts</td></tr>
-          <tr><td><kbd>x</kbd></td><td>exec — a shell in the container</td></tr>
+          <tr><td><kbd>x</kbd></td><td>exec — a shell in the container; on a shell-less container or a pod that won't stay up, opens the debug panel instead</td></tr>
           <tr><td><kbd>f</kbd></td><td>forward — start a port-forward</td></tr>
           <tr><td><kbd>ctrl-k</kbd></td><td>force delete (grace period 0)</td></tr>
         </tbody>
@@ -584,6 +623,21 @@
           <tr><td><kbd>C</kbd></td><td>cordon / uncordon</td></tr>
           <tr><td><kbd>D</kbd></td><td>drain</td></tr>
           <tr><td><kbd>x</kbd></td><td>debug — opens a panel for a root shell on the node, with a preview of the command before it runs</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Debug panel <span class="dim">(kubectl debug — pods and nodes)</span></h3>
+      <table class="keyref">
+        <tbody>
+          <tr><td><kbd>↵</kbd></td><td>start — launches the will-run command; inline <kbd>y/N</kbd> first in a production context</td></tr>
+          <tr><td><kbd>m</kbd></td><td>mode — attach ephemeral / copy pod <span class="dim">(pods only; a pod that won't stay up opens straight into copy mode)</span></td></tr>
+          <tr><td><kbd>i</kbd></td><td>image — edit in place, with recent images remembered per context</td></tr>
+          <tr><td><kbd>t</kbd></td><td>target/container — cycle the container to attach to or copy</td></tr>
+          <tr><td><kbd>p</kbd></td><td>profile — general / sysadmin / netadmin</td></tr>
+          <tr><td><kbd>e</kbd></td><td>entrypoint <span class="dim">(copy mode)</span> — replaces the command, which is what stops the crash loop</td></tr>
+          <tr><td><kbd>s</kbd></td><td>share processes <span class="dim">(copy mode)</span> — toggle sharing the original's process namespace</td></tr>
+          <tr><td><kbd>ctrl-d</kbd></td><td>clean up — delete the copy or node-debug pod kute left behind, offered on exit</td></tr>
+          <tr><td><kbd>esc</kbd></td><td>cancel, or keep the leftover pod instead of cleaning it up</td></tr>
         </tbody>
       </table>
 
