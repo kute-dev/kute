@@ -78,29 +78,42 @@ const maxCapturedStderr = 4 << 10
 // globally by exec config, so the first client built for a given kubeconfig
 // user is the one that decides where every later token mint's stderr goes.
 type stderrCapture struct {
-	once sync.Once
-	w    *os.File
+	// openPipe is set by newStderrCapture, not declared here, because
+	// sync.OnceValue closes over the receiver.
+	openPipe func() *os.File
 
 	mu  sync.Mutex
 	buf []byte
+	// grew carries one token per append, so take can wait for output instead
+	// of polling for it. Buffered and sent to non-blockingly: drain must
+	// never block on a reader, or a full pipe buffer stalls the credential
+	// plugin's own write — the hang this file exists to prevent.
+	grew chan struct{}
 }
 
-var pluginStderr stderrCapture
+var pluginStderr = newStderrCapture()
 
-// writer lazily creates the pipe and the goroutine draining it. Returns nil
-// if the pipe can't be created, in which case capture is skipped and stderr
-// keeps its normal (frame-corrupting, but not worse-than-today) behaviour.
-func (s *stderrCapture) writer() *os.File {
-	s.once.Do(func() {
+func newStderrCapture() *stderrCapture {
+	s := &stderrCapture{grew: make(chan struct{}, 1)}
+	// The pipe and its draining goroutine are created at most once, and the
+	// result is the value of the call — which is all the old once+field pair
+	// was ever doing by hand.
+	s.openPipe = sync.OnceValue(func() *os.File {
 		r, w, err := os.Pipe()
 		if err != nil {
-			return
+			// Capture is skipped; stderr keeps its normal (frame-corrupting,
+			// but not worse-than-today) behaviour.
+			return nil
 		}
-		s.w = w
 		go s.drain(r)
+		return w
 	})
-	return s.w
+	return s
 }
+
+// writer lazily creates the pipe and the goroutine draining it. Returns nil
+// if the pipe can't be created.
+func (s *stderrCapture) writer() *os.File { return s.openPipe() }
 
 // drain reads the pipe forever, appending to the ring. It must keep reading
 // whether or not anyone ever asks for the contents: a full pipe buffer would
@@ -121,10 +134,17 @@ func (s *stderrCapture) drain(r *os.File) {
 
 func (s *stderrCapture) append(p []byte) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.buf = append(s.buf, p...)
 	if len(s.buf) > maxCapturedStderr {
 		s.buf = s.buf[len(s.buf)-maxCapturedStderr:]
+	}
+	s.mu.Unlock()
+
+	// Non-blocking: one pending token is as good as ten, and drain must never
+	// park here.
+	select {
+	case s.grew <- struct{}{}:
+	default:
 	}
 }
 
@@ -171,34 +191,48 @@ func (s *stderrCapture) capture(fn func()) {
 // the first write and strand the second to surface stale on the *next*
 // take(), the exact bug this function's clearing exists to prevent.
 func (s *stderrCapture) take() string {
-	const quiet = 20 * time.Millisecond
-	deadline := time.Now().Add(100 * time.Millisecond)
-	lastLen := -1
+	const (
+		quiet   = 20 * time.Millisecond
+		initial = 100 * time.Millisecond
+	)
+
+	// Waiting on append's own signal rather than re-reading len(s.buf) every
+	// 5ms: same two windows as before — `initial` for anything at all to
+	// arrive, then `quiet` restarted by each write — but the wait ends the
+	// moment the window actually elapses instead of up to a poll late, and
+	// the loop no longer takes the mutex on every tick. That matters because
+	// CredentialPluginOutput is exported: nothing structural stops a future
+	// caller reaching this from the render goroutine.
+	timer := time.NewTimer(initial)
+	defer timer.Stop()
 	for {
-		s.mu.Lock()
-		n := len(s.buf)
-		s.mu.Unlock()
-
-		if n > 0 {
-			if n != lastLen {
-				// Grew since the last look: push the deadline out so a
-				// second write already in flight has room to land too.
-				deadline = time.Now().Add(quiet)
-			} else if time.Now().After(deadline) {
-				break // held steady for a full quiet window
+		select {
+		case <-s.grew:
+			// A write landed. Restart the quiet window so a second plugin run
+			// already in flight — which the health loop's retry really does
+			// produce — has room to land in the same take.
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
-		} else if time.Now().After(deadline) {
-			break // never got anything
+			timer.Reset(quiet)
+		case <-timer.C:
+			s.mu.Lock()
+			out := string(s.buf)
+			s.buf = nil
+			s.mu.Unlock()
+			// Drop a token that raced in alongside the final read, so the
+			// next take starts from a clean signal rather than shortening its
+			// own initial window.
+			select {
+			case <-s.grew:
+			default:
+			}
+			return out
 		}
-		lastLen = n
-		time.Sleep(5 * time.Millisecond)
 	}
-
-	s.mu.Lock()
-	out := string(s.buf)
-	s.buf = nil
-	s.mu.Unlock()
-	return out
 }
 
 // CredentialPluginOutput returns and clears whatever the exec credential

@@ -203,7 +203,7 @@ func (l Loader) Load() (Index, error) {
 	idx.status.Configured = true
 
 	for _, repo := range cfg.Repositories {
-		if repo.Name == "" {
+		if !safeRepoName(repo.Name) {
 			continue
 		}
 		path := filepath.Join(cachePath, repo.Name+"-index.yaml")
@@ -253,6 +253,21 @@ func (i *Index) sortCandidates() {
 }
 
 // readIndex parses one index.yaml down to chart name → newest version.
+// safeRepoName reports whether name can be joined onto the cache dir as a
+// single path element.
+//
+// The name comes out of the user's own repositories.yaml, and filepath.Join
+// *cleans* its result rather than confining it — a repo named "../../etc"
+// would resolve to a file outside the Helm cache entirely. Helm itself never
+// writes such a name, so anything that looks like a path is a config this code
+// should decline to follow rather than guess at.
+func safeRepoName(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	return !strings.ContainsAny(name, `/\`) && !strings.ContainsRune(name, os.PathSeparator)
+}
+
 func readIndex(path string) (map[string]string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

@@ -373,3 +373,23 @@ func TestPlatformHelmDirs(t *testing.T) {
 		t.Errorf("helmCacheDir() = %q, want %q", got, wantCache)
 	}
 }
+
+func TestSafeRepoNameRejectsPathElements(t *testing.T) {
+	t.Parallel()
+	cases := map[string]bool{
+		"bitnami":         true,
+		"my-repo.1":       true,
+		"":                false,
+		".":               false,
+		"..":              false,
+		"../../etc":       false,
+		"a/b":             false,
+		`..\..\windows`:   false,
+		"nested/../thing": false,
+	}
+	for name, want := range cases {
+		if got := safeRepoName(name); got != want {
+			t.Errorf("safeRepoName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
