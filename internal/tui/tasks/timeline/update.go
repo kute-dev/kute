@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -449,12 +450,10 @@ func (m Model) railSelectionTarget() (kube.TimelineEntry, bool) {
 // field, since target always comes from m.entries (the same slice m.rows is
 // filtered from) rather than being freshly constructed.
 func (m Model) indexOfEntry(target kube.TimelineEntry) int {
-	for i, e := range m.rows {
-		if e.Kind == target.Kind && e.Object == target.Object && e.Reason == target.Reason && e.Time.Equal(target.Time) {
-			return i
-		}
-	}
-	return -1
+	return slices.IndexFunc(m.rows, func(e kube.TimelineEntry) bool {
+		return e.Kind == target.Kind && e.Object == target.Object &&
+			e.Reason == target.Reason && e.Time.Equal(target.Time)
+	})
 }
 
 func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

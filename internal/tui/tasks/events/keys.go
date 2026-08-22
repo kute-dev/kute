@@ -3,6 +3,7 @@ package events
 import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/verbs"
+	"slices"
 )
 
 // Keybar composes the bottom band from verb references only, per the
@@ -46,10 +47,7 @@ func (m Model) Keybar() tui.Keybar {
 // groups to fold/expand, so the keybar only advertises 'tab' when it does
 // something.
 func (m Model) hasNormal() bool {
-	for _, r := range m.rows {
-		if r.kind == rowFolded || (r.kind == rowGroup && r.group.Type != "Warning") {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(m.rows, func(r displayRow) bool {
+		return r.kind == rowFolded || (r.kind == rowGroup && r.group.Type != "Warning")
+	})
 }

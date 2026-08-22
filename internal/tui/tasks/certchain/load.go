@@ -95,12 +95,10 @@ type namer interface{ GetName() string }
 // Issuer/ClusterIssuer callers, which need the object itself, not just its
 // presence.
 func existsByName(objs []runtime.Object, name string) bool {
-	for _, o := range objs {
-		if n, ok := o.(namer); ok && n.GetName() == name {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(objs, func(o runtime.Object) bool {
+		n, ok := o.(namer)
+		return ok && n.GetName() == name
+	})
 }
 
 // ownedBy filters objs to those whose OwnerReferences name (kind, name) —

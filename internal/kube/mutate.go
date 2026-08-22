@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1406,12 +1407,9 @@ func workloadResourceArg(kind ResourceKind) string {
 }
 
 func isDaemonSetOwnedPod(pod corev1.Pod) bool {
-	for _, ref := range pod.OwnerReferences {
-		if ref.Kind == "DaemonSet" {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(pod.OwnerReferences, func(ref metav1.OwnerReference) bool {
+		return ref.Kind == "DaemonSet"
+	})
 }
 
 func isMirrorPod(pod corev1.Pod) bool {

@@ -303,12 +303,7 @@ func matchHistoryIndex(t *setImageTarget) int {
 		}
 		tag = tagOf(t.input.Value())
 	}
-	for i, e := range t.history {
-		if e.tag == tag {
-			return i
-		}
-	}
-	return -1
+	return slices.IndexFunc(t.history, func(e imageHistoryEntry) bool { return e.tag == tag })
 }
 
 // commitSetImage executes t through actions.Controller — verbs.TierForSetImage

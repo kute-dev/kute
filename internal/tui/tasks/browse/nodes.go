@@ -8,6 +8,7 @@ package browse
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -210,12 +211,7 @@ func (m Model) nodeHealthCell(name string, st rowCellStyles) components.Cell {
 // nodeVersionColumn finds Version's position within a Node row's Cells, so
 // version-skew flagging doesn't hardcode the column order.
 func nodeVersionColumn(desc resources.Descriptor) int {
-	for i, title := range desc.Columns {
-		if title == "Version" {
-			return i
-		}
-	}
-	return -1
+	return slices.Index(desc.Columns, "Version")
 }
 
 // nodeMajorityVersion is the most common KubeletVersion across the loaded

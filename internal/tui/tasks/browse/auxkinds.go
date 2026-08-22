@@ -2,6 +2,7 @@ package browse
 
 import (
 	"context"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -123,12 +124,7 @@ func (m Model) auxKindsError(kinds []kube.ResourceKind) error {
 
 // auxKindOf reports whether changed is one of listed's secondary kinds.
 func auxKindOf(listed, changed kube.ResourceKind) bool {
-	for _, k := range auxKinds[listed] {
-		if k == changed {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(auxKinds[listed], changed)
 }
 
 // prefetchAuxKinds warms the caches the current kind's rows and prompts read,

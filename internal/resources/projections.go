@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -354,12 +355,9 @@ func previousReplicaSetImage(lister RawLister, d *appsv1.Deployment, currentImag
 // ownedByDeployment reports whether refs names a Deployment owner named
 // name — the ReplicaSet→Deployment link every rollout walks.
 func ownedByDeployment(refs []metav1.OwnerReference, name string) bool {
-	for _, ref := range refs {
-		if ref.Kind == "Deployment" && ref.Name == name {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(refs, func(ref metav1.OwnerReference) bool {
+		return ref.Kind == "Deployment" && ref.Name == name
+	})
 }
 
 func projectDaemonSet(obj runtime.Object) Row {

@@ -435,12 +435,7 @@ func metaKeyExists(t *metaTarget, isAnnotation bool, key string) bool {
 	if isAnnotation {
 		rows = t.annotations
 	}
-	for _, r := range rows {
-		if r.key == key {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(rows, func(r metaRow) bool { return r.key == key })
 }
 
 // updateMetaKey routes keys while pendingMeta's panel is showing — add-mode

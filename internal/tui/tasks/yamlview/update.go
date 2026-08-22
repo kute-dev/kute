@@ -2,6 +2,7 @@ package yamlview
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
@@ -180,12 +181,7 @@ func (m *Model) toggleRevealAtCursor() {
 }
 
 func (m *Model) hasUnrevealedSecretData() bool {
-	for _, e := range m.secretData {
-		if !m.revealed[e.key] {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(m.secretData, func(e secretDataLine) bool { return !m.revealed[e.key] })
 }
 
 // updateRevealAllConfirmKey routes keys while the "X reveal all" inline y/N

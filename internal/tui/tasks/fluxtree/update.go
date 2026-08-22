@@ -2,6 +2,7 @@ package fluxtree
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -393,7 +394,7 @@ func (m *Model) selectFirst() {
 }
 
 func (m *Model) selectLast() {
-	for i := len(m.lines) - 1; i >= 0; i-- {
+	for i := range slices.Backward(m.lines) {
 		if m.selectable(i) {
 			m.selected = i
 			m.clampOffset()

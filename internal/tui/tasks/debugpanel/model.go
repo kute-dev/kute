@@ -10,6 +10,7 @@
 package debugpanel
 
 import (
+	"slices"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -205,12 +206,7 @@ func New(cfg Config) Model {
 // the pod's first ordinary container, matching how browse's own
 // openSelectedExec picks a default before a picker/panel ever opens.
 func firstNonSidecarIndex(containers []kube.ContainerInfo) int {
-	for i, c := range containers {
-		if !c.IsSidecar {
-			return i
-		}
-	}
-	return 0
+	return max(slices.IndexFunc(containers, func(c kube.ContainerInfo) bool { return !c.IsSidecar }), 0)
 }
 
 // containerIndexOrDefault resolves name to its index in containers, falling
@@ -219,10 +215,8 @@ func firstNonSidecarIndex(containers []kube.ContainerInfo) int {
 // container the cursor was on; every other entry point leaves name empty.
 func containerIndexOrDefault(containers []kube.ContainerInfo, name string) int {
 	if name != "" {
-		for i, c := range containers {
-			if c.Name == name {
-				return i
-			}
+		if i := slices.IndexFunc(containers, func(c kube.ContainerInfo) bool { return c.Name == name }); i >= 0 {
+			return i
 		}
 	}
 	return firstNonSidecarIndex(containers)

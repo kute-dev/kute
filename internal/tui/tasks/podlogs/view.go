@@ -2,6 +2,7 @@ package podlogs
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -234,8 +235,8 @@ func (m Model) visibleEntries(entries []LogEntry) []LogEntry {
 // lastErrIndex returns the index of the last (most recent) ERR-severity
 // entry in entries, or -1 if none.
 func lastErrIndex(entries []LogEntry) int {
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].Severity == SeverityErr {
+	for i, e := range slices.Backward(entries) {
+		if e.Severity == SeverityErr {
 			return i
 		}
 	}

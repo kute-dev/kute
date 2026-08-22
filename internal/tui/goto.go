@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -258,10 +259,11 @@ func gotoBrowseItems(sess *Session) []palette.Item {
 // there's no other kind to toggle to.
 func gotoBrowseSelection(items []palette.Item, recentKinds []string, current kube.ResourceKind) int {
 	if target, ok := mostRecentOther(recentKinds, string(current)); ok {
-		for i, it := range items {
-			if t, ok := it.Data.(gotoTarget); ok && string(t.kind) == target {
-				return i
-			}
+		if i := slices.IndexFunc(items, func(it palette.Item) bool {
+			t, ok := it.Data.(gotoTarget)
+			return ok && string(t.kind) == target
+		}); i >= 0 {
+			return i
 		}
 	}
 	return 0

@@ -71,12 +71,7 @@ type WhoCanResult struct {
 
 // matchesVerb reports whether rule grants verb ("*" matches anything).
 func matchesVerb(rule rbacv1.PolicyRule, verb string) bool {
-	for _, v := range rule.Verbs {
-		if v == "*" || v == verb {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(rule.Verbs, func(v string) bool { return v == "*" || v == verb })
 }
 
 // matchesResource reports whether rule grants resource ("*" matches
@@ -84,12 +79,7 @@ func matchesVerb(rule rbacv1.PolicyRule, verb string) bool {
 // resource-name slot, so a rule scoped to specific names still counts as a
 // match on the resource type.
 func matchesResource(rule rbacv1.PolicyRule, resource string) bool {
-	for _, r := range rule.Resources {
-		if r == "*" || r == resource {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(rule.Resources, func(r string) bool { return r == "*" || r == resource })
 }
 
 func ruleMatches(rule rbacv1.PolicyRule, verb, resource string) bool {
@@ -97,29 +87,20 @@ func ruleMatches(rule rbacv1.PolicyRule, verb, resource string) bool {
 }
 
 func anyRuleMatches(rules []rbacv1.PolicyRule, verb, resource string) bool {
-	for _, rule := range rules {
-		if ruleMatches(rule, verb, resource) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(rules, func(rule rbacv1.PolicyRule) bool {
+		return ruleMatches(rule, verb, resource)
+	})
 }
 
 // matchesIdentity reports whether subjects covers user (an exact "User"
 // kind match) or any of groups (a "Group" kind subject naming one of
 // them) — the two ways a real identity ever appears in an RBAC binding.
 func matchesIdentity(subjects []rbacv1.Subject, user string, groups []string) bool {
-	for _, s := range subjects {
-		if s.Kind == rbacv1.UserKind && s.Name == user {
-			return true
-		}
-	}
-	for _, s := range subjects {
-		if s.Kind == rbacv1.GroupKind && slices.Contains(groups, s.Name) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(subjects, func(s rbacv1.Subject) bool {
+		return s.Kind == rbacv1.UserKind && s.Name == user
+	}) || slices.ContainsFunc(subjects, func(s rbacv1.Subject) bool {
+		return s.Kind == rbacv1.GroupKind && slices.Contains(groups, s.Name)
+	})
 }
 
 // ResolveWhoCan walks ClusterRoleBindings/RoleBindings → (Cluster)Roles
