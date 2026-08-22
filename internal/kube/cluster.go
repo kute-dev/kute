@@ -161,6 +161,22 @@ type Cluster struct {
 	kindFailed    map[scopeKey]error
 	kindStalled   map[scopeKey]error
 
+	// allKindsSynced latches allStartedKindsSyncedLocked's answer once every
+	// informer started so far has finished its initial LIST, so the steady
+	// state costs a bool read instead of a sweep over every started
+	// informer. Sound because HasSynced is monotonic per informer — a
+	// DeltaFIFO only counts an initial population once, so a watch drop and
+	// re-LIST on an already-synced cache never un-syncs it — and because the
+	// only other way the sweep's answer changes is a *new* informer, which
+	// clears the latch through noteInformerStartedLocked. It matters on the
+	// watch-error path: every reflector's error funnels through
+	// recordWatchError, which needs this answer while holding the same c.mu
+	// ListRaw/ensureKind take on the render loop's behalf. With thirty lazy
+	// informers started and a connection flapping, an O(all-informers) sweep
+	// per error — each HasSynced taking that informer's own lock — is UI jank
+	// by construction.
+	allKindsSynced bool
+
 	events  chan ResourceChangedMsg
 	health  *health
 	stopCh  chan struct{}
@@ -765,7 +781,31 @@ func (c *Cluster) allStartedKindsSynced() bool {
 // that already holds c.mu — recordWatchError, so its health.onWatchError
 // call reads sync state from inside the same critical section as its
 // generation check rather than re-acquiring the lock. c.mu must be held.
+//
+// Sweeps only while the answer can still be no: once every started informer
+// has synced it latches (see allKindsSynced), and a later start clears the
+// latch. Callers on a hot path keep the lock hold O(1) in the steady state.
 func (c *Cluster) allStartedKindsSyncedLocked() bool {
+	if c.allKindsSynced {
+		return true
+	}
+	if c.allStartedKindsSweepLocked() {
+		c.allKindsSynced = true
+		return true
+	}
+	return false
+}
+
+// noteInformerStartedLocked invalidates the allKindsSynced latch. Every site
+// that adds an entry to kindInformers/dynKinds/helmInformers must call it in
+// the same critical section as the write: a freshly started informer has not
+// synced, so a stale latch would claim otherwise and hand the health loop's
+// connect-grace window the wrong answer for exactly the LIST burst it exists
+// to forgive. c.mu must be held.
+func (c *Cluster) noteInformerStartedLocked() { c.allKindsSynced = false }
+
+// allStartedKindsSweepLocked is the unmemoized sweep. c.mu must be held.
+func (c *Cluster) allStartedKindsSweepLocked() bool {
 	for key, inf := range c.kindInformers {
 		if c.kindFailed[key] == nil && !inf.HasSynced() {
 			return false
@@ -917,6 +957,11 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 	c.kindInformers = nil
 	c.kindFailed = nil
 	c.kindStalled = nil
+	// Belt and braces: Start re-registers the eager informers through
+	// noteInformerStartedLocked, which clears this anyway, but a latch left
+	// standing across a wholesale swap of the maps it summarizes is the kind
+	// of thing that only stays correct by accident.
+	c.allKindsSynced = false
 	c.eagerKeys = nil
 	c.metaClient = nil
 	c.helmFactories = nil

@@ -553,6 +553,7 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	}
 	c.helmFactories[namespace] = factory
 	c.helmInformers[namespace] = informer
+	c.noteInformerStartedLocked()
 	factory.Start(c.stopCh)
 	c.health.noteListBurst()
 }

@@ -288,6 +288,20 @@ deployments           33 objects  324.4 KB
   slow link" unforgiven and paint an offline banner over a healthy cluster.
 - **`KindSynced` reports true for things that will never arrive** (stopped cluster,
   no informer, Forbidden). A spinner gated on it cannot hang.
+- **"Is anything still listing" is latched, not swept.** Every reflector's watch error
+  funnels through `recordWatchError`, which holds the same `c.mu` that `ListRaw`/
+  `ensureKind` take on the render loop's behalf — so the O(all-informers) `HasSynced()`
+  sweep behind the connect-grace window used to run inside that hold, per error, with each
+  call taking that informer's own lock. With thirty lazy informers started and a connection
+  flapping, that is UI jank by construction. `allKindsSynced` caches the *true* answer, so
+  the steady state is a bool read. Sound because `HasSynced` is monotonic — a `DeltaFIFO`
+  counts an initial population once, so a watch drop and re-LIST never un-syncs a filled
+  cache — which leaves a newly started informer as the only thing that can change the
+  answer back. Every registration site clears the latch in the same critical section as its
+  own write (`noteInformerStartedLocked`); a fourth site that forgets fails *silently*, the
+  same shape as the missing decorator forward in
+  [What the tests missed](#what-the-tests-missed) — a stale latch closes the grace window
+  over exactly the LIST burst it exists to forgive.
 - **Counts are never fabricated.** Unknown renders as `–`, not `0`.
 
 ### Verification notes

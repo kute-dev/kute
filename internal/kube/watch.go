@@ -316,6 +316,7 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 		c.kindInformers = map[scopeKey]cache.SharedIndexInformer{}
 	}
 	c.kindInformers[scopeKey{kind, scope}] = informer
+	c.noteInformerStartedLocked()
 }
 
 // notify delivers a change event without blocking the informer goroutine; if

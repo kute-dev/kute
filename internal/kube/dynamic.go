@@ -81,6 +81,7 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 		lister:     informer.Lister(),
 		informer:   informer.Informer(),
 	}
+	c.noteInformerStartedLocked()
 	f.Start(c.stopCh)
 	c.health.noteListBurst()
 }
