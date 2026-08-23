@@ -58,8 +58,12 @@ scripts/run-website.sh
 
 Pass a port as the first argument to override `4174`, or set
 `KUTE_SITE_NO_OPEN=1` to skip opening a browser. Assets live at
-`website/assets/`, while demo recordings live in `docs/assets/`; the script
-merges both into `website/dist/` just as the deploy job does.
+`website/assets/`, while product media lives in `docs/assets/` — homepage
+screenshots under `shots/`, guide clips under `demos/`, and the tapes they are
+recorded from under `tapes/` (`docs/assets/README.md` documents that layout and
+how to add a checkpoint). The script merges the two output directories into
+`website/dist/assets/` just as the deploy job does, flattening them, which is
+why a page reference is `/assets/<name>` and never names the subdirectory.
 
 `text/template`, not `html/template`: there is no untrusted input, and
 contextual escaping rewrites content inside attributes (an apostrophe in a
@@ -146,8 +150,15 @@ third-party round trip behind it. Only weights actually used are requested.
   absent. Deliberate omissions go in that test's `omitted` map with a reason.
 - **Product media is cache-busted at deploy.** GitHub Pages will not let us set
   `Cache-Control`, so `deploy-pages.yml` appends the commit SHA to every demo
-  `.mp4`, poster, and homepage `home-*.png` reference — across all pages, not a
-  named one, which is how the step got missed when recordings moved before.
+  `.mp4`, `demo-*.png` poster and homepage `home-*.png` reference — across all
+  pages, not a named one, which is how the step got missed when recordings
+  moved before.
+- **Every published capture is paired with the tape that produces it.**
+  `TestRecordingTapesAndAssetsAgree` walks `docs/assets/tapes/` and fails on a
+  tape with no committed output, an output with no tape, or a `Set Width`/
+  `Set Height` that disagrees with the `<img>` dimensions on the homepage. The
+  tape tree is the inventory; `index.html` and the tests read it rather than
+  restating it.
 
 ## Provenance
 

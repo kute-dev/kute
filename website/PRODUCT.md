@@ -50,7 +50,7 @@ Visitors read this site from a browser, generally while at a terminal or about t
 ## Evidence on Hand
 
 - Full README and CLAUDE.md in the parent repo describe every screen, verb, and design invariant of the actual TUI — authoritative source for any claim the site makes about product behavior.
-- Recorded demo GIFs exist in the parent repo (`docs/assets/*.gif`, e.g. incident walkthrough, namespace palette, goto palette), captured against `kute --demo`'s built-in fake cluster via `scripts/record-demo.sh`. The website itself currently represents screens via hand-built terminal mockups rather than these GIFs/screenshots — do not assume the two are interchangeable without checking `pages/*.html`.
+- Every screen shown on the site is a real capture of `kute --demo`'s built-in fake cluster, recorded from a `.tape` in the parent repo's `docs/assets/tapes/` (see `docs/assets/README.md`). Home renders 25 dark/light PNG pairs from `docs/assets/shots/`; Guide plays five mp4 clips from `docs/assets/demos/`, which also holds each clip's final frame as a PNG — used both as the video's poster and as the still README.md embeds, since GitHub will not play a repo-committed video. None of it is a hand-built mockup, and nothing on the site may claim behavior these captures do not show.
 - No customer testimonials, logos, case studies, press mentions, or usage benchmarks exist anywhere in the repo. Future work must not fabricate any of these.
 - Install/verify pages encode real, checkable procedures (signature/SBOM/attestation verification steps) — treat as evidence to preserve exactly, not copy to rephrase loosely.
 

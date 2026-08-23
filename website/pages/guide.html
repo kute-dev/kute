@@ -108,8 +108,8 @@
       <p class="term-caption">The goto palette. <code>:</code> opens it too, if that is the muscle memory you already have.</p>
 
       <div class="demo-shot reveal">
-        <video src="/assets/goto-palette-demo.mp4" poster="/assets/goto-palette-demo-poster.jpg"
-               width="840" height="434" muted loop playsinline
+        <video src="/assets/demo-goto-palette.mp4" poster="/assets/demo-goto-palette.png"
+               width="1040" height="616" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: the goto palette pinning Deployments to rank 1 with the &quot;d&quot; alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing &quot;cache&quot; to jump straight to the cache-0 pod and open its detail"></video>
       </div>
@@ -119,8 +119,8 @@
       <p>The namespace palette keeps a RECENT row of the places you have been, each with a digit you can press. The digits shift as your recent list changes, so the namespace you are bouncing off is always <code>n ↵</code>.</p>
 
       <div class="demo-shot reveal">
-        <video src="/assets/namespace-palette-demo.mp4" poster="/assets/namespace-palette-demo-poster.jpg"
-               width="840" height="434" muted loop playsinline
+        <video src="/assets/demo-namespace-palette.mp4" poster="/assets/demo-namespace-palette.png"
+               width="1040" height="616" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit"></video>
       </div>
@@ -231,8 +231,8 @@
       <h3>A worked example</h3>
       <p>This is the whole loop end to end: a namespace that looks fine, all-namespaces revealing the pod that isn't, detail and logs giving the cause, and the timeline tying it to a rollout ten minutes earlier.</p>
       <div class="demo-shot reveal">
-        <video src="/assets/incident-walkthrough-all-namespaces.mp4" poster="/assets/incident-walkthrough-all-namespaces-poster.jpg"
-               width="840" height="434" muted loop playsinline
+        <video src="/assets/demo-all-namespaces.mp4" poster="/assets/demo-all-namespaces.png"
+               width="1040" height="616" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier"></video>
       </div>
@@ -347,8 +347,8 @@
       <p>Helm releases are just another kind in the list — you can browse them, read their values with <code>v</code>, and open the revision history with <code>h</code>, all without the <code>helm</code> binary installed. Rolling back with <code>R</code> is the one thing that shells out to real <code>helm</code>.</p>
 
       <div class="demo-shot reveal">
-        <video src="/assets/demo-everyday-actions.mp4" poster="/assets/demo-everyday-actions-poster.jpg"
-               width="840" height="434" muted loop playsinline
+        <video src="/assets/demo-everyday-actions.mp4" poster="/assets/demo-everyday-actions.png"
+               width="1040" height="616" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: scaling a HPA-managed Deployment shows a 'managed by hpa' warning instead of a plain command preview, set image picks a tag from rollout history, set resources nudges a cpu limit, adding then removing a label shows the exact kubectl label command before the removal runs, and starting a port-forward leaves the header's forward chip live while browsing continues"></video>
       </div>
@@ -418,8 +418,8 @@
       </div>
 
       <div class="demo-shot reveal">
-        <video src="/assets/demo-routing-table.mp4" poster="/assets/demo-routing-table-poster.jpg"
-               width="840" height="434" muted loop playsinline
+        <video src="/assets/demo-routing-table.mp4" poster="/assets/demo-routing-table.png"
+               width="1040" height="616" muted loop playsinline
                controls preload="none" data-demo
                aria-label="kute: an Ingress routing table showing a healthy / route next to a broken /admin route whose backend Service doesn't exist, an HTTPRoute's 90/10 weighted canary split with live endpoint counts, and jumping via p to the route's accepted parent Gateway"></video>
       </div>

@@ -10,9 +10,9 @@ See what broke. Understand why. Act safely.
 
 Browse, diagnose, and act on your cluster — all from one terminal console. kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
 
-![kute: an incident walkthrough — a clean production namespace, then all-namespaces reveals a CrashLoopBackOff pod, pod detail and logs show the actual cause, delete asks for explicit confirmation, and the timeline correlates the crash to a rollout 10 minutes earlier](docs/assets/incident-walkthrough-all-namespaces.gif)
+[![kute's all-namespaces view: a CrashLoopBackOff pod sorted to the top, above the otherwise-healthy namespaces collapsed beneath it](docs/assets/demos/demo-all-namespaces.png)](https://kute.dev/guide.html#investigating)
 
-*Recorded against `kute --demo`'s built-in fake cluster — regenerate with `scripts/record-demo.sh docs/assets/demo-all-namespaces.tape`.*
+*One frame from an incident walkthrough: a clean production namespace, then all-namespaces surfaces a CrashLoopBackOff pod, logs show the cause, delete asks for explicit confirmation, and the timeline ties the crash to a rollout ten minutes earlier. [Watch it play](https://kute.dev/guide.html#investigating), or run it yourself with `--demo` below.*
 
 ## Try it
 
@@ -46,18 +46,18 @@ kute is built for the first 15 minutes after something breaks: unhealthy workloa
 <details>
 <summary>See it: namespace palette alt-tab + digit recall</summary>
 
-![kute: the namespace palette alt-tabbing to ingress-nginx and back to default with no typing, then recalling production and argocd from the RECENT row by their assigned digit](docs/assets/namespace-palette-demo.gif)
+[![kute's namespace palette open on its RECENT row, each remembered namespace carrying the digit that jumps to it](docs/assets/demos/demo-namespace-palette.png)](https://kute.dev/guide.html#navigation)
 
-*Recorded against `kute --demo` — regenerate with `scripts/record-demo.sh docs/assets/demo-namespace-palette.tape`.*
+*Alt-tabs to ingress-nginx and back to default with no typing, then recalls production and argocd from the RECENT row by their digit. [Watch it play](https://kute.dev/guide.html#navigation).*
 
 </details>
 
 <details>
 <summary>See it: goto palette alias switch, alt-tab, and jump-to-pod</summary>
 
-![kute: the goto palette pinning Deployments to rank 1 with the "d" alias, alt-tabbing back and forth between Pods and Deployments with no typing, then typing "cache" to jump straight to the cache-0 pod and open its detail](docs/assets/goto-palette-demo.gif)
+[![kute's pod detail for cache-0, reached by typing a pod's name into the goto palette, which switched kind on the way](docs/assets/demos/demo-goto-palette.png)](https://kute.dev/guide.html#navigation)
 
-*Recorded against `kute --demo` — regenerate with `scripts/record-demo.sh docs/assets/demo-goto-palette.tape`.*
+*Pins Deployments to rank 1 with the `d` alias, alt-tabs between Pods and Deployments with no typing, then types "cache" to jump straight to the cache-0 pod. [Watch it play](https://kute.dev/guide.html#navigation).*
 
 </details>
 

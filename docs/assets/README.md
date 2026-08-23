@@ -1,19 +1,72 @@
 # Demos
 
+## Layout
+
+Source is separated from output, and one tape owns every file named after it:
+
+| Directory | Holds |
+| --- | --- |
+| `tapes/` | The source. One `.tape` per capture — 25 `home-*` homepage checkpoints, 5 `demo-*` clips |
+| `shots/` | `home-<stem>.png` and `home-<stem>-light.png` for each `home-*` tape |
+| `demos/` | `demo-<stem>.mp4` and `demo-<stem>.png` for each `demo-*` tape, both written by the same recording |
+
+The **tape stem is the output stem**, with no exceptions: `tapes/home-timeline.tape`
+writes exactly `shots/home-timeline.png` and `shots/home-timeline-light.png`;
+`tapes/demo-routing-table.tape` writes exactly `demos/demo-routing-table.mp4` and
+`demos/demo-routing-table.png`.
+`TestRecordingTapesAndAssetsAgree` (`cmd/site/site_test.go`) enforces the pairing in
+both directions, so a tape with no committed output and an output with no tape are
+both build failures — as is a `Set Width`/`Set Height` that disagrees with the
+`width=`/`height=` on that checkpoint's `<img>` tags in `website/pages/index.html`.
+
+The deploy flattens `shots/` and `demos/` into one `assets/` directory
+(`.github/workflows/deploy-pages.yml`), which is why a page always references
+`/assets/<name>` regardless of which directory the file is in.
+
+**To add a homepage checkpoint:** write `tapes/home-<stem>.tape`, record it, and add
+the dark/light `<img>` pair to `website/pages/index.html`. The tape tree is the
+inventory — `TestHomeScreenshotsHaveThemePairs` globs it, so forgetting the HTML
+fails the build rather than silently shipping a screenshot nobody renders.
+
 ## Homepage Explorer
 
 The `home-*.tape` files render the real, static product checkpoints used by
-the hero and task menu on kute.dev. The dedicated `home-hero*.tape` pair
-captures the larger hero surface; the task menu captures cover all-namespaces
+the hero and task menu on kute.dev. The dedicated `home-hero.tape` captures the
+larger hero surface; the task menu captures cover all-namespaces
 triage, the Goto/Namespace/Context palettes, pod detail, timeline, CronJob and
 Job-attempt diagnosis, Helm releases and release history, Ingress and HTTPRoute
 routing, Flux, Argo CD, non-PROD/PROD confirmations, certificate failure, and
 the kubectl-debug panel (ephemeral attach, copy mode, node debug).
-Every checkpoint has a dark `home-<name>.png` and light
-`home-<name>-light.png`
-capture so the website screenshot follows its selected theme. The tapes output
-PNG directly; the incident and routing recordings remain optional clips shown
-from those screenshots.
+Every checkpoint has a dark and a light capture so the website screenshot
+follows its selected theme. The tapes output PNG directly; the incident and
+routing recordings remain optional clips shown from those screenshots.
+
+### One tape, both themes
+
+A `home-*` tape is authored as the **dark** capture and stays directly runnable
+(`betamax run docs/assets/tapes/home-triage.tape` writes the dark PNG). The light
+PNG is derived by `scripts/lib/record.sh` from three substitutions on a temp copy:
+
+| In the tape | Becomes |
+| --- | --- |
+| `Output ".../shots/<stem>.png"` | `.../shots/<stem>-light.png` |
+| `Set Theme "3024 Night"` | `Set Theme "3024 Day"` |
+| `--theme dark` | `--theme light` |
+
+Every `home-*` tape must therefore declare that theme and pass that flag, which
+the test asserts. This replaced 25 checked-in `-light` twins that differed from
+their partner by exactly those three lines — near-duplicates that had already
+drifted: `home-prod-confirm` was 800px tall in one theme and 1100 in the other,
+and two tapes relied on terminal auto-detection instead of `--theme`.
+
+The preamble is deliberately *not* shared between tapes. betamax 0.1.15 has no
+include directive, so a shared fragment would have to be concatenated into a temp
+file, and then neither `betamax run` nor `betamax validate` would work on the
+checked-in tape. Only about half the preamble is constant anyway — `Set Width`,
+`Set Height` and `Set FontSize` are per-checkpoint, and `home-actions-scale.tape`
+explains why one of them departs from the gallery default.
+
+### Isolation
 
 The recording scripts isolate both `HOME` and `XDG_STATE_HOME`. This is
 load-bearing for `home-prod-confirm.tape`, which writes a temporary config that
@@ -22,9 +75,70 @@ configuration. They expose only `~/.local/share/fonts` on Linux and
 `~/Library/Fonts` on macOS inside the temporary home so Betamax can resolve the
 font family declared by each tape.
 The navigation palette tapes also seed recents and remembered namespaces in
-that isolated state directory. The Context pair writes an isolated kubeconfig
+that isolated state directory. The Context tape writes an isolated kubeconfig
 and PROD marker so it can show the real lazy-probe state without reading or
 probing any context configured on the recording machine.
+
+Both recording entry points drive the same `scripts/lib/record.sh`, so the
+isolation cannot differ between a single-tape and a batch run:
+
+```sh
+scripts/record-demo.sh docs/assets/tapes/home-timeline.tape   # one tape
+scripts/record-all-demos.sh                                   # all 30
+```
+
+## Demo clips
+
+Each `demo-*.tape` produces both its files from one recording — the clip from
+its `Output`, the still from a `Screenshot` placed at the beat worth freezing:
+
+```
+Output "docs/assets/demos/demo-routing-table.mp4"       # what guide.html plays
+Screenshot "docs/assets/demos/demo-routing-table.png"   # the chosen frame
+```
+
+The PNG does double duty — it is the `poster` on the `<video>`, so it is what a
+`prefers-reduced-motion` visitor sees, and it is the still README.md embeds.
+README gets a still rather than the clip because **GitHub strips `<video>` and
+will not play an mp4 committed to a repo**; only files uploaded through a
+comment box render there, and such a URL cannot be regenerated from a tape. The
+README stills link to the matching section of the guide, which does play.
+
+### Why the mp4 is encoded by the script, not by betamax
+
+betamax captures one frame per damage event and keeps a real duration next to
+each one, but its video writer discards those durations: it dumps the frames as
+a numbered PNG sequence and hands ffmpeg `-framerate <Set Framerate>`, giving
+every frame an identical 1/24s slot however long it was actually on screen. A
+tape's `Sleep`s then contribute *nothing* to the clip. All five demos shipped
+this way once — `demo-goto-palette`'s ~15s walkthrough was 58 frames of 2.4s,
+every pause gone and every keystroke a blur. Its GIF writer, over the same
+frames, honours the durations exactly.
+
+So `scripts/lib/record.sh` asks the recording for what betamax gets right —
+full-colour PNG frames, plus a GIF whose only job is to carry the per-frame
+delays — by swapping the `.mp4` `Output` line for those two in a temp copy of
+the tape, the same substitution trick the dark/light derivation uses. It then
+joins the two through ffmpeg's concat demuxer. The frame counts cannot
+disagree: both betamax writers iterate the same captured slice.
+
+This is not the pre-betamax `gif-to-mp4.sh` returning. That transcoded the
+GIF's *pixels*, publishing video already quantised to 256 colours; here the
+pixels are the untouched PNGs and the GIF contributes nothing but its delay
+table. The clip is written constant-framerate rather than the variable-framerate
+stream concat yields on its own, because it plays in a `<video>` on kute.dev and
+seeking a VFR stream with multi-second frames is browser-dependent; the
+duplicated frames of a still terminal cost almost nothing through x264.
+
+A checked-in tape stays directly runnable (`betamax run
+docs/assets/tapes/demo-routing-table.tape`), but the mp4 that writes has the
+collapsed timing — record through the script.
+
+One constraint follows from the encoder: **`Set Width` and `Set Height` must
+both be even**, because libx264 rejects an odd dimension. It does not fail
+loudly — a direct `betamax run` leaves a zero-byte mp4 — so
+`TestRecordingTapesAndAssetsAgree` checks the parity. `demo-goto-palette.tape`
+is 1040x616 for exactly this reason and says so in its own header.
 
 ## All Namespaces
 The recording, using kute --demo, shows an incident from a clean namespace to root cause:

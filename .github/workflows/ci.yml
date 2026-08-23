@@ -35,6 +35,12 @@ jobs:
       # template would fail after review rather than during it.
       - name: Render the website
         run: go run ./cmd/site
+      # betamax parses the tapes but records nothing, so this is cheap and
+      # needs no fonts or terminal. Recording is manual and local, which means
+      # a tape broken by an edit would otherwise stay broken until the next
+      # time someone regenerated the media.
+      - name: Validate the recording tapes
+        run: betamax validate 'docs/assets/tapes/*.tape'
       - name: go test
         run: go test -race -shuffle=on -count=1 ./...
   # The release builds a windows/amd64 and windows/arm64 binary, so something

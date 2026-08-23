@@ -27,7 +27,7 @@ cp -R website/assets/. "$dist/assets/"
 cp website/CNAME website/favicon.ico website/install.ps1 website/install.sh "$dist/"
 
 shopt -s nullglob
-demo_assets=(docs/assets/*.mp4 docs/assets/*-poster.jpg docs/assets/home-*.png)
+demo_assets=(docs/assets/demos/*.mp4 docs/assets/demos/*.png docs/assets/shots/home-*.png)
 if ((${#demo_assets[@]})); then
 	cp "${demo_assets[@]}" "$dist/assets/"
 fi
