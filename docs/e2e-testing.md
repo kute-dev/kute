@@ -108,16 +108,29 @@ nothing extra.
 
 `harness.go` — `Launch(t, opts...) *App`. Points `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at
 `t.TempDir()`, then calls `app.run` with `tea.WithInput`, `tea.WithOutput`,
-`tea.WithWindowSize(120, 36)`, `tea.WithColorProfile(colorprofile.TrueColor)`,
+`tea.WithWindowSize(140, 36)`, `tea.WithColorProfile(colorprofile.TrueColor)`,
 `tea.WithContext(ctx)`.
 
 Launch options: `WithKubeconfig`, `WithNamespace`, `WithScopeNamespace` (drives
-`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`.
+`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`, `WithAPIProxy`.
 
-`App` methods: `Press`/`Type`/`Enter`/`Esc`/`Down` to drive input; `Frame` to read the
-current screen (ANSI-stripped); `WaitFor`/`WaitForAll`/`WaitGone`/`WaitForWrapped`/
+Every launch goes through a per-test TLS API proxy by default. `App.Proxy()` exposes controls
+for fixed delays, held requests, Kubernetes `Status` faults, endpoint availability, and
+closing active watches or streams. `Fence` plus `WaitForRequest` is the synchronization
+contract: install the control, fence the traffic, and wait for the matching request rather
+than sleeping or matching client-go log text. `History` and `Counts` expose timestamps,
+cancellation, responses, and active/total counts by resource and verb. `WithoutAPIProxy`
+exists only for diagnosing proxy transparency.
+
+`App` methods: `Press`/`Type`/`Paste`/`Enter`/`Esc`/`Down` to drive terminal input; `Send`
+and `Resize` to inject explicit Bubble Tea messages through the retained real program;
+`Frame` to read the current screen (ANSI-stripped); `WaitFor`/`WaitForAll`/`WaitGone`/`WaitForWrapped`/
 `WaitLoaded` to poll against a deadline; `Never` to assert a substring stays absent across a
 window; `Quit` to shut down. On failure the harness dumps the last frame.
+
+`harness_support.go` adds `WaitForTCPRefused`, heap/goroutine `SnapshotRuntime`
+classification, and `BuildMergedKubeconfig`. The merged builder rewrites cluster and user
+keys per named context so two proxies derived from the same kind kubeconfig remain distinct.
 
 ### Test files
 

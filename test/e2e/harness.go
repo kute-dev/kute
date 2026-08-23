@@ -205,6 +205,8 @@ type options struct {
 	width             int
 	height            int
 	prodContexts      []string
+	proxy             *APIProxy
+	direct            bool
 }
 
 // WithKubeconfig launches against a kubeconfig other than the admin one —
@@ -245,18 +247,33 @@ func WithProdContexts(contexts ...string) Option {
 	return func(o *options) { o.prodContexts = contexts }
 }
 
+// WithAPIProxy uses an already-created proxy. Launch creates one by default;
+// this option lets a test install controls before kute sends its first request.
+func WithAPIProxy(proxy *APIProxy) Option {
+	return func(o *options) { o.proxy = proxy }
+}
+
+// WithoutAPIProxy bypasses the default proxy. Keep this for diagnosing proxy
+// transparency; lifecycle and recovery tests should always use the default.
+func WithoutAPIProxy() Option {
+	return func(o *options) { o.direct = true }
+}
+
 // App is a running kute, driven by key bytes and observed through captured
 // frames.
 type App struct {
-	t      *testing.T
-	in     *io.PipeWriter
-	cancel context.CancelFunc
-	done   chan error
+	t            *testing.T
+	in           *io.PipeWriter
+	cancel       context.CancelFunc
+	done         chan error
+	programReady chan struct{}
+	proxy        *APIProxy
 
-	mu     sync.Mutex
-	frame  string
-	seq    uint64
-	fences uint64
+	mu      sync.Mutex
+	program *tea.Program
+	frame   string
+	seq     uint64
+	fences  uint64
 
 	quitOnce sync.Once
 }
@@ -298,6 +315,16 @@ func Launch(t *testing.T, opts ...Option) *App {
 			t.Fatalf("kubeconfig %s does not exist, but the admin kubeconfig %s does — scripts/e2e-cluster.sh up did not mint it: %v", o.kubeconfig, KubeconfigPath(), err)
 		}
 	}
+	if o.proxy != nil && o.direct {
+		t.Fatal("e2e: WithAPIProxy and WithoutAPIProxy are mutually exclusive")
+	}
+	proxy := o.proxy
+	if proxy == nil && !o.direct {
+		proxy = NewAPIProxy(t, o.kubeconfig)
+	}
+	if proxy != nil {
+		o.kubeconfig = proxy.KubeconfigPath()
+	}
 
 	isolateEnv(t, o)
 
@@ -317,7 +344,7 @@ func Launch(t *testing.T, opts ...Option) *App {
 	pr, pw := io.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	a := &App{t: t, in: pw, cancel: cancel, done: make(chan error, 1)}
+	a := &App{t: t, in: pw, cancel: cancel, done: make(chan error, 1), programReady: make(chan struct{}), proxy: proxy}
 
 	teaOpts := []tea.ProgramOption{
 		tea.WithContext(ctx),
@@ -332,6 +359,9 @@ func Launch(t *testing.T, opts ...Option) *App {
 		// recovered-and-reported error.
 		tea.WithoutCatchPanics(),
 		tea.WithFilter(a.capture),
+		// ProgramOption is a function over the constructed Program, so this
+		// retains the real instance without adding an app production seam.
+		func(program *tea.Program) { a.setProgram(program) },
 	}
 
 	go func() {
@@ -346,12 +376,63 @@ func Launch(t *testing.T, opts ...Option) *App {
 	t.Cleanup(func() {
 		if t.Failed() {
 			t.Logf("last frame:\n%s", a.Frame())
+			if a.proxy != nil {
+				for _, rec := range a.proxy.History() {
+					if rec.Error != "" || rec.StatusCode >= 400 {
+						t.Logf("proxy request %d %s %s: status=%d cancelled=%t error=%q", rec.ID, rec.Verb, rec.URL.String(), rec.StatusCode, rec.Cancelled, rec.Error)
+					}
+				}
+			}
 		}
 		a.Quit()
 	})
 
 	a.waitForFirstFrame()
 	return a
+}
+
+// Proxy returns the TLS API proxy used by this launch, or nil when launched
+// with WithoutAPIProxy.
+func (a *App) Proxy() *APIProxy { return a.proxy }
+
+func (a *App) setProgram(program *tea.Program) {
+	a.mu.Lock()
+	a.program = program
+	a.mu.Unlock()
+	close(a.programReady)
+}
+
+// Send injects an explicit Bubble Tea message into the real running program.
+// It is useful for lifecycle events which do not have a terminal byte
+// encoding, and fences before returning so Frame observes the update.
+func (a *App) Send(msg tea.Msg) {
+	a.t.Helper()
+	select {
+	case <-a.programReady:
+	case err := <-a.done:
+		a.done <- err
+		a.t.Fatalf("kute exited before its program became ready: %v", err)
+	}
+	a.mu.Lock()
+	program := a.program
+	a.mu.Unlock()
+	program.Send(msg)
+	a.sync()
+}
+
+// Resize sends the same WindowSizeMsg Bubble Tea emits for a real terminal
+// resize and waits until the model has processed it.
+func (a *App) Resize(width, height int) {
+	a.t.Helper()
+	a.Send(tea.WindowSizeMsg{Width: width, Height: height})
+}
+
+// Paste feeds terminal bracketed-paste bytes rather than manufacturing a
+// PasteMsg, covering Bubble Tea's input decoder as well as kute's handling.
+func (a *App) Paste(content string) {
+	a.t.Helper()
+	a.write("\x1b[200~" + content + "\x1b[201~")
+	a.sync()
 }
 
 // capture is the tea.WithFilter hook: one frame per message, plus a separate
