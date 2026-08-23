@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"math"
 	"strconv"
 
 	resource "k8s.io/apimachinery/pkg/api/resource"
@@ -41,8 +42,14 @@ func FormatCPU(q resource.Quantity) string {
 	return strconv.FormatFloat(float64(milli)/1000, 'f', 1, 64)
 }
 
-// FormatMemory renders q as the compact "128Mi"/"1.5Gi" strings PodMetrics/
-// NodeMetric.MEM carry — exported for the same reason as FormatCPU.
+// FormatMemory renders q as the compact "128Mi"/"1.5Gi"/"175Mi" strings
+// PodMetrics/NodeMetric.MEM carry — exported for the same reason as FormatCPU.
+//
+// The output is capped at three significant digits, and so at five cells,
+// because that is exactly what browse's metric cell has room for: the CPU/MEM
+// columns are resources.MetricColumnWidth wide, of which the mini bar takes six
+// cells and the separator one. A fourth digit doesn't render narrower, it
+// renders as "174.…".
 func FormatMemory(q resource.Quantity) string {
 	bytes := q.Value()
 	if bytes < 1024 {
@@ -52,17 +59,34 @@ func FormatMemory(q resource.Quantity) string {
 		suffix string
 		value  int64
 	}{
-		{"Gi", 1024 * 1024 * 1024},
-		{"Mi", 1024 * 1024},
-		{"Ki", 1024},
+		{"Ei", 1 << 60},
+		{"Pi", 1 << 50},
+		{"Ti", 1 << 40},
+		{"Gi", 1 << 30},
+		{"Mi", 1 << 20},
+		{"Ki", 1 << 10},
 	}
-	for _, unit := range units {
-		if bytes >= unit.value {
-			if bytes%unit.value == 0 {
-				return strconv.FormatInt(bytes/unit.value, 10) + unit.suffix
-			}
-			return strconv.FormatFloat(float64(bytes)/float64(unit.value), 'f', 1, 64) + unit.suffix
+	for i, unit := range units {
+		if bytes < unit.value {
+			continue
 		}
+		// Anything from 1000 of its own unit up would need a fourth digit, so
+		// hand it to the next unit up and let it render as "1.0Gi" instead of
+		// "1023Mi". Ei is the top of the table only because int64 tops out at
+		// 8 EiB, so this can never run off the end.
+		if i > 0 && math.Round(float64(bytes)/float64(unit.value)) >= 1000 {
+			unit = units[i-1]
+		}
+		if bytes%unit.value == 0 {
+			return strconv.FormatInt(bytes/unit.value, 10) + unit.suffix
+		}
+		scaled := float64(bytes) / float64(unit.value)
+		// 9.95 and up rounds to "10.0", a digit too wide — take whole numbers
+		// from there on.
+		if scaled < 9.95 {
+			return strconv.FormatFloat(scaled, 'f', 1, 64) + unit.suffix
+		}
+		return strconv.FormatInt(int64(math.Round(scaled)), 10) + unit.suffix
 	}
 	return strconv.FormatInt(bytes, 10) + "B"
 }

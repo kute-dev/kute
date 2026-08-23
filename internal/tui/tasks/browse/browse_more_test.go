@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	corev1 "k8s.io/api/core/v1"
+	resource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -300,6 +301,38 @@ func TestPodMetricsRenderAsBars(t *testing.T) {
 	view := ansi.Strip(m.Render())
 	if !strings.Contains(view, "45m") || !strings.Contains(view, "128Mi") {
 		t.Fatalf("expected live CPU/MEM values in view:\n%s", view)
+	}
+}
+
+// TestPodMetricsRenderRoundedRatherThanTruncated pins the pairing between
+// kube.FormatMemory and metricCell: the value slot is only
+// MetricColumnWidth-barWidth-1 = 5 cells, so an unrounded 174.5Mi used to reach
+// the view as "174.…". The MEM string here comes from the real formatter rather
+// than a literal precisely so this fails if that rounding is ever relaxed.
+func TestPodMetricsRenderRoundedRatherThanTruncated(t *testing.T) {
+	const memBytes = 174.5 * 1024 * 1024
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-1")},
+	}}
+	metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
+		"api-1": {
+			CPU:      kube.FormatCPU(*resource.NewMilliQuantity(45, resource.DecimalSI)),
+			MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
+			CPUMilli: 45,
+			MemBytes: memBytes,
+		},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Metrics: metrics})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+	m = step(t, m, m.loadMetrics(m.metricsEpoch)())
+
+	view := ansi.Strip(m.Render())
+	if !strings.Contains(view, "175Mi") {
+		t.Fatalf("expected 174.5Mi to render rounded as 175Mi:\n%s", view)
+	}
+	if strings.Contains(view, "174") {
+		t.Fatalf("expected no truncated 174.… remnant in view:\n%s", view)
 	}
 }
 
