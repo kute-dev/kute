@@ -1,14 +1,12 @@
-# kute
+# kute - the incident console for Kubernetes
 
-**Modern Kubernetes TUI**
+**See what broke. Understand why. Act safely.**
 
 [kute.dev](https://kute.dev)
 
-### The incident console for Kubernetes.
+Browse, diagnose, and act on your cluster — all from one terminal console. 
 
-See what broke. Understand why. Act safely.
-
-Browse, diagnose, and act on your cluster — all from one terminal console. kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
+kute is a keyboard-driven Kubernetes console built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), designed around the first 15 minutes of an incident rather than plain object browsing.
 
 [![kute's all-namespaces view: a CrashLoopBackOff pod sorted to the top, above the otherwise-healthy namespaces collapsed beneath it](docs/assets/demos/demo-all-namespaces.png)](https://kute.dev/guide.html#investigating)
 
