@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -691,8 +692,12 @@ func TestRecordingTapesAndAssetsAgree(t *testing.T) {
 	for _, stem := range homeTapeStems(t) {
 		tape := readFile(t, filepath.Join(tapesDir, stem+".tape"))
 
-		dark := filepath.Join(shotsDir, stem+".png")
-		light := filepath.Join(shotsDir, stem+"-light.png")
+		// path, not filepath: these are compared against the paths written
+		// inside the tapes, which are always slash-separated. filepath.Join
+		// would build "docs\\assets\\shots\\..." on Windows and fail every
+		// comparison there.
+		dark := path.Join(shotsDir, stem+".png")
+		light := path.Join(shotsDir, stem+"-light.png")
 		owned[dark], owned[light] = true, true
 
 		if got := tapeField(t, tape, tapeOutputRe); got != dark {
@@ -758,8 +763,8 @@ func TestRecordingTapesAndAssetsAgree(t *testing.T) {
 		// chosen frame rather than Output's last one because a walkthrough
 		// does not reliably end on its own payoff: demo-all-namespaces closes
 		// on an empty timeline.
-		mp4 := filepath.Join(demosDir, stem+".mp4")
-		still := filepath.Join(demosDir, stem+".png")
+		mp4 := path.Join(demosDir, stem+".mp4")
+		still := path.Join(demosDir, stem+".png")
 		owned[mp4], owned[still] = true, true
 
 		if got := tapeOutputs(t, tape); !slices.Equal(got, []string{mp4}) {
@@ -822,7 +827,7 @@ func TestRecordingTapesAndAssetsAgree(t *testing.T) {
 			if e.IsDir() {
 				continue
 			}
-			if rel := filepath.Join(dir, e.Name()); !owned[rel] {
+			if rel := path.Join(dir, e.Name()); !owned[rel] {
 				t.Errorf("%s is committed but no tape in %s produces it", rel, tapesDir)
 			}
 		}
