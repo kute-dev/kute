@@ -36,13 +36,25 @@ type RequestMatcher struct {
 	Path     string
 	Resource string
 	Verb     string
+	// Query matches decoded query parameters exactly. Omitted keys remain
+	// wildcards, so tests can distinguish filtered or streaming-list watches
+	// without coupling to resourceVersion and randomized timeout values.
+	Query map[string]string
 }
 
 func (m RequestMatcher) matches(r RequestRecord) bool {
-	return (m.Method == "" || strings.EqualFold(m.Method, r.Method)) &&
+	if !((m.Method == "" || strings.EqualFold(m.Method, r.Method)) &&
 		(m.Path == "" || strings.HasPrefix(r.URL.Path, m.Path)) &&
 		(m.Resource == "" || strings.EqualFold(m.Resource, r.Resource)) &&
-		(m.Verb == "" || strings.EqualFold(m.Verb, r.Verb))
+		(m.Verb == "" || strings.EqualFold(m.Verb, r.Verb))) {
+		return false
+	}
+	for key, value := range m.Query {
+		if r.URL.Query().Get(key) != value {
+			return false
+		}
+	}
+	return true
 }
 
 // RequestRecord is the wire-observable lifecycle of one proxied request.
@@ -376,9 +388,14 @@ func (p *APIProxy) serveHTTP(w http.ResponseWriter, incoming *http.Request) {
 		}
 	}
 	var gates []*proxyGate
-	for _, gate := range p.gates {
-		if gate.matcher.matches(rec) {
-			gates = append(gates, gate)
+	// A synthetic failure is already a complete response chosen by the
+	// proxy. Let it return immediately even when a broader gate also matches;
+	// the gate then catches the client's recovery request that follows it.
+	if status == 0 {
+		for _, gate := range p.gates {
+			if gate.matcher.matches(rec) {
+				gates = append(gates, gate)
+			}
 		}
 	}
 	p.signalLocked()

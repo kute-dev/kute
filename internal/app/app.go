@@ -1615,6 +1615,13 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 	defer installPanicHandler(sink)()
 
 	model, cluster, demoCluster := NewModel(cfg)
+	// ForwardManager sessions deliberately survive context switches, but they
+	// must not survive the process that owns them. Their reconnect loops are
+	// rooted independently from the active Cluster so a context swap cannot
+	// cancel them; make the composition root the matching lifetime boundary.
+	if sess := model.Session(); sess != nil && sess.Forwards != nil {
+		defer sess.Forwards.StopAll()
+	}
 	program := tea.NewProgram(newCrashCatcher(model, sink, live), opts...)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1632,7 +1639,7 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 	switch {
 	case cluster != nil:
 		defer cluster.Stop()
-		go forwardEvents(ctx, cluster, program)
+		go forwardEvents(ctx, cluster, program, model.Session().Forwards)
 		go func() {
 			_ = cluster.Start(ctx)
 			// The one connect path where CRD discovery (folded into
@@ -1643,7 +1650,7 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 			program.Send(kube.CRDsDiscoveredMsg{})
 		}()
 	case demoCluster != nil:
-		go forwardEvents(ctx, demoCluster, program)
+		go forwardEvents(ctx, demoCluster, program, model.Session().Forwards)
 	}
 	if sess := model.Session(); sess != nil && sess.Forwards != nil {
 		go watchForwardManager(ctx, sess.Forwards, program)
@@ -1734,7 +1741,7 @@ type eventSource interface {
 	ConnEvents() <-chan kube.ConnStateMsg
 }
 
-func forwardEvents(ctx context.Context, src eventSource, program *tea.Program) {
+func forwardEvents(ctx context.Context, src eventSource, program *tea.Program, forwards *kube.ForwardManager) {
 	events := src.Events()
 	conn := src.ConnEvents()
 	for {
@@ -1747,6 +1754,9 @@ func forwardEvents(ctx context.Context, src eventSource, program *tea.Program) {
 				continue
 			}
 			program.Send(ev)
+			if ev.Kind == kube.KindPod && forwards != nil {
+				forwards.ReconcilePodTargets()
+			}
 			if ev.Kind == kube.KindSecret {
 				// A release Secret changing already emits KindHelmRelease
 				// directly, from the filtered release informer that backs

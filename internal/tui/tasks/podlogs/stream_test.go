@@ -31,6 +31,7 @@ type fakeRestartLister struct {
 	state     string // "", "Running", "Waiting", "Terminated"
 	reason    string
 	listErr   error
+	deleted   bool
 }
 
 func (f *fakeRestartLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string) ([]runtime.Object, error) {
@@ -39,6 +40,9 @@ func (f *fakeRestartLister) ListRaw(_ context.Context, kind kube.ResourceKind, _
 	}
 	if f.listErr != nil {
 		return nil, f.listErr
+	}
+	if f.deleted {
+		return nil, nil
 	}
 	status := corev1.ContainerStatus{Name: f.container, RestartCount: f.restarts}
 	switch f.state {
@@ -263,6 +267,29 @@ func TestStreamContainerReconnectsAfterActualRestartDetected(t *testing.T) {
 	}
 	if entries[2].Message != "second" {
 		t.Fatalf("post-reconnect entry = %+v", entries[2])
+	}
+}
+
+func TestStreamContainerEndsWhenPodIsDeleted(t *testing.T) {
+	t.Parallel()
+
+	streamer := &fakeStreamer{connects: map[string][]string{"app": {"first\n", ""}}}
+	lister := &fakeRestartLister{podName: "api", container: "app", restarts: 3}
+	model := testModel()
+	model.streamer = streamer
+	model.lister = lister
+
+	err := model.streamContainer(t.Context(), "app", func(e LogEntry) bool {
+		if e.Message == "first" {
+			lister.deleted = true
+		}
+		return true
+	})
+	if !errors.Is(err, errPodDeleted) {
+		t.Fatalf("streamContainer error = %v, want pod deleted", err)
+	}
+	if len(streamer.requests) != 2 {
+		t.Fatalf("requests = %+v, want history plus one follow request and no retry loop", streamer.requests)
 	}
 }
 

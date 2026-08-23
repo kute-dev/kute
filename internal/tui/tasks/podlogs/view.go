@@ -65,6 +65,12 @@ func (m Model) Strips(width int) []string {
 		return []string{m.loadingStripLine(width)}
 	}
 	if m.taskState() != tui.TaskStateReady {
+		// A terminal stream error keeps accepting '/' filter input so the
+		// screen remains navigable. Keep that input visible even though the
+		// body is now the terminal error state rather than cached log rows.
+		if m.filterActive {
+			return []string{m.filterStripLine(width)}
+		}
 		return nil
 	}
 	lines := []string{m.toolbarLine(width)}

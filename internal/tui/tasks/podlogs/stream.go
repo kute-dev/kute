@@ -36,6 +36,8 @@ type streamClosedMsg struct{ streamID int }
 type streamWaitMsg struct{}
 type rateTickMsg struct{ gen int }
 
+var errPodDeleted = errors.New("pod deleted")
+
 // containerReadyMsg and containerWaitingMsg are checkContainerCmd's two
 // outcomes — see beginStream's doc comment for the flow they drive.
 type containerReadyMsg struct{ streamID int }
@@ -125,11 +127,11 @@ func (m Model) checkContainerCmd(streamID int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, containerCheckTimeout)
 		defer cancel()
-		info, found := lookupContainerInfo(ctx, lister, namespace, podName, container)
-		if found && info.State != "" && info.State != "Waiting" {
+		info, podFound, containerFound := lookupContainerInfo(ctx, lister, namespace, podName, container)
+		if containerFound && info.State != "" && info.State != "Waiting" {
 			return containerReadyMsg{streamID: streamID}
 		}
-		if !found {
+		if !podFound || !containerFound {
 			return containerReadyMsg{streamID: streamID}
 		}
 		return containerWaitingMsg{streamID: streamID, reason: info.Reason}
@@ -325,9 +327,12 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 			// replayed the same lines on a tight loop — the "logs repeat
 			// constantly" symptom. Wait for the live restart count to
 			// actually move before reconnecting.
-			count, ok := m.waitForContainerRestart(ctx, container, lastRestarts)
-			if !ok {
-				return nil
+			count, err := m.waitForContainerRestart(ctx, container, lastRestarts)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					return nil
+				}
+				return err
 			}
 			lastRestarts = count
 			continue
@@ -342,34 +347,41 @@ func (m Model) streamContainer(ctx context.Context, container string, emit func(
 }
 
 // waitForContainerRestart polls container's live restart count (via lister)
-// every reconnectDelay until it exceeds last — a genuine restart — or ctx is
-// cancelled. Returns the new count and true, or 0 and false on cancellation.
-func (m Model) waitForContainerRestart(ctx context.Context, container string, last int32) (int32, bool) {
+// every reconnectDelay until it exceeds last — a genuine restart — the Pod
+// disappears, or ctx is cancelled. A deleted Pod is a terminal error rather
+// than an indefinite wait for a restart count that can never advance.
+func (m Model) waitForContainerRestart(ctx context.Context, container string, last int32) (int32, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return 0, false
+			return 0, ctx.Err()
 		case <-time.After(reconnectDelay):
 		}
-		if count, ok := m.containerRestartCount(ctx, container); ok && count > last {
-			return count, true
+		info, podFound, containerFound := lookupContainerInfo(ctx, m.lister, m.pod.Namespace, m.pod.Name, container)
+		if !podFound {
+			return 0, errPodDeleted
+		}
+		if containerFound && info.Restarts > last {
+			return info.Restarts, nil
 		}
 	}
 }
 
 // lookupContainerInfo reads container's own live status from the pod
 // cache via lister — the ListRaw-and-find-this-pod-and-container dance
-// shared by containerRestartCount and checkContainerCmd. ok is false
-// whenever the answer can't be determined at all (no lister, list failure,
-// pod/container not found) — callers each have their own fail-open
-// fallback for that case.
-func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namespace, podName, container string) (kube.ContainerInfo, bool) {
+// shared by containerRestartCount and checkContainerCmd. The two booleans
+// distinguish confirmed Pod absence from an unknown container status, so a
+// cache-read failure cannot masquerade as Pod deletion.
+func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namespace, podName, container string) (kube.ContainerInfo, bool, bool) {
 	if lister == nil {
-		return kube.ContainerInfo{}, false
+		return kube.ContainerInfo{}, true, false
 	}
 	objs, err := lister.ListRaw(ctx, kube.KindPod, namespace)
 	if err != nil {
-		return kube.ContainerInfo{}, false
+		// A failed cache read says nothing about object existence. Treat the
+		// pod as present so a connectivity outage does not masquerade as a
+		// deletion.
+		return kube.ContainerInfo{}, true, false
 	}
 	for _, obj := range objs {
 		p, ok := obj.(*corev1.Pod)
@@ -378,12 +390,12 @@ func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namesp
 		}
 		for _, ci := range kube.PodFromObject(p).ContainerInfos {
 			if ci.Name == container {
-				return ci, true
+				return ci, true, true
 			}
 		}
-		return kube.ContainerInfo{}, false
+		return kube.ContainerInfo{}, true, false
 	}
-	return kube.ContainerInfo{}, false
+	return kube.ContainerInfo{}, false, false
 }
 
 // containerRestartCount reads container's own live restart count —
@@ -393,7 +405,7 @@ func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namesp
 // callers fall back to the blind reconnect-after-delay behavior in that
 // case.
 func (m Model) containerRestartCount(ctx context.Context, container string) (int32, bool) {
-	info, ok := lookupContainerInfo(ctx, m.lister, m.pod.Namespace, m.pod.Name, container)
+	info, _, ok := lookupContainerInfo(ctx, m.lister, m.pod.Namespace, m.pod.Name, container)
 	if !ok {
 		return 0, false
 	}

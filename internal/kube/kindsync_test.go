@@ -255,6 +255,63 @@ func TestNoteWatchErrorDropsStaleGeneration(t *testing.T) {
 	}
 }
 
+func TestWatchFailureKeepsHealthUnreadyUntilInformerEvent(t *testing.T) {
+	t.Parallel()
+	c := &Cluster{health: newHealth(), events: make(chan ResourceChangedMsg, 1)}
+	c.recordWatchError(0, KindPod, "", errors.New("watch connection closed"))
+	if c.allStartedKindsSynced() {
+		t.Fatal("watch failure still reported all started kinds ready")
+	}
+
+	c.notify(0, KindPod)
+	if !c.allStartedKindsSynced() {
+		t.Fatal("first recovered informer event did not clear watch-unhealthy state")
+	}
+	select {
+	case <-c.health.retry:
+	default:
+		t.Fatal("final recovered informer event did not request an immediate health probe")
+	}
+}
+
+func TestInitialListFailureDoesNotAwaitInformerEvent(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	// Register the informer without starting it so its cache is known but has
+	// not completed the initial LIST. An empty successful retry may produce no
+	// object event, so recovery must depend on HasSynced rather than notify.
+	c.registerWatches(KindPod)
+	c.recordWatchError(c.generation, KindPod, "", errors.New("initial list failed"))
+
+	key := scopeKey{KindPod, ""}
+	if c.watchUnhealthy[key] {
+		t.Fatal("initial LIST failure entered post-sync watch-unhealthy state")
+	}
+	if c.kindStalled[key] == nil {
+		t.Fatal("initial LIST failure was not recorded as a stalled kind")
+	}
+}
+
+func TestWatchRecoveryClearsOnlyItsInformerScope(t *testing.T) {
+	t.Parallel()
+	c := &Cluster{
+		health: newHealth(), events: make(chan ResourceChangedMsg, 1),
+		watchUnhealthy: map[scopeKey]bool{
+			{KindConfigMap, "team-a"}: true,
+			{KindConfigMap, "team-b"}: true,
+		},
+	}
+	c.notifyScope(0, KindConfigMap, "team-a")
+	if c.watchUnhealthy[scopeKey{KindConfigMap, "team-a"}] {
+		t.Fatal("recovered scope team-a stayed unhealthy")
+	}
+	if !c.watchUnhealthy[scopeKey{KindConfigMap, "team-b"}] {
+		t.Fatal("recovering team-a cleared team-b's independent watch failure")
+	}
+}
+
 // TestMarkKindFailedDropsStaleGeneration is noteWatchError's Forbidden-path
 // counterpart above — markKindFailed re-checks gen itself for the same
 // reason.

@@ -275,6 +275,22 @@ func TestFilterOpensNarrowsAndClears(t *testing.T) {
 	}
 }
 
+func TestFilterRemainsVisibleAfterTerminalStreamError(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.stream = StreamError
+	model.feedback = "API disconnected"
+	model.buffer.Append(LogEntry{Message: "KUTE-E2E marker"})
+
+	press(&model, "/")
+	press(&model, "KUTE-E2E")
+	strips := model.Strips(model.width)
+	if len(strips) != 1 || !strings.Contains(strips[0], "KUTE-E2E") {
+		t.Fatalf("terminal stream error hid the active filter input: strips=%q", strips)
+	}
+}
+
 func TestFilterCtrlJKAltHLMoveWithoutTyping(t *testing.T) {
 	t.Parallel()
 

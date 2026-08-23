@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -314,6 +315,8 @@ func switchContextCmd(sess *Session, name string) tea.Cmd {
 	// quitting should abandon it.
 	sess.ResetClusterContext()
 	parent := sess.Context()
+	oldContext := sess.Location.Context
+	oldNamespace := sess.Location.Namespace
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, switchContextTimeout)
@@ -324,6 +327,16 @@ func switchContextCmd(sess *Session, name string) tea.Cmd {
 		// context's kubeconfig-default one — see SwitchContext's doc
 		// comment. Ignored entirely in cluster-wide mode.
 		if err := cluster.SwitchContext(ctx, name, restoreNS); err != nil {
+			// SwitchContext replaces informer factories in place. Rebuild the
+			// original context before reporting failure so the task and Session
+			// location we intentionally leave untouched still point at a usable
+			// cluster rather than a half-switched target.
+			rollbackCtx, rollbackCancel := context.WithTimeout(parent, switchContextTimeout)
+			rollbackErr := cluster.SwitchContext(rollbackCtx, oldContext, oldNamespace)
+			rollbackCancel()
+			if rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore context %s: %w", oldContext, rollbackErr))
+			}
 			return SwitchContextMsg{Err: err}
 		}
 		return SwitchContextMsg{Context: name, Namespace: restoreNS, Kind: restoreKind, Filter: restoreFilter}

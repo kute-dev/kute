@@ -308,9 +308,9 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 	})
 	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(any) { c.notify(gen, kind) },
-		UpdateFunc: func(any, any) { c.notify(gen, kind) },
-		DeleteFunc: func(any) { c.notify(gen, kind) },
+		AddFunc:    func(any) { c.notifyScope(gen, kind, scope) },
+		UpdateFunc: func(any, any) { c.notifyScope(gen, kind, scope) },
+		DeleteFunc: func(any) { c.notifyScope(gen, kind, scope) },
 	})
 	if c.kindInformers == nil {
 		c.kindInformers = map[scopeKey]cache.SharedIndexInformer{}
@@ -328,11 +328,30 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 // noteWatchError's atomicity (worst case here is one wasted reload reading
 // the new context's own, correct data), so a plain locked read is enough.
 func (c *Cluster) notify(gen int, kind ResourceKind) {
+	c.notifyScope(gen, kind, "")
+}
+
+// notifyScope is notify with the informer cache key retained, so recovery of
+// one namespace cannot clear another scope's outstanding watch failure.
+func (c *Cluster) notifyScope(gen int, kind ResourceKind, scope string) {
 	c.mu.Lock()
 	current := c.generation == gen
+	watchesRecovered := false
+	if current {
+		key := scopeKey{kind, scope}
+		_, wasUnhealthy := c.watchUnhealthy[key]
+		delete(c.watchUnhealthy, key)
+		watchesRecovered = wasUnhealthy && len(c.watchUnhealthy) == 0
+	}
 	c.mu.Unlock()
 	if !current {
 		return
+	}
+	if watchesRecovered {
+		// The first event proves the final unhealthy resource stream resumed.
+		// Probe now rather than leaving the connected badge behind the outage's
+		// potentially 30-second backoff timer.
+		c.health.retryNow()
 	}
 	select {
 	case c.events <- ResourceChangedMsg{Kind: kind}:

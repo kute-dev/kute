@@ -439,7 +439,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		// correct scope (auxScope), since not every aux kind shares the
 		// primary kind's own namespace (Node's Pod aux-kind reads
 		// cluster-wide regardless of m.namespace).
-		if !tui.KindsSynced(m.lister, m.namespace, m.kind) || !m.auxKindsSynced(auxKinds[m.kind]) {
+		if msg.cacheUnreadyAtRead || !tui.KindsSynced(m.lister, m.namespace, m.kind) || !m.auxKindsSynced(auxKinds[m.kind]) {
 			// The informer cache is still filling (just after launch or mid
 			// SwitchContext) — this empty result isn't trustworthy yet.
 			// Stay in the loading state and retry shortly rather than

@@ -133,6 +133,9 @@ apply_fixtures() {
   log "waiting for the api rollout"
   kc -n "$NAMESPACE" rollout status deployment/api --timeout=180s >/dev/null
 
+  log "waiting for the secondary namespace pod"
+  kc -n kute-e2e-b wait --for=condition=Ready --timeout=180s pod/namespace-b-pod >/dev/null
+
   # worker is *meant* to crash, so there is no rollout to wait on — wait for
   # the crash itself instead, which is what the status-derivation tests read.
   #

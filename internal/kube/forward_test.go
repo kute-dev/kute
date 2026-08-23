@@ -122,6 +122,19 @@ func (r stubResolver) ResolveForwardPod(_ context.Context, _ ForwardTarget) (str
 	return r.pod, nil
 }
 
+type checkingResolver struct {
+	pod       string
+	available bool
+}
+
+func (r checkingResolver) ResolveForwardPod(_ context.Context, _ ForwardTarget) (string, error) {
+	return r.pod, nil
+}
+
+func (r checkingResolver) ForwardPodAvailable(_ context.Context, _, _ string) (bool, error) {
+	return r.available, nil
+}
+
 func awaitState(t *testing.T, mgr *ForwardManager, id string, want ForwardState) ForwardSession {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -178,6 +191,31 @@ func TestForwardManagerReconnectsOnLostTunnel(t *testing.T) {
 		t.Fatalf("Err = %q, want it to mention the lost tunnel", got.Err)
 	}
 
+	mgr.Stop(session.ID)
+}
+
+func TestForwardManagerPodChangeClosesDeletedServiceTarget(t *testing.T) {
+	t.Parallel()
+	mgr := NewForwardManager()
+	tunnel := newStubTunnel(nil)
+	dialer := &stubDialer{tunnel: tunnel, dialErr: errors.New("replacement not ready")}
+	resolver := checkingResolver{pod: "web-old", available: false}
+	target := ForwardTarget{Kind: KindService, Namespace: "default", Name: "web"}
+
+	session := mgr.Start(dialer, resolver, target, "web-old", 8080, 80, "")
+	awaitState(t, mgr, session.ID, ForwardActive)
+	deadline := time.Now().Add(2 * time.Second)
+	for mgr.tunnelFor(session.ID) == nil && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if mgr.tunnelFor(session.ID) == nil {
+		t.Fatal("initial tunnel was never published")
+	}
+	mgr.ReconcilePodTargets()
+	got := awaitState(t, mgr, session.ID, ForwardReconnecting)
+	if got.Attempt < 1 {
+		t.Fatalf("Attempt = %d, want >= 1 after the resolved Pod disappeared", got.Attempt)
+	}
 	mgr.Stop(session.ID)
 }
 

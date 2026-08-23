@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -137,6 +138,16 @@ type PodResolver interface {
 	ResolveForwardPod(ctx context.Context, target ForwardTarget) (string, error)
 }
 
+// ForwardPodChecker is the optional watch-reconciliation seam implemented by
+// the real resolver. A port-forward's upgraded SPDY session can remain open
+// after its Pod is deleted, so Tunnel.Run alone is not a reliable liveness
+// signal. ForwardManager checks the resolved Pod whenever the Cluster's Pod
+// informer emits a change and closes the tunnel when it has gone away; the
+// normal reconnect loop then re-resolves Service/Deployment targets.
+type ForwardPodChecker interface {
+	ForwardPodAvailable(ctx context.Context, namespace, pod string) (bool, error)
+}
+
 // --- real (SPDY) dialer ---
 
 type spdyDialer struct {
@@ -231,6 +242,17 @@ func NewClientsetPodResolver(clientset kubernetes.Interface) PodResolver {
 	return clientsetPodResolver{clientset: clientset}
 }
 
+func (r clientsetPodResolver) ForwardPodAvailable(ctx context.Context, namespace, pod string) (bool, error) {
+	got, err := r.clientset.CoreV1().Pods(namespace).Get(ctx, pod, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return got.DeletionTimestamp == nil && got.Status.Phase == corev1.PodRunning, nil
+}
+
 func (r clientsetPodResolver) ResolveForwardPod(ctx context.Context, target ForwardTarget) (string, error) {
 	switch target.Kind {
 	case KindPod:
@@ -305,6 +327,7 @@ type forwardEntry struct {
 	resolver PodResolver
 	cancel   context.CancelFunc
 	tunnel   Tunnel
+	checking bool
 }
 
 // NewForwardManager builds an empty manager.
@@ -491,6 +514,68 @@ func (m *ForwardManager) touchActivity(id string) {
 		e.session.LastActivityAt = time.Now()
 	}
 	m.mu.Unlock()
+}
+
+// ReconcilePodTargets reacts to a Pod informer event without polling. Real
+// Service/Deployment forwards validate their currently resolved Pod in the
+// background; a missing/terminating Pod closes the active tunnel, which feeds
+// the existing reconnect/backoff/re-resolution loop. API errors are ignored:
+// an outage is not evidence that the Pod disappeared, and closing a working
+// tunnel would only make the outage worse.
+func (m *ForwardManager) ReconcilePodTargets() {
+	type check struct {
+		id        string
+		entry     *forwardEntry
+		checker   ForwardPodChecker
+		namespace string
+		pod       string
+	}
+
+	m.mu.Lock()
+	checks := make([]check, 0, len(m.sessions))
+	for id, entry := range m.sessions {
+		if entry.checking || entry.session.Target.Kind == KindPod || entry.session.ResolvedPod == "" {
+			continue
+		}
+		checker, ok := entry.resolver.(ForwardPodChecker)
+		if !ok {
+			continue
+		}
+		entry.checking = true
+		checks = append(checks, check{
+			id: id, entry: entry, checker: checker,
+			namespace: entry.session.Target.Namespace, pod: entry.session.ResolvedPod,
+		})
+	}
+	m.mu.Unlock()
+
+	for _, candidate := range checks {
+		go m.reconcilePodTarget(candidate.id, candidate.entry, candidate.checker, candidate.namespace, candidate.pod)
+	}
+}
+
+func (m *ForwardManager) reconcilePodTarget(id string, expected *forwardEntry, checker ForwardPodChecker, namespace, pod string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	available, err := checker.ForwardPodAvailable(ctx, namespace, pod)
+	cancel()
+
+	m.mu.Lock()
+	entry, ok := m.sessions[id]
+	if !ok || entry != expected {
+		m.mu.Unlock()
+		return
+	}
+	entry.checking = false
+	if err != nil || available || entry.session.ResolvedPod != pod {
+		m.mu.Unlock()
+		return
+	}
+	tunnel := entry.tunnel
+	m.mu.Unlock()
+
+	if tunnel != nil {
+		tunnel.Close()
+	}
 }
 
 // Stop ends and forgets id — a stopped forward is removed outright (13c's

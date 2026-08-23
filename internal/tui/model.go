@@ -314,9 +314,12 @@ type Model struct {
 	// without an import cycle, the same constraint Session.HelpScope/
 	// HelpList/HelpResource/HelpMisc already documents) and swaps back to a
 	// fresh browse task
-	// the moment a Connected state arrives. Once any Connected state has
-	// been observed, neverConnected latches false for good — a later
-	// mid-session drop is 4a (handled entirely inside browse), not this.
+	// the moment a Connected state arrives. Once any Connected state or real
+	// resource event has been observed, neverConnected latches false for good
+	// — a later mid-session drop is 4a (handled entirely inside browse), not
+	// this. A resource event is equally strong evidence because the eager
+	// informer caches cannot deliver one without first reaching the cluster;
+	// it also closes the startup window before the first periodic /livez probe.
 	neverConnected bool
 	showingSetup   bool
 	buildSetup     func(kube.ConnState) Task
@@ -630,8 +633,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.session.Cluster != nil {
 				m.session.Registry, m.session.Groups = resources.BuildDiscoveredRegistry(m.session.Cluster.DiscoveredKinds(), m.session.Cluster)
 			}
+			// A context switch from a pushed task has one explicit contract:
+			// discard the old-context task stack and return to a fresh browse
+			// screen restored for the destination context. Rebuilding an
+			// equivalent detail/log/editor would risk carrying old object
+			// identity or an old stream into the new frame.
+			if len(m.stack) > 0 && m.buildBrowse != nil {
+				m.task = m.buildBrowse()
+				m.resizeTask()
+				m.stack = nil
+				return m, m.task.Init()
+			}
 		}
 	case kube.ResourceChangedMsg:
+		// Informer traffic proves this session has connected even when it lands
+		// before health's first periodic ConnConnected message. Without this
+		// latch, a fast post-start outage could be mistaken for an unreachable
+		// launch and replace a useful cached browse/log screen with setup.
+		m.neverConnected = false
 		// A CRD change means the kind registry itself may be stale — most
 		// often because a custom kind's printer columns have just arrived
 		// (they're fetched per-kind on first read, not at connect). Rebuild

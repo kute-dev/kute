@@ -543,9 +543,9 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	})
 	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(any) { c.notify(gen, KindHelmRelease) },
-		UpdateFunc: func(any, any) { c.notify(gen, KindHelmRelease) },
-		DeleteFunc: func(any) { c.notify(gen, KindHelmRelease) },
+		AddFunc:    func(any) { c.notifyScope(gen, KindHelmRelease, namespace) },
+		UpdateFunc: func(any, any) { c.notifyScope(gen, KindHelmRelease, namespace) },
+		DeleteFunc: func(any) { c.notifyScope(gen, KindHelmRelease, namespace) },
 	})
 	if c.helmFactories == nil {
 		c.helmFactories = map[string]informers.SharedInformerFactory{}

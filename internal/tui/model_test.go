@@ -563,6 +563,37 @@ func TestWithInitialPushSeedsStackAndResizesBothTasks(t *testing.T) {
 	}
 }
 
+func TestContextSwitchFromPushedTaskReturnsToFreshBrowse(t *testing.T) {
+	t.Parallel()
+
+	sess := testSession()
+	sess.Location = tui.Location{Context: "one", Namespace: "old", Kind: kube.KindPod}
+	oldBrowse := &screenTask{name: "old-browse"}
+	detail := &screenTask{name: "old-detail"}
+	freshBrowse := &screenTask{name: "fresh-browse"}
+	model := tui.NewWithSession(oldBrowse, sess).
+		WithRootFactories(nil, func() tui.Task { return freshBrowse }).
+		WithInitialPush(detail)
+
+	updated, _ := model.Update(tui.SwitchContextMsg{
+		Context: "two", Namespace: "new", Kind: kube.KindConfigMap, Filter: "marker",
+	})
+	m := updated.(tui.Model)
+	if view := m.View().Content; !strings.Contains(view, "fresh-browse") || strings.Contains(view, "old-detail") {
+		t.Fatalf("context switch did not replace the pushed task with browse:\n%s", view)
+	}
+	if got := sess.Location; got.Context != "two" || got.Namespace != "new" || got.Kind != kube.KindConfigMap || got.Filter != "marker" {
+		t.Fatalf("Session.Location = %+v, want destination context location", got)
+	}
+
+	// The old stack was discarded, so Back cannot resurrect an object task
+	// built against the previous context.
+	updated, _ = m.Update(tui.BackMsg{})
+	if view := updated.(tui.Model).View().Content; !strings.Contains(view, "fresh-browse") {
+		t.Fatalf("Back resurrected old-context stack after switch:\n%s", view)
+	}
+}
+
 // TestNeverConnectedLatchesOffAfterFirstConnect pins the "latches false for
 // good" half of the same doc comment: once any Connected state has been
 // observed, a later mid-session drop is 4a (browse's own job), not another
@@ -585,6 +616,34 @@ func TestNeverConnectedLatchesOffAfterFirstConnect(t *testing.T) {
 
 	if builtSetup != 0 {
 		t.Fatalf("buildSetup fired %d times after a Connected state was already observed, want 0", builtSetup)
+	}
+	if !strings.Contains(m.View().Content, "browse-view") {
+		t.Fatalf("expected browse to stay active:\n%s", m.View().Content)
+	}
+}
+
+// Informer events can arrive before health's first periodic /livez probe.
+// They prove startup connected just as conclusively as ConnConnected, so a
+// subsequent mid-session outage must stay on browse instead of swapping to
+// the unreachable-at-launch setup screen.
+func TestNeverConnectedLatchesOffAfterFirstResourceEvent(t *testing.T) {
+	t.Parallel()
+
+	browseTask := &screenTask{name: "browse-view"}
+	sess := testSession()
+	sess.Cluster = &kube.Cluster{}
+	builtSetup := 0
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(
+		func(kube.ConnState) tui.Task { builtSetup++; return &screenTask{name: "setup-view"} },
+		func() tui.Task { return browseTask },
+	)
+
+	updated, _ := model.Update(kube.ResourceChangedMsg{Kind: kube.KindPod})
+	updated, _ = updated.(tui.Model).Update(kube.ConnStateMsg{Phase: kube.ConnReconnecting, Err: "boom"})
+	m := updated.(tui.Model)
+
+	if builtSetup != 0 {
+		t.Fatalf("buildSetup fired %d times after a resource event was observed, want 0", builtSetup)
 	}
 	if !strings.Contains(m.View().Content, "browse-view") {
 		t.Fatalf("expected browse to stay active:\n%s", m.View().Content)

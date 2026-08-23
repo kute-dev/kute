@@ -160,6 +160,11 @@ type Cluster struct {
 	kindInformers map[scopeKey]cache.SharedIndexInformer
 	kindFailed    map[scopeKey]error
 	kindStalled   map[scopeKey]error
+	// watchUnhealthy records post-sync watch failures until that informer
+	// delivers another object event. A successful /livez only proves the API
+	// endpoint answers; it must not declare the session recovered while a
+	// resource stream is still broken.
+	watchUnhealthy map[scopeKey]bool
 
 	// allKindsSynced latches allStartedKindsSyncedLocked's answer once every
 	// informer started so far has finished its initial LIST, so the steady
@@ -759,13 +764,25 @@ func (c *Cluster) recordWatchError(gen int, kind ResourceKind, namespace string,
 	if c.generation != gen {
 		return
 	}
+	key := scopeKey{kind, namespace}
+	wasSynced := c.kindSyncedLockedKey(key)
 	c.noteWatchErrorLocked(kind, namespace, err)
-	c.health.onWatchError(err, c.allStartedKindsSyncedLocked(), time.Now())
+	// Initial LIST failures are already represented by kindStalled and clear
+	// when HasSynced flips, including for a legitimately empty cache where no
+	// Add event can ever arrive. watchUnhealthy is only the post-sync case.
+	if wasSynced && !IsPermissionError(err) {
+		if c.watchUnhealthy == nil {
+			c.watchUnhealthy = map[scopeKey]bool{}
+		}
+		c.watchUnhealthy[key] = true
+	}
+	c.health.onWatchError(err, c.allStartedKindsReadyLocked(), time.Now())
 }
 
 // allStartedKindsSynced reports whether every informer started so far has
-// finished its initial LIST. This is what the health loop's connect-grace
-// window keys off, rather than Synced: with informers starting on demand,
+// finished its initial LIST and no observed watch failure is still awaiting
+// a recovered event. This is what the health loop keys off, rather than
+// Synced: with informers starting on demand,
 // the burst of LIST traffic that starves the /livez ping no longer happens
 // only at connect time — opening the Secrets list on a constrained link
 // produces exactly the same contention mid-session. Asking "is anything
@@ -774,7 +791,13 @@ func (c *Cluster) recordWatchError(gen int, kind ResourceKind, namespace string,
 func (c *Cluster) allStartedKindsSynced() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.allStartedKindsSyncedLocked()
+	return c.allStartedKindsReadyLocked()
+}
+
+// allStartedKindsReadyLocked requires both an initial cache population and
+// recovery from every watch error observed since it. c.mu must be held.
+func (c *Cluster) allStartedKindsReadyLocked() bool {
+	return c.allStartedKindsSyncedLocked() && len(c.watchUnhealthy) == 0
 }
 
 // allStartedKindsSyncedLocked is allStartedKindsSynced's body for a caller
@@ -957,6 +980,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 	c.kindInformers = nil
 	c.kindFailed = nil
 	c.kindStalled = nil
+	c.watchUnhealthy = nil
 	// Belt and braces: Start re-registers the eager informers through
 	// noteInformerStartedLocked, which clears this anyway, but a latch left
 	// standing across a wholesale swap of the maps it summarizes is the kind

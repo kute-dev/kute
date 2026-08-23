@@ -624,19 +624,24 @@ type Model struct {
 // that changes what should be showing (namespace, kind, context switch, a
 // CRD's columns landing), so this one check subsumes all of them.
 type rowsLoadedMsg struct {
-	epoch           int
-	namespace       string
-	kind            kube.ResourceKind
-	columns         int
-	rows            []resources.Row
-	pods            map[string]kube.Pod
-	helmReleases    map[string]kube.HelmRelease
-	nodeCount       int
-	nodeCapacity    map[string]nodeCapacity
-	podCountByNode  map[string]int
-	clusterPodTotal int
-	nodePodHealth   map[string]resources.HealthCounts
-	chartCacheNote  chartCacheNote
+	epoch     int
+	namespace string
+	kind      kube.ResourceKind
+	columns   int
+	// cacheUnreadyAtRead records that this load read the cache before its
+	// initial population completed. HasSynced can flip before this message is
+	// applied, but that does not make the already-captured empty rows current;
+	// one post-sync read is still required before rendering an empty state.
+	cacheUnreadyAtRead bool
+	rows               []resources.Row
+	pods               map[string]kube.Pod
+	helmReleases       map[string]kube.HelmRelease
+	nodeCount          int
+	nodeCapacity       map[string]nodeCapacity
+	podCountByNode     map[string]int
+	clusterPodTotal    int
+	nodePodHealth      map[string]resources.HealthCounts
+	chartCacheNote     chartCacheNote
 	// cronJobSummaries/cronJobJobsErr ride along for KindCronJob only —
 	// loadCronJobRows' own aggregation output, applyRowsLoaded stores them
 	// as m.cronJobSummaries/m.cronJobJobsErr.
@@ -990,6 +995,7 @@ func (m Model) load() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
+		cacheUnreadyAtRead := !tui.KindsSynced(lister, ns, kind)
 		if kind == kube.KindCronJob {
 			// §36a bypasses resources.List/Descriptor.Project entirely
 			// (registry.go's own doc comment on the CronJob entry) — Job-aware
@@ -1036,7 +1042,8 @@ func (m Model) load() tea.Cmd {
 		}
 		return rowsLoadedMsg{
 			epoch: epoch, namespace: ns,
-			kind: kind, columns: len(desc.Columns), rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
+			kind: kind, columns: len(desc.Columns), cacheUnreadyAtRead: cacheUnreadyAtRead,
+			rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
 			nodePodHealth: nodePodHealth, chartCacheNote: cacheNote,
 		}
@@ -1350,6 +1357,10 @@ func (m *Model) switchContext(msg tui.SwitchContextMsg) tea.Cmd {
 	m.namespace = msg.Namespace
 	cmd := m.resetAndLoad()
 	m.filterActive = msg.Filter != ""
+	// A restored filter is already committed navigation state, not a text
+	// edit the user must confirm again. Keep focus on the list so the first
+	// Enter after a context switch opens the selected destination object.
+	m.filterListFocused = msg.Filter != ""
 	m.setFilter(msg.Filter)
 	return cmd
 }

@@ -128,3 +128,30 @@ subjects:
   - kind: ServiceAccount
     name: kute-team
     namespace: kute-e2e
+---
+# The same team identity can read the secondary fixture namespace. Keeping a
+# distinct Role in each namespace is intentional: the scoped-cache tests
+# exercise a realistic namespace-bound identity, never a ClusterRole.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kute-team
+  namespace: kute-e2e-b
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "configmaps", "events"]
+    verbs: ["list", "get", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kute-team
+  namespace: kute-e2e-b
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kute-team
+subjects:
+  - kind: ServiceAccount
+    name: kute-team
+    namespace: kute-e2e

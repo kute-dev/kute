@@ -330,6 +330,9 @@ func (m Model) viewportHeight() int {
 // viewportHeight's doc comment for why that split matters.
 func (m Model) stripLineCount() int {
 	if m.taskState() != tui.TaskStateReady {
+		if m.filterActive {
+			return 1
+		}
 		return 0
 	}
 	n := 1

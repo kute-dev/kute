@@ -261,8 +261,8 @@ func TestSwitchContextMsgAppliesRestoredFilter(t *testing.T) {
 
 	m = step(t, m, tui.SwitchContextMsg{Context: "other-cluster", Namespace: "default", Kind: kube.KindPod, Filter: "api"})
 
-	if !m.filterActive || m.filterInput.Value() != "api" {
-		t.Fatalf("filterActive=%v filterQuery=%q, want active with the restored 'api' filter", m.filterActive, m.filterInput.Value())
+	if !m.filterActive || !m.filterListFocused || m.filterInput.Value() != "api" {
+		t.Fatalf("filterActive=%v filterListFocused=%v filterQuery=%q, want a committed restored 'api' filter", m.filterActive, m.filterListFocused, m.filterInput.Value())
 	}
 	if len(m.visible) != 1 || m.visible[0].row.Name != "api-1" {
 		t.Fatalf("visible = %+v, want just api-1", m.visible)

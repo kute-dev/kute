@@ -122,3 +122,35 @@ func TestScopedModeNamespacePaletteShowsDeniedNotice(t *testing.T) {
 	a.WaitForWrapped("cannot list namespaces", Settle)
 	a.WaitForWrapped("switch to", Settle)
 }
+
+func TestScopedModeSwitchesBetweenReadableNamespaceCaches(t *testing.T) {
+	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
+	a.WaitForAll(Connect, "api-", "worker-")
+
+	switchNamespaceThroughPalette(t, a, "kute-e2e-b")
+	a.WaitForAll(Settle, "kute-e2e-b", "namespace-b-pod")
+	a.Never("api-", 750*time.Millisecond)
+
+	marker := "namespace-a-current-on-return"
+	createDisposablePod(t, marker, map[string]string{"namespace-cache": "a"})
+	a.Never(marker, 500*time.Millisecond)
+
+	switchNamespaceThroughPalette(t, a, Namespace)
+	a.WaitForAll(Settle, Namespace, "api-", marker)
+	a.Never("namespace-b-pod", 750*time.Millisecond)
+
+	// A second B→A round trip must reuse the same scoped caches; the wire-level
+	// companion asserts the informer keys directly, while this pins the rows.
+	switchNamespaceThroughPalette(t, a, "kute-e2e-b")
+	a.WaitFor("namespace-b-pod", Settle)
+	switchNamespaceThroughPalette(t, a, Namespace)
+	a.WaitFor(marker, Settle)
+}
+
+func switchNamespaceThroughPalette(t *testing.T, a *App, namespace string) {
+	t.Helper()
+	a.Press("n")
+	a.Type(namespace)
+	a.WaitFor(namespace, Settle)
+	a.Enter()
+}

@@ -1,0 +1,198 @@
+//go:build e2e
+
+package e2e
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
+)
+
+func TestTypedWatchCloseGoneRelistsWithoutFalseEmpty(t *testing.T) {
+	a := Launch(t)
+	a.WaitForAll(Connect, "api-", "worker-")
+	marker := fmt.Sprintf("watch-pod-%d", time.Now().UnixNano())
+	exerciseWatchRecovery(t, a, RequestMatcher{Resource: "pods"}, "api-", func() {
+		createDisposablePod(t, marker, map[string]string{"watch": "typed"})
+	}, marker)
+}
+
+func TestDynamicWatchCloseGoneRelistsWithoutFalseEmpty(t *testing.T) {
+	a := Launch(t)
+	a.WaitFor("api-", Connect)
+	a.gotoKind(t, "widgets", "Widgets")
+	a.WaitForAll(Settle, "sprocket", "flange")
+	marker := fmt.Sprintf("watch-widget-%d", time.Now().UnixNano())
+	exerciseWatchRecovery(t, a, RequestMatcher{Resource: "widgets"}, "sprocket", func() {
+		createDisposableWidget(t, marker)
+	}, marker)
+}
+
+func TestFilteredHelmWatchCloseGoneRelistsWithoutFalseEmpty(t *testing.T) {
+	a := Launch(t)
+	a.WaitFor("api-", Connect)
+	a.gotoKind(t, "helm", "Helm Releases")
+	a.WaitForAll(Settle, "shop", "1.3.0", "deployed")
+	exerciseWatchRecovery(t, a, RequestMatcher{
+		Path:     "/api/v1/namespaces/" + Namespace + "/secrets",
+		Resource: "secrets",
+		Query:    map[string]string{"fieldSelector": "type=helm.sh/release.v1"},
+	}, "shop", func() {
+		createHelmRevision(t, 3, "1.4.0")
+	}, "1.4.0")
+}
+
+func exerciseWatchRecovery(t *testing.T, a *App, resource RequestMatcher, stable string, mutate func(), final string) {
+	t.Helper()
+	proxy := a.Proxy()
+	watch := resource
+	watch.Verb = "WATCH"
+	if watch.Query == nil {
+		watch.Query = map[string]string{}
+	}
+	watch.Query["sendInitialEvents"] = "true"
+	proxy.FailNext(watch, 410, 1)
+	gate := proxy.Hold(watch)
+	fence := proxy.Fence()
+	if active := matchingActiveRequests(proxy.History(), watch); len(active) != 1 {
+		t.Fatalf("active %+v requests before close = %d, want exactly one: %+v", watch, len(active), active)
+	}
+	if closed := proxy.CloseActive(watch); closed != 1 {
+		t.Fatalf("closed %d active %+v watches, want exactly one", closed, resource)
+	}
+
+	goneWatch := proxy.WaitForRequest(fence, watch, Settle)
+	completed := proxy.WaitForCompletion(goneWatch.ID, Settle)
+	if completed.StatusCode != 410 {
+		t.Fatalf("replacement watch status = %d, want 410 Gone", completed.StatusCode)
+	}
+	relist := proxy.WaitForRequest(goneWatch.ID, watch, Settle)
+	if relist.Completed {
+		t.Fatalf("streaming relist passed the request gate before the gap mutation: %+v", relist)
+	}
+	if frame, lost := a.poll(func(f string) bool { return !strings.Contains(f, stable) }, 750*time.Millisecond); lost {
+		t.Fatalf("cached row %q disappeared during relist gap:\n%s", stable, frame)
+	}
+	mutate()
+	gate.Release()
+	a.WaitForAll(Settle, stable, final)
+	waitForOneActiveWatch(t, proxy, watch, Settle)
+}
+
+func waitForOneActiveWatch(t *testing.T, proxy *APIProxy, matcher RequestMatcher, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if got := activeMatchingRequests(proxy.History(), matcher); got == 1 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("active %+v requests = %d, want exactly one", matcher, activeMatchingRequests(proxy.History(), matcher))
+}
+
+func activeMatchingRequests(records []RequestRecord, matcher RequestMatcher) int {
+	return len(matchingActiveRequests(records, matcher))
+}
+
+func matchingActiveRequests(records []RequestRecord, matcher RequestMatcher) []RequestRecord {
+	var active []RequestRecord
+	for _, rec := range records {
+		if !rec.Completed && matcher.matches(rec) {
+			active = append(active, rec)
+		}
+	}
+	return active
+}
+
+func createDisposableWidget(t *testing.T, name string) {
+	t.Helper()
+	cfg, err := clientcmd.BuildConfigFromFlags("", KubeconfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gvr := schema.GroupVersionResource{Group: "kute.dev", Version: "v1", Resource: "widgets"}
+	obj := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "kute.dev/v1", "kind": "Widget",
+		"metadata": map[string]any{"name": name, "namespace": Namespace},
+		"spec":     map[string]any{"size": "gap", "colour": "violet"},
+		"status":   map[string]any{"phase": "Recovered"},
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), Settle)
+	defer cancel()
+	if _, err := client.Resource(gvr).Namespace(Namespace).Create(ctx, obj, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("creating widget %s: %v", name, err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		_ = client.Resource(gvr).Namespace(Namespace).Delete(cleanupCtx, name, metav1.DeleteOptions{})
+	})
+}
+
+func createHelmRevision(t *testing.T, revision int, chartVersion string) {
+	t.Helper()
+	client := e2eClientset(t)
+	ctx, cancel := context.WithTimeout(context.Background(), Settle)
+	defer cancel()
+	source, err := client.CoreV1().Secrets(Namespace).Get(ctx, "sh.helm.release.v1.shop.v2", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("reading source Helm release: %v", err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(string(source.Data["release"]))
+	if err != nil {
+		t.Fatalf("decoding Helm release: %v", err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("opening Helm release: %v", err)
+	}
+	var release map[string]any
+	if err := json.NewDecoder(gz).Decode(&release); err != nil {
+		t.Fatalf("decoding Helm JSON: %v", err)
+	}
+	_ = gz.Close()
+	release["version"] = revision
+	release["chart"].(map[string]any)["metadata"].(map[string]any)["version"] = chartVersion
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	if err := json.NewEncoder(zw).Encode(release); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	name := fmt.Sprintf("sh.helm.release.v1.shop.v%d", revision)
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: Namespace, Labels: map[string]string{
+			"owner": "helm", "name": "shop", "status": "deployed", "version": fmt.Sprint(revision),
+		}},
+		Type: "helm.sh/release.v1",
+		Data: map[string][]byte{"release": []byte(base64.StdEncoding.EncodeToString(compressed.Bytes()))},
+	}
+	if _, err := client.CoreV1().Secrets(Namespace).Create(ctx, secret, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("creating Helm revision: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		_ = client.CoreV1().Secrets(Namespace).Delete(cleanupCtx, name, metav1.DeleteOptions{})
+	})
+}

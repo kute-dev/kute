@@ -111,6 +111,7 @@ type health struct {
 	state ConnState
 	ch    chan ConnStateMsg
 	retry chan struct{}
+	wake  chan struct{}
 	// startedAt anchors connectGrace: the moment the most recent burst of
 	// initial LIST traffic began. Stamped at construction, on reset (so a
 	// SwitchContext into a slow cluster gets the same forgiveness a cold
@@ -124,6 +125,7 @@ func newHealth() *health {
 		state:     ConnState{Phase: ConnConnected, FetchedAt: now},
 		ch:        make(chan ConnStateMsg, 8),
 		retry:     make(chan struct{}, 1),
+		wake:      make(chan struct{}, 1),
 		startedAt: now,
 	}
 }
@@ -141,6 +143,13 @@ func (h *health) reset() {
 	h.state = ConnState{Phase: ConnConnected, FetchedAt: now}
 	h.startedAt = now
 	h.mu.Unlock()
+	// The probe timer may be parked on the unauthenticated phase's long wait.
+	// A context switch must make it recompute against this fresh Connected
+	// state instead of inheriting that pause from the old credentials.
+	select {
+	case h.wake <- struct{}{}:
+	default:
+	}
 }
 
 // noteListBurst re-arms the connect-grace window because an informer has
@@ -162,6 +171,10 @@ func (h *health) set(s ConnState) {
 	h.mu.Lock()
 	h.state = s
 	h.mu.Unlock()
+	select {
+	case h.wake <- struct{}{}:
+	default:
+	}
 	select {
 	case h.ch <- ConnStateMsg(s):
 	default:
@@ -249,29 +262,51 @@ func (c *Cluster) ConnState() ConnState { return c.health.get() }
 // RetryNow requests an immediate reconnect probe (the 4a "r" key).
 func (c *Cluster) RetryNow() { c.health.retryNow() }
 
-// startHealthLoop pings /livez every pingInterval (and immediately on
-// RetryNow) to measure latency and detect recovery. It runs until stopCh
-// closes.
+// startHealthLoop pings /livez every pingInterval while healthy and follows
+// ConnState.NextRetryAt while reconnecting. RetryNow bypasses either wait.
+// It runs until stopCh closes.
 func (c *Cluster) startHealthLoop(stopCh <-chan struct{}) {
-	ticker := time.NewTicker(pingInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(nextProbeDelay(c.health.get(), time.Now()))
+	defer timer.Stop()
 	for {
 		select {
 		case <-stopCh:
 			return
-		case <-ticker.C:
-			// The one phase the ticker doesn't drive: an expired credential
-			// comes back when the user re-authenticates elsewhere, not when
-			// two more seconds pass, and every ping in between re-runs the
-			// failing credential plugin. RetryNow (4a/4c's r) is the way out.
-			if c.health.pausesPolling() {
-				continue
-			}
+		case <-timer.C:
 			c.ping()
 		case <-c.health.retry:
 			c.ping()
+		case <-c.health.wake:
+			// A watch failure may schedule a retry sooner than the healthy
+			// interval already on the timer. Recompute without probing now.
+		}
+		resetProbeTimer(timer, c.health.get(), time.Now())
+	}
+}
+
+func nextProbeDelay(state ConnState, now time.Time) time.Duration {
+	if state.Phase == ConnUnauthenticated {
+		// Only RetryNow wakes this phase. A long timer keeps the select shape
+		// simple without repeatedly invoking an expired credential plugin.
+		return 24 * time.Hour
+	}
+	if state.Phase == ConnReconnecting || state.Phase == ConnFailed {
+		if delay := state.NextRetryAt.Sub(now); !state.NextRetryAt.IsZero() && delay > 0 {
+			return delay
+		}
+		return 0
+	}
+	return pingInterval
+}
+
+func resetProbeTimer(timer *time.Timer, state ConnState, now time.Time) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
 		}
 	}
+	timer.Reset(nextProbeDelay(state, now))
 }
 
 func (c *Cluster) ping() {
@@ -289,6 +324,23 @@ func (h *health) recordPing(latency time.Duration, err error, synced bool, now t
 	prev := h.get()
 
 	if err == nil {
+		// /livez succeeding says the endpoint is reachable, not that the
+		// resource watches which made the cache useful are healthy again.
+		if !synced && prev.Offline() {
+			// Keep the outage's advertised backoff moving forward. Leaving the
+			// expired NextRetryAt in place would reset the timer to zero and turn
+			// a healthy /livez plus broken WATCH into a tight probe loop.
+			attempt := prev.Attempt + 1
+			h.set(ConnState{
+				Phase:       ConnReconnecting,
+				Latency:     latency,
+				Err:         prev.Err,
+				Attempt:     attempt,
+				NextRetryAt: now.Add(backoffDelay(attempt)),
+				FetchedAt:   prev.FetchedAt,
+			})
+			return
+		}
 		h.set(ConnState{Phase: ConnConnected, Latency: latency, FetchedAt: now})
 		return
 	}

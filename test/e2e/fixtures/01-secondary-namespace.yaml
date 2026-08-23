@@ -1,0 +1,33 @@
+# A second readable namespace for scoped-cache and namespace-switch lifecycle
+# coverage. Its names are deliberately unique so frame assertions never need
+# to infer which namespace a shared fixture row came from.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kute-e2e-b
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: namespace-b-config
+  namespace: kute-e2e-b
+data:
+  marker: KUTE-E2E-NAMESPACE-B
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: namespace-b-pod
+  namespace: kute-e2e-b
+  labels:
+    app: namespace-b
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: sleeper
+      image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+      command: ["/bin/sh", "-c", "while true; do sleep 30; done"]
+      resources:
+        requests:
+          cpu: 5m
+          memory: 8Mi

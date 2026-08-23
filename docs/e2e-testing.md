@@ -92,6 +92,7 @@ cluster.
 | Fixture | What it makes testable |
 | --- | --- |
 | `00-namespace.yaml` | the shared `kute-e2e` namespace every other fixture lands in |
+| `01-secondary-namespace.yaml` — `kute-e2e-b`, a Pod and ConfigMap unique to it | real A→B→A namespace switching and distinct scoped-cache keys |
 | `10-workloads.yaml` — Deployments `api`, `worker` (`exit 1`) | list → detail → logs → exec; rollout-restart; CrashLoopBackOff status derivation, poddetail's termination banner, timeline restarts |
 | `20-config.yaml` — ConfigMap `app-config`, Secret `app-secret` | §27a in-place `↵` edit and the `e` buffer editor; §27b masked grid, `ctrl-x`, add/remove key |
 | `30-helm-releases.yaml` — two `helm.sh/release.v1` Secrets, revisions 1 and 2 | §18a history rail and rollback, with no helm binary anywhere |
@@ -146,9 +147,16 @@ keys per named context so two proxies derived from the same kind kubeconfig rema
 | `scoped_test.go` | `--namespace-scoped` end-to-end: real pod rows, cluster-scoped kinds forbidden honestly, lazy per-namespace cache fills, the namespace palette's denied notice |
 | `metrics_test.go` | no metrics-server: `–` in browse, poddetail's bars, nodedetail, overview's capacity bars — no crash, no zeroes presented as real |
 | `prod_test.go` | prod-context delete requires the typed name; non-prod delete stays inline `y/N` |
+| `forward_lifecycle_test.go` | listener teardown on stop/quit, Service target replacement, and stop-during-retry cancellation |
+| `network_test.go` | cached offline rows, disabled writes, responsive input, wire-timestamped retry pacing, and recovery without restart |
+| `watch_recovery_test.go` | WATCH close → 410 → LIST → WATCH recovery for typed, dynamic, and filtered Helm informers without false-empty frames |
+| `context_switch_test.go` | merged-context restore, old read/stream cancellation, pushed-task return-to-browse, endpoint isolation, and failed-switch rollback |
+| `churn_test.go` | external create/update/delete, selection clamping, empty settlement, UID replacement, and Pod-detail gone state |
+| `log_lifecycle_test.go` | deleted-Pod terminal state plus follow-request cancellation on esc, context switch, quit, and disconnect navigation |
+| `terminal_test.go` | resize survival and real bracketed-paste routing through filters, palettes, confirmations, port input, and multiline editors |
 | `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: connect-time budget, first-frame render, informer heap via `runtime.ReadMemStats` — excluded from the PR job |
 
-## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`
+## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`
 
 `package kube`, `//go:build e2e`, living beside `count_test.go` because they need the
 unexported `kindInformers` map. Against a real apiserver:
@@ -160,6 +168,8 @@ unexported `kindInformers` map. Against a real apiserver:
   selector;
 - under the restricted SA, a forbidden kind has non-nil `KindError` *and* `KindSynced` true —
   settled-but-errored, never a hang or a false empty.
+- typed, dynamic, and filtered Helm informer identities remain singular across
+  real server churn; proxy-level tests pin the corresponding 410 relist order.
 
 `e2e_scoped_test.go` reads `kindInformers` keyed by the full `scopeKey{kind, namespace}`
 rather than merely by kind, verifying `--namespace-scoped` starts one cache per namespace

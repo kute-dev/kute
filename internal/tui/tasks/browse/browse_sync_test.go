@@ -270,6 +270,27 @@ func TestApplyRowsLoadedStaysLoadingWhileCacheSyncing(t *testing.T) {
 	}
 }
 
+// TestApplyRowsLoadedRetriesAnEmptyReadCapturedBeforeSync closes the narrow
+// race where HasSynced flips after ListRaw returned an empty pre-population
+// snapshot but before the resulting message reaches Update. The current sync
+// check is true by then, but only a fresh read can honestly claim emptiness.
+func TestApplyRowsLoadedRetriesAnEmptyReadCapturedBeforeSync(t *testing.T) {
+	lister := &notYetSyncedLister{lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}}}
+	synced := true
+	lister.synced = &synced
+	m := New(Config{Session: newSession(), Lister: lister})
+	m.SetSize(120, 36)
+
+	msg := emptyRowsFor(m, kube.KindPod)
+	msg.cacheUnreadyAtRead = true
+	updated, cmd := m.applyRowsLoaded(msg)
+	m = *updated.(*Model)
+
+	if m.state != tui.TaskStateLoading || cmd == nil {
+		t.Fatalf("pre-sync empty snapshot settled as state=%s cmd=%v; want loading with a fresh read scheduled", m.state, cmd)
+	}
+}
+
 // TestLaunchStaysLoadingUntilCacheSynced drives the retry through to
 // completion: once the lister reports synced, browse settles at Ready with
 // the real rows rather than getting stuck showing an empty namespace. The

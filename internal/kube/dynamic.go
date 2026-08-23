@@ -68,9 +68,9 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 	})
 	// Handler registration errors are non-fatal for a read-only UI.
 	_, _ = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(any) { c.notify(gen, k) },
-		UpdateFunc: func(any, any) { c.notify(gen, k) },
-		DeleteFunc: func(any) { c.notify(gen, k) },
+		AddFunc:    func(any) { c.notifyScope(gen, k, scope) },
+		UpdateFunc: func(any, any) { c.notifyScope(gen, k, scope) },
+		DeleteFunc: func(any) { c.notifyScope(gen, k, scope) },
 	})
 	if c.dynKinds == nil {
 		c.dynKinds = map[scopeKey]dynamicKindInfo{}

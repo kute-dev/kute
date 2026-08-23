@@ -4,10 +4,17 @@ package kube
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // The wire-level counterpart of test/e2e/scoped_test.go: these read
@@ -29,6 +36,100 @@ func e2eRestrictedKubeconfig(t *testing.T) string {
 		return p
 	}
 	return filepath.Join(repoRootForTest(t), ".kube", "e2e-restricted.config")
+}
+
+func TestScopedNamespaceCachesStayDistinctCurrentAndExplicit(t *testing.T) {
+	c := e2eScopedCluster(t, e2eTeamKubeconfig(t), e2eNamespace)
+	const secondNamespace = "kute-e2e-b"
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	if _, err := c.ListRaw(ctx, KindConfigMap, e2eNamespace); err != nil {
+		t.Fatalf("ListRaw ConfigMap A: %v", err)
+	}
+	waitForKindSynced(t, c, KindConfigMap, e2eNamespace, 60*time.Second)
+	c.SwitchNamespace(secondNamespace)
+	if _, err := c.ListRaw(ctx, KindConfigMap, secondNamespace); err != nil {
+		t.Fatalf("ListRaw ConfigMap B: %v", err)
+	}
+	waitForKindSynced(t, c, KindConfigMap, secondNamespace, 60*time.Second)
+
+	scopes := startedScopes(c)
+	for _, key := range []scopeKey{{KindConfigMap, e2eNamespace}, {KindConfigMap, secondNamespace}} {
+		if !scopes[key] {
+			t.Errorf("missing scoped cache key %+v: %v", key, scopes)
+		}
+	}
+	if got := countKindScopes(scopes, KindConfigMap); got != 2 {
+		t.Fatalf("ConfigMap informer scopes = %d, want A and B only: %v", got, scopes)
+	}
+
+	// Both scoped informers stay live. Mutating A while B is the active UI
+	// namespace must already be reflected when A is revisited.
+	adminCfg, err := clientcmd.BuildConfigFromFlags("", e2eKubeconfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := kubernetes.NewForConfig(adminCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := fmt.Sprintf("scoped-current-%d", time.Now().UnixNano())
+	_, err = admin.CoreV1().ConfigMaps(e2eNamespace).Create(ctx, &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name}, Data: map[string]string{"marker": "current"},
+	}, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		_ = admin.CoreV1().ConfigMaps(e2eNamespace).Delete(cleanupCtx, name, metav1.DeleteOptions{})
+	})
+	waitForCachedName(t, c, KindConfigMap, e2eNamespace, name, 30*time.Second)
+
+	c.SwitchNamespace(e2eNamespace)
+	if _, err := c.ListRaw(ctx, KindConfigMap, e2eNamespace); err != nil {
+		t.Fatal(err)
+	}
+	if got := countKindScopes(startedScopes(c), KindConfigMap); got != 2 {
+		t.Fatalf("revisiting A created another informer: %d", got)
+	}
+
+	// An explicit all-namespaces read owns the explicit global key. The team
+	// Role cannot satisfy it, but it must never be silently downgraded to A.
+	_, _ = c.ListRaw(ctx, KindConfigMap, "")
+	_ = waitForKindForbidden(t, c, KindConfigMap, "", 60*time.Second)
+	if !startedScopes(c)[scopeKey{KindConfigMap, ""}] {
+		t.Fatalf("explicit global read did not start the global cache: %v", startedScopes(c))
+	}
+}
+
+func countKindScopes(scopes map[scopeKey]bool, kind ResourceKind) int {
+	count := 0
+	for key := range scopes {
+		if key.kind == kind {
+			count++
+		}
+	}
+	return count
+}
+
+func waitForCachedName(t *testing.T, c *Cluster, kind ResourceKind, namespace, name string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		objs, err := c.ListRaw(context.Background(), kind, namespace)
+		if err == nil {
+			for _, obj := range objs {
+				if accessor, err := apimeta.Accessor(obj); err == nil && accessor.GetName() == name {
+					return
+				}
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("cache %s/%s never received %s", kind, namespace, name)
 }
 
 // e2eTeamKubeconfig is the kute-team identity's kubeconfig — a namespace-

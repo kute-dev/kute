@@ -300,6 +300,48 @@ func TestRecordPingSuccessClearsOutage(t *testing.T) {
 	}
 }
 
+func TestRecordPingSuccessWaitsForWatchRecovery(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.onWatchError(errors.New("watch dropped"), true, time.Now())
+	before := h.get()
+	now := time.Now()
+	h.recordPing(12*time.Millisecond, nil, false, now)
+
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting while a resource watch is still unhealthy", got.Phase)
+	}
+	if got.Attempt != before.Attempt+1 {
+		t.Fatalf("Attempt = %d, want %d so a livez-only success keeps backoff moving", got.Attempt, before.Attempt+1)
+	}
+	if want := now.Add(backoffDelay(got.Attempt)); !got.NextRetryAt.Equal(want) {
+		t.Fatalf("NextRetryAt = %s, want %s", got.NextRetryAt, want)
+	}
+}
+
+func TestNextProbeDelayFollowsAdvertisedBackoff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	for _, tt := range []struct {
+		name  string
+		state ConnState
+		want  time.Duration
+	}{
+		{name: "healthy", state: ConnState{Phase: ConnConnected}, want: pingInterval},
+		{name: "first retry", state: ConnState{Phase: ConnReconnecting, NextRetryAt: now.Add(time.Second)}, want: time.Second},
+		{name: "later retry", state: ConnState{Phase: ConnReconnecting, NextRetryAt: now.Add(8 * time.Second)}, want: 8 * time.Second},
+		{name: "retry due", state: ConnState{Phase: ConnReconnecting, NextRetryAt: now.Add(-time.Second)}, want: 0},
+		{name: "credentials pause", state: ConnState{Phase: ConnUnauthenticated}, want: 24 * time.Hour},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := nextProbeDelay(tt.state, now); got != tt.want {
+				t.Fatalf("nextProbeDelay() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestHealthResetRestampsConnectGrace: a SwitchContext into a slow cluster
 // gets the same startup forgiveness a cold launch does.
 func TestHealthResetRestampsConnectGrace(t *testing.T) {
@@ -326,7 +368,13 @@ func TestHealthResetPreservesChannelIdentity(t *testing.T) {
 	t.Parallel()
 	h := newHealth()
 	h.onWatchError(errors.New("boom"), true, time.Now())
-	origCh, origRetry := h.ch, h.retry
+	origCh, origRetry, origWake := h.ch, h.retry, h.wake
+	// Drain the watch-error wake so reset has to publish its own signal.
+	select {
+	case <-h.wake:
+	default:
+		t.Fatal("watch error did not wake the probe scheduler")
+	}
 
 	h.reset()
 
@@ -335,6 +383,14 @@ func TestHealthResetPreservesChannelIdentity(t *testing.T) {
 	}
 	if h.retry != origRetry {
 		t.Fatalf("reset() replaced retry — RetryNow()'s existing signal path is now orphaned")
+	}
+	if h.wake != origWake {
+		t.Fatalf("reset() replaced wake — the health loop is now orphaned")
+	}
+	select {
+	case <-h.wake:
+	default:
+		t.Fatal("reset() did not wake a probe timer parked by the old context")
 	}
 	got := h.get()
 	if got.Phase != ConnConnected {
