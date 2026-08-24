@@ -50,8 +50,11 @@ func TestJobAttemptLedger(t *testing.T) {
 
 	// The ledger itself: the flat attempt table (this Job has no
 	// spec.completionMode, so it takes the table branch rather than §37d's
-	// index grid).
-	a.WaitForAll(Settle, "POD", "RESULT", "EXIT", "failed")
+	// index grid). "Error" is the table branch's own word for a failed
+	// attempt (resources.attemptResultCell) — §37d's index grid is the one
+	// that says "failed", so asserting that word here would have been an
+	// assertion the passing screen can never satisfy.
+	a.WaitForAll(Settle, "POD", "RESULT", "EXIT", "Error")
 
 	// Three pods ran, so three attempt rows have to be listed, each carrying
 	// the exit code the container actually returned. Counting rows rather
