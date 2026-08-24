@@ -29,6 +29,7 @@ import (
 // line built from the pending change, the apply, and the screen still being
 // the screen afterwards.
 func TestConfigMapEditInPlace(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -95,6 +96,7 @@ func TestConfigMapEditInPlace(t *testing.T) {
 // real Secret, whose values are base64 on the wire and have to survive a
 // decode/encode round trip that no fake exercises.
 func TestSecretUnmaskAddAndRemoveKey(t *testing.T) {
+	RequireCluster(t)
 	const (
 		key   = "e2e-scratch"
 		value = "KUTE-E2E-ADDED-VALUE"

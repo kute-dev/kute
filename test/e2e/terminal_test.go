@@ -8,6 +8,7 @@ import (
 )
 
 func TestResizePreservesSelectionAndFocusedBuffers(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	pod := a.selectAPIPod(t)
@@ -48,6 +49,7 @@ func TestResizePreservesSelectionAndFocusedBuffers(t *testing.T) {
 }
 
 func TestBracketedPasteRoutesOnlyToActiveBuffers(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -80,6 +82,7 @@ func TestBracketedPasteRoutesOnlyToActiveBuffers(t *testing.T) {
 }
 
 func TestBracketedPasteFillsProdTypeNameConfirmation(t *testing.T) {
+	RequireCluster(t)
 	ctxName := ContextName(t)
 	a := Launch(t, WithProdContexts(ctxName))
 	a.WaitFor("api-", Connect)

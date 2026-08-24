@@ -15,6 +15,7 @@ import (
 )
 
 func TestJobRerunCreatesAVisibleDetachedJob(t *testing.T) {
+	RequireCluster(t)
 	const sourceName = "phase3-job"
 	client := mutationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -81,6 +82,7 @@ func TestJobRerunCreatesAVisibleDetachedJob(t *testing.T) {
 }
 
 func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
+	RequireCluster(t)
 	const name = "phase3-cron"
 	const beforeSchedule, afterSchedule = "0 2 * * *", "15 3 * * *"
 	client := mutationClient(t)

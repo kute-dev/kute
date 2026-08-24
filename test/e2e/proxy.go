@@ -86,6 +86,7 @@ type RequestCounts struct {
 type proxyFault struct {
 	matcher RequestMatcher
 	status  int
+	message string
 	left    int
 }
 
@@ -341,6 +342,12 @@ func (p *APIProxy) SetAvailable(available bool) {
 
 // FailNext returns a Kubernetes Status response for the next n matches.
 func (p *APIProxy) FailNext(matcher RequestMatcher, status, n int) {
+	p.FailNextStatus(matcher, status, "fault injected by e2e proxy", n)
+}
+
+// FailNextStatus is FailNext with a caller-supplied Kubernetes Status
+// message, useful when a test must distinguish a stale response by origin.
+func (p *APIProxy) FailNextStatus(matcher RequestMatcher, status int, message string, n int) {
 	p.t.Helper()
 	if n < 1 {
 		p.t.Fatalf("proxy FailNext count must be positive, got %d", n)
@@ -351,7 +358,7 @@ func (p *APIProxy) FailNext(matcher RequestMatcher, status, n int) {
 		p.t.Fatalf("proxy unsupported Kubernetes status %d", status)
 	}
 	p.mu.Lock()
-	p.faults = append(p.faults, &proxyFault{matcher: matcher, status: status, left: n})
+	p.faults = append(p.faults, &proxyFault{matcher: matcher, status: status, message: message, left: n})
 	p.mu.Unlock()
 }
 
@@ -417,11 +424,13 @@ func (p *APIProxy) serveHTTP(w http.ResponseWriter, incoming *http.Request) {
 	p.active[rec.ID] = cancel
 	available := p.available
 	var status int
+	var statusMessage string
 	if available {
 		for _, fault := range p.faults {
 			if fault.left > 0 && fault.matcher.matches(rec) {
 				fault.left--
 				status = fault.status
+				statusMessage = fault.message
 				break
 			}
 		}
@@ -481,7 +490,7 @@ func (p *APIProxy) serveHTTP(w http.ResponseWriter, incoming *http.Request) {
 		}
 	}
 	if status != 0 {
-		writeKubernetesStatus(rw, status)
+		writeKubernetesStatusMessage(rw, status, statusMessage)
 		return
 	}
 
@@ -582,6 +591,10 @@ func isCollectionPath(parts []string, resource string) bool {
 }
 
 func writeKubernetesStatus(w http.ResponseWriter, code int) {
+	writeKubernetesStatusMessage(w, code, "fault injected by e2e proxy")
+}
+
+func writeKubernetesStatusMessage(w http.ResponseWriter, code int, message string) {
 	reason := metav1.StatusReasonUnknown
 	switch code {
 	case 401:
@@ -597,7 +610,8 @@ func writeKubernetesStatus(w http.ResponseWriter, code int) {
 	case 503:
 		reason = metav1.StatusReasonServiceUnavailable
 	}
-	status := apierrors.NewGenericServerResponse(code, "", schema.GroupResource{}, "", "fault injected by e2e proxy", 0, false).ErrStatus
+	status := apierrors.NewGenericServerResponse(code, "", schema.GroupResource{}, "", message, 0, false).ErrStatus
+	status.Message = message
 	status.Reason = reason
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)

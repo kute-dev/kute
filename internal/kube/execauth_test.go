@@ -113,7 +113,7 @@ func TestExecProviderIsToldStdinIsUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	exec := client.RESTConfig.ExecProvider
+	exec := client.credentialConfig.ExecProvider
 	if exec == nil {
 		t.Fatal("REST config has no ExecProvider")
 	}

@@ -27,6 +27,7 @@ import (
 // tea.ExecProcess, and there is no tty here to hand over; the fixture's job
 // is to prove the probe and the picker work against a real kubelet.
 func TestExecPickerDetectsShellsOnARealContainer(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -86,6 +87,7 @@ var localPortRe = regexp.MustCompile(`localhost:(\d+)`)
 // by fetching through it — a forward that reports itself started and moves no
 // bytes is exactly the failure a screen-only assertion cannot see.
 func TestPortForwardCarriesRealTraffic(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 

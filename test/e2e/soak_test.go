@@ -25,6 +25,7 @@ var soakKinds = []soakKind{
 }
 
 func TestRepeatedWorkflowSoakReleasesTransientSessions(t *testing.T) {
+	RequireCluster(t)
 	iterations := soakCount(t, "KUTE_E2E_SOAK_ITERATIONS", 8)
 	first := NewAPIProxy(t, KubeconfigPath())
 	second := NewAPIProxy(t, KubeconfigPath())

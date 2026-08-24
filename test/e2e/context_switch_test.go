@@ -9,6 +9,7 @@ import (
 )
 
 func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T) {
+	RequireCluster(t)
 	first := NewAPIProxy(t, KubeconfigPath())
 	second := NewAPIProxy(t, KubeconfigPath())
 	merged := BuildMergedKubeconfig(t,
@@ -30,6 +31,19 @@ func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T)
 		t.Fatalf("delayed old-context log stream completed too early: %+v", stream)
 	}
 
+	// Fence a uniquely identifiable failure on the old endpoint. Its
+	// replacement WATCH is held long enough for SwitchContext to cancel the
+	// old informer generation before the proxy can return the Status body.
+	const oldContextMarker = "KUTE-E2E-STALE-OLD-CONTEXT"
+	oldWatch := RequestMatcher{Resource: "pods", Verb: "WATCH"}
+	first.FailNextStatus(oldWatch, 503, oldContextMarker, 1)
+	first.Delay(oldWatch, 2*time.Second)
+	oldFailureFence := first.Fence()
+	if closed := first.CloseActive(oldWatch); closed != 1 {
+		t.Fatalf("closed %d old-context pod watches, want one", closed)
+	}
+	oldFailure := first.WaitForRequest(oldFailureFence, oldWatch, Settle)
+
 	switchContextThroughPalette(t, a, "ctx-two")
 	a.WaitFor("ctx-two", Settle)
 	a.WaitGone(pod, Settle)
@@ -37,6 +51,11 @@ func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T)
 	if !completed.Cancelled {
 		t.Fatalf("old-context follow request was not cancelled: %+v", completed)
 	}
+	failedWatch := first.WaitForCompletion(oldFailure.ID, Settle)
+	if !failedWatch.Cancelled {
+		t.Fatalf("fenced old-context WATCH was not cancelled: %+v", failedWatch)
+	}
+	first.ClearDelays()
 	gate.Release()
 
 	// The destination contract is browse, never an attempted reconstruction
@@ -45,7 +64,7 @@ func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T)
 	a.Never("KUTE-E2E-LOG-MARKER", time.Second)
 
 	oldFence := first.Fence()
-	a.Never("old-context-error-marker", 2500*time.Millisecond)
+	a.Never(oldContextMarker, 2500*time.Millisecond)
 	for _, rec := range first.History() {
 		if rec.ID > oldFence && (rec.Verb == "LIST" || rec.Verb == "WATCH") {
 			t.Fatalf("old endpoint received new %s after switch: %+v", rec.Verb, rec)
@@ -93,6 +112,7 @@ func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T)
 }
 
 func TestFailedContextSwitchKeepsOriginalSession(t *testing.T) {
+	RequireCluster(t)
 	first := NewAPIProxy(t, KubeconfigPath())
 	second := NewAPIProxy(t, KubeconfigPath())
 	merged := BuildMergedKubeconfig(t,

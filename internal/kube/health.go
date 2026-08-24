@@ -6,6 +6,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"k8s.io/client-go/kubernetes"
 )
 
 // ConnPhase is the cluster connection's state machine (mvp-plan.md §0.7).
@@ -260,12 +262,30 @@ func (c *Cluster) ConnEvents() <-chan ConnStateMsg { return c.health.ch }
 func (c *Cluster) ConnState() ConnState { return c.health.get() }
 
 // RetryNow requests an immediate reconnect probe (the 4a "r" key).
-func (c *Cluster) RetryNow() { c.health.retryNow() }
+func (c *Cluster) RetryNow() {
+	c.mu.Lock()
+	if c.authGate != nil {
+		c.authGate.permitProbe()
+	}
+	c.mu.Unlock()
+	c.health.retryNow()
+}
+
+// healthProbeSnapshot binds a health loop to exactly one cluster generation.
+// SwitchContext replaces all four fields under Cluster.mu and cancels ctx, so
+// an old loop can neither issue a request through the replacement client nor
+// apply a late result to the replacement gate or health state.
+type healthProbeSnapshot struct {
+	clientset  kubernetes.Interface
+	gate       *authenticationGate
+	generation int
+	ctx        context.Context
+}
 
 // startHealthLoop pings /livez every pingInterval while healthy and follows
 // ConnState.NextRetryAt while reconnecting. RetryNow bypasses either wait.
 // It runs until stopCh closes.
-func (c *Cluster) startHealthLoop(stopCh <-chan struct{}) {
+func (c *Cluster) startHealthLoop(stopCh <-chan struct{}, probe healthProbeSnapshot) {
 	timer := time.NewTimer(nextProbeDelay(c.health.get(), time.Now()))
 	defer timer.Stop()
 	for {
@@ -273,9 +293,9 @@ func (c *Cluster) startHealthLoop(stopCh <-chan struct{}) {
 		case <-stopCh:
 			return
 		case <-timer.C:
-			c.ping()
+			c.ping(probe)
 		case <-c.health.retry:
-			c.ping()
+			c.ping(probe)
 		case <-c.health.wake:
 			// A watch failure may schedule a retry sooner than the healthy
 			// interval already on the timer. Recompute without probing now.
@@ -309,12 +329,28 @@ func resetProbeTimer(timer *time.Timer, state ConnState, now time.Time) {
 	timer.Reset(nextProbeDelay(state, now))
 }
 
-func (c *Cluster) ping() {
+func (c *Cluster) ping(probe healthProbeSnapshot) {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+	ctx, cancel := context.WithTimeout(probe.ctx, pingTimeout)
 	defer cancel()
-	err := c.clientset.Discovery().RESTClient().Get().AbsPath("/livez").Do(ctx).Error()
-	c.health.recordPing(time.Since(start), err, c.allStartedKindsSynced(), time.Now())
+	err := probe.clientset.Discovery().RESTClient().Get().AbsPath("/livez").Do(ctx).Error()
+
+	// Keep the generation check and every result-side effect in the same
+	// critical section as SwitchContext's generation bump, field replacement,
+	// and health reset. Checking before this lock and writing afterward would
+	// leave the same stale-result window in a smaller form.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.generation != probe.generation {
+		return
+	}
+	if err == nil && probe.gate != nil {
+		probe.gate.open()
+	}
+	if err != nil && probe.gate != nil && probe.gate.isBlocked() && !IsAuthenticationError(err) {
+		return
+	}
+	c.health.recordPing(time.Since(start), err, c.allStartedKindsReadyLocked(), time.Now())
 }
 
 // recordPing folds one /livez result into ConnState. synced is the informer

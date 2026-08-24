@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -265,6 +266,9 @@ func IsAuthenticationError(err error) bool {
 		return false
 	}
 	if apierrors.IsUnauthorized(err) {
+		return true
+	}
+	if errors.Is(err, errAuthenticationGated) {
 		return true
 	}
 	return strings.Contains(err.Error(), credentialFailurePrefix)

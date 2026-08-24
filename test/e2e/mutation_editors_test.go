@@ -12,6 +12,7 @@ import (
 )
 
 func TestConfigMapMutationBreadthAndConsumerRestart(t *testing.T) {
+	RequireCluster(t)
 	const cmName, deploymentName = "phase3-config", "phase3-config-consumer"
 	created := createConfigMap(t, cmName, map[string]string{
 		"mode":   "before",
@@ -110,6 +111,7 @@ func TestConfigMapMutationBreadthAndConsumerRestart(t *testing.T) {
 }
 
 func TestSecretRewriteRecoversFromConflict(t *testing.T) {
+	RequireCluster(t)
 	const name, key = "phase3-secret", "token"
 	const before, after = "before-secret", "after-secret"
 	created := createSecret(t, name, map[string][]byte{key: []byte(before)})

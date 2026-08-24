@@ -39,6 +39,7 @@ func e2eRestrictedKubeconfig(t *testing.T) string {
 }
 
 func TestScopedNamespaceCachesStayDistinctCurrentAndExplicit(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eScopedCluster(t, e2eTeamKubeconfig(t), e2eNamespace)
 	const secondNamespace = "kute-e2e-b"
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -217,6 +218,7 @@ func startedScopes(c *Cluster) map[scopeKey]bool {
 // TestScopedModeEagerPodListCarriesTheNamespace (fake clientset) proven
 // against kube-apiserver's own field-selector/RBAC enforcement instead.
 func TestScopedModeEagerPodListCarriesTheNamespaceAgainstARealAPIServer(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eScopedCluster(t, e2eRestrictedKubeconfig(t), e2eNamespace)
 
 	if !startedScopes(c)[scopeKey{KindPod, e2eNamespace}] {
@@ -239,6 +241,7 @@ func TestScopedModeEagerPodListCarriesTheNamespaceAgainstARealAPIServer(t *testi
 // synthetic apierrors.NewForbidden from a PrependReactor the way
 // internal/kube/scoped_test.go's fake-clientset version has to build it.
 func TestScopedModeClusterScopedReadsStayForbiddenUnderANamespacedRole(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eScopedCluster(t, e2eRestrictedKubeconfig(t), e2eNamespace)
 
 	_ = waitForKindForbidden(t, c, KindNamespace, "", 60*time.Second)
@@ -255,6 +258,7 @@ func TestScopedModeClusterScopedReadsStayForbiddenUnderANamespacedRole(t *testin
 // Synced() here is what turns that into a regression test of its own
 // instead of a side effect of another test's setup.
 func TestScopedModeStartLatchesSyncedDespiteTheDenials(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eScopedCluster(t, e2eRestrictedKubeconfig(t), e2eNamespace)
 
 	if !c.Synced() {
@@ -267,6 +271,7 @@ func TestScopedModeStartLatchesSyncedDespiteTheDenials(t *testing.T) {
 // informer starts lazily, scoped to one namespace, under a Role that has
 // never had cluster-wide list access at all.
 func TestScopedModeLazyReadStartsExactlyOneInformerAgainstTheRealServer(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eScopedCluster(t, e2eTeamKubeconfig(t), e2eNamespace)
 
 	if startedScopes(c)[scopeKey{KindConfigMap, e2eNamespace}] {

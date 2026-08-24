@@ -17,6 +17,7 @@ import (
 // ordering at the proxy; this one can inspect the unexported informer maps and
 // proves the same typed/dynamic/filtered shapes retain exactly one cache.
 func TestInformerShapesKeepOneCacheAcrossWireChurn(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

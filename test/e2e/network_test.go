@@ -14,6 +14,7 @@ import (
 )
 
 func TestConnectivityOutageKeepsCacheResponsiveAndRecovers(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitForAll(Connect, "api-", "worker-")
 	proxy := a.Proxy()
@@ -88,12 +89,16 @@ func assertRetrySpacing(t *testing.T, records []RequestRecord) {
 }
 
 func createDisposablePod(t *testing.T, name string, labels map[string]string) {
+	createDisposablePodInNamespace(t, Namespace, name, labels)
+}
+
+func createDisposablePodInNamespace(t *testing.T, namespace, name string, labels map[string]string) {
 	t.Helper()
 	client := e2eClientset(t)
 	ctx, cancel := context.WithTimeout(context.Background(), Settle)
 	defer cancel()
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: Namespace, Labels: labels},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels},
 		Spec: corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			Containers: []corev1.Container{{
@@ -102,14 +107,14 @@ func createDisposablePod(t *testing.T, name string, labels map[string]string) {
 			}},
 		},
 	}
-	if _, err := client.CoreV1().Pods(Namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+	if _, err := client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("creating disposable pod %s: %v", name, err)
 	}
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cleanupCancel()
 		zero := int64(0)
-		if err := client.CoreV1().Pods(Namespace).Delete(cleanupCtx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero}); err != nil && !strings.Contains(err.Error(), "not found") {
+		if err := client.CoreV1().Pods(namespace).Delete(cleanupCtx, name, metav1.DeleteOptions{GracePeriodSeconds: &zero}); err != nil && !strings.Contains(err.Error(), "not found") {
 			t.Logf("cleanup pod %s: %v", name, err)
 		}
 	})

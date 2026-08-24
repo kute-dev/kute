@@ -15,6 +15,7 @@ import (
 )
 
 func TestExternalResourceChurnKeepsRowsAndIdentityHonest(t *testing.T) {
+	RequireCluster(t)
 	client := e2eClientset(t)
 	ctx := context.Background()
 	namespace := fmt.Sprintf("kute-churn-%d", time.Now().UnixNano())
@@ -94,6 +95,7 @@ func TestExternalResourceChurnKeepsRowsAndIdentityHonest(t *testing.T) {
 }
 
 func TestPodDetailShowsGoneAfterExternalDelete(t *testing.T) {
+	RequireCluster(t)
 	name := fmt.Sprintf("detail-gone-%d", time.Now().UnixNano())
 	createDisposablePod(t, name, map[string]string{"churn": "detail"})
 	a := Launch(t)

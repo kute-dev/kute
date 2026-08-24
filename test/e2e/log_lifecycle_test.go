@@ -12,6 +12,7 @@ import (
 )
 
 func TestLogStreamEndsWhenPodIsDeleted(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	pod, stream := openAPILogStream(t, a)
@@ -34,6 +35,7 @@ func TestLogStreamEndsWhenPodIsDeleted(t *testing.T) {
 }
 
 func TestEscAndQuitCancelFollowRequests(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	_, stream := openAPILogStream(t, a)
@@ -54,6 +56,7 @@ func TestEscAndQuitCancelFollowRequests(t *testing.T) {
 }
 
 func TestLogsRemainNavigableAcrossAPIDisconnect(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	_, _ = openAPILogStream(t, a)

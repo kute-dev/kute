@@ -16,6 +16,7 @@ import (
 // previous step's ending state, so a screen that renders correctly only when
 // opened first has nowhere to hide.
 func TestEverydayFlow(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 
 	// --- the resting screen ------------------------------------------------
@@ -63,6 +64,7 @@ func TestEverydayFlow(t *testing.T) {
 // y/N rather than a type-the-name modal, and when it lands the Deployments
 // list must still be the Deployments list.
 func TestRolloutRestartStaysOnScreen(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -223,6 +225,7 @@ func firstMatch(frame, prefix string) string {
 // a real exit code, a restart count the kubelet keeps incrementing, and a
 // backoff the API server reports — and three screens are supposed to say so.
 func TestCrashLoopingWorkloadSurfaces(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("worker-", Connect)
 

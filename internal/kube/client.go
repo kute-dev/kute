@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -159,6 +160,12 @@ type Client struct {
 	Interface  kubernetes.Interface
 	RESTConfig *rest.Config
 	Context    Context
+	// credentialConfig is retained for diagnostics and package tests only.
+	// RESTConfig is the anonymous outer config whose transport already
+	// contains credentials, keeping every derived client behind the gate.
+	credentialConfig *rest.Config
+	authGate         *authenticationGate
+	watcher          *watchObserver
 }
 
 func NewClient() (Client, error) {
@@ -204,9 +211,26 @@ func newClientForContext(contextName string) (Client, error) {
 	// what creates (and globally caches) client-go's Authenticator, freezing
 	// both decisions for the rest of the session.
 	prepareExecProvider(restConfig)
+	credentialConfig := restConfig
+	authGate := &authenticationGate{}
+	watcher := newWatchObserver()
 
 	var clientset *kubernetes.Clientset
 	pluginStderr.capture(func() {
+		var authenticatedTransport http.RoundTripper
+		authenticatedTransport, err = rest.TransportFor(restConfig)
+		if err != nil {
+			return
+		}
+		// Wrap outside the already-built credential transport. WrapTransport
+		// itself is inside client-go's auth wrappers and would still invoke an
+		// expired exec plugin before the gate got a chance to reject traffic.
+		controlled := rest.AnonymousClientConfig(restConfig)
+		controlled.TLSClientConfig = rest.TLSClientConfig{}
+		controlled.Dial = nil
+		controlled.Proxy = nil
+		controlled.Transport = &observingRoundTripper{next: authenticatedTransport, gate: authGate, observer: watcher}
+		restConfig = controlled
 		clientset, err = kubernetes.NewForConfig(restConfig)
 	})
 	if err != nil {
@@ -250,7 +274,7 @@ func newClientForContext(contextName string) (Client, error) {
 		}
 	}
 
-	return Client{Interface: clientset, RESTConfig: restConfig, Context: ctx}, nil
+	return Client{Interface: clientset, RESTConfig: restConfig, Context: ctx, credentialConfig: credentialConfig, authGate: authGate, watcher: watcher}, nil
 }
 
 // clientCertIdentity extracts the real identity a client-certificate

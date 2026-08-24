@@ -290,7 +290,6 @@ type App struct {
 // there is safe and yields the same full frame the golden tests assert on.
 func Launch(t *testing.T, opts ...Option) *App {
 	t.Helper()
-	RequireCluster(t)
 
 	o := options{
 		kubeconfig: KubeconfigPath(),
@@ -306,14 +305,17 @@ func Launch(t *testing.T, opts ...Option) *App {
 		t.Fatalf("e2e: WithNamespace and WithScopeNamespace are mutually exclusive, mirroring cmd/kute's own --namespace/--namespace-scoped conflict check")
 	}
 
-	// Distinguish "no cluster" (RequireCluster above already handled that)
-	// from "the cluster is up but this identity's kubeconfig was never
-	// minted": a stat failure here means scripts/e2e-cluster.sh's minting
-	// step silently broke, not that nobody ran `up`.
-	if o.kubeconfig != KubeconfigPath() {
-		if _, err := os.Stat(o.kubeconfig); err != nil {
-			t.Fatalf("kubeconfig %s does not exist, but the admin kubeconfig %s does — scripts/e2e-cluster.sh up did not mint it: %v", o.kubeconfig, KubeconfigPath(), err)
+	// Apply options before checking the cluster: tagged suites such as scale
+	// select a different kubeconfig and do not provision the ordinary kind
+	// cluster at all. Keep a missing default config as an actionable local
+	// skip, but fail for a missing explicitly-selected identity/config — its
+	// suite-specific requirement has already established that its cluster is
+	// meant to exist.
+	if _, err := os.Stat(o.kubeconfig); err != nil {
+		if o.kubeconfig == KubeconfigPath() {
+			t.Skipf("no e2e cluster: %v\nrun: scripts/e2e-cluster.sh up", err)
 		}
+		t.Fatalf("selected kubeconfig %s does not exist: %v", o.kubeconfig, err)
 	}
 	if o.proxy != nil && o.direct {
 		t.Fatal("e2e: WithAPIProxy and WithoutAPIProxy are mutually exclusive")

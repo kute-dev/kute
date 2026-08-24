@@ -55,6 +55,11 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 	_ = informer.Informer().SetTransform(stripManagedFields)
 	k := kind
 	gen := c.generation
+	if c.watcher != nil {
+		c.watcher.register(gvr, scope, "", func() {
+			c.recordWatchEstablished(gen, k, scope)
+		})
+	}
 	// Same reason the typed informers have one
 	// (registerTypedWatchLocked): a discovered kind can be forbidden, or
 	// its initial LIST can keep failing, and without this the only symptom

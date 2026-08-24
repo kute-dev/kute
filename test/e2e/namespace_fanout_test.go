@@ -18,6 +18,7 @@ import (
 // cluster context, then all are released by context switch or shutdown.
 // Growth is intentionally linear, so the budgets are per visited namespace.
 func TestNamespaceFanOutRetainsOneCachePerReadNamespace(t *testing.T) {
+	RequireCluster(t)
 	count := soakCount(t, "KUTE_E2E_SOAK_NAMESPACES", 24)
 	run := soakName("fanout")
 	client := e2eClientset(t)

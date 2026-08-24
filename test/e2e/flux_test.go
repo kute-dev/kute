@@ -26,6 +26,7 @@ import (
 // permanent — which is exactly the "never assert on transient state" rule
 // the harness doc calls out.
 func TestFluxScreens(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 

@@ -24,6 +24,7 @@ const authExpiredMarker = "KUTE-E2E-AUTH-EXPIRED: run the test login command"
 // a whole-connection fact: cached rows stay useful, writes disappear, and no
 // automatic /livez loop keeps retrying until the user asks it to.
 func TestDirectUnauthorizedPausesHealthChecks(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitForAll(Connect, "api-", "worker-")
 	proxy := a.Proxy()
@@ -55,10 +56,10 @@ func TestDirectUnauthorizedPausesHealthChecks(t *testing.T) {
 // own recognizable stderr. Recovery changes only the plugin's external state
 // and presses r; kute itself is never restarted.
 func TestExecCredentialExpiryRecoversWithoutRestart(t *testing.T) {
+	RequireCluster(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the temporary exec credential plugin is a POSIX shell script")
 	}
-	RequireCluster(t)
 
 	proxy := NewAPIProxyForwardingClientAuth(t, KubeconfigPath())
 	plugin := newCredentialPlugin(t, partialServiceAccountToken(t))
@@ -89,6 +90,7 @@ func TestExecCredentialExpiryRecoversWithoutRestart(t *testing.T) {
 	marker := fmt.Sprintf("auth-recovery-%d", time.Now().UnixNano())
 	createDisposablePod(t, marker, map[string]string{"phase": "auth-expired"})
 	a.Never(marker, time.Second)
+	neverPluginRunsAgain(t, plugin.countPath, failedRuns, 2500*time.Millisecond)
 
 	plugin.succeed(t, time.Now().Add(10*time.Minute))
 	retryFence := proxy.Fence()

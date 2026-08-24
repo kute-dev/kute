@@ -15,6 +15,7 @@ import (
 )
 
 func TestHelmRollbackCreatesANewVisibleRevision(t *testing.T) {
+	RequireCluster(t)
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Fatalf("helm is required for Phase 3 mutation coverage; run mise install: %v", err)
 	}

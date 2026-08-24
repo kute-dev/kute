@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -12,6 +14,8 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func TestBackoffDelaySchedule(t *testing.T) {
@@ -398,6 +402,100 @@ func TestHealthResetPreservesChannelIdentity(t *testing.T) {
 	}
 	if got.Attempt != 0 {
 		t.Fatalf("Attempt after reset = %d, want 0", got.Attempt)
+	}
+}
+
+// TestHealthProbeDropsResultsFromReplacedGeneration pins both corruptions a
+// probe already inside RoundTrip could cause after SwitchContext replaced the
+// cluster fields. The transport deliberately ignores cancellation: request
+// cancellation is best-effort, while the generation check is the authority
+// that prevents a late result from landing.
+func TestHealthProbeDropsResultsFromReplacedGeneration(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		resultErr error
+	}{
+		{name: "success cannot open replacement authentication gate"},
+		{name: "failure cannot overwrite replacement health", resultErr: errors.New("old context refused connection")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			started := make(chan struct{})
+			release := make(chan struct{})
+			transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				close(started)
+				<-release
+				if tt.resultErr != nil {
+					return nil, tt.resultErr
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("ok")),
+					Request:    req,
+				}, nil
+			})
+			oldClient, err := kubernetes.NewForConfig(&rest.Config{
+				Host:      "https://old.example.test",
+				Transport: transport,
+			})
+			if err != nil {
+				t.Fatalf("build old client: %v", err)
+			}
+
+			oldGate := &authenticationGate{blocked: true}
+			probeCtx, cancelProbe := context.WithCancel(t.Context())
+			c := &Cluster{
+				clientset:         oldClient,
+				authGate:          oldGate,
+				generation:        7,
+				health:            newHealth(),
+				cancelHealthProbe: cancelProbe,
+			}
+			probe := healthProbeSnapshot{
+				clientset:  oldClient,
+				gate:       oldGate,
+				generation: c.generation,
+				ctx:        probeCtx,
+			}
+
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				c.ping(probe)
+			}()
+			<-started
+
+			// SwitchContext's replacement critical section: invalidate and
+			// cancel the old probe before installing the new generation's gate
+			// and resetting its health.
+			newGate := &authenticationGate{blocked: true}
+			c.mu.Lock()
+			c.generation++
+			c.cancelHealthProbe()
+			c.cancelHealthProbe = nil
+			c.authGate = newGate
+			c.health.reset()
+			c.mu.Unlock()
+
+			select {
+			case <-probeCtx.Done():
+			default:
+				t.Fatal("replacement did not cancel the old probe context")
+			}
+			close(release)
+			<-done
+
+			if !oldGate.isBlocked() {
+				t.Fatal("stale success opened the old authentication gate instead of being discarded")
+			}
+			if !newGate.isBlocked() {
+				t.Fatal("stale success opened the replacement authentication gate")
+			}
+			if got := c.health.get(); got.Phase != ConnConnected || got.Err != "" {
+				t.Fatalf("replacement health = %+v; stale probe result was not discarded", got)
+			}
+		})
 	}
 }
 

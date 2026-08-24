@@ -16,6 +16,7 @@ import (
 // starting that kind's informer from inside ListRaw, and every screen after
 // the first is opened on a program that has already been running.
 func TestKindScreens(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -132,6 +133,7 @@ func TestKindScreens(t *testing.T) {
 // puts the open palette ahead of discovery. On a cluster whose discovery beats
 // it the assertion is merely true on arrival — it can be vacuous, never wrong.
 func TestJumpPaletteGainsKindsWhileOpen(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.Press("g")
 	a.Type("kustomiz")

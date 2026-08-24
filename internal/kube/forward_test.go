@@ -68,6 +68,62 @@ type stubTunnel struct {
 	err    error // returned once Close fires or immediately if failFast
 }
 
+type recordingTunnel struct {
+	mu     sync.Mutex
+	ran    bool
+	closed bool
+}
+
+func (t *recordingTunnel) Run(func()) error {
+	t.mu.Lock()
+	t.ran = true
+	t.mu.Unlock()
+	return nil
+}
+func (t *recordingTunnel) Close() {
+	t.mu.Lock()
+	t.closed = true
+	t.mu.Unlock()
+}
+func (t *recordingTunnel) state() (ran, closed bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.ran, t.closed
+}
+
+type blockingResolver struct {
+	resolveStarted chan struct{}
+	resolveDone    chan struct{}
+	checkStarted   chan struct{}
+	checkDone      chan struct{}
+	resolveOnce    sync.Once
+	checkOnce      sync.Once
+}
+
+func newBlockingResolver() *blockingResolver {
+	return &blockingResolver{
+		resolveStarted: make(chan struct{}), resolveDone: make(chan struct{}),
+		checkStarted: make(chan struct{}), checkDone: make(chan struct{}),
+	}
+}
+func (r *blockingResolver) ResolveForwardPod(ctx context.Context, _ ForwardTarget) (string, error) {
+	r.resolveOnce.Do(func() { close(r.resolveStarted) })
+	<-ctx.Done()
+	close(r.resolveDone)
+	return "", ctx.Err()
+}
+func (r *blockingResolver) ForwardPodAvailable(ctx context.Context, _, _ string) (bool, error) {
+	r.checkOnce.Do(func() { close(r.checkStarted) })
+	<-ctx.Done()
+	close(r.checkDone)
+	return false, ctx.Err()
+}
+
+type immediateTunnel struct{}
+
+func (immediateTunnel) Run(func()) error { return errors.New("tunnel lost") }
+func (immediateTunnel) Close()           {}
+
 func newStubTunnel(err error) *stubTunnel {
 	return &stubTunnel{closed: make(chan struct{}), err: err}
 }
@@ -293,6 +349,123 @@ func (d *gatedDialer) Dial(_ string, _ string, _ int, _ int32) (Tunnel, error) {
 		return d.tunnels[n], nil
 	}
 	return nil, errors.New("no tunnel left")
+}
+
+func TestForwardManagerStopClosesTunnelReturnedAfterDial(t *testing.T) {
+	t.Parallel()
+	stale := &recordingTunnel{}
+	dialer := &gatedDialer{gate: make(chan struct{}), entered: make(chan struct{}), tunnels: []*stubTunnel{}}
+	// gatedDialer is stubTunnel-specific; use a small adapter to retain its
+	// synchronization while returning the recording tunnel.
+	held := &heldRecordingDialer{gate: dialer.gate, entered: dialer.entered, tunnel: stale}
+	mgr := NewForwardManager()
+	s := mgr.Start(held, stubResolver{pod: "web"}, ForwardTarget{Kind: KindPod, Namespace: "default", Name: "web"}, "web", 8080, 80, "")
+	<-held.entered
+	mgr.Stop(s.ID)
+	close(held.gate)
+	deadline := time.Now().Add(time.Second)
+	for {
+		ran, closed := stale.state()
+		if closed {
+			if ran {
+				t.Fatal("stale tunnel Run was called after Stop")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stale tunnel returned after Stop was not closed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestForwardManagerStopAllClosesTunnelReturnedAfterDial(t *testing.T) {
+	t.Parallel()
+	stale := &recordingTunnel{}
+	held := &heldRecordingDialer{gate: make(chan struct{}), entered: make(chan struct{}), tunnel: stale}
+	mgr := NewForwardManager()
+	mgr.Start(held, stubResolver{pod: "web"}, ForwardTarget{Kind: KindPod, Namespace: "default", Name: "web"}, "web", 8080, 80, "")
+	<-held.entered
+	mgr.StopAll()
+	close(held.gate)
+	deadline := time.Now().Add(time.Second)
+	for {
+		ran, closed := stale.state()
+		if closed {
+			if ran {
+				t.Fatal("stale tunnel Run was called after StopAll")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stale tunnel returned after StopAll was not closed")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+type heldRecordingDialer struct {
+	gate    chan struct{}
+	entered chan struct{}
+	tunnel  Tunnel
+}
+
+func (d *heldRecordingDialer) Dial(string, string, int, int32) (Tunnel, error) {
+	close(d.entered)
+	<-d.gate
+	return d.tunnel, nil
+}
+
+func TestForwardManagerStopCancelsPodChecks(t *testing.T) {
+	t.Parallel()
+	resolver := newBlockingResolver()
+	mgr := NewForwardManager()
+	dialer := &stubDialer{tunnel: newStubTunnel(nil)}
+	s := mgr.Start(dialer, resolver, ForwardTarget{Kind: KindService, Namespace: "default", Name: "web"}, "web-old", 8080, 80, "")
+	awaitState(t, mgr, s.ID, ForwardActive)
+	mgr.ReconcilePodTargets()
+	<-resolver.checkStarted
+	mgr.StopAll()
+	select {
+	case <-resolver.checkDone:
+	case <-time.After(time.Second):
+		t.Fatal("Pod availability request was not cancelled by application shutdown")
+	}
+}
+
+func TestForwardManagerStopCancelsReplacementResolution(t *testing.T) {
+	t.Parallel()
+	resolver := newBlockingResolver()
+	mgr := NewForwardManager()
+	dialer := &sequenceDialer{tunnels: []Tunnel{immediateTunnel{}}}
+	s := mgr.Start(dialer, resolver, ForwardTarget{Kind: KindService, Namespace: "default", Name: "web"}, "web-old", 8080, 80, "")
+	select {
+	case <-resolver.resolveStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("replacement resolver did not start")
+	}
+	mgr.Stop(s.ID)
+	select {
+	case <-resolver.resolveDone:
+	case <-time.After(time.Second):
+		t.Fatal("replacement resolver was not cancelled by Stop")
+	}
+}
+
+type sequenceDialer struct {
+	mu      sync.Mutex
+	tunnels []Tunnel
+}
+
+func (d *sequenceDialer) Dial(string, string, int, int32) (Tunnel, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.tunnels) == 0 {
+		return nil, errors.New("no tunnel left")
+	}
+	tunnel := d.tunnels[0]
+	d.tunnels = d.tunnels[1:]
+	return tunnel, nil
 }
 
 // tunnelFor reads the live tunnel handle a session is holding.

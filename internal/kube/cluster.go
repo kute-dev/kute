@@ -67,7 +67,13 @@ type Cluster struct {
 	metrics   metricsclient.Interface
 	factory   informers.SharedInformerFactory
 	restCfg   *rest.Config
-	Context   Context
+	// credentialCfg is the inner authenticated config used only when an
+	// upgraded SPDY transport must be constructed. Ordinary and derived REST
+	// clients use restCfg's gated outer transport.
+	credentialCfg *rest.Config
+	Context       Context
+	authGate      *authenticationGate
+	watcher       *watchObserver
 
 	// scoped is set once via SetNamespaceScope, before Start, and never
 	// cleared — a session that launched cluster-wide stays cluster-wide, and
@@ -84,10 +90,10 @@ type Cluster struct {
 	// discovered CRD kinds.
 	dynScopedFactories map[string]dynamicinformer.DynamicSharedInformerFactory
 
-	// generation increments on every Start and, ahead of that, at the very
-	// start of SwitchContext's own critical section (see its doc comment for
-	// why that has to happen before, not after, its map clears) — and is
-	// captured by every watch-error/notify closure at registration time. A
+	// generation increments on every Start, at the very start of
+	// SwitchContext's own critical section (see its doc comment for why that
+	// has to happen before, not after, its map clears), and on Stop — and is
+	// captured by every watch-error/notify closure and health loop. A
 	// callback whose captured generation no longer matches c.generation
 	// belongs to a context that's already been replaced and must not write
 	// into the new context's kindFailed/kindStalled maps — see
@@ -182,12 +188,16 @@ type Cluster struct {
 	// by construction.
 	allKindsSynced bool
 
-	events  chan ResourceChangedMsg
-	health  *health
-	stopCh  chan struct{}
-	started bool
-	synced  bool
-	mu      sync.Mutex
+	events chan ResourceChangedMsg
+	health *health
+	stopCh chan struct{}
+	// cancelHealthProbe cancels the /livez request owned by the current
+	// generation. It is created alongside the client/gate/generation snapshot
+	// in Start and cancelled before SwitchContext replaces any of them.
+	cancelHealthProbe context.CancelFunc
+	started           bool
+	synced            bool
+	mu                sync.Mutex
 
 	// tzCapability is capability.go's tri-state "does this server honor
 	// CronJob spec.timeZone" answer, refreshed by probeTimeZoneCapability
@@ -226,18 +236,23 @@ func NewClusterForContext(contextName string) (*Cluster, error) {
 	metrics, _ := metricsclient.NewForConfig(client.RESTConfig)
 	dynClient, _ := dynamic.NewForConfig(client.RESTConfig)
 
-	return &Cluster{
-		clientset:  client.Interface,
-		metrics:    metrics,
-		factory:    newTypedFactory(client.Interface),
-		restCfg:    client.RESTConfig,
-		Context:    client.Context,
-		dynClient:  dynClient,
-		dynFactory: dynamicinformer.NewDynamicSharedInformerFactory(dynClient, defaultResync),
-		events:     make(chan ResourceChangedMsg, 64),
-		health:     newHealth(),
-		stopCh:     make(chan struct{}),
-	}, nil
+	c := &Cluster{
+		clientset:     client.Interface,
+		metrics:       metrics,
+		factory:       newTypedFactory(client.Interface),
+		restCfg:       client.RESTConfig,
+		credentialCfg: client.credentialConfig,
+		Context:       client.Context,
+		dynClient:     dynClient,
+		dynFactory:    dynamicinformer.NewDynamicSharedInformerFactory(dynClient, defaultResync),
+		events:        make(chan ResourceChangedMsg, 64),
+		health:        newHealth(),
+		stopCh:        make(chan struct{}),
+		authGate:      client.authGate,
+		watcher:       client.watcher,
+	}
+	client.authGate.onBlocked = func(err error) { c.recordAuthenticationFailure(client.authGate, err) }
+	return c, nil
 }
 
 // Clientset exposes the underlying clientset for callers that still need direct
@@ -406,6 +421,14 @@ func (c *Cluster) Start(ctx context.Context) error {
 	}
 	c.started = true
 	c.generation++
+	probeCtx, cancelProbe := context.WithCancel(context.WithoutCancel(ctx))
+	c.cancelHealthProbe = cancelProbe
+	probe := healthProbeSnapshot{
+		clientset:  c.clientset,
+		gate:       c.authGate,
+		generation: c.generation,
+		ctx:        probeCtx,
+	}
 
 	c.registerWatchesLocked(KindNamespace, KindNode)
 	podScope := c.cacheScopeLocked(KindPod, c.Context.Namespace)
@@ -425,7 +448,7 @@ func (c *Cluster) Start(ctx context.Context) error {
 		podFactory.Start(stopCh)
 	}
 	c.mu.Unlock()
-	go c.startHealthLoop(stopCh)
+	go c.startHealthLoop(stopCh, probe)
 
 	// Wait on the eager informers by name rather than calling
 	// factory.WaitForCacheSync, which waits on whatever is started at the
@@ -779,6 +802,36 @@ func (c *Cluster) recordWatchError(gen int, kind ResourceKind, namespace string,
 	c.health.onWatchError(err, c.allStartedKindsReadyLocked(), time.Now())
 }
 
+// recordWatchEstablished clears a post-sync watch failure when the matching
+// HTTP WATCH response succeeds. Unlike an object handler this also fires for
+// a legitimately empty collection.
+func (c *Cluster) recordWatchEstablished(gen int, kind ResourceKind, namespace string) {
+	c.mu.Lock()
+	if c.generation != gen {
+		c.mu.Unlock()
+		return
+	}
+	key := scopeKey{kind, namespace}
+	_, wasUnhealthy := c.watchUnhealthy[key]
+	delete(c.watchUnhealthy, key)
+	recovered := wasUnhealthy && len(c.watchUnhealthy) == 0
+	c.mu.Unlock()
+	if recovered {
+		c.health.retryNow()
+	}
+}
+
+func (c *Cluster) recordAuthenticationFailure(gate *authenticationGate, err error) {
+	c.mu.Lock()
+	if c.authGate != gate {
+		c.mu.Unlock()
+		return
+	}
+	prev := c.health.get()
+	c.health.setUnauthenticated(err, 0, prev)
+	c.mu.Unlock()
+}
+
 // allStartedKindsSynced reports whether every informer started so far has
 // finished its initial LIST and no observed watch failure is still awaiting
 // a recovered event. This is what the health loop keys off, rather than
@@ -958,14 +1011,22 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 	// could otherwise pass its generation check by arriving after the clear
 	// below but before Start's own bump.
 	c.generation++
+	if c.cancelHealthProbe != nil {
+		c.cancelHealthProbe()
+		c.cancelHealthProbe = nil
+	}
 	// Tear down the current informers before swapping in the new factory.
 	if c.stopCh != nil {
 		close(c.stopCh)
 	}
 	c.stopCh = make(chan struct{})
 	c.clientset = client.Interface
+	c.authGate = client.authGate
+	c.watcher = client.watcher
+	client.authGate.onBlocked = func(err error) { c.recordAuthenticationFailure(client.authGate, err) }
 	c.metrics = metrics
 	c.restCfg = client.RESTConfig
+	c.credentialCfg = client.credentialConfig
 	c.factory = newTypedFactory(client.Interface)
 	c.scopedFactories = nil
 	c.dynClient = dynClient
@@ -1006,6 +1067,14 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 func (c *Cluster) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Invalidate in-flight health probes before cancelling them. A transport
+	// is allowed to return a result after its request context is cancelled;
+	// the generation guard in ping keeps that stale result from landing.
+	c.generation++
+	if c.cancelHealthProbe != nil {
+		c.cancelHealthProbe()
+		c.cancelHealthProbe = nil
+	}
 	if c.stopCh != nil {
 		close(c.stopCh)
 		c.stopCh = nil

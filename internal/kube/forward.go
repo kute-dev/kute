@@ -153,6 +153,8 @@ type ForwardPodChecker interface {
 type spdyDialer struct {
 	clientset kubernetes.Interface
 	restCfg   *rest.Config
+	gate      *authenticationGate
+	watcher   *watchObserver
 }
 
 // NewSpdyForwardDialer builds the real ForwardDialer, snapshotting clientset
@@ -163,12 +165,23 @@ func NewSpdyForwardDialer(clientset kubernetes.Interface, restCfg *rest.Config) 
 	return spdyDialer{clientset: clientset, restCfg: restCfg}
 }
 
+// NewForwardDialer snapshots the active context's authenticated SPDY config
+// while retaining the same outer request gate as ordinary REST traffic.
+func (c *Cluster) NewForwardDialer() ForwardDialer {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return spdyDialer{clientset: c.clientset, restCfg: c.credentialCfg, gate: c.authGate, watcher: c.watcher}
+}
+
 func (d spdyDialer) Dial(namespace, pod string, localPort int, remotePort int32) (Tunnel, error) {
 	req := d.clientset.CoreV1().RESTClient().Post().
 		Resource("pods").Namespace(namespace).Name(pod).SubResource("portforward")
 	transport, upgrader, err := spdy.RoundTripperFor(d.restCfg)
 	if err != nil {
 		return nil, err
+	}
+	if d.gate != nil {
+		transport = &observingRoundTripper{next: transport, gate: d.gate, observer: d.watcher}
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", req.URL())
 	return &spdyTunnel{dialer: dialer, localPort: localPort, remotePort: remotePort}, nil
@@ -325,6 +338,7 @@ type forwardEntry struct {
 	session  ForwardSession
 	dialer   ForwardDialer
 	resolver PodResolver
+	ctx      context.Context
 	cancel   context.CancelFunc
 	tunnel   Tunnel
 	checking bool
@@ -404,7 +418,7 @@ func (m *ForwardManager) Start(dialer ForwardDialer, resolver PodResolver, targe
 		State: ForwardActive, StartedAt: now, LastActivityAt: now,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.sessions[id] = &forwardEntry{session: session, dialer: dialer, resolver: resolver, cancel: cancel}
+	m.sessions[id] = &forwardEntry{session: session, dialer: dialer, resolver: resolver, ctx: ctx, cancel: cancel}
 	m.mu.Unlock()
 
 	m.notify()
@@ -499,7 +513,7 @@ func (m *ForwardManager) run(ctx context.Context, id, initialPod string) {
 		resolver, target := entry.resolver, entry.session.Target
 		m.mu.Unlock()
 		if target.Kind != KindPod && resolver != nil {
-			rctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			if newPod, rerr := resolver.ResolveForwardPod(rctx, target); rerr == nil {
 				pod = newPod
 			}
@@ -527,6 +541,7 @@ func (m *ForwardManager) ReconcilePodTargets() {
 		id        string
 		entry     *forwardEntry
 		checker   ForwardPodChecker
+		ctx       context.Context
 		namespace string
 		pod       string
 	}
@@ -543,19 +558,19 @@ func (m *ForwardManager) ReconcilePodTargets() {
 		}
 		entry.checking = true
 		checks = append(checks, check{
-			id: id, entry: entry, checker: checker,
+			id: id, entry: entry, checker: checker, ctx: entry.ctx,
 			namespace: entry.session.Target.Namespace, pod: entry.session.ResolvedPod,
 		})
 	}
 	m.mu.Unlock()
 
 	for _, candidate := range checks {
-		go m.reconcilePodTarget(candidate.id, candidate.entry, candidate.checker, candidate.namespace, candidate.pod)
+		go m.reconcilePodTarget(candidate.ctx, candidate.id, candidate.entry, candidate.checker, candidate.namespace, candidate.pod)
 	}
 }
 
-func (m *ForwardManager) reconcilePodTarget(id string, expected *forwardEntry, checker ForwardPodChecker, namespace, pod string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (m *ForwardManager) reconcilePodTarget(sessionCtx context.Context, id string, expected *forwardEntry, checker ForwardPodChecker, namespace, pod string) {
+	ctx, cancel := context.WithTimeout(sessionCtx, 10*time.Second)
 	available, err := checker.ForwardPodAvailable(ctx, namespace, pod)
 	cancel()
 
@@ -585,15 +600,22 @@ func (m *ForwardManager) Stop(id string) {
 	m.mu.Lock()
 	entry, ok := m.sessions[id]
 	if ok {
+		// Cancel while the entry is still discoverable. A Dial or resolver
+		// released concurrently can now observe cancellation before it can
+		// publish a handle against a session which has disappeared.
+		entry.cancel()
 		delete(m.sessions, id)
+	}
+	var tunnel Tunnel
+	if ok {
+		tunnel = entry.tunnel
 	}
 	m.mu.Unlock()
 	if !ok {
 		return
 	}
-	entry.cancel()
-	if entry.tunnel != nil {
-		entry.tunnel.Close()
+	if tunnel != nil {
+		tunnel.Close()
 	}
 	m.notify()
 }
@@ -604,12 +626,12 @@ func (m *ForwardManager) StopAll() {
 	m.mu.Lock()
 	entries := make([]*forwardEntry, 0, len(m.sessions))
 	for _, e := range m.sessions {
+		e.cancel()
 		entries = append(entries, e)
 	}
 	m.sessions = map[string]*forwardEntry{}
 	m.mu.Unlock()
 	for _, e := range entries {
-		e.cancel()
 		if e.tunnel != nil {
 			e.tunnel.Close()
 		}
@@ -634,6 +656,7 @@ func (m *ForwardManager) Restart(id string) {
 	// cancelling and closing. Restart was the one that did not.
 	old := entry.tunnel
 	ctx, cancel := context.WithCancel(context.Background())
+	entry.ctx = ctx
 	entry.cancel = cancel
 	entry.tunnel = nil
 	entry.session.State = ForwardActive

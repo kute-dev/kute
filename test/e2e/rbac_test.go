@@ -22,6 +22,7 @@ const falseEmpty = "no pods in"
 // namespace, so kute-restricted — which may read Pods only inside kute-e2e —
 // is Forbidden on every read it makes, including Pods.
 func TestForbiddenKindNeverRendersAsEmpty(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(RestrictedKubeconfigPath()))
 
 	// Settled: whatever the app decides to show, it has to stop loading.
@@ -57,6 +58,7 @@ func TestForbiddenKindNeverRendersAsEmpty(t *testing.T) {
 // has to read normally, including a lazily-started kind, so that a failure on
 // a kind it cannot read is visibly about that kind.
 func TestReadableKindsWorkUnderAPartialGrant(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 
 	a.WaitForAll(Connect, "api-", "worker-", "kute-e2e")
@@ -80,6 +82,7 @@ func TestReadableKindsWorkUnderAPartialGrant(t *testing.T) {
 // a backoff countdown that could not help. Often a kind the user never asked
 // for, since the eager set and CRD discovery both run unprompted.
 func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 	a.WaitFor("api-", Connect)
 
@@ -114,6 +117,7 @@ func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 // none may hang, because a permission failure settles a cache without ever
 // filling it.
 func TestPartialGrantAcrossScreens(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 	a.WaitFor("api-", Connect)
 

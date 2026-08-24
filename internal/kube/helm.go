@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 	sigsyaml "sigs.k8s.io/yaml"
@@ -533,6 +534,11 @@ func (c *Cluster) ensureHelmSecrets(namespace string) {
 	)
 	informer := factory.Core().V1().Secrets().Informer()
 	gen := c.generation
+	if c.watcher != nil {
+		c.watcher.register(schema.GroupVersionResource{Version: "v1", Resource: "secrets"}, namespace, helmReleaseFieldSelector, func() {
+			c.recordWatchEstablished(gen, KindHelmRelease, namespace)
+		})
+	}
 	// Best-effort: a failed registration just means no health signal here.
 	// Runs later, on the reflector's goroutine — so it takes the lock
 	// itself rather than assuming the one held here. recordWatchError

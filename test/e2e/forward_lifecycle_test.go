@@ -16,6 +16,7 @@ import (
 var resolvedForwardPodRe = regexp.MustCompile(`pod/(api-[a-z0-9-]+)`)
 
 func TestForwardListenerClosesOnApplicationQuit(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	local := startSelectedPodForward(t, a)
@@ -28,6 +29,7 @@ func TestForwardListenerClosesOnApplicationQuit(t *testing.T) {
 }
 
 func TestForwardScreenStopRemovesRowAndListener(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	local := startSelectedPodForward(t, a)
@@ -41,6 +43,7 @@ func TestForwardScreenStopRemovesRowAndListener(t *testing.T) {
 }
 
 func TestServiceForwardRebindsToReplacementAndStopCancelsRetry(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 	a.gotoKind(t, "services", "Services")

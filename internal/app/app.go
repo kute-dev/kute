@@ -1434,7 +1434,7 @@ func openForwardFunc(sess *tui.Session, lister resources.RawLister, cluster *kub
 			Session:  sess,
 			Lister:   lister,
 			Resolver: kube.NewClientsetPodResolver(cluster.Clientset()),
-			Dialer:   kube.NewSpdyForwardDialer(cluster.Clientset(), cluster.RESTConfig()),
+			Dialer:   cluster.NewForwardDialer(),
 			Manager:  sess.Forwards,
 			Target:   target,
 		})

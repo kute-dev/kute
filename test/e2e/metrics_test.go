@@ -19,6 +19,7 @@ const noMetrics = "– –"
 // metrics client that yields an empty PodMetrics reads as 0m/0Mi, and a pod
 // reported as using no CPU is a worse answer than no answer.
 func TestNoMetricsServerRendersUnknown(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 

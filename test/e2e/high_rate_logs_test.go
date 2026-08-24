@@ -20,6 +20,7 @@ import (
 )
 
 func TestHighRateLogsStayBoundedAndResponsive(t *testing.T) {
+	RequireCluster(t)
 	linesPerBatch := soakCount(t, "KUTE_E2E_SOAK_LOG_LINES_PER_BATCH", 12000)
 	if linesPerBatch <= 5000 {
 		t.Fatalf("KUTE_E2E_SOAK_LOG_LINES_PER_BATCH must exceed the 5000-entry viewer buffer, got %d", linesPerBatch)

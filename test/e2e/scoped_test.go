@@ -15,6 +15,7 @@ import (
 // scoped launch reaches Connect and shows real pod rows. One flag is the
 // entire difference.
 func TestScopedLaunchLoadsRealPodRows(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(RestrictedKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 }
@@ -27,6 +28,7 @@ func TestScopedLaunchLoadsRealPodRows(t *testing.T) {
 // rest of the session has to stay usable afterward, not merely "connect
 // itself worked."
 func TestScopedModeConnectSettlesWithClusterScopedKindsForbidden(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(RestrictedKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitLoaded(Connect)
 	a.Never("loading", 8*time.Second)
@@ -46,6 +48,7 @@ func TestScopedModeConnectSettlesWithClusterScopedKindsForbidden(t *testing.T) {
 // lazily, scoped to one namespace, under a Role that has never had
 // cluster-wide list access at all.
 func TestScopedModeLazyGrantedKindLoads(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 
@@ -59,6 +62,7 @@ func TestScopedModeLazyGrantedKindLoads(t *testing.T) {
 // shape, under scoped mode instead of kute-partial. kute-team has no Secrets
 // grant.
 func TestScopedModeUngrantedKindStillShowsTheCard(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 
@@ -81,6 +85,7 @@ func TestScopedModeUngrantedKindStillShowsTheCard(t *testing.T) {
 // explicit global read must still degrade to a permission card, never a
 // false empty.
 func TestScopedModeAllNamespacesFailsHonestly(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 
@@ -94,6 +99,7 @@ func TestScopedModeAllNamespacesFailsHonestly(t *testing.T) {
 // only assert separately: the denied namespace palette dispatches a typed
 // name, and a namespace switch reloads.
 func TestScopedModeReturningToGrantedNamespaceRestoresRows(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 
@@ -115,6 +121,7 @@ func TestScopedModeReturningToGrantedNamespaceRestoresRows(t *testing.T) {
 // that a genuinely absent Namespace ClusterRole (not a hand-built fake
 // lister) reaches the palette's denied state end to end.
 func TestScopedModeNamespacePaletteShowsDeniedNotice(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 
@@ -124,6 +131,7 @@ func TestScopedModeNamespacePaletteShowsDeniedNotice(t *testing.T) {
 }
 
 func TestScopedModeSwitchesBetweenReadableNamespaceCaches(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(TeamKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitForAll(Connect, "api-", "worker-")
 

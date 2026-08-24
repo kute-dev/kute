@@ -255,7 +255,7 @@ func TestNoteWatchErrorDropsStaleGeneration(t *testing.T) {
 	}
 }
 
-func TestWatchFailureKeepsHealthUnreadyUntilInformerEvent(t *testing.T) {
+func TestWatchFailureKeepsHealthUnreadyUntilWatchEstablished(t *testing.T) {
 	t.Parallel()
 	c := &Cluster{health: newHealth(), events: make(chan ResourceChangedMsg, 1)}
 	c.recordWatchError(0, KindPod, "", errors.New("watch connection closed"))
@@ -263,14 +263,20 @@ func TestWatchFailureKeepsHealthUnreadyUntilInformerEvent(t *testing.T) {
 		t.Fatal("watch failure still reported all started kinds ready")
 	}
 
+	// Object events are not authoritative: a streaming LIST may deliver
+	// initial objects before its replacement WATCH is actually established.
 	c.notify(0, KindPod)
+	if c.allStartedKindsSynced() {
+		t.Fatal("object event cleared watch-unhealthy state")
+	}
+	c.recordWatchEstablished(0, KindPod, "")
 	if !c.allStartedKindsSynced() {
-		t.Fatal("first recovered informer event did not clear watch-unhealthy state")
+		t.Fatal("successful WATCH did not clear watch-unhealthy state")
 	}
 	select {
 	case <-c.health.retry:
 	default:
-		t.Fatal("final recovered informer event did not request an immediate health probe")
+		t.Fatal("final recovered WATCH did not request an immediate health probe")
 	}
 }
 
@@ -303,12 +309,24 @@ func TestWatchRecoveryClearsOnlyItsInformerScope(t *testing.T) {
 			{KindConfigMap, "team-b"}: true,
 		},
 	}
-	c.notifyScope(0, KindConfigMap, "team-a")
+	c.recordWatchEstablished(0, KindConfigMap, "team-a")
 	if c.watchUnhealthy[scopeKey{KindConfigMap, "team-a"}] {
 		t.Fatal("recovered scope team-a stayed unhealthy")
 	}
 	if !c.watchUnhealthy[scopeKey{KindConfigMap, "team-b"}] {
 		t.Fatal("recovering team-a cleared team-b's independent watch failure")
+	}
+}
+
+func TestWatchEstablishmentDropsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	c := &Cluster{
+		generation: 2, health: newHealth(), events: make(chan ResourceChangedMsg, 1),
+		watchUnhealthy: map[scopeKey]bool{{KindPod, ""}: true},
+	}
+	c.recordWatchEstablished(1, KindPod, "")
+	if !c.watchUnhealthy[scopeKey{KindPod, ""}] {
+		t.Fatal("old-context WATCH establishment cleared current generation health")
 	}
 }
 

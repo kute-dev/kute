@@ -12,6 +12,7 @@ import (
 )
 
 func TestCordonAndUncordonDedicatedWorker(t *testing.T) {
+	RequireCluster(t)
 	client := mutationClient(t)
 	name := NodeNamePrefix(t) + "-worker"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -67,6 +68,7 @@ func TestCordonAndUncordonDedicatedWorker(t *testing.T) {
 }
 
 func TestWorkloadEditorsMutateAndRemain(t *testing.T) {
+	RequireCluster(t)
 	const name = "phase3-workload"
 	created := createDeployment(t, name, 0, "")
 	client := mutationClient(t)

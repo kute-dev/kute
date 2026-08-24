@@ -13,6 +13,7 @@ import (
 )
 
 func TestNonProdDeleteCommitsAndClampsSelection(t *testing.T) {
+	RequireCluster(t)
 	const deleted, neighbor = "phase3-delete-a", "phase3-delete-b"
 	before := createConfigMap(t, deleted, map[string]string{"value": "before"})
 	createConfigMap(t, neighbor, map[string]string{"value": "keep"})
@@ -40,6 +41,7 @@ func TestNonProdDeleteCommitsAndClampsSelection(t *testing.T) {
 }
 
 func TestProdDeleteCommitsAfterTypedName(t *testing.T) {
+	RequireCluster(t)
 	const name = "phase3-prod-delete"
 	createConfigMap(t, name, map[string]string{"value": "before"})
 	client := mutationClient(t)
@@ -64,6 +66,7 @@ func TestProdDeleteCommitsAfterTypedName(t *testing.T) {
 }
 
 func TestForceDeleteEscalationUsesDisposablePod(t *testing.T) {
+	RequireCluster(t)
 	const name = "phase3-force-delete"
 	client := mutationClient(t)
 	grace := int64(60)

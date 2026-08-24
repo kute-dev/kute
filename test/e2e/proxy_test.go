@@ -95,8 +95,21 @@ func TestAPIProxyForwardsAndInjectsStatus(t *testing.T) {
 		t.Errorf("reason = %q", status.Reason)
 	}
 
+	p.FailNextStatus(RequestMatcher{Resource: "pods", Verb: "LIST"}, http.StatusServiceUnavailable, "unique fixture fault", 1)
+	resp, err = client.Get(base.Host + "/api/v1/namespaces/fixture/pods")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Message != "unique fixture fault" {
+		t.Errorf("message = %q", status.Message)
+	}
+
 	counts := p.Counts()
-	if counts.Total != 2 || counts.ByResourceVerb["pods/LIST"] != 2 {
+	if counts.Total != 3 || counts.ByResourceVerb["pods/LIST"] != 3 {
 		t.Errorf("counts = %+v", counts)
 	}
 }

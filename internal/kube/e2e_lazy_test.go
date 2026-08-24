@@ -27,6 +27,13 @@ import (
 
 const e2eNamespace = "kute-e2e"
 
+func requireE2ECluster(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(e2eKubeconfig(t)); err != nil {
+		t.Skipf("no e2e cluster: %v\nrun: scripts/e2e-cluster.sh up", err)
+	}
+}
+
 // e2eCluster builds a Cluster against the kind cluster scripts/e2e-cluster.sh
 // provisions, started and synced, and stops it at the end of the test.
 func e2eCluster(t *testing.T) *Cluster {
@@ -117,6 +124,7 @@ func startedKinds(c *Cluster) map[ResourceKind]bool {
 // screen you're on" rule at its starting point: connecting to a real cluster
 // registers three informers and no others.
 func TestConnectStartsOnlyTheEagerKinds(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 
 	// Named literally rather than compared against eagerKinds: a test that
@@ -147,6 +155,7 @@ func TestConnectStartsOnlyTheEagerKinds(t *testing.T) {
 // moment the palette opened — the regression that once hung the app for a
 // minute on the update loop.
 func TestCountLiveStartsNoInformers(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 	before := len(startedKinds(c))
 
@@ -175,6 +184,7 @@ func TestCountLiveStartsNoInformers(t *testing.T) {
 // server-side, off remainingItemCount, so the number has to be right as well
 // as cheap.
 func TestCountLiveCountsRealObjects(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -193,6 +203,7 @@ func TestCountLiveCountsRealObjects(t *testing.T) {
 // read path. One read of one kind starts that kind's informer and nothing
 // else's.
 func TestFirstReadStartsExactlyOneInformer(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 	before := startedKinds(c)
 	if before[KindSecret] {
@@ -233,6 +244,7 @@ func TestFirstReadStartsExactlyOneInformer(t *testing.T) {
 // cluster-wide against 4 MB for one namespace) is a screen that loads against
 // one that never does.
 func TestHelmInformerIsPerNamespaceAndTypeFiltered(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eCluster(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -308,6 +320,7 @@ func TestHelmInformerIsPerNamespaceAndTypeFiltered(t *testing.T) {
 // retryable status; a 403 will not change while the process runs, and the two
 // deserve different screens.
 func TestForbiddenKindIsSettledAndSaysWhy(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eClusterWithKubeconfig(t, e2ePartialKubeconfig(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -348,6 +361,7 @@ func TestForbiddenKindIsSettledAndSaysWhy(t *testing.T) {
 // permission boundary, not a broken cluster. The kind this identity *can*
 // read has to keep reading.
 func TestReadableKindSurvivesAForbiddenNeighbour(t *testing.T) {
+	requireE2ECluster(t)
 	c := e2eClusterWithKubeconfig(t, e2ePartialKubeconfig(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

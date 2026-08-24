@@ -42,14 +42,21 @@ func scaleKubeconfigPath() string {
 	return filepath.Join(repoRoot(), ".kube", "e2e-scale.config")
 }
 
+// requireScaleCluster skips the test unless the kwok scale kubeconfig exists.
+// The nightly scale job deliberately provisions no ordinary e2e cluster.
+func requireScaleCluster(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat(scaleKubeconfigPath()); err != nil {
+		t.Skipf("no scale cluster: %v\nrun: scripts/e2e-scale-cluster.sh up", err)
+	}
+}
+
 // TestScaleConnectAndFirstFrame: on a cluster with 5,000 pods, kute reaches a
 // rendered list inside the connect budget, and the frame it reaches is a real
 // one — the pod count in the header, not a spinner that has given up.
 func TestScaleConnectAndFirstFrame(t *testing.T) {
+	requireScaleCluster(t)
 	path := scaleKubeconfigPath()
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("no scale cluster: %v\nrun: scripts/e2e-scale-cluster.sh up", err)
-	}
 
 	start := time.Now()
 	a := Launch(t, WithKubeconfig(path), WithNamespace("scale-00"))
@@ -84,10 +91,8 @@ func TestScaleConnectAndFirstFrame(t *testing.T) {
 // goto palette across a dozen kinds on a 5k-pod cluster is exactly the
 // sequence that once hung the app for a minute.
 func TestScaleNavigationStaysResponsive(t *testing.T) {
+	requireScaleCluster(t)
 	path := scaleKubeconfigPath()
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("no scale cluster: %v\nrun: scripts/e2e-scale-cluster.sh up", err)
-	}
 
 	a := Launch(t, WithKubeconfig(path), WithNamespace("scale-00"))
 	a.WaitFor("web-", connectBudget)

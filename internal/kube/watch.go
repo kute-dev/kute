@@ -296,6 +296,11 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 	}
 	informer := tk.informer(f)
 	gen := c.generation
+	if c.watcher != nil {
+		c.watcher.register(tk.gvr, scope, "", func() {
+			c.recordWatchEstablished(gen, kind, scope)
+		})
+	}
 	// Best-effort: a failed registration just means no health signal from
 	// this informer.
 	_ = informer.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
@@ -334,24 +339,8 @@ func (c *Cluster) notify(gen int, kind ResourceKind) {
 // notifyScope is notify with the informer cache key retained, so recovery of
 // one namespace cannot clear another scope's outstanding watch failure.
 func (c *Cluster) notifyScope(gen int, kind ResourceKind, scope string) {
-	c.mu.Lock()
-	current := c.generation == gen
-	watchesRecovered := false
-	if current {
-		key := scopeKey{kind, scope}
-		_, wasUnhealthy := c.watchUnhealthy[key]
-		delete(c.watchUnhealthy, key)
-		watchesRecovered = wasUnhealthy && len(c.watchUnhealthy) == 0
-	}
-	c.mu.Unlock()
-	if !current {
+	if !c.generationCurrent(gen) {
 		return
-	}
-	if watchesRecovered {
-		// The first event proves the final unhealthy resource stream resumed.
-		// Probe now rather than leaving the connected badge behind the outage's
-		// potentially 30-second backoff timer.
-		c.health.retryNow()
 	}
 	select {
 	case c.events <- ResourceChangedMsg{Kind: kind}:

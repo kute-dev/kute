@@ -21,6 +21,7 @@ import (
 // status in 55-argocd-objects.yaml is permanent, so a Degraded app stays
 // Degraded for the whole test instead of being reconciled away.
 func TestArgoApplications(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 

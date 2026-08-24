@@ -20,6 +20,7 @@ import (
 // writes it into the isolated config the harness points HOME at, which is the
 // only honest way to reach this state.
 func TestProdDeleteRequiresTheTypedName(t *testing.T) {
+	RequireCluster(t)
 	ctxName := ContextName(t)
 	a := Launch(t, WithProdContexts(ctxName))
 	a.WaitFor("api-", Connect)
@@ -52,6 +53,7 @@ func TestProdDeleteRequiresTheTypedName(t *testing.T) {
 // never the modal. Without this, a delete flow that had escalated everything
 // to the modal would look "safe" and pass every test.
 func TestNonProdDeleteIsInline(t *testing.T) {
+	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 

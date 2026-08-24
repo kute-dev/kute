@@ -22,6 +22,7 @@ import (
 )
 
 func TestEventStormConvergesWithoutAmplification(t *testing.T) {
+	RequireCluster(t)
 	widgetPatches := soakCount(t, "KUTE_E2E_STORM_WIDGET_PATCHES", 300)
 	podPatches := soakCount(t, "KUTE_E2E_STORM_POD_PATCHES", 300)
 	eventsPerScreen := soakCount(t, "KUTE_E2E_STORM_EVENTS_PER_SCREEN", 180)
