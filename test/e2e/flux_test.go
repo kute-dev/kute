@@ -27,6 +27,20 @@ import (
 // the harness doc calls out.
 func TestFluxScreens(t *testing.T) {
 	RequireCluster(t)
+	const priorReconcileStamp = "2000-01-01T00:00:00Z"
+	kustomizations := fluxDynamic(t).Resource(kustomizationGVR).Namespace(Namespace)
+	seeded := seedDynamicObject(t, kustomizations, "kute-apps", func(obj *unstructured.Unstructured) {
+		_ = unstructured.SetNestedField(obj.Object, false, "spec", "suspend")
+		annotations := obj.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations["reconcile.fluxcd.io/requestedAt"] = priorReconcileStamp
+		obj.SetAnnotations(annotations)
+	}, func(current, original *unstructured.Unstructured) {
+		restoreNestedField(current, original, "spec", "suspend")
+		restoreAnnotation(current, original, "reconcile.fluxcd.io/requestedAt")
+	})
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -98,20 +112,25 @@ func TestFluxScreens(t *testing.T) {
 		// from a frame: a suspend nothing reconciles away stays true.
 		a.Press("s")
 		a.waitForRowState(t, "kute-apps", "suspended")
-		waitForKustomization(t, "kute-apps", "became suspended", suspendIs(true))
+		suspended := waitForKustomization(t, "kute-apps", "became suspended", suspendIs(true))
+		requireNewResourceVersion(t, seeded.GetResourceVersion(), suspended.GetResourceVersion())
 
 		a.Press("s")
-		waitForKustomization(t, "kute-apps", "resumed", suspendIs(false))
+		resumed := waitForKustomization(t, "kute-apps", "resumed", suspendIs(false))
+		requireNewResourceVersion(t, suspended.GetResourceVersion(), resumed.GetResourceVersion())
 
 		a.Press("r")
 		obj := waitForKustomization(t, "kute-apps", "gained a reconcile request",
 			func(u *unstructured.Unstructured) bool {
-				return u.GetAnnotations()["reconcile.fluxcd.io/requestedAt"] != ""
+				stamp := u.GetAnnotations()["reconcile.fluxcd.io/requestedAt"]
+				return stamp != "" && stamp != priorReconcileStamp
 			})
+		requireNewResourceVersion(t, resumed.GetResourceVersion(), obj.GetResourceVersion())
 		stamp := obj.GetAnnotations()["reconcile.fluxcd.io/requestedAt"]
 		if _, err := time.Parse(time.RFC3339, stamp); err != nil {
 			t.Errorf("reconcile annotation %q is not RFC3339 — Flux ignores a malformed stamp: %v", stamp, err)
 		}
+		a.WaitForAll(Settle, "Kustomizations", "kute-apps")
 	})
 
 	// §30b: the same objects, arranged by what drives them. The join is

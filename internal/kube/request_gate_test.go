@@ -64,7 +64,7 @@ func TestWatchObserverMatchesTypedDynamicAndFilteredHelmWatches(t *testing.T) {
 			mu.Lock()
 			seen[name]++
 			mu.Unlock()
-		})
+		}, func(error) {})
 	}
 	register("typed", schema.GroupVersionResource{Version: "v1", Resource: "pods"}, "team-a", "")
 	register("dynamic", schema.GroupVersionResource{Group: "example.io", Version: "v1", Resource: "widgets"}, "", "")
@@ -92,7 +92,7 @@ func TestWatchObserverIgnoresFailedAndNonWatchResponses(t *testing.T) {
 	gate := &authenticationGate{}
 	observer := newWatchObserver()
 	called := 0
-	observer.register(schema.GroupVersionResource{Version: "v1", Resource: "pods"}, "", "", func() { called++ })
+	observer.register(schema.GroupVersionResource{Version: "v1", Resource: "pods"}, "", "", func() { called++ }, func(error) {})
 	status := http.StatusGone
 	rt := &observingRoundTripper{
 		gate: gate, observer: observer,
@@ -110,5 +110,45 @@ func TestWatchObserverIgnoresFailedAndNonWatchResponses(t *testing.T) {
 	_, _ = rt.RoundTrip(list)
 	if called != 0 {
 		t.Fatal("successful LIST was reported as WATCH establishment")
+	}
+}
+
+func TestWatchObserverReportsEstablishedBodyEnd(t *testing.T) {
+	t.Parallel()
+	gate := &authenticationGate{}
+	observer := newWatchObserver()
+	established := 0
+	var ended error
+	endedCalls := 0
+	observer.register(
+		schema.GroupVersionResource{Version: "v1", Resource: "pods"}, "", "",
+		func() { established++ },
+		func(err error) { ended, endedCalls = err, endedCalls+1 },
+	)
+	rt := &observingRoundTripper{
+		gate: gate, observer: observer,
+		next: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
+		}),
+	}
+	watch, _ := http.NewRequest(http.MethodGet, "https://cluster/api/v1/pods?watch=true", nil)
+	resp, err := rt.RoundTrip(watch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if established != 1 {
+		t.Fatalf("WATCH establishment callbacks = %d, want one", established)
+	}
+	if _, err := io.ReadAll(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(ended, io.EOF) {
+		t.Fatalf("WATCH end error = %v, want EOF", ended)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if endedCalls != 1 {
+		t.Fatalf("WATCH end callbacks after EOF and close = %d, want one", endedCalls)
 	}
 }

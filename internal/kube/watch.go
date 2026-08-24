@@ -299,6 +299,8 @@ func (c *Cluster) registerTypedWatchLocked(kind ResourceKind, scope string, f in
 	if c.watcher != nil {
 		c.watcher.register(tk.gvr, scope, "", func() {
 			c.recordWatchEstablished(gen, kind, scope)
+		}, func(err error) {
+			c.recordWatchError(gen, kind, scope, err)
 		})
 	}
 	// Best-effort: a failed registration just means no health signal from

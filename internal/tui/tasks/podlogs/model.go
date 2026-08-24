@@ -142,6 +142,7 @@ type Model struct {
 	feedback      string
 	streamer      kube.PodLogStreamer
 	tailLines     int64
+	conn          kube.ConnState
 
 	streamCancel context.CancelFunc
 	streamCh     chan tea.Msg

@@ -69,6 +69,9 @@ jobs:
       - name: Create the scale cluster
         run: scripts/e2e-scale-cluster.sh up
       - name: Run the scale suite
+        env:
+          KUTE_E2E_SCALE_NAV_ITERATIONS: "8"
+          KUTE_E2E_SCALE_BURST_PODS: "500"
         run: go test -tags "e2e e2e_scale" -count=1 -timeout 30m -run TestScale ./test/e2e/...
 
   soak:

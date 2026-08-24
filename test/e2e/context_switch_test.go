@@ -111,6 +111,57 @@ func TestContextSwitchCancelsOldStreamAndReturnsPushedTaskToBrowse(t *testing.T)
 	a.Never("BUFFER EDITOR", time.Second)
 }
 
+func TestContextSwitchCancelsPushedYAMLManagedFieldsRead(t *testing.T) {
+	RequireCluster(t)
+	first := NewAPIProxy(t, KubeconfigPath())
+	second := NewAPIProxy(t, KubeconfigPath())
+	merged := BuildMergedKubeconfig(t,
+		KubeconfigContext{Name: "ctx-one", Kubeconfig: first.KubeconfigPath()},
+		KubeconfigContext{Name: "ctx-two", Kubeconfig: second.KubeconfigPath()},
+	)
+	a := Launch(t, WithKubeconfig(merged), WithContext("ctx-one"), WithoutAPIProxy())
+	a.WaitFor("api-", Connect)
+	pod := a.selectAPIPod(t)
+
+	const staleMarker = "KUTE-E2E-STALE-MANAGED-FIELDS"
+	managedFieldsGET := RequestMatcher{
+		Path:     "/api/v1/namespaces/" + Namespace + "/pods/" + pod,
+		Resource: "pods",
+		Verb:     "GET",
+	}
+	gate := first.HoldNextStatus(managedFieldsGET, 503, staleMarker)
+	fence := first.Fence()
+	a.Press("y")
+	request := first.WaitForRequest(fence, managedFieldsGET, Settle)
+	if request.Completed {
+		t.Fatalf("old-context managedFields GET completed before the switch: %+v", request)
+	}
+
+	switchContextThroughPalette(t, a, "ctx-two")
+	a.WaitForAll(Settle, "ctx-two", "Pods")
+	completed := first.WaitForCompletion(request.ID, Settle)
+	gate.Release()
+	if !completed.Cancelled {
+		t.Fatalf("old-context managedFields GET was not cancelled: %+v", completed)
+	}
+
+	// The destination contract is browse and the best-effort managedFields
+	// failure belongs wholly to the context that issued it.
+	a.WaitFor("● connected", Settle)
+	a.Never(staleMarker, time.Second)
+	a.Never("YAML", time.Second)
+
+	oldFence := first.Fence()
+	// Keep the observation window open before checking all three request
+	// classes together; a one-shot history check could race a late old loop.
+	a.Never(staleMarker, 2*time.Second)
+	for _, rec := range first.History() {
+		if rec.ID > oldFence && (rec.Verb == "GET" || rec.Verb == "LIST" || rec.Verb == "WATCH") {
+			t.Fatalf("old endpoint received new %s after YAML context switch: %+v", rec.Verb, rec)
+		}
+	}
+}
+
 func TestFailedContextSwitchKeepsOriginalSession(t *testing.T) {
 	RequireCluster(t)
 	first := NewAPIProxy(t, KubeconfigPath())

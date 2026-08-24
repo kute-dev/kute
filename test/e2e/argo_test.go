@@ -22,6 +22,19 @@ import (
 // Degraded for the whole test instead of being reconciled away.
 func TestArgoApplications(t *testing.T) {
 	RequireCluster(t)
+	applications := argoDynamic(t).Resource(applicationGVR).Namespace(Namespace)
+	seedDynamicObject(t, applications, "kute-billing", func(obj *unstructured.Unstructured) {
+		annotations := obj.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations["argocd.argoproj.io/refresh"] = "e2e-prior-state"
+		obj.SetAnnotations(annotations)
+		unstructured.RemoveNestedField(obj.Object, "operation")
+	}, func(current, original *unstructured.Unstructured) {
+		restoreAnnotation(current, original, "argocd.argoproj.io/refresh")
+		restoreNestedField(current, original, "operation")
+	})
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
 
@@ -98,11 +111,15 @@ func TestArgoApplications(t *testing.T) {
 
 		// 'r' is TierNone — it executes immediately, no confirm. The fence is
 		// the API, not a frame: the annotation is invisible to the row.
+		before := waitForApplication(t, "kute-billing", "was readable before refresh", func(*unstructured.Unstructured) bool { return true })
 		a.Press("r")
-		waitForApplication(t, "kute-billing", "gained a refresh annotation",
+		refreshed := waitForApplication(t, "kute-billing", "gained a fresh refresh annotation",
 			func(u *unstructured.Unstructured) bool {
-				return u.GetAnnotations()["argocd.argoproj.io/refresh"] != ""
+				return u.GetAnnotations()["argocd.argoproj.io/refresh"] == "normal" &&
+					u.GetResourceVersion() != before.GetResourceVersion()
 			})
+		requireNewResourceVersion(t, before.GetResourceVersion(), refreshed.GetResourceVersion())
+		a.WaitForAll(Settle, "Applications", "refresh")
 	})
 
 	t.Run("sync shows the confirm then patches the target revision", func(t *testing.T) {
@@ -119,16 +136,19 @@ func TestArgoApplications(t *testing.T) {
 		// suspend/reconcile subtest shows (it verifies the write through the
 		// API, never a will-run string on screen).
 		a.WaitFor("CONFIRM", Settle)
+		before := waitForApplication(t, "kute-billing", "was readable before sync", func(*unstructured.Unstructured) bool { return true })
 		a.Press("y")
 
 		// The app's own spec.source.targetRevision ("main") pins the sync,
 		// read from the API rather than a frame (the list does not project
 		// .operation).
-		waitForApplication(t, "kute-billing", "gained a sync request",
+		synced := waitForApplication(t, "kute-billing", "gained a fresh sync request",
 			func(u *unstructured.Unstructured) bool {
 				rev, _, _ := unstructured.NestedString(u.Object, "operation", "sync", "revision")
-				return rev == "main"
+				return rev == "main" && u.GetResourceVersion() != before.GetResourceVersion()
 			})
+		requireNewResourceVersion(t, before.GetResourceVersion(), synced.GetResourceVersion())
+		a.WaitForAll(Settle, "Applications", "refresh")
 	})
 
 	t.Run("dashboard url resolves", func(t *testing.T) {

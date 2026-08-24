@@ -15,7 +15,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -68,6 +70,75 @@ func requireNewResourceVersion(t *testing.T, before, after string) {
 	if before == "" || after == "" || before == after {
 		t.Fatalf("resourceVersion did not advance: before=%q after=%q", before, after)
 	}
+}
+
+// seedDynamicObject captures a shared CRD fixture, writes a distinguishable
+// pre-action state, and restores only the caller-owned fields in cleanup.
+// Field-scoped restoration avoids overwriting unrelated server changes while
+// still making reruns against a reused cluster honest.
+func seedDynamicObject(
+	t *testing.T,
+	resource dynamic.ResourceInterface,
+	name string,
+	seed func(*unstructured.Unstructured),
+	restore func(current, original *unstructured.Unstructured),
+) *unstructured.Unstructured {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	original, err := resource.Get(ctx, name, metav1.GetOptions{})
+	cancel()
+	if err != nil {
+		t.Fatalf("capturing %s before mutation: %v", name, err)
+	}
+
+	seeded := original.DeepCopy()
+	seed(seeded)
+	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	seeded, err = resource.Update(ctx, seeded, metav1.UpdateOptions{})
+	cancel()
+	if err != nil {
+		t.Fatalf("seeding %s before mutation: %v", name, err)
+	}
+
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanupCancel()
+		current, getErr := resource.Get(cleanupCtx, name, metav1.GetOptions{})
+		if getErr != nil {
+			t.Errorf("getting %s for restore: %v", name, getErr)
+			return
+		}
+		restore(current, original)
+		if _, updateErr := resource.Update(cleanupCtx, current, metav1.UpdateOptions{}); updateErr != nil {
+			t.Errorf("restoring %s: %v", name, updateErr)
+		}
+	})
+	return seeded
+}
+
+func restoreAnnotation(current, original *unstructured.Unstructured, key string) {
+	annotations := current.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	if value, ok := original.GetAnnotations()[key]; ok {
+		annotations[key] = value
+	} else {
+		delete(annotations, key)
+	}
+	current.SetAnnotations(annotations)
+}
+
+func restoreNestedField(current, original *unstructured.Unstructured, fields ...string) {
+	value, found, err := unstructured.NestedFieldCopy(original.Object, fields...)
+	if err != nil {
+		return
+	}
+	if !found {
+		unstructured.RemoveNestedField(current.Object, fields...)
+		return
+	}
+	_ = unstructured.SetNestedField(current.Object, value, fields...)
 }
 
 func replaceTypedValue(a *App, old, value string) {

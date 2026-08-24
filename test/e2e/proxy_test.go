@@ -172,6 +172,54 @@ func TestAPIProxyInjectsConflict(t *testing.T) {
 	}
 }
 
+func TestAPIProxyCanHoldASyntheticStatus(t *testing.T) {
+	source, _ := proxyFixture(t, http.NotFoundHandler())
+	p := NewAPIProxy(t, source)
+	client := proxyClient(t, p.KubeconfigPath())
+	base, err := clientcmd.BuildConfigFromFlags("", p.KubeconfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matcher := RequestMatcher{Resource: "pods", Verb: "GET"}
+	gate := p.HoldNextStatus(matcher, http.StatusServiceUnavailable, "held synthetic marker")
+	fence := p.Fence()
+	done := make(chan *http.Response, 1)
+	errs := make(chan error, 1)
+	go func() {
+		resp, requestErr := client.Get(base.Host + "/api/v1/namespaces/fixture/pods/example")
+		if requestErr != nil {
+			errs <- requestErr
+			return
+		}
+		done <- resp
+	}()
+
+	rec := p.WaitForRequest(fence, matcher, time.Second)
+	if rec.Completed {
+		t.Fatalf("held synthetic response completed before release: %+v", rec)
+	}
+	gate.Release()
+	select {
+	case err := <-errs:
+		t.Fatal(err)
+	case resp := <-done:
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503", resp.StatusCode)
+		}
+		var status metav1.Status
+		if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+			t.Fatal(err)
+		}
+		if status.Message != "held synthetic marker" {
+			t.Fatalf("message = %q", status.Message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("held synthetic response did not finish after release")
+	}
+}
+
 func TestAPIProxyFenceAndCloseActive(t *testing.T) {
 	source, _ := proxyFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()

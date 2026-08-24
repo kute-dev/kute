@@ -554,6 +554,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Also forwarded to the task below (unchanged msg), so browse can
 		// render its own stale strip (Phase 4).
 		m.conn = kube.ConnState(msg)
+		// The eager cache-sync latch is connection proof even if all of its
+		// Add events landed before Bubble Tea began consuming the event
+		// stream and the first periodic /livez result has not arrived yet.
+		// A WATCH can end in that narrow window (the logs lifecycle E2E closes
+		// every active request deliberately); that is a mid-session outage
+		// with useful cached state, not an unreachable launch that should
+		// discard the active task stack for setup.
+		if m.neverConnected && m.session != nil && m.session.Cluster != nil && m.session.Cluster.Synced() {
+			m.neverConnected = false
+		}
 		switch {
 		case m.conn.Phase == kube.ConnConnected:
 			m.neverConnected = false

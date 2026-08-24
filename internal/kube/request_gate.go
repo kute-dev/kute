@@ -3,6 +3,7 @@ package kube
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -91,41 +92,98 @@ func (t *observingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		t.gate.block(fmt.Errorf("kubernetes API returned %s", resp.Status))
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && req.URL.Query().Get("watch") == "true" {
-		t.observer.established(req)
+		if ended := t.observer.established(req); ended != nil {
+			resp.Body = &observedWatchBody{ReadCloser: resp.Body, ended: ended}
+		}
 	}
 	return resp, nil
+}
+
+// observedWatchBody makes the transport observer symmetrical: response
+// headers prove a replacement WATCH was established, while the response
+// body's end proves that established stream is no longer healthy. Relying
+// only on SharedIndexInformer's WatchErrorHandler misses client-go recovery
+// paths (notably an HTTP 410 followed by a streaming relist), allowing a
+// successful /livez probe to turn the header green before the replacement
+// WATCH exists.
+type observedWatchBody struct {
+	io.ReadCloser
+	ended func(error)
+	once  sync.Once
+}
+
+func (b *observedWatchBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil {
+		b.finish(err)
+	}
+	return n, err
+}
+
+func (b *observedWatchBody) Close() error {
+	err := b.ReadCloser.Close()
+	if err != nil {
+		b.finish(err)
+	} else {
+		b.finish(errors.New("kubernetes watch stream closed"))
+	}
+	return err
+}
+
+func (b *observedWatchBody) finish(err error) {
+	b.once.Do(func() { b.ended(err) })
 }
 
 type watchRegistration struct {
 	group, version, resource, namespace, fieldSelector string
 }
 
+type watchCallbacks struct {
+	established func()
+	ended       func(error)
+}
+
 type watchObserver struct {
 	mu        sync.Mutex
-	callbacks map[watchRegistration][]func()
+	callbacks map[watchRegistration][]watchCallbacks
 }
 
 func newWatchObserver() *watchObserver {
-	return &watchObserver{callbacks: map[watchRegistration][]func(){}}
+	return &watchObserver{callbacks: map[watchRegistration][]watchCallbacks{}}
 }
 
-func (o *watchObserver) register(gvr schema.GroupVersionResource, namespace, fieldSelector string, callback func()) {
+func (o *watchObserver) register(
+	gvr schema.GroupVersionResource,
+	namespace, fieldSelector string,
+	established func(),
+	ended func(error),
+) {
 	o.mu.Lock()
 	o.callbacks[watchRegistration{gvr.Group, gvr.Version, gvr.Resource, namespace, fieldSelector}] = append(
-		o.callbacks[watchRegistration{gvr.Group, gvr.Version, gvr.Resource, namespace, fieldSelector}], callback)
+		o.callbacks[watchRegistration{gvr.Group, gvr.Version, gvr.Resource, namespace, fieldSelector}],
+		watchCallbacks{established: established, ended: ended},
+	)
 	o.mu.Unlock()
 }
 
-func (o *watchObserver) established(req *http.Request) {
+func (o *watchObserver) established(req *http.Request) func(error) {
 	got, ok := watchRegistrationForRequest(req)
 	if !ok {
-		return
+		return nil
 	}
 	o.mu.Lock()
-	callbacks := append([]func(){}, o.callbacks[got]...)
+	callbacks := append([]watchCallbacks{}, o.callbacks[got]...)
 	o.mu.Unlock()
 	for _, callback := range callbacks {
-		callback()
+		callback.established()
+	}
+	if len(callbacks) == 0 {
+		return nil
+	}
+	return func(err error) {
+		for _, callback := range callbacks {
+			callback.ended(err)
+		}
 	}
 }
 

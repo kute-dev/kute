@@ -117,9 +117,10 @@ func exerciseWatchRecovery(t *testing.T, a *App, resource RequestMatcher, stable
 	gate := proxy.Hold(watch)
 
 	// A cancelled streaming request and 410 Gone are both normal reflector
-	// restart paths, so neither alone is a connection-health failure. Fail one
-	// health probe and hold its successor to make the degraded phase observable
-	// until the target watch has completed its recovery sequence.
+	// restart paths. Fail one health probe to make the degraded phase
+	// observable, then hold its successful successor so it can be completed in
+	// the exact ordering this test guards: livez=200 while the resource WATCH is
+	// still unhealthy must not turn the header green.
 	probe := RequestMatcher{Path: "/livez"}
 	proxy.FailNext(probe, 409, 1)
 	probeGate := proxy.Hold(probe)
@@ -160,9 +161,29 @@ func exerciseWatchRecovery(t *testing.T, a *App, resource RequestMatcher, stable
 	// are therefore the only path by which the cache can learn this value.
 	mutate()
 	a.Never(final, 750*time.Millisecond)
-	gate.Release()
-	a.WaitForAll(Settle, stable, final)
+	successfulProbe := proxy.WaitForRequest(failedProbe.ID, probe, Settle)
+	if successfulProbe.Completed {
+		t.Fatalf("successful health probe passed its gate before watch recovery was staged: %+v", successfulProbe)
+	}
 	probeGate.Release()
+	completed = proxy.WaitForCompletion(successfulProbe.ID, Settle)
+	if completed.StatusCode != 200 {
+		t.Fatalf("health probe status while relist was held = %d, want 200: %+v", completed.StatusCode, completed)
+	}
+	if stable != "" && !strings.Contains(a.Frame(), stable) {
+		t.Fatalf("cached row %q disappeared after livez recovered but before its watch did:\n%s", stable, a.Frame())
+	}
+	a.WaitFor("disconnected", Settle)
+	a.Never("● connected", 750*time.Millisecond)
+
+	recoveryProbeFence := proxy.Fence()
+	releasedAt := time.Now()
+	gate.Release()
+	recoveryProbe := proxy.WaitForRequest(recoveryProbeFence, probe, Settle)
+	if delay := recoveryProbe.Started.Sub(releasedAt); delay > time.Second {
+		t.Errorf("watch establishment did not request an immediate health retry: delay=%s request=%+v", delay, recoveryProbe)
+	}
+	a.WaitForAll(Settle, stable, final)
 	a.WaitGone("disconnected", Settle)
 	a.WaitFor("connected", Settle)
 	waitForOneActiveWatch(t, proxy, watch, Settle)

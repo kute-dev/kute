@@ -1,9 +1,9 @@
 # kute — end-to-end test suite
 
 What `test/e2e` and its `internal/kube` counterpart actually cover, how the harness works,
-and the rules that keep a suite running against a real cluster from going flaky. Companion
-to [`lazy-informers.md`](lazy-informers.md), whose rules this suite verifies against a real
-apiserver instead of a fake clientset.
+and the rules that keep a suite running against a real cluster from going flaky. This is the
+source of truth for the guards that exist in the repository today; read it alongside
+[`lazy-informers.md`](lazy-informers.md) when changing informer lifecycle coverage.
 
 ---
 
@@ -13,8 +13,8 @@ Every other test in the repo stops at a fake: `internal/kube`'s unit tests drive
 `k8s.io/client-go/kubernetes/fake`, and every task package drives a hand-written
 `fakeLister`. None of that exercises the actual join — kubeconfig resolution → REST config
 → shared informer factory → lazy `ensureKind` → `resources.List` → rendered frame — against
-a real apiserver. This suite does, on a real kind cluster, driving the real `app.run`
-through a real `tea.Program`.
+a real apiserver. This suite does, on a real kind cluster, driving the production startup
+path through a real `tea.Program`.
 
 ---
 
@@ -31,11 +31,11 @@ through a real `tea.Program`.
    a real apiserver by reading the unexported `kindInformers` map, exactly as
    `internal/kube/count_test.go` already does against the fake clientset.
 
-`RunWithConfig` (`internal/app/app.go`) is a thin wrapper around `run(cfg Config, opts
-...tea.ProgramOption)` for exactly this reason — the harness calls `run` with its own
-`tea.ProgramOption`s so it exercises the *real* startup path (the four goroutines wiring
-`forwardEvents`, `cluster.Start`, `watchForwardManager`, `updateCheckCmd`), not a copy that
-can silently drift from it.
+`RunWithConfig` (`internal/app/app.go`) and the build-tagged `RunE2E`
+(`internal/app/e2e.go`) both delegate to the same unexported `run`. The harness enters through
+`RunE2E` with its own `tea.ProgramOption`s, so it exercises the production composition-root
+lifecycle — cluster start, resource and connection event bridge, forward bridge, shutdown,
+and state save — without exporting a headless-test seam in shipping builds.
 
 ### Rules that keep this from going flaky
 
@@ -62,9 +62,9 @@ can silently drift from it.
 - **A key press whose meaning depends on the previous write fences on the screen, not the
   API.** Reading the object back through a client proves the *server* has the write, not
   that kute does, and `browse` reloads from its informer cache on a 250 ms debounce.
-- **No `t.Parallel`, anywhere in this suite.** `lipgloss.SetColorProfile` is a process
-  global (as with `browse`'s truecolor goldens), `Launch` isolates `HOME`/XDG with
-  `t.Setenv`, and `internal/kube`'s own e2e tests set the kubeconfig path — both process-wide.
+- **No `t.Parallel`, anywhere in this suite.** `Launch` isolates `HOME`/XDG with `t.Setenv`,
+  `internal/kube`'s own e2e tests set a package-global kubeconfig path, and many scenarios
+  intentionally mutate the same real cluster fixtures.
 
 ---
 
@@ -87,8 +87,9 @@ can silently drift from it.
 
 ## 2. Fixtures — `test/e2e/fixtures/*.yaml`
 
-Everything lives in namespace `kute-e2e`, pinned by image digest so a re-run is not a new
-cluster.
+Namespaced fixtures primarily live in `kute-e2e` (with `kute-e2e-b` for scoped switching).
+CRDs and Nodes are cluster-scoped, while the RBAC fixture deliberately mixes Roles and
+ClusterRoles. Workload images are pinned by digest and fixture application is idempotent.
 
 | Fixture | What it makes testable |
 | --- | --- |
@@ -102,7 +103,7 @@ cluster.
 | `50-crd.yaml` + `51-widgets.yaml` — CRD `widgets.kute.dev`, two Widgets | discovery → kind registry → §14d, the "CRD support is data, not code" invariant |
 | `52-flux-crds.yaml` + `53-flux-objects.yaml` — Kustomization/HelmRelease/GitRepository CRDs, hand-written status, no controller | §30a/§31a, and the Flux-vs-Helm-3 `HelmRelease` name collision the substitution table exists for |
 | `54-argocd-crds.yaml` + `55-argocd-objects.yaml` — Application/AppProject CRDs, hand-written status, no controller | §33a's sync×health matrix |
-| `60-rbac.yaml` — ServiceAccounts `kute-restricted` (pods list/get only), `kute-partial` (connect kinds + ConfigMaps/Events, no Secrets/Deployments/Ingresses), `kute-team` (Pods/ConfigMaps/Events/pods-log, namespace-bound Role only, no ClusterRole) | every 403 path, including per-kind degradation and `--namespace-scoped` coverage |
+| `60-rbac.yaml` — ServiceAccounts `kute-restricted` (Pod list/get/watch only), `kute-partial` (connect kinds + ConfigMaps/Events, no Secrets/Deployments/Ingresses), `kute-team` (Pods/ConfigMaps/Events/pods-log, namespace-bound Roles only, no ClusterRole) | startup, per-kind, and scoped-mode 403 paths, plus real A→B access under `--namespace-scoped` |
 
 kind ships no metrics-server, so the "CPU/MEM render `–`, never a lie or a crash" row costs
 nothing extra.
@@ -115,34 +116,45 @@ The PR suite uses `//go:build e2e`. Expensive rows add a second tag:
 subprocess handoff. The TLS fault-injection proxy is part of ordinary `e2e`, not another
 tag. The PTY suite is POSIX-only; the nightly job runs it on Linux.
 
-`harness.go` — `Launch(t, opts...) *App`. Points `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at
-`t.TempDir()`, then calls `app.run` with `tea.WithInput`, `tea.WithOutput`,
-`tea.WithWindowSize(140, 36)`, `tea.WithColorProfile(colorprofile.TrueColor)`,
-`tea.WithContext(ctx)`.
+`harness.go` — `Launch(t, opts...) *App`. Isolates `HOME` and all XDG state/config/cache
+paths under `t.TempDir()`, disables the ambient update check, pins the dark theme, then calls
+the build-tagged `app.RunE2E` with pipe input, discarded renderer output,
+`tea.WithWindowSize(140, 36)`, `tea.WithColorProfile(colorprofile.TrueColor)`, and
+`tea.WithContext(ctx)`. Full frames are captured from the model through `tea.WithFilter`;
+the renderer's cursor-relative diff stream is not parsed as if it were a screen.
 
 Launch options: `WithKubeconfig`, `WithNamespace`, `WithScopeNamespace` (drives
-`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`, `WithAPIProxy`.
+`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`, `WithAPIProxy`, and
+`WithoutAPIProxy`. The last option is diagnostic for an ordinary launch and required when a
+merged/authentication kubeconfig already points at explicitly managed proxies, avoiding an
+unobservable proxy-around-proxy layer.
 
 Every launch goes through a per-test TLS API proxy by default. `App.Proxy()` exposes controls
 for fixed delays, held requests, Kubernetes `Status` faults, endpoint availability, and
 closing active watches or streams. `Fence` plus `WaitForRequest` is the synchronization
 contract: install the control, fence the traffic, and wait for the matching request rather
 than sleeping or matching client-go log text. `History` and `Counts` expose timestamps,
-cancellation, responses, and active/total counts by resource and verb. `WithoutAPIProxy`
-exists only for diagnosing proxy transparency.
+cancellation, responses, and active/total counts by resource and verb. Matchers include
+decoded query parameters, which is how the recovery tests distinguish client-go's streaming
+list (`watch=true&sendInitialEvents=true`) from an ordinary watch. `HoldNextStatus` gates a
+synthetic response itself, which lets context-switch tests prove cancellation before a
+uniquely marked stale failure can return without changing the ordinary one-shot-fault then
+recovery-gate behavior.
 
 `App` methods: `Press`/`Type`/`Paste`/`Enter`/`Esc`/`Down` to drive terminal input; `Send`
 and `Resize` to inject explicit Bubble Tea messages through the retained real program;
 `Frame` to read the current screen (ANSI-stripped); `WaitFor`/`WaitForAll`/`WaitGone`/`WaitForWrapped`/
 `WaitLoaded` to poll against a deadline; `Never` to assert a substring stays absent across a
-window; `Quit` to shut down. On failure the harness dumps the last frame.
+window; `Quit` to shut down. On failure the harness dumps the last frame and any proxied
+request that failed or returned a 4xx/5xx response.
 
-`auth_test.go` adds a temporary POSIX exec credential plugin whose mode, response, and run
-counter are controlled by atomic files. Its proxy variant strips the proxy's own upstream
-credentials and forwards the client's bearer token, so the kind apiserver—not merely the
-proxy—validates the token. `pty_test.go` builds `cmd/kute`, attaches stdin/stdout/stderr to a
-fresh kernel PTY, records the initial terminal state, and retains raw output checkpoints for
-assertions across Bubble Tea renderer suspension and redraw.
+`auth_test.go` adds a temporary POSIX exec credential plugin with atomically replaced mode
+and response files plus an append-only invocation counter. Its proxy variant strips the
+proxy's own upstream credentials and forwards the client's bearer token, so the kind
+apiserver — not merely the proxy — validates the token. `pty_test.go` builds `cmd/kute`,
+attaches stdin/stdout/stderr to a fresh kernel PTY, records the initial terminal state, and
+retains raw output checkpoints for assertions across Bubble Tea renderer suspension and
+redraw.
 
 `harness_support.go` adds `WaitForTCPRefused`, heap/allocation/goroutine
 `SnapshotRuntime` classification, and `BuildMergedKubeconfig`. `InputFence` measures one
@@ -158,39 +170,54 @@ be reduced for a local reproduction with `KUTE_E2E_STORM_WIDGET_PATCHES`,
 status patches, 360 Event objects (each created and updated), eight full workflow loops,
 24,000 streamed log lines, and 24 namespaces.
 
+The kwok scale row has the same bounded-override contract:
+`KUTE_E2E_SCALE_NAV_ITERATIONS` defaults to 8 repeated warmed navigation cycles and
+`KUTE_E2E_SCALE_BURST_PODS` defaults to a 500-Pod watch burst. The nightly workflow sets
+those values explicitly; smaller positive values are useful for local iteration.
+
 ### Test files
 
 | File | Covers |
 | --- | --- |
-| `flow_test.go` | the everyday flow (list → pod detail → logs → events → timeline → rollout-restart), that the screen is *still the screen* after a commit, and CrashLoopBackOff surfacing |
-| `kinds_test.go` | ConfigMap, Secret, Ingress, discovered Widget, and synthetic Helm-release screens, plus the jump palette gaining discovered kinds while open; other files cover Pods, Deployments, Nodes, Events, Jobs, CronJobs, and the remaining curated screens |
+| `flow_test.go` | the everyday list → Pod detail → logs → events → timeline flow, a separate real rollout-restart with remain-on-screen behavior, and durable crash-loop evidence |
+| `kinds_test.go` | ConfigMap, Secret, Ingress, discovered Widget, and synthetic Helm-release screens, plus discovery fenced across one already-open palette instance; other files cover Pods, Deployments, Nodes, Events, Jobs, CronJobs, and the remaining curated screens |
 | `editors_test.go` | §27a/§27b's confirm → execute → refresh → show result → *remain on screen* contract — the thing a unit test against a fake can't check, because it's about what the screen does after the write lands |
 | `exec_test.go` | §10a's exec picker against a real container (real shell-detection round-trip, stops short of handing off the tty) and port-forward carrying real traffic — the reason this suite runs on kind rather than kwok |
-| `flux_test.go` | §30a/§31a against real Flux CRDs, including the HelmRelease name-collision regression |
-| `argo_test.go` | §33a's sync×health matrix against real Argo CD CRDs |
-| `rbac_test.go` | the restricted/partial kubeconfigs across every screen — the 403 card, and that no screen spins forever or claims zero of a kind it merely cannot read |
+| `flux_test.go` | §30a/§31a against real Flux CRDs, including the HelmRelease name-collision regression and fresh resource-version/timestamp assertions with fixture restoration |
+| `argo_test.go` | §33a's sync×health matrix plus fresh refresh/sync resource versions and restored shared write fields against real Argo CD CRDs |
+| `rbac_test.go` | restricted/partial identities across browse, Pod detail, logs, Events, Timeline, Nodes, and refused Deployments/Secrets/Ingresses — no spinner or false-empty claim for unreadable kinds |
 | `scoped_test.go` | `--namespace-scoped` end-to-end: real pod rows, cluster-scoped kinds forbidden honestly, lazy per-namespace cache fills, the namespace palette's denied notice |
 | `metrics_test.go` | no metrics-server: `–` in browse, poddetail's bars, nodedetail, overview's capacity bars — no crash, no zeroes presented as real |
 | `prod_test.go` | prod-context delete requires the typed name; non-prod delete stays inline `y/N` |
+| `proxy_test.go` | transparent forwarding, client-auth forwarding, Kubernetes Status injection (including 409), request fences/cancellation, and collision-free merged kubeconfigs |
 | `forward_lifecycle_test.go` | listener teardown on stop/quit, Service target replacement, and stop-during-retry cancellation |
 | `network_test.go` | cached offline rows, disabled writes, responsive input, wire-timestamped retry pacing, and recovery without restart |
-| `watch_recovery_test.go` | WATCH close → 410 → LIST → WATCH recovery for typed, dynamic, and filtered Helm informers without false-empty frames |
-| `context_switch_test.go` | merged-context restore, old read/stream cancellation, pushed-task return-to-browse, endpoint isolation, and failed-switch rollback |
+| `watch_recovery_test.go` | active WATCH close → injected 410 → gated streaming relist for typed, dynamic, and filtered Helm informers, including successful-livez-before-WATCH ordering, populated and initially empty scopes, and no false-empty frames |
+| `context_switch_test.go` | merged-context restore, cancellation of a delayed log stream, YAML managedFields GET, and old WATCH, return-to-browse from pushed tasks, endpoint isolation, and failed-switch rollback |
 | `churn_test.go` | external create/update/delete, selection clamping, empty settlement, UID replacement, and Pod-detail gone state |
-| `log_lifecycle_test.go` | deleted-Pod terminal state plus follow-request cancellation on esc, context switch, quit, and disconnect navigation |
+| `log_lifecycle_test.go` | deleted-Pod terminal state, follow-request cancellation on `esc` and quit, and continued navigation plus connection-badge recovery while logs remain open; context-switch cancellation lives in `context_switch_test.go` |
 | `terminal_test.go` | resize survival and real bracketed-paste routing through filters, palettes, confirmations, port input, and multiline editors |
 | `mutation_delete_test.go` | committed non-prod/PROD deletes, selection clamping, and disposable-Pod force-delete escalation |
 | `mutation_editors_test.go` | ConfigMap multiline/add/remove/restart mutations and Secret rewrite recovery after an injected 409 Conflict |
 | `mutation_workloads_test.go` | cordon/uncordon with cleanup plus scale, set-image, resources, and metadata editors against a disposable Deployment |
 | `mutation_batch_test.go` | Job rerun and CronJob run-now/schedule editing against dedicated fixtures |
 | `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
-| `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: connect-time budget, first-frame render, informer heap via `runtime.ReadMemStats` — excluded from the PR job |
+| `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: 5k-Pod connect/heap budget, warmed repeated-navigation heap/goroutine deltas, and a responsive 500-Pod burst with unrelated LIST/WATCH policing — excluded from the PR job |
 | `storm_test.go` | build tag `e2e && e2e_soak`: Widget, Pod-detail, Events, and Timeline bursts converge to stable final values with bounded input, request, and goroutine growth |
 | `soak_test.go` | build tag `e2e && e2e_soak`: repeated detail/log/event/timeline/YAML, ten-kind, three-palette, forward, context, and namespace workflows return near their settled runtime baseline |
 | `high_rate_logs_test.go` | build tag `e2e && e2e_soak`: two 12k-line live batches overflow the bounded log buffer, advance its dropped counter, plateau heap, and remain responsive |
 | `namespace_fanout_test.go` | build tag `e2e && e2e_soak`: 24 scoped namespaces enforce one retained cache/watch per namespace and zero new requests on revisit |
 | `auth_test.go` | build tag `e2e && e2e_auth`: direct 401 and short-lived exec credential failure, cached rows/write gate, stopped automatic retries, and watch recovery after explicit `r` |
 | `pty_test.go` | build tag `e2e && e2e_pty` (POSIX): clean/non-zero real exec exits, redraw and continued input, quit across an active handoff, and terminal-mode restoration |
+
+### Coverage audit
+
+The lifecycle expansion and its six post-implementation cleanup items now have direct PR or
+nightly guards. The coverage audit has no remaining unguarded bullet: discovery is
+request-fenced, GitOps writes require fresh resource versions and restore their fixtures,
+watch health outranks a successful probe at the wire, YAML's live GET is cancelled across
+context switches, logs recover while still active, and the kwok row covers post-navigation
+runtime deltas plus breadth-safe event churn.
 
 ## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`
 
@@ -206,8 +233,9 @@ unexported `kindInformers` map. Against a real apiserver:
   and `KindSynced` true. The real-server screen tests consume the explicit forbidden signal,
   while `KindError` remains the retryable/stalled-cache reason — settled-but-denied or
   settled-but-errored is never rendered as a hang or a false empty.
-- typed, dynamic, and filtered Helm informer identities remain singular across
-  real server churn; proxy-level tests pin the corresponding 410 relist order.
+- typed, dynamic, and filtered Helm informer identities remain singular across real server
+  events; proxy-level tests pin close → 410 → streaming-relist ordering and one final active
+  WATCH for each shape.
 
 `e2e_scoped_test.go` reads `kindInformers` keyed by the full `scopeKey{kind, namespace}`
 rather than merely by kind, verifying `--namespace-scoped` starts one cache per namespace
@@ -218,7 +246,9 @@ actually read (`lazy-informers.md` §5.6).
 - **`.github/workflows/ci.yml`** — `e2e` job: mise-action, `scripts/e2e-cluster.sh up`, then
   `go test -tags e2e -count=1 -timeout 15m ./test/e2e/... ./internal/kube/...`. Uploads
   cluster state (`kubectl get all`/`describe pods`/`get events`) on failure. Runs kind 1.35
-  on every PR.
+  on every PR. Because every unqualified lifecycle and mutation file uses the ordinary
+  `e2e` tag, all of those tests — including all six watch-recovery shapes — run here; only
+  scale, soak, authentication-expiry, and PTY files are excluded by their second tags.
 - **`.github/workflows/e2e-nightly.yml`** — both supported kind versions on a schedule, plus
   the `e2e_soak` lifecycle job, `e2e_auth`/`e2e_pty` process-and-terminal job, and
   `e2e_scale` kwok run. The soak job runs only the four bounded long-session scenarios and
@@ -235,9 +265,11 @@ scripts/e2e-cluster.sh up                        # kind + fixtures, ~90s cold
 go test -tags e2e -count=1 -timeout 15m ./test/e2e/... ./internal/kube/...
 go test -tags "e2e e2e_auth e2e_pty" -count=1 -timeout 15m -run 'Test(DirectUnauthorizedPausesHealthChecks|ExecCredentialExpiryRecoversWithoutRestart|PTYExecSubprocessHandoff)$' ./test/e2e/...
 go test -tags "e2e e2e_soak" -count=1 -timeout 25m -run 'Test(EventStorm|RepeatedWorkflowSoak|HighRateLogs|NamespaceFanOut)' ./test/e2e/...
-K8S_VERSION=1.36 scripts/e2e-cluster.sh recreate && go test -tags e2e ./test/e2e/...
-scripts/e2e-scale-cluster.sh up && go test -tags "e2e e2e_scale" -run TestScale ./test/e2e/...
 scripts/e2e-cluster.sh down
+K8S_VERSION=1.36 scripts/e2e-run.sh              # provisions, tests, and removes 1.36
+scripts/e2e-scale-cluster.sh up
+go test -tags "e2e e2e_scale" -count=1 -timeout 30m -run TestScale ./test/e2e/...
+scripts/e2e-scale-cluster.sh down
 ```
 
 Or, for iterating on a single failure: `scripts/e2e-run.sh -run TestFluxScreens`.
@@ -254,8 +286,8 @@ go vet ./... && golangci-lint run
 Two checks that the suite is real rather than merely green, worth repeating whenever the
 lazy-informer rules change:
 
-- Revert `54d5d1e`'s laziness locally (make `Start` register every kind) and confirm
-  `e2e_lazy_test.go` fails. A wire-level test that passes both ways proves nothing — the
-  lesson `newTypedFactory` in `internal/kube/lazy_test.go` already encodes.
+- Temporarily make `Cluster.Start` register every kind and confirm `e2e_lazy_test.go` fails.
+  A wire-level test that passes both ways proves nothing — the lesson `newTypedFactory` in
+  `internal/kube/lazy_test.go` already encodes.
 - Point the harness at the restricted kubeconfig with the 403 handling stubbed out and
   confirm `rbac_test.go` fails on the false-empty assertion, not just the card.

@@ -44,6 +44,13 @@ func (m Model) Header() tui.HeaderState {
 
 	conn := tui.ConnBadge{Text: tui.GlyphFollowing + " following", Style: lipgloss.NewStyle().Foreground(theme.Good)}
 	switch {
+	case m.conn.Offline():
+		// Stream state and cluster reachability are independent: a dropped
+		// follow request becomes a terminal stream error, while the active
+		// context can later recover underneath this still-open task. Show the
+		// shared offline vocabulary during the outage, then fall back to the
+		// stream's own following/paused/error badge once connectivity returns.
+		conn = tui.LiveConnBadge(theme, m.conn, tui.GlyphFollowing+" following")
 	case m.stream == StreamError:
 		conn = tui.ConnBadge{Text: tui.GlyphFailed + " error", Style: lipgloss.NewStyle().Foreground(theme.Bad)}
 	case m.stream == StreamWaitingForContainer:

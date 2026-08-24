@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 )
 
@@ -27,6 +28,22 @@ func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
 	_, _ = model.Update(streamErrorMsg{err: stringError("pods/log is forbidden")})
 	if view := model.Render(); !strings.Contains(view, "Permission denied") {
 		t.Fatalf("permission view missing feedback:\n%s", view)
+	}
+}
+
+func TestHeaderConnectionOutageOverridesStreamStateUntilRecovery(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.stream = StreamError
+	_, _ = model.Update(kube.ConnStateMsg{Phase: kube.ConnReconnecting})
+	if got := model.Header().Conn.Text; !strings.Contains(got, "disconnected") {
+		t.Fatalf("offline header = %q, want disconnected", got)
+	}
+
+	_, _ = model.Update(kube.ConnStateMsg{Phase: kube.ConnConnected})
+	if got := model.Header().Conn.Text; got != tui.GlyphFailed+" error" {
+		t.Fatalf("recovered header = %q, want terminal stream error", got)
 	}
 }
 

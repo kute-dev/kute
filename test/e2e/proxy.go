@@ -32,10 +32,14 @@ import (
 // Empty fields are wildcards. Path is a prefix, which keeps matching stable
 // across namespace and object-name suffixes.
 type RequestMatcher struct {
-	Method   string
-	Path     string
-	Resource string
-	Verb     string
+	Method string
+	Path   string
+	// ExactPath selects one discovery endpoint without also matching every
+	// resource path beneath it. Path remains the prefix matcher used by
+	// namespace/object lifecycle tests.
+	ExactPath string
+	Resource  string
+	Verb      string
 	// Query matches decoded query parameters exactly. Omitted keys remain
 	// wildcards, so tests can distinguish filtered or streaming-list watches
 	// without coupling to resourceVersion and randomized timeout values.
@@ -45,6 +49,7 @@ type RequestMatcher struct {
 func (m RequestMatcher) matches(r RequestRecord) bool {
 	if !((m.Method == "" || strings.EqualFold(m.Method, r.Method)) &&
 		(m.Path == "" || strings.HasPrefix(r.URL.Path, m.Path)) &&
+		(m.ExactPath == "" || r.URL.Path == m.ExactPath) &&
 		(m.Resource == "" || strings.EqualFold(m.Resource, r.Resource)) &&
 		(m.Verb == "" || strings.EqualFold(m.Verb, r.Verb))) {
 		return false
@@ -88,6 +93,7 @@ type proxyFault struct {
 	status  int
 	message string
 	left    int
+	gate    *proxyGate
 }
 
 type proxyDelay struct {
@@ -362,6 +368,25 @@ func (p *APIProxy) FailNextStatus(matcher RequestMatcher, status int, message st
 	p.mu.Unlock()
 }
 
+// HoldNextStatus returns a Kubernetes Status response for the next matching
+// request, but only after the returned gate is released. Unlike combining
+// Hold with FailNextStatus, this deliberately gates the synthetic response
+// itself; ordinary Hold rules continue to skip synthetic faults so a broad
+// recovery gate catches the request after a one-shot failure instead.
+func (p *APIProxy) HoldNextStatus(matcher RequestMatcher, status int, message string) *RequestGate {
+	p.t.Helper()
+	switch status {
+	case 401, 403, 409, 410, 429, 503:
+	default:
+		p.t.Fatalf("proxy unsupported Kubernetes status %d", status)
+	}
+	g := &proxyGate{matcher: matcher, release: make(chan struct{})}
+	p.mu.Lock()
+	p.faults = append(p.faults, &proxyFault{matcher: matcher, status: status, message: message, left: 1, gate: g})
+	p.mu.Unlock()
+	return &RequestGate{gate: g}
+}
+
 // Delay adds a fixed delay before matching requests are forwarded.
 func (p *APIProxy) Delay(matcher RequestMatcher, delay time.Duration) {
 	p.mu.Lock()
@@ -425,12 +450,14 @@ func (p *APIProxy) serveHTTP(w http.ResponseWriter, incoming *http.Request) {
 	available := p.available
 	var status int
 	var statusMessage string
+	var statusGate *proxyGate
 	if available {
 		for _, fault := range p.faults {
 			if fault.left > 0 && fault.matcher.matches(rec) {
 				fault.left--
 				status = fault.status
 				statusMessage = fault.message
+				statusGate = fault.gate
 				break
 			}
 		}
@@ -442,6 +469,9 @@ func (p *APIProxy) serveHTTP(w http.ResponseWriter, incoming *http.Request) {
 		}
 	}
 	var gates []*proxyGate
+	if statusGate != nil {
+		gates = append(gates, statusGate)
+	}
 	// A synthetic failure is already a complete response chosen by the
 	// proxy. Let it return immediately even when a broader gate also matches;
 	// the gate then catches the client's recovery request that follows it.

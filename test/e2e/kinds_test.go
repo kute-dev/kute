@@ -5,6 +5,7 @@ package e2e
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestKindScreens opens each fixture group's screen the way a user reaches it
@@ -128,16 +129,35 @@ func TestKindScreens(t *testing.T) {
 // and a query for it does not come back empty, it matches the kind's own CRD
 // row and jumps to CustomResourceDefinitions, which is a wrong answer rather
 // than a missing one.
-//
-// 'g' is the very first key here, before even the connect wait, which is what
-// puts the open palette ahead of discovery. On a cluster whose discovery beats
-// it the assertion is merely true on arrival — it can be vacuous, never wrong.
 func TestJumpPaletteGainsKindsWhileOpen(t *testing.T) {
 	RequireCluster(t)
-	a := Launch(t)
+	proxy := NewAPIProxy(t, KubeconfigPath())
+	// The pinned client-go negotiates aggregated discovery: /apis carries the
+	// target Flux API group and there is no follow-up
+	// /apis/kustomize.toolkit.fluxcd.io/v1 request. Match that endpoint exactly
+	// so eager informer traffic below /apis cannot satisfy the fence.
+	discovery := RequestMatcher{Method: "GET", ExactPath: "/apis", Verb: "GET"}
+	gate := proxy.Hold(discovery)
+	fence := proxy.Fence()
+	a := Launch(t, WithAPIProxy(proxy))
+	req := proxy.WaitForRequest(fence, discovery, Settle)
+	if req.Completed {
+		t.Fatalf("kustomize discovery passed its gate before the palette opened: %+v", req)
+	}
+
 	a.Press("g")
 	a.Type("kustomiz")
+	// The lowercase CRD object may match the query, but the discovered kind's
+	// capitalized row cannot exist until this exact discovery response lands.
+	a.Never("Kustomizations", 750*time.Millisecond)
+
+	gate.Release()
+	if completed := proxy.WaitForCompletion(req.ID, Settle); completed.StatusCode != 200 {
+		t.Fatalf("kustomize discovery status = %d, want 200: %+v", completed.StatusCode, completed)
+	}
 	a.WaitFor("Kustomizations", Settle)
+	a.Enter()
+	a.WaitForAll(Settle, "kute-apps", "kute-workers", "suspended")
 }
 
 // openFrom jumps to a kind's list, puts the cursor on the named row and

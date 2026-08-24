@@ -58,6 +58,8 @@ func (c *Cluster) ensureDynamicKind(kind ResourceKind, scope string, gvr schema.
 	if c.watcher != nil {
 		c.watcher.register(gvr, scope, "", func() {
 			c.recordWatchEstablished(gen, k, scope)
+		}, func(err error) {
+			c.recordWatchError(gen, k, scope, err)
 		})
 	}
 	// Same reason the typed informers have one

@@ -59,19 +59,32 @@ func TestLogsRemainNavigableAcrossAPIDisconnect(t *testing.T) {
 	RequireCluster(t)
 	a := Launch(t)
 	a.WaitFor("api-", Connect)
-	_, _ = openAPILogStream(t, a)
+	_, stream := openAPILogStream(t, a)
 	a.WaitFor("KUTE-E2E-LOG-MARKER", Settle)
 	a.Proxy().SetAvailable(false)
+	a.Proxy().WaitForCompletion(stream.ID, Settle)
+	a.WaitFor("disconnected", Settle)
 
 	// A stream error is terminal, but the task must continue accepting input.
 	a.Press("/")
 	a.Type("KUTE-E2E")
 	a.WaitFor("/ KUTE-E2E", Settle)
 	a.Esc()
-	a.Esc()
-	a.WaitFor("api-", Settle)
+
+	// Recover the active context before leaving logs. Depending on whether the
+	// stream's bounded restart wins the race with the health probe, its own
+	// badge may already be following again or may remain terminal. Connection
+	// chrome must clear either way, and the same task must still route input
+	// rather than needing to be popped and rebuilt.
 	a.Proxy().SetAvailable(true)
-	a.WaitGone("OFFLINE", Settle)
+	a.WaitGone("disconnected", Settle)
+	a.WaitFor("› logs · server", Settle)
+	a.Press("/")
+	a.Type("LOG")
+	a.WaitFor("/ LOG", Settle)
+	a.Esc()
+	a.Esc()
+	a.WaitFor("CONTAINERS", Settle)
 }
 
 func openAPILogStream(t *testing.T, a *App) (string, RequestRecord) {

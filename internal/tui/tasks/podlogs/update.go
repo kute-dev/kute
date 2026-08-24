@@ -48,6 +48,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stream = StreamWaitingForContainer
 		m.waitingReason = msg.reason
 		m.feedback = "waiting for container to start: " + msg.reason
+	case kube.ConnStateMsg:
+		m.conn = kube.ConnState(msg)
 	case kube.ResourceChangedMsg:
 		if msg.Kind == kube.KindPod && m.stream == StreamWaitingForContainer {
 			return m, m.checkContainerCmd(m.streamID)
