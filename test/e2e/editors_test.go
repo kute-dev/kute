@@ -169,8 +169,29 @@ func TestSecretUnmaskAddAndRemoveKey(t *testing.T) {
 // selectRow moves the cursor down until want is the selected row, so a verb
 // acts on the row the test means rather than whichever one happened to be
 // selected. The selection marker is the only thing that says which is which.
+//
+// It waits for the row to exist first. The movement loop below is bounded by
+// key presses rather than by a deadline, so on a list whose lazy informer has
+// not filled yet it exhausts all 24 presses against an empty table in a
+// fraction of a second and fails claiming the row is unreachable — when the
+// truth is only that it had not arrived. That is the harness's own "wait for
+// the row, not for the breadcrumb" rule, and WaitLoaded does not stand in for
+// it: an empty-but-settled list renders no loading state at all, so
+// WaitLoaded returns immediately on exactly the frame that has nothing to
+// select.
 func (a *App) selectRow(t *testing.T, want string) {
 	t.Helper()
+	frame, ok := a.poll(func(f string) bool {
+		for _, line := range strings.Split(f, "\n") {
+			if lineHasExactField(line, want) {
+				return true
+			}
+		}
+		return false
+	}, Settle)
+	if !ok {
+		t.Fatalf("row %q never appeared:\n%s", want, frame)
+	}
 	for range 24 {
 		selected, target := -1, -1
 		for i, line := range strings.Split(a.Frame(), "\n") {

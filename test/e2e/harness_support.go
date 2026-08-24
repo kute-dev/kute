@@ -67,21 +67,48 @@ func SnapshotRuntime() RuntimeSnapshot {
 			continue
 		}
 		count++
-		lower := strings.ToLower(stack)
-		switch {
-		case strings.Contains(lower, "sharedindexinformer") || strings.Contains(lower, "reflector") || strings.Contains(lower, "sharedinformerfactory"):
-			classes["informers"]++
-		case strings.Contains(lower, "bubbletea") && (strings.Contains(lower, "handlecommands") || strings.Contains(lower, "exec") || strings.Contains(lower, "cmd")):
-			classes["bubbletea_commands"]++
-		case strings.Contains(lower, "portforward") || strings.Contains(lower, "forwardmanager") || strings.Contains(lower, "internal/kube.(*forward"):
-			classes["forwards"]++
-		case strings.Contains(lower, "podlogs") || strings.Contains(lower, "stream") || strings.Contains(lower, "watch.streamwatcher"):
-			classes["streams"]++
-		default:
-			classes["other"]++
-		}
+		classes[classifyStack(stack)]++
 	}
 	return RuntimeSnapshot{CapturedAt: time.Now(), HeapAlloc: mem.HeapAlloc, HeapInuse: mem.HeapInuse, TotalAlloc: mem.TotalAlloc, Goroutines: count, Classes: classes, Stacks: dump}
+}
+
+// classifyStack buckets one goroutine stack for the Classes breakdown a
+// failed leak budget prints.
+//
+// The budgets themselves compare a baseline against an after-snapshot of the
+// same process, so only the total count decides pass or fail — but the
+// breakdown is the entire diagnostic a failure leaves behind, and a
+// breakdown that lies is worse than none. So every marker here is a package
+// path or a concrete symbol rather than a loose word: matching bare "stream"
+// swept up client-go's own watch plumbing, half the TLS stack and anything
+// with "Stream" in a frame name, and pairing "bubbletea" with "cmd" matched
+// essentially every goroutine the program owns, since bubbletea appears
+// somewhere in most of their stacks.
+func classifyStack(stack string) string {
+	lower := strings.ToLower(stack)
+	switch {
+	case strings.Contains(lower, "sharedindexinformer") ||
+		strings.Contains(lower, "cache.(*reflector)") ||
+		strings.Contains(lower, "sharedinformerfactory") ||
+		strings.Contains(lower, "cache.(*processorlistener)"):
+		return "informers"
+	case strings.Contains(lower, "internal/kube.(*forwardmanager)") ||
+		strings.Contains(lower, "portforward.(*portforwarder)") ||
+		strings.Contains(lower, "internal/kube.(*forward"):
+		return "forwards"
+	case strings.Contains(lower, "tasks/podlogs") ||
+		strings.Contains(lower, "internal/kube.(*logstream") ||
+		strings.Contains(lower, "watch.(*streamwatcher)"):
+		return "streams"
+	// Deliberately last and deliberately narrow: bubbletea's own loop
+	// goroutines, not "anything that mentions bubbletea".
+	case strings.Contains(lower, "bubbletea.(*program).handlecommands") ||
+		strings.Contains(lower, "bubbletea.(*program).eventloop") ||
+		strings.Contains(lower, "bubbletea.(*program).handleevents"):
+		return "bubbletea_commands"
+	default:
+		return "other"
+	}
 }
 
 // Snapshot captures a process snapshot at an App lifecycle boundary.

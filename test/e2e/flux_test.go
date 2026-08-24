@@ -38,7 +38,7 @@ func TestFluxScreens(t *testing.T) {
 		annotations["reconcile.fluxcd.io/requestedAt"] = priorReconcileStamp
 		obj.SetAnnotations(annotations)
 	}, func(current, original *unstructured.Unstructured) {
-		restoreNestedField(current, original, "spec", "suspend")
+		restoreNestedField(t, current, original, "spec", "suspend")
 		restoreAnnotation(current, original, "reconcile.fluxcd.io/requestedAt")
 	})
 	a := Launch(t)

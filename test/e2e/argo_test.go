@@ -33,7 +33,7 @@ func TestArgoApplications(t *testing.T) {
 		unstructured.RemoveNestedField(obj.Object, "operation")
 	}, func(current, original *unstructured.Unstructured) {
 		restoreAnnotation(current, original, "argocd.argoproj.io/refresh")
-		restoreNestedField(current, original, "operation")
+		restoreNestedField(t, current, original, "operation")
 	})
 	a := Launch(t)
 	a.WaitFor("api-", Connect)

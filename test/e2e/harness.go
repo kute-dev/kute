@@ -659,9 +659,7 @@ func flattenFrame(s string) string {
 // on the wrong signal never clears it, and fails here.
 func (a *App) WaitLoaded(timeout time.Duration) string {
 	a.t.Helper()
-	frame, ok := a.poll(func(f string) bool {
-		return !strings.Contains(strings.ToLower(f), "loading")
-	}, timeout)
+	frame, ok := a.poll(func(f string) bool { return !isLoadingFrame(f) }, timeout)
 	if !ok {
 		a.t.Fatalf("still loading after %s; last frame:\n%s", timeout, frame)
 	}
@@ -677,6 +675,30 @@ func (a *App) Never(substr string, window time.Duration) {
 	if found {
 		a.t.Fatalf("%q appeared, and must not have; frame:\n%s", substr, frame)
 	}
+}
+
+// NeverLoading asserts no loading state appears at any point in the window —
+// WaitLoaded's sustained counterpart, for the screens whose loading state can
+// come *back* after settling once.
+//
+// It exists because Never("loading", …) is the wrong tool and silently so:
+// screens spell their loading states both ways — a pushed detail renders
+// "⣽ Loading app-config...", a list renders "⣻ listing configmaps in
+// kute-e2e…" — so a case-sensitive Never misses every capitalised one and
+// can never fail. WaitLoaded already case-folds for exactly this reason;
+// this shares its matcher rather than restating it.
+func (a *App) NeverLoading(window time.Duration) {
+	a.t.Helper()
+	frame, found := a.poll(isLoadingFrame, window)
+	if found {
+		a.t.Fatalf("a loading state appeared during the %s window, and must not have; frame:\n%s", window, frame)
+	}
+}
+
+// isLoadingFrame is the one definition of "this frame is still loading",
+// shared by WaitLoaded and NeverLoading so the two can never drift.
+func isLoadingFrame(frame string) bool {
+	return strings.Contains(strings.ToLower(frame), "loading")
 }
 
 func (a *App) poll(pred func(string) bool, timeout time.Duration) (string, bool) {

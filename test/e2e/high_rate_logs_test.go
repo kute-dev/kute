@@ -48,14 +48,14 @@ func TestHighRateLogsStayBoundedAndResponsive(t *testing.T) {
 	stream := a.Proxy().WaitForRequest(fence, RequestMatcher{Resource: "pods", Verb: "STREAM"}, Settle)
 
 	firstMarker := name + "-batch-a-final"
-	firstElapsed := runBurstWithFences(t, a, "first high-rate log batch", func(ctx context.Context) error {
+	firstElapsed := runBurstWithFences(t, a, "first high-rate log batch", func(ctx context.Context) (int, error) {
 		return emitPodLogBatch(ctx, restCfg, client, name, "a", linesPerBatch, firstMarker)
 	})
 	a.WaitForAll(Settle, firstMarker, "older log lines dropped")
 	plateauA := settledSnapshot(a)
 
 	secondMarker := name + "-batch-b-final"
-	secondElapsed := runBurstWithFences(t, a, "second high-rate log batch", func(ctx context.Context) error {
+	secondElapsed := runBurstWithFences(t, a, "second high-rate log batch", func(ctx context.Context) (int, error) {
 		return emitPodLogBatch(ctx, restCfg, client, name, "b", linesPerBatch, secondMarker)
 	})
 	a.WaitForAll(Settle, secondMarker, "older log lines dropped")
@@ -131,18 +131,24 @@ func createLogSoakPod(t *testing.T, client kubernetes.Interface, name string) {
 	})
 }
 
-func emitPodLogBatch(ctx context.Context, cfg *rest.Config, client kubernetes.Interface, pod, batch string, lines int, finalMarker string) error {
+// emitPodLogBatch execs a producer in the fixture pod and returns the number
+// of log lines it asked for — the burst's "writes" for runBurstWithFences,
+// which refuses a burst that produced none.
+func emitPodLogBatch(ctx context.Context, cfg *rest.Config, client kubernetes.Interface, pod, batch string, lines int, finalMarker string) (int, error) {
 	script := fmt.Sprintf(`i=1; while [ "$i" -le %d ]; do printf 'soak-%s-%%05d payload payload payload\n' "$i" > /proc/1/fd/1; i=$((i+1)); done; printf '%%s\n' "$1" > /proc/1/fd/1`, lines, batch)
 	req := client.CoreV1().RESTClient().Post().Resource("pods").Namespace(Namespace).Name(pod).SubResource("exec").VersionedParams(&corev1.PodExecOptions{
 		Container: "logger", Command: []string{"/bin/sh", "-c", script, "soak", finalMarker}, Stdout: true, Stderr: true,
 	}, scheme.ParameterCodec)
 	executor, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var stdout, stderr bytes.Buffer
 	if err := executor.StreamWithContext(ctx, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr}); err != nil {
-		return fmt.Errorf("exec log producer: %w (stderr %q)", err, stderr.String())
+		return 0, fmt.Errorf("exec log producer: %w (stderr %q)", err, stderr.String())
 	}
-	return nil
+	// The producer wrote `lines` payload lines plus the final marker; the
+	// exec returning cleanly is what makes that count real rather than
+	// intended.
+	return lines + 1, nil
 }

@@ -90,7 +90,8 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 	baselineRuntime := settledSnapshot(a)
 	baselineRequests := a.Proxy().Counts()
 
-	runBurstWithFences(t, a, "Widget patches", func(ctx context.Context) error {
+	runBurstWithFences(t, a, "Widget patches", func(ctx context.Context) (int, error) {
+		writes := 0
 		for i := 0; i < widgetPatches; i++ {
 			colour := fmt.Sprintf("storm-%03d", i)
 			phase := fmt.Sprintf("Phase-%03d", i)
@@ -99,14 +100,16 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 			}
 			patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"colour": colour}, "status": map[string]any{"phase": phase}})
 			if _, err := widgets.Patch(ctx, widgetName, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-				return err
+				return writes, err
 			}
+			writes++
 		}
-		return nil
+		return writes, nil
 	})
 
-	runBurstWithFences(t, a, "Pod metadata and status patches", func(ctx context.Context) error {
+	runBurstWithFences(t, a, "Pod metadata and status patches", func(ctx context.Context) (int, error) {
 		pods := client.CoreV1().Pods(Namespace)
+		writes := 0
 		for i := 0; i < podPatches; i++ {
 			label := fmt.Sprintf("seq-%03d", i)
 			phase := corev1.PodPending
@@ -115,8 +118,9 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 			}
 			metaPatch, _ := json.Marshal(map[string]any{"metadata": map[string]any{"labels": map[string]any{"storm-seq": label}}})
 			if _, err := pods.Patch(ctx, podName, types.MergePatchType, metaPatch, metav1.PatchOptions{}); err != nil {
-				return err
+				return writes, err
 			}
+			writes++
 			statusPatch, _ := json.Marshal(map[string]any{"status": map[string]any{
 				"phase": phase,
 				"conditions": []any{map[string]any{
@@ -125,17 +129,18 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 				}},
 			}})
 			if _, err := pods.Patch(ctx, podName, types.MergePatchType, statusPatch, metav1.PatchOptions{}, "status"); err != nil {
-				return err
+				return writes, err
 			}
+			writes++
 		}
-		return nil
+		return writes, nil
 	})
 	a.WaitForAll(Settle, "storm-seq="+finalPodLabel, "Failed")
 
 	a.Press("e")
 	a.WaitLoaded(Settle)
 	eventsFinal := run + "-events-final"
-	runBurstWithFences(t, a, "Events-screen event objects", func(ctx context.Context) error {
+	runBurstWithFences(t, a, "Events-screen event objects", func(ctx context.Context) (int, error) {
 		return createAndUpdateEventBurst(ctx, client.CoreV1().Events(Namespace), podName, run, "events", eventsPerScreen, eventsFinal)
 	})
 	a.WaitFor(eventsFinal, Settle)
@@ -144,7 +149,7 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 	a.Press("t")
 	a.WaitLoaded(Settle)
 	timelineFinal := run + "-timeline-final"
-	runBurstWithFences(t, a, "Timeline-screen event objects", func(ctx context.Context) error {
+	runBurstWithFences(t, a, "Timeline-screen event objects", func(ctx context.Context) (int, error) {
 		return createAndUpdateEventBurst(ctx, client.CoreV1().Events(Namespace), podName, run, "timeline", eventsPerScreen, timelineFinal)
 	})
 	a.WaitFor(timelineFinal, Settle)
@@ -209,7 +214,8 @@ func createStormPod(t *testing.T, ctx context.Context, client kubernetes.Interfa
 	})
 }
 
-func createAndUpdateEventBurst(ctx context.Context, events typedcorev1.EventInterface, podName, run, prefix string, count int, finalMarker string) error {
+func createAndUpdateEventBurst(ctx context.Context, events typedcorev1.EventInterface, podName, run, prefix string, count int, finalMarker string) (int, error) {
+	writes := 0
 	for i := 0; i < count; i++ {
 		marker := fmt.Sprintf("%s-%03d", prefix, i)
 		if i == count-1 {
@@ -223,14 +229,16 @@ func createAndUpdateEventBurst(ctx context.Context, events typedcorev1.EventInte
 			Source: corev1.EventSource{Component: "kute-e2e-soak"}, FirstTimestamp: now, LastTimestamp: now, Count: 1,
 		}, metav1.CreateOptions{})
 		if err != nil {
-			return err
+			return writes, err
 		}
+		writes++
 		created.Count = 2
 		created.Message = marker
 		created.LastTimestamp = metav1.Now()
 		if _, err := events.Update(ctx, created, metav1.UpdateOptions{}); err != nil {
-			return err
+			return writes, err
 		}
+		writes++
 	}
-	return nil
+	return writes, nil
 }

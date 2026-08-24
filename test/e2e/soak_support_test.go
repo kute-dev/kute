@@ -34,24 +34,44 @@ func soakCount(t *testing.T, env string, fallback int) int {
 	return value
 }
 
+// burstResult is what a burst worker reports back: how many writes it
+// actually landed on the cluster, and whether it failed.
+//
+// The count is the point. A responsiveness measurement taken while nothing is
+// happening is excellent by construction, so a worker that silently wrote
+// nothing — a rename that stops matching a fixture, a loop bound that reads
+// zero from an env override, an early return — would turn every one of these
+// scenarios green while proving nothing at all. runBurstWithFences refuses a
+// zero-write burst for that reason.
+type burstResult struct {
+	writes int
+	err    error
+}
+
 // runBurstWithFences runs bounded cluster churn while continuously measuring
-// inert turns of kute's event loop. The worker returns errors instead of
-// touching testing.T from its goroutine.
-func runBurstWithFences(t *testing.T, a *App, name string, worker func(context.Context) error) time.Duration {
+// inert turns of kute's event loop. The worker returns its write count and
+// any error instead of touching testing.T from its goroutine.
+func runBurstWithFences(t *testing.T, a *App, name string, worker func(context.Context) (int, error)) time.Duration {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*Settle)
 	defer cancel()
-	done := make(chan error, 1)
+	done := make(chan burstResult, 1)
 	start := time.Now()
-	go func() { done <- worker(ctx) }()
+	go func() {
+		writes, err := worker(ctx)
+		done <- burstResult{writes: writes, err: err}
+	}()
 
 	maxLatency := time.Duration(0)
 	fences := 0
 	for {
 		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("%s burst: %v", name, err)
+		case result := <-done:
+			if result.err != nil {
+				t.Fatalf("%s burst: %v", name, result.err)
+			}
+			if result.writes == 0 {
+				t.Fatalf("%s burst wrote nothing — there was no churn to stay responsive under, so this scenario measured an idle cluster", name)
 			}
 			if fences == 0 {
 				latency := a.InputFence()
@@ -62,7 +82,7 @@ func runBurstWithFences(t *testing.T, a *App, name string, worker func(context.C
 				t.Fatalf("%s input fence reached %s, budget %s", name, maxLatency, soakInputBudget)
 			}
 			elapsed := time.Since(start)
-			t.Logf("%s: %d input fences, max %s, burst %s", name, fences, maxLatency, elapsed)
+			t.Logf("%s: %d writes, %d input fences, max %s, burst %s", name, result.writes, fences, maxLatency, elapsed)
 			return elapsed
 		default:
 		}

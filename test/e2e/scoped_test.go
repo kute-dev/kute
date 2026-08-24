@@ -31,7 +31,11 @@ func TestScopedModeConnectSettlesWithClusterScopedKindsForbidden(t *testing.T) {
 	RequireCluster(t)
 	a := Launch(t, WithKubeconfig(RestrictedKubeconfigPath()), WithScopeNamespace(Namespace))
 	a.WaitLoaded(Connect)
-	a.Never("loading", 8*time.Second)
+	// NeverLoading, not Never("loading", …): every capitalised loading state
+	// ("⣽ Loading …") slips straight through a case-sensitive match, which
+	// made this assertion — the anti-hang claim this whole test exists for —
+	// one that could not fail.
+	a.NeverLoading(8 * time.Second)
 
 	a.gotoKind(t, "nodes", "Nodes")
 	a.WaitLoaded(Settle)

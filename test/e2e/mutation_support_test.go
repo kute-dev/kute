@@ -129,16 +129,28 @@ func restoreAnnotation(current, original *unstructured.Unstructured, key string)
 	current.SetAnnotations(annotations)
 }
 
-func restoreNestedField(current, original *unstructured.Unstructured, fields ...string) {
+// restoreNestedField puts one field back the way seedDynamicObject found it.
+//
+// It reports through t rather than returning early on error, because the
+// failure mode is invisible otherwise and outlives the run: a restore that
+// gives up leaves the shared fixture carrying this test's seeded value, and
+// under the documented KUTE_E2E_REUSE=1 the *next* run starts from that
+// mutated state. A cleanup that cannot do its job has to say so.
+func restoreNestedField(t *testing.T, current, original *unstructured.Unstructured, fields ...string) {
+	t.Helper()
+	path := strings.Join(fields, ".")
 	value, found, err := unstructured.NestedFieldCopy(original.Object, fields...)
 	if err != nil {
+		t.Errorf("restoring %s on %s: reading the captured original: %v", path, current.GetName(), err)
 		return
 	}
 	if !found {
 		unstructured.RemoveNestedField(current.Object, fields...)
 		return
 	}
-	_ = unstructured.SetNestedField(current.Object, value, fields...)
+	if err := unstructured.SetNestedField(current.Object, value, fields...); err != nil {
+		t.Errorf("restoring %s on %s: %v", path, current.GetName(), err)
+	}
 }
 
 func replaceTypedValue(a *App, old, value string) {
