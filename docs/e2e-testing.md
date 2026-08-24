@@ -83,7 +83,11 @@ and state save — without exporting a headless-test seam in shipping builds.
 - **`scripts/e2e-run.sh`** — one-shot wrapper: bring the cluster up, run the suite, tear it
   down even on failure. `KUTE_E2E_KEEP=1` leaves the cluster up for iterating on a failure;
   `KUTE_E2E_REUSE=1` skips `up` against an already-provisioned cluster and never tears down
-  one it didn't create.
+  one it didn't create. It builds with `-tags e2e` only; `KUTE_E2E_TAGS` adds the
+  nightly-only tags on top (`KUTE_E2E_TAGS=e2e_soak scripts/e2e-run.sh -run TestEventStorm`).
+  Without that tag the file is not compiled at all, so the `-run` would match nothing and
+  `go test` would exit 0 — the wrapper turns a "no tests to run" report into a failure
+  rather than letting a suite that never ran read as green.
 
 ## 2. Fixtures — `test/e2e/fixtures/*.yaml`
 
@@ -103,6 +107,7 @@ ClusterRoles. Workload images are pinned by digest and fixture application is id
 | `50-crd.yaml` + `51-widgets.yaml` — CRD `widgets.kute.dev`, two Widgets | discovery → kind registry → §14d, the "CRD support is data, not code" invariant |
 | `52-flux-crds.yaml` + `53-flux-objects.yaml` — Kustomization/HelmRelease/GitRepository CRDs, hand-written status, no controller | §30a/§31a, and the Flux-vs-Helm-3 `HelmRelease` name collision the substitution table exists for |
 | `54-argocd-crds.yaml` + `55-argocd-objects.yaml` — Application/AppProject CRDs, hand-written status, no controller | §33a's sync×health matrix |
+| `56-certmanager-crds.yaml` + `57-certmanager-objects.yaml` — Certificate/CertificateRequest/Order/Challenge/Issuer/ClusterIssuer CRDs across two API groups, hand-written status, no controller | §35a's issuance-chain walk and §35b's EXPIRES/RENEWAL/ISSUER columns; the ACME chain fails at its deepest hop, the CA chain is clean |
 | `60-rbac.yaml` — ServiceAccounts `kute-restricted` (Pod list/get/watch only), `kute-partial` (connect kinds + ConfigMaps/Events, no Secrets/Deployments/Ingresses), `kute-team` (Pods/ConfigMaps/Events/pods-log, namespace-bound Roles only, no ClusterRole) | startup, per-kind, and scoped-mode 403 paths, plus real A→B access under `--namespace-scoped` |
 
 kind ships no metrics-server, so the "CPU/MEM render `–`, never a lie or a crash" row costs
@@ -202,6 +207,9 @@ those values explicitly; smaller positive values are useful for local iteration.
 | `mutation_workloads_test.go` | cordon/uncordon with cleanup plus scale, set-image, resources, and metadata editors against a disposable Deployment |
 | `mutation_batch_test.go` | Job rerun and CronJob run-now/schedule editing against dedicated fixtures |
 | `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
+| `certchain_test.go` | §35a's Certificate → CertificateRequest → Order → Challenge walk across two API groups: deepest-failure promotion on the ACME chain, the short CA chain with no banner, and both refs-strip branches (missing Secret + ClusterIssuer, existing Secret + namespaced Issuer) |
+| `batch_screens_test.go` | §37b's attempt ledger (per-attempt pods joined by controller ownerRef, real exit codes, no index grid on a non-Indexed Job) and §36e's CronJob detail (facts grid, retention limits, settled with zero Jobs) |
+| `inspectors_test.go` | §22a who-can resolved from cache with no authorization round-trip, and §41d's node debug panel staging its command without handing off the terminal |
 | `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: 5k-Pod connect/heap budget, warmed repeated-navigation heap/goroutine deltas, and a responsive 500-Pod burst with unrelated LIST/WATCH policing — excluded from the PR job |
 | `storm_test.go` | build tag `e2e && e2e_soak`: Widget, Pod-detail, Events, and Timeline bursts converge to stable final values with bounded input, request, and goroutine growth |
 | `soak_test.go` | build tag `e2e && e2e_soak`: repeated detail/log/event/timeline/YAML, ten-kind, three-palette, forward, context, and namespace workflows return near their settled runtime baseline |

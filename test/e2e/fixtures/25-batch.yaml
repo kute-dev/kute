@@ -46,3 +46,68 @@ spec:
             - name: job
               image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
               command: ["/bin/sh", "-c", "echo KUTE-E2E-PHASE3-CRON"]
+---
+# §37b/§37c/§37d's attempt ledger needs a Job that genuinely ran and
+# genuinely failed, with its pods retained: BuildJobAttempts joins the Job to
+# its own pods by controller ownerRef, so a suspended Job (like phase3-job
+# above) produces an empty ledger and proves nothing.
+#
+# backoffLimit 2 with restartPolicy Never means three pods — one per attempt,
+# each a separate object — and a terminal BackoffLimitExceeded condition.
+# ttlSecondsAfterFinished is deliberately unset: the TTL controller would
+# delete the Job and take the retained pods with it, and v0.9.0 has no
+# retained-pod ledger to fall back on.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: attempts-fail
+  namespace: kute-e2e
+  labels:
+    app: attempts-fail
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: attempts-fail
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c", "echo KUTE-E2E-ATTEMPT-FAILED; exit 3"]
+---
+# A CronJob for §36e's detail screen alone. Deliberately separate from
+# phase3-cron: that one is the mutation suite's fixture — its schedule is
+# rewritten and a manual Job is run against it — and a detail test sharing it
+# would read whatever the mutation test left behind, in whichever order the
+# two happened to run.
+#
+# Suspended, so nothing here ever fires on its own and the facts grid's
+# LAST SCHEDULE / NEXT stay the deterministic "no retained runs" reading.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: detail-cron
+  namespace: kute-e2e
+spec:
+  schedule: "17 4 * * 1"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app: detail-cron
+    spec:
+      template:
+        metadata:
+          labels:
+            app: detail-cron
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: job
+              image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+              command: ["/bin/sh", "-c", "echo KUTE-E2E-DETAIL-CRON"]

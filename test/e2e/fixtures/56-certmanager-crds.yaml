@@ -1,0 +1,185 @@
+# cert-manager's CRDs, trimmed to what §35a/§35b read. Installed without any
+# cert-manager controller — the same reasoning as 52-flux-crds.yaml and
+# 54-argocd-crds.yaml: nothing reconciles these, so the hand-written chain
+# status in 57-certmanager-objects.yaml is permanent. A real cert-manager
+# would immediately rewrite every one of these objects (there is no ACME
+# server to reach and no CA to sign with), collapsing the whole
+# Certificate → CertificateRequest → Order → Challenge chain this screen
+# exists to render into a single "issuer not found" state.
+#
+# No status subresource anywhere on purpose: the objects set status through a
+# plain apply, which a status subresource would drop.
+#
+# The printer columns are the ones real cert-manager CRDs declare. §35b's
+# EXPIRES/RENEWAL/ISSUER columns come from internal/resources/certmanager.go's
+# curated descriptor rather than from these, but Ready/Secret being declared
+# here is what a generic discovered kind would otherwise fall back to — so
+# leaving them in keeps the fixture honest about what discovery really sees.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: certificates.cert-manager.io
+spec:
+  group: cert-manager.io
+  scope: Namespaced
+  names:
+    plural: certificates
+    singular: certificate
+    kind: Certificate
+    listKind: CertificateList
+    shortNames: [cert, certs]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+        - name: Secret
+          type: string
+          jsonPath: .spec.secretName
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: certificaterequests.cert-manager.io
+spec:
+  group: cert-manager.io
+  scope: Namespaced
+  names:
+    plural: certificaterequests
+    singular: certificaterequest
+    kind: CertificateRequest
+    listKind: CertificateRequestList
+    shortNames: [cr, crs]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Approved
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Approved")].status
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+# Order and Challenge live in acme.cert-manager.io, a *different* API group
+# from Certificate's. §35a walks the chain across that group boundary by
+# ownerRef Kind+Name, so a fixture that put them all in one group would not
+# exercise the walk the way a real cluster does.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: orders.acme.cert-manager.io
+spec:
+  group: acme.cert-manager.io
+  scope: Namespaced
+  names:
+    plural: orders
+    singular: order
+    kind: Order
+    listKind: OrderList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: State
+          type: string
+          jsonPath: .status.state
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: challenges.acme.cert-manager.io
+spec:
+  group: acme.cert-manager.io
+  scope: Namespaced
+  names:
+    plural: challenges
+    singular: challenge
+    kind: Challenge
+    listKind: ChallengeList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: State
+          type: string
+          jsonPath: .status.state
+        - name: Domain
+          type: string
+          jsonPath: .spec.dnsName
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+# Issuer is namespaced, ClusterIssuer is not. §35a's refs strip resolves
+# whichever one spec.issuerRef.kind names, reading the *cluster-scoped* one
+# with a "" namespace — so both scopes have to exist for that branch to be
+# more than theory.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: issuers.cert-manager.io
+spec:
+  group: cert-manager.io
+  scope: Namespaced
+  names:
+    plural: issuers
+    singular: issuer
+    kind: Issuer
+    listKind: IssuerList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterissuers.cert-manager.io
+spec:
+  group: cert-manager.io
+  scope: Cluster
+  names:
+    plural: clusterissuers
+    singular: clusterissuer
+    kind: ClusterIssuer
+    listKind: ClusterIssuerList
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Ready
+          type: string
+          jsonPath: .status.conditions[?(@.type=="Ready")].status
+      schema:
+        openAPIV3Schema:
+          type: object
+          x-kubernetes-preserve-unknown-fields: true

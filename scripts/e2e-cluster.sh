@@ -97,6 +97,22 @@ install_proxy_ca_in_nodes() {
   done
 }
 
+# link_owner <child-resource> <child-name> <owner-apiVersion> <owner-kind> \
+#            <owner-resource> <owner-name>
+#
+# Sets one ownerReference on a namespaced child, resolving the owner's uid
+# from the cluster. Idempotent: the reference is not in the fixture's
+# last-applied-configuration, so a re-apply of the file never strips it, and
+# re-patching the same value is a no-op.
+link_owner() {
+  local child_resource="$1" child_name="$2" owner_api="$3" owner_kind="$4" owner_resource="$5" owner_name="$6"
+  local uid
+  uid="$(kc -n "$NAMESPACE" get "$owner_resource" "$owner_name" -o jsonpath='{.metadata.uid}')"
+  [[ -n "$uid" ]] || die "cannot own ${child_resource}/${child_name}: ${owner_resource}/${owner_name} has no uid"
+  kc -n "$NAMESPACE" patch "$child_resource" "$child_name" --type=merge -p \
+    "{\"metadata\":{\"ownerReferences\":[{\"apiVersion\":\"${owner_api}\",\"kind\":\"${owner_kind}\",\"name\":\"${owner_name}\",\"uid\":\"${uid}\"}]}}" >/dev/null
+}
+
 apply_fixtures() {
   install_proxy_ca_in_nodes
   log "applying fixtures to ${NAMESPACE}"
@@ -105,7 +121,7 @@ apply_fixtures() {
   # sweep.
   for f in "${FIXTURE_DIR}"/*.yaml; do
     case "$(basename "$f")" in
-      51-widgets.yaml|53-flux-objects.yaml|55-argocd-objects.yaml) continue ;;
+      51-widgets.yaml|53-flux-objects.yaml|55-argocd-objects.yaml|57-certmanager-objects.yaml) continue ;;
     esac
     kc apply -f "$f" >/dev/null
   done
@@ -130,6 +146,27 @@ apply_fixtures() {
   done
   kc apply -f "${FIXTURE_DIR}/55-argocd-objects.yaml" >/dev/null
 
+  # cert-manager's CRDs, same reasoning again: no cert-manager controller
+  # runs here, so the hand-written Certificate → CertificateRequest → Order →
+  # Challenge chain in 57-certmanager-objects.yaml stays exactly as written.
+  # A real controller would rewrite all of it — there is no ACME server to
+  # reach and no CA to sign with.
+  for crd in certificates.cert-manager.io certificaterequests.cert-manager.io \
+             orders.acme.cert-manager.io challenges.acme.cert-manager.io \
+             issuers.cert-manager.io clusterissuers.cert-manager.io; do
+    kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
+  done
+  kc apply -f "${FIXTURE_DIR}/57-certmanager-objects.yaml" >/dev/null
+  # §35a walks the chain by ownerReference, but an ownerReference cannot be
+  # written into a static fixture: the API server rejects an empty uid, and a
+  # made-up one is worse — the garbage collector resolves owners by uid, finds
+  # no such object, and deletes the child. So the refs are patched in here,
+  # after the parents exist and have real uids.
+  link_owner certificaterequests web-tls-1        cert-manager.io/v1      Certificate        certificates        web-tls
+  link_owner orders              web-tls-1-2748   cert-manager.io/v1      CertificateRequest certificaterequests web-tls-1
+  link_owner challenges          web-tls-1-2748-0 acme.cert-manager.io/v1 Order              orders              web-tls-1-2748
+  link_owner certificaterequests internal-tls-1   cert-manager.io/v1      Certificate        certificates        internal-tls
+
   log "waiting for the api rollout"
   kc -n "$NAMESPACE" rollout status deployment/api --timeout=180s >/dev/null
 
@@ -152,6 +189,14 @@ apply_fixtures() {
     [[ $SECONDS -lt $deadline ]] || die "worker never restarted (count=${restarts:-none})"
     sleep 3
   done
+
+  # attempts-fail exhausts backoffLimit 2 with a ~30s backoff between
+  # attempts, so its ledger is not complete the moment the fixture applies.
+  # Waiting here rather than in the test keeps §37b's assertions about the
+  # *number* of attempts honest — a test that polled for them itself could
+  # not distinguish "two attempts so far" from "two attempts, final".
+  log "waiting for attempts-fail to exhaust its backoffLimit"
+  kc -n "$NAMESPACE" wait --for=condition=Failed --timeout=300s job/attempts-fail >/dev/null
 }
 
 # mint_sa_kubeconfig <serviceaccount> <destination>

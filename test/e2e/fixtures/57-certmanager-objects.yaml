@@ -1,0 +1,285 @@
+# cert-manager objects with hand-written status. No controller runs, so every
+# state below is permanent — which is the point: §35a needs a chain that is
+# genuinely stuck at its deepest hop and one that is cleanly issued, both on
+# a cluster with no ACME server and no CA, which a real cert-manager would
+# collapse into "issuer not found" within a second.
+#
+# Two chains, chosen to cover the branches §35a actually forks on:
+#
+#   web-tls       ACME, four hops deep, failing at the Challenge — the case
+#                 the failure banner exists for. Its target Secret is
+#                 deliberately absent (refs · missing) and its issuerRef is a
+#                 *ClusterIssuer*, which certchain resolves with a "" (cluster
+#                 -wide) namespace.
+#   internal-tls  CA, two hops, Ready. Its Secret exists and its issuerRef is
+#                 a namespaced *Issuer*, the other side of that same branch.
+#
+# Everything lives in kute-e2e, same as the Flux and Argo fixtures.
+---
+# The ClusterIssuer web-tls points at. Cluster-scoped on purpose: certchain's
+# resolveIssuerRef reads Issuer with the object's own namespace and
+# ClusterIssuer with "", and only a genuinely cluster-scoped CRD tells those
+# two apart.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-e2e
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: e2e@kute.dev
+    privateKeySecretRef:
+      name: letsencrypt-e2e-account-key
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ACMEAccountRegistered
+      message: The ACME account was registered with the ACME server
+      lastTransitionTime: "2026-01-05T09:00:00Z"
+---
+# The namespaced Issuer internal-tls points at.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: internal-ca
+  namespace: kute-e2e
+spec:
+  ca:
+    secretName: internal-ca-keypair
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: KeyPairVerified
+      message: Signing CA verified
+      lastTransitionTime: "2026-01-05T09:00:00Z"
+---
+# ── web-tls: the failing ACME chain ──────────────────────────────────────
+#
+# Ready=False with reason=Issuing is *not* by itself a failure — cert-manager
+# reports exactly this while an issuance is merely in flight, which is why
+# §35a's certNode classes it Warn and looks deeper for the real story. The
+# banner has to come from the Challenge, four hops down.
+#
+# spec.secretName names a Secret that does not exist anywhere in this
+# fixture set, so the refs strip reads "missing" — the honest state for a
+# certificate that has never successfully issued.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: web-tls
+  namespace: kute-e2e
+spec:
+  secretName: web-tls
+  dnsNames:
+    - web.kute-e2e.test
+  issuerRef:
+    name: letsencrypt-e2e
+    kind: ClusterIssuer
+    group: cert-manager.io
+status:
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: Issuing
+      message: Issuing certificate as Secret does not exist
+      lastTransitionTime: "2026-08-01T10:00:00Z"
+---
+# Approved but not Ready: ordinary progress, so this hop is Warn too.
+#
+# No ownerReferences here, even though the whole chain is an ownership walk:
+# the API server rejects an ownerReference with an empty uid, and a
+# *fabricated* uid is worse than none — the garbage collector resolves owners
+# by uid, finds nothing, and deletes the child out from under the fixture.
+# scripts/e2e-cluster.sh patches each ownerReference in after apply, with the
+# parent's real uid. certchain's own ownedBy matches on Kind+Name, so the uid
+# is the cluster's requirement rather than the screen's.
+apiVersion: cert-manager.io/v1
+kind: CertificateRequest
+metadata:
+  name: web-tls-1
+  namespace: kute-e2e
+spec:
+  request: e2e-placeholder-csr
+  issuerRef:
+    name: letsencrypt-e2e
+    kind: ClusterIssuer
+    group: cert-manager.io
+status:
+  conditions:
+    - type: Approved
+      status: "True"
+      reason: cert-manager.io
+      message: Certificate request has been approved by cert-manager.io
+      lastTransitionTime: "2026-08-01T10:00:01Z"
+    - type: Ready
+      status: "False"
+      reason: Pending
+      message: Waiting on certificate issuance from order kute-e2e/web-tls-1-2748
+      lastTransitionTime: "2026-08-01T10:00:01Z"
+---
+# status.state=pending with *no* status.reason: cert-manager only populates
+# reason to explain something going wrong, so a bare pending is ordinary
+# progress (Warn). Keeping this hop healthy is what forces the banner to come
+# from the Challenge below rather than from the first thing that isn't green.
+apiVersion: acme.cert-manager.io/v1
+kind: Order
+metadata:
+  name: web-tls-1-2748
+  namespace: kute-e2e
+spec:
+  request: e2e-placeholder-csr
+  dnsNames:
+    - web.kute-e2e.test
+  issuerRef:
+    name: letsencrypt-e2e
+    kind: ClusterIssuer
+    group: cert-manager.io
+status:
+  state: pending
+---
+# The deepest hop and the only genuine failure: state=invalid. §35a promotes
+# this into the top band ("challenge failed"), with this reason as the message
+# and the Order above named as its parent.
+apiVersion: acme.cert-manager.io/v1
+kind: Challenge
+metadata:
+  name: web-tls-1-2748-0
+  namespace: kute-e2e
+spec:
+  type: http-01
+  dnsName: web.kute-e2e.test
+  url: https://acme-staging-v02.api.letsencrypt.org/acme/chall-v3/e2e/0
+  issuerRef:
+    name: letsencrypt-e2e
+    kind: ClusterIssuer
+    group: cert-manager.io
+status:
+  state: invalid
+  reason: 'propagation check failed: NXDOMAIN looking up A record for web.kute-e2e.test'
+  presented: false
+  processing: false
+---
+# ── internal-tls: the healthy CA chain ───────────────────────────────────
+#
+# Two hops, both Ready, no Order/Challenge at all — a CA issuer has no ACME
+# stage, which is why §35a must render a short chain without inventing the
+# missing hops.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-tls
+  namespace: kute-e2e
+spec:
+  secretName: internal-tls
+  dnsNames:
+    - internal.kute-e2e.test
+  issuerRef:
+    name: internal-ca
+    kind: Issuer
+    group: cert-manager.io
+status:
+  # §35b's EXPIRES/RENEWAL columns read these two directly. Far-future so the
+  # fixture does not rot into an "expired" reading partway through the
+  # project's life.
+  notAfter: "2035-01-05T09:00:00Z"
+  renewalTime: "2034-11-06T09:00:00Z"
+  revision: 1
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Ready
+      message: Certificate is up to date and has not expired
+      lastTransitionTime: "2026-01-05T09:00:00Z"
+---
+apiVersion: cert-manager.io/v1
+kind: CertificateRequest
+metadata:
+  name: internal-tls-1
+  namespace: kute-e2e
+spec:
+  request: e2e-placeholder-csr
+  issuerRef:
+    name: internal-ca
+    kind: Issuer
+    group: cert-manager.io
+status:
+  conditions:
+    - type: Approved
+      status: "True"
+      reason: cert-manager.io
+      message: Certificate request has been approved by cert-manager.io
+      lastTransitionTime: "2026-01-05T09:00:00Z"
+    - type: Ready
+      status: "True"
+      reason: Issued
+      message: Certificate fetched from issuer successfully
+      lastTransitionTime: "2026-01-05T09:00:01Z"
+---
+# The target Secret internal-tls resolves to. Its existence is the whole
+# assertion — §35a's refs strip reports existence for a Secret and nothing
+# more, since a Secret has no Ready concept.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: internal-tls
+  namespace: kute-e2e
+type: kubernetes.io/tls
+stringData:
+  # A real self-signed pair, generated once and expiring in 2126. The API
+  # server warns ("failed to find any PEM data in certificate input") on a
+  # kubernetes.io/tls Secret whose values are not parseable PEM, and a
+  # fixture that warns on every provision just teaches people to ignore
+  # warnings. Nothing reads the key material — §35a's refs strip reports
+  # existence and nothing more.
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDSDCCAjCgAwIBAgIUNYrTp9K9cLvuE0P0aNou6iEKR8wwDQYJKoZIhvcNAQEL
+    BQAwITEfMB0GA1UEAwwWaW50ZXJuYWwua3V0ZS1lMmUudGVzdDAgFw0yNjA4MjQx
+    NTMzNTFaGA8yMTI2MDczMTE1MzM1MVowITEfMB0GA1UEAwwWaW50ZXJuYWwua3V0
+    ZS1lMmUudGVzdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBANQzf6If
+    1v+JbrZ1f+rJUHa9EO4eYBe8+kWDO6ap946A/krLYUPlAWi9EO0Nhrpyl027bFh4
+    Gl0W+9LOzA1KLzUAvGnaOAI6iNi9SSirdP5P6BWtF/m4Wlwyc5er8XIl10Z8CIft
+    4ewqVn/BbLjMf68UIxtuOiUdz4eOkVLGo4jQcOxhtwnX3Hwu8o+BXi3FDsJizs/N
+    groJkb1EIzyZm5nkZJmSMWV0qK8G6aAP4bI8eFsnr8KRmtqY7yVnZo9IYxmPnJTg
+    w+ajH7+7ifCxbFTxB2PFzFrFPrV29kBbSmDgIne9HTGn4WLn8d8ZNRZFibE9fXbi
+    /UCHaqC2S7GlHIkCAwEAAaN2MHQwHQYDVR0OBBYEFGSinMoAScdExTy+VhcoxzNA
+    yKndMB8GA1UdIwQYMBaAFGSinMoAScdExTy+VhcoxzNAyKndMA8GA1UdEwEB/wQF
+    MAMBAf8wIQYDVR0RBBowGIIWaW50ZXJuYWwua3V0ZS1lMmUudGVzdDANBgkqhkiG
+    9w0BAQsFAAOCAQEAwnz90gkdGs97OpFrPfNb1R62JlcqDwxBMHJ0/OiIagBj/+qr
+    hIpRnBF0qUEJQyoo9m6V0gcucWCk1JnTKnFvlSSBytsLyYLdLyEnSZaB33QjJbel
+    8U6xglehcQofmczVJXKxzZ9aGOLsimDcn1vQfY8JI1bzs9ZCRN+mbNjEO3u/mD+/
+    DNsE/iT4yOCwbqu+1IWFO5GMAXWf9HiqpdmDmUWHP/N8Xsyxtc2c6hYHaQYZ4hB+
+    E1p8xSrjyDcQ3EfdcytFXyO6kSUzBNgtEKGJUGFy4qhCDQmFQoQOo0+4LMP6IrgR
+    e4Hk96JpMoXFWpv+VtZJGAxQXSz3Jv+aI5d0mw==
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDUM3+iH9b/iW62
+    dX/qyVB2vRDuHmAXvPpFgzumqfeOgP5Ky2FD5QFovRDtDYa6cpdNu2xYeBpdFvvS
+    zswNSi81ALxp2jgCOojYvUkoq3T+T+gVrRf5uFpcMnOXq/FyJddGfAiH7eHsKlZ/
+    wWy4zH+vFCMbbjolHc+HjpFSxqOI0HDsYbcJ19x8LvKPgV4txQ7CYs7PzYK6CZG9
+    RCM8mZuZ5GSZkjFldKivBumgD+GyPHhbJ6/CkZramO8lZ2aPSGMZj5yU4MPmox+/
+    u4nwsWxU8QdjxcxaxT61dvZAW0pg4CJ3vR0xp+Fi5/HfGTUWRYmxPX124v1Ah2qg
+    tkuxpRyJAgMBAAECggEABQnD+gFvhVmp+0MG6nglJOyQPlcSSP3/oy7ed7KJYiTF
+    5Ni3UnlZczcp87bigALAfOP6So9vcM5e5D5ssdQVEtkVoB3CPqtNHHhCCGkpufAD
+    vqABdbhezNmVzQAUF3W2isHfIfsP5h+LNjVNc4XHcky0GK6hSshOaRWFdcWplFHz
+    hKf7J2565ruGnZsc311yksEKlqKnSSznRLfoq7eqr95UFSLZhwRK8EK2AJY/QzMi
+    YAaTWezgTSr46aJvXjmIWuVvhZ5ubtZSkgh6pH4I1jVkb56qnAqETVtFF/RKJQ4x
+    Nw+wuQrB8toCr/sOHeXaqXR4UE8cQTXnpkg2YyBAAQKBgQD5VsSoMpGqhA9RSEen
+    JWWOaQ3pEpuxOxK9Tt3nXlxslUu/yeYiu5thcrHUOLIR797SCuOHz8jXI2xskkk6
+    CMR9xjiIpJd7VRiO2Yy0Y8tXVITQe6zvlheDJAC3uw1ZJ064uZcBvhAGMXclJEGL
+    L3eaYBnKAjO3STcl2WAMHSViAQKBgQDZ3r6m9UcgqMCkYexPTb/sPmm8VQLG/pqf
+    hEB+ZcBoWVLkvBrWaweud0ouhuoC2lIz8VgAYU6mbEUs7BGBT76zPVQMMm7JWNIR
+    K3CIZKS2MhJHMUsrS2dCf8N/JFYm97PrLojbft3H1/IxF1j2vgHVG1F6ErkNUR4c
+    mpvlh4+qiQKBgEwaOq3nuWQlKJOzjwMqO+QKlo9T+adPk3mqb7plp6oQq20fT5m8
+    T0GgAzz2DQvCfez4G9hhCDj5++brg2QuNuL4tFqoef/Pyk4XgoWwi+jcyCjmBrOd
+    yRFi1ME/W2ShxbpGExwaCcQKJwZ0GXlFBKleuaBZqbVAqI9p2JH592YBAoGAcarU
+    rSaqxU9Fsn2kXHuj9g1Z/PgdStTqtu649zj++XIg3VWGavfMOiniegPJc1OUL6Vq
+    1EfwUMOME7PWLjD8vWbxwqtNQZ8lee+/9mkLxkK5ZotBPIVKilc+F8dNa2cwZzMQ
+    E/RMoUb5BMO5loHrUtO93oKGKXx4yVOgok/nlIECgYA9Swb+v9KROPmo4HLAy4rb
+    /NFF3qfcaJyQrUwtg7Ogm99MpxFs2HCWoQ9CfP5/qBSYdo+2KRNOlSx7Kh1gcSWh
+    ZoUb/9gwIa+GPD/ab3rhDmQxlJDcVBsdL6sPDwHjYL8fkwj44mpXC//bscqoQ6pd
+    yl8R+Q0atjWz3j4o+V9hlg==
+    -----END PRIVATE KEY-----
