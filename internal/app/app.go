@@ -1741,32 +1741,92 @@ type eventSource interface {
 	ConnEvents() <-chan kube.ConnStateMsg
 }
 
+// resourceEventDebounce is the event bridge's trailing-edge coalescing
+// window. Informers commonly emit a burst for one logical change (and a
+// controller can emit hundreds during a rollout); forwarding each one into
+// Bubble Tea starts one cache-local screen reload per message and can fill
+// Cluster.events before the final state is delivered. One pending deadline
+// per kind keeps the bridge draining watches while guaranteeing a quiet kind
+// sends its latest state promptly. A single timer services every kind, so a
+// storm cannot accumulate timers either.
+const resourceEventDebounce = 250 * time.Millisecond
+
 func forwardEvents(ctx context.Context, src eventSource, program *tea.Program, forwards *kube.ForwardManager) {
 	events := src.Events()
 	conn := src.ConnEvents()
+	pending := map[kube.ResourceKind]time.Time{}
+	var eventTimer *time.Timer
+	var eventTimerC <-chan time.Time
+
+	resetEventTimer := func(now time.Time) {
+		var next time.Time
+		for _, due := range pending {
+			if next.IsZero() || due.Before(next) {
+				next = due
+			}
+		}
+		if next.IsZero() {
+			if eventTimer != nil && !eventTimer.Stop() {
+				select {
+				case <-eventTimer.C:
+				default:
+				}
+			}
+			eventTimerC = nil
+			return
+		}
+		delay := max(next.Sub(now), 0)
+		if eventTimer == nil {
+			eventTimer = time.NewTimer(delay)
+		} else {
+			if !eventTimer.Stop() {
+				select {
+				case <-eventTimer.C:
+				default:
+				}
+			}
+			eventTimer.Reset(delay)
+		}
+		eventTimerC = eventTimer.C
+	}
+
+	flushDue := func(now time.Time) {
+		for kind, due := range pending {
+			if due.After(now) {
+				continue
+			}
+			delete(pending, kind)
+			program.Send(kube.ResourceChangedMsg{Kind: kind})
+			if kind == kube.KindPod && forwards != nil {
+				forwards.ReconcilePodTargets()
+			}
+			if kind == kube.KindSecret {
+				// A release Secret changing already emits KindHelmRelease from
+				// the real filtered release informer. This covers fake/demo
+				// listers whose releases derive from their shared Secrets.
+				program.Send(kube.ResourceChangedMsg{Kind: kube.KindHelmRelease})
+			}
+		}
+		resetEventTimer(now)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
+			if eventTimer != nil {
+				eventTimer.Stop()
+			}
 			return
 		case ev, ok := <-events:
 			if !ok {
 				events = nil
 				continue
 			}
-			program.Send(ev)
-			if ev.Kind == kube.KindPod && forwards != nil {
-				forwards.ReconcilePodTargets()
-			}
-			if ev.Kind == kube.KindSecret {
-				// A release Secret changing already emits KindHelmRelease
-				// directly, from the filtered release informer that backs
-				// the Helm screens (kube/helm.go). This covers the listers
-				// that have no such informer — *fake.Cluster in --demo and
-				// tests — where releases really are derived from whatever
-				// Secrets are seeded, and so a Secret change is the only
-				// signal an open Helm screen would ever get.
-				program.Send(kube.ResourceChangedMsg{Kind: kube.KindHelmRelease})
-			}
+			now := time.Now()
+			pending[ev.Kind] = now.Add(resourceEventDebounce)
+			resetEventTimer(now)
+		case now := <-eventTimerC:
+			flushDue(now)
 		case cs, ok := <-conn:
 			if !ok {
 				conn = nil

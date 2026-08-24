@@ -106,7 +106,12 @@ cluster.
 kind ships no metrics-server, so the "CPU/MEM render `–`, never a lie or a crash" row costs
 nothing extra.
 
-## 3. Go harness — `test/e2e/`, all files `//go:build e2e`
+## 3. Go harness — `test/e2e/`
+
+The PR suite uses `//go:build e2e`. Expensive rows add a second tag:
+`e2e && e2e_scale` for kwok and `e2e && e2e_soak` for the bounded long-session suite.
+The TLS fault-injection proxy is part of ordinary `e2e`, not another tag. `e2e_pty` is
+reserved for Phase 5's real-terminal subprocess handoff and is not implemented yet.
 
 `harness.go` — `Launch(t, opts...) *App`. Points `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at
 `t.TempDir()`, then calls `app.run` with `tea.WithInput`, `tea.WithOutput`,
@@ -130,16 +135,26 @@ and `Resize` to inject explicit Bubble Tea messages through the retained real pr
 `WaitLoaded` to poll against a deadline; `Never` to assert a substring stays absent across a
 window; `Quit` to shut down. On failure the harness dumps the last frame.
 
-`harness_support.go` adds `WaitForTCPRefused`, heap/goroutine `SnapshotRuntime`
-classification, and `BuildMergedKubeconfig`. The merged builder rewrites cluster and user
-keys per named context so two proxies derived from the same kind kubeconfig remain distinct.
+`harness_support.go` adds `WaitForTCPRefused`, heap/allocation/goroutine
+`SnapshotRuntime` classification, and `BuildMergedKubeconfig`. `InputFence` measures one
+inert event-loop turn while a burst is in flight. The merged builder rewrites cluster and
+user keys per named context so two proxies derived from the same kind kubeconfig remain
+distinct.
+
+Nightly stress files use `//go:build e2e && e2e_soak`. Their dimensions are bounded and can
+be reduced for a local reproduction with `KUTE_E2E_STORM_WIDGET_PATCHES`,
+`KUTE_E2E_STORM_POD_PATCHES`, `KUTE_E2E_STORM_EVENTS_PER_SCREEN`,
+`KUTE_E2E_SOAK_ITERATIONS`, `KUTE_E2E_SOAK_LOG_LINES_PER_BATCH`, and
+`KUTE_E2E_SOAK_NAMESPACES`. The defaults exercise 300 Widget patches, 300 Pod metadata plus
+status patches, 360 Event objects (each created and updated), eight full workflow loops,
+24,000 streamed log lines, and 24 namespaces.
 
 ### Test files
 
 | File | Covers |
 | --- | --- |
 | `flow_test.go` | the everyday flow (list → pod detail → logs → events → timeline → rollout-restart), that the screen is *still the screen* after a commit, and CrashLoopBackOff surfacing |
-| `kinds_test.go` | one subtest per resource kind's screen, opened from `browse` with fixture data reaching the frame; the jump palette gaining kinds while open |
+| `kinds_test.go` | ConfigMap, Secret, Ingress, discovered Widget, and synthetic Helm-release screens, plus the jump palette gaining discovered kinds while open; other files cover Pods, Deployments, Nodes, Events, Jobs, CronJobs, and the remaining curated screens |
 | `editors_test.go` | §27a/§27b's confirm → execute → refresh → show result → *remain on screen* contract — the thing a unit test against a fake can't check, because it's about what the screen does after the write lands |
 | `exec_test.go` | §10a's exec picker against a real container (real shell-detection round-trip, stops short of handing off the tty) and port-forward carrying real traffic — the reason this suite runs on kind rather than kwok |
 | `flux_test.go` | §30a/§31a against real Flux CRDs, including the HelmRelease name-collision regression |
@@ -161,6 +176,10 @@ keys per named context so two proxies derived from the same kind kubeconfig rema
 | `mutation_batch_test.go` | Job rerun and CronJob run-now/schedule editing against dedicated fixtures |
 | `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
 | `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: connect-time budget, first-frame render, informer heap via `runtime.ReadMemStats` — excluded from the PR job |
+| `storm_test.go` | build tag `e2e && e2e_soak`: Widget, Pod-detail, Events, and Timeline bursts converge to stable final values with bounded input, request, and goroutine growth |
+| `soak_test.go` | build tag `e2e && e2e_soak`: repeated detail/log/event/timeline/YAML, ten-kind, three-palette, forward, context, and namespace workflows return near their settled runtime baseline |
+| `high_rate_logs_test.go` | build tag `e2e && e2e_soak`: two 12k-line live batches overflow the bounded log buffer, advance its dropped counter, plateau heap, and remain responsive |
+| `namespace_fanout_test.go` | build tag `e2e && e2e_soak`: 24 scoped namespaces enforce one retained cache/watch per namespace and zero new requests on revisit |
 
 ## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`
 
@@ -172,8 +191,10 @@ unexported `kindInformers` map. Against a real apiserver:
 - the first `ListRaw(KindSecret)` adds exactly one;
 - the Helm release informer is per-namespace and carries the `type=helm.sh/release.v1` field
   selector;
-- under the restricted SA, a forbidden kind has non-nil `KindError` *and* `KindSynced` true —
-  settled-but-errored, never a hang or a false empty.
+- under the restricted SA, a forbidden kind has non-nil `KindForbidden`, nil `KindError`,
+  and `KindSynced` true. The real-server screen tests consume the explicit forbidden signal,
+  while `KindError` remains the retryable/stalled-cache reason — settled-but-denied or
+  settled-but-errored is never rendered as a hang or a false empty.
 - typed, dynamic, and filtered Helm informer identities remain singular across
   real server churn; proxy-level tests pin the corresponding 410 relist order.
 
@@ -187,9 +208,10 @@ actually read (`lazy-informers.md` §5.6).
   `go test -tags e2e -count=1 -timeout 15m ./test/e2e/... ./internal/kube/...`. Uploads
   cluster state (`kubectl get all`/`describe pods`/`get events`) on failure. Runs kind 1.35
   on every PR.
-- **`.github/workflows/e2e-nightly.yml`** — the 1.36 leg on a schedule, plus the `e2e_scale`
-  kwok run (`-tags "e2e e2e_scale" -run TestScale`), keeping PR latency to the single 1.35
-  job.
+- **`.github/workflows/e2e-nightly.yml`** — both supported kind versions on a schedule, plus
+  the `e2e_soak` lifecycle job and `e2e_scale` kwok run. The soak job runs only the four
+  bounded long-session scenarios and uploads the same cluster diagnostics as the ordinary
+  kind legs.
 
 ---
 
@@ -200,6 +222,7 @@ Local, in order:
 ```sh
 scripts/e2e-cluster.sh up                        # kind + fixtures, ~90s cold
 go test -tags e2e -count=1 -timeout 15m ./test/e2e/... ./internal/kube/...
+go test -tags "e2e e2e_soak" -count=1 -timeout 25m -run 'Test(EventStorm|RepeatedWorkflowSoak|HighRateLogs|NamespaceFanOut)' ./test/e2e/...
 K8S_VERSION=1.36 scripts/e2e-cluster.sh recreate && go test -tags e2e ./test/e2e/...
 scripts/e2e-scale-cluster.sh up && go test -tags "e2e e2e_scale" -run TestScale ./test/e2e/...
 scripts/e2e-cluster.sh down

@@ -47,6 +47,14 @@ func TestLogBufferBoundsEntries(t *testing.T) {
 	}
 }
 
+func TestLogBufferSaturatedAppendDoesNotAllocate(t *testing.T) {
+	buffer := LogBuffer{MaxEntries: 5000, Entries: make([]LogEntry, 5000)}
+	entry := LogEntry{Message: "steady-state line"}
+	if got := testing.AllocsPerRun(100, func() { buffer.Append(entry) }); got != 0 {
+		t.Fatalf("saturated Append allocated %.2f times per line, want zero", got)
+	}
+}
+
 func TestClampOffsets(t *testing.T) {
 	t.Parallel()
 

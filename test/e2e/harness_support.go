@@ -38,6 +38,7 @@ type RuntimeSnapshot struct {
 	CapturedAt time.Time
 	HeapAlloc  uint64
 	HeapInuse  uint64
+	TotalAlloc uint64
 	Goroutines int
 	Classes    map[string]int
 	Stacks     string
@@ -80,7 +81,7 @@ func SnapshotRuntime() RuntimeSnapshot {
 			classes["other"]++
 		}
 	}
-	return RuntimeSnapshot{CapturedAt: time.Now(), HeapAlloc: mem.HeapAlloc, HeapInuse: mem.HeapInuse, Goroutines: count, Classes: classes, Stacks: dump}
+	return RuntimeSnapshot{CapturedAt: time.Now(), HeapAlloc: mem.HeapAlloc, HeapInuse: mem.HeapInuse, TotalAlloc: mem.TotalAlloc, Goroutines: count, Classes: classes, Stacks: dump}
 }
 
 // Snapshot captures a process snapshot at an App lifecycle boundary.

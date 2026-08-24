@@ -61,6 +61,23 @@ func (f fakeLister) ListRaw(_ context.Context, kind kube.ResourceKind, _ string)
 	return f.objs[kind], nil
 }
 
+// readSyncedLister models the real lazy cache contract: a kind is not synced
+// until ListRaw has started/read it. Event is pre-set by the test because the
+// separate EventsReader seam performs that read in production.
+type readSyncedLister struct {
+	fakeLister
+	read map[kube.ResourceKind]bool
+}
+
+func (l *readSyncedLister) ListRaw(ctx context.Context, kind kube.ResourceKind, namespace string) ([]runtime.Object, error) {
+	l.read[kind] = true
+	return l.fakeLister.ListRaw(ctx, kind, namespace)
+}
+
+func (l *readSyncedLister) KindSynced(kind kube.ResourceKind, _ string) bool {
+	return l.read[kind]
+}
+
 func newSession() *tui.Session {
 	return &tui.Session{
 		Location: tui.Location{Context: "microk8s-cluster", Namespace: "default"},
@@ -127,6 +144,33 @@ func TestNamespaceScopedLoadMergesEventsAndRestarts(t *testing.T) {
 	}
 	if len(m.rail) != 0 {
 		t.Fatalf("expected no revision rail in 16a namespace-scoped mode, got %+v", m.rail)
+	}
+}
+
+// TestOwnerlessPodStartsEveryRequiredCache guards the lazy-informer edge
+// where a Pod has no ReplicaSet owner. Timeline still gates its empty/ready
+// claim on Deployment, so the load must start that cache even though there
+// is no rollout rail whose status would otherwise read it.
+func TestOwnerlessPodStartsEveryRequiredCache(t *testing.T) {
+	pod := testPod("standalone", "node-a", 0)
+	lister := &readSyncedLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {pod}}},
+		read:       map[kube.ResourceKind]bool{kube.KindEvent: true},
+	}
+	m := New(Config{
+		Session: newSession(), Events: fakeEvents{}, Lister: lister,
+		Namespace: "default", ObjectKind: kube.KindPod, ObjectName: pod.Name,
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateEmpty {
+		t.Fatalf("state = %s, want empty after every required cache settles", m.state)
+	}
+	for _, kind := range []kube.ResourceKind{kube.KindEvent, kube.KindReplicaSet, kube.KindDeployment, kube.KindPod} {
+		if !lister.read[kind] {
+			t.Errorf("required %s cache was never read", kind)
+		}
 	}
 }
 

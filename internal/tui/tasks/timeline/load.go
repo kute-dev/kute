@@ -39,6 +39,14 @@ func (m Model) load() tea.Cmd {
 		if err != nil {
 			return loadedMsg{err: err}
 		}
+		// Deployment is part of applyLoaded's required cache set even when
+		// this particular scope has no ReplicaSet-owned Pod and therefore no
+		// rollout rows. Start/read it unconditionally: otherwise an ownerless
+		// Pod can leave KindSynced(Deployment) false forever while the screen
+		// waits on a cache that none of the helpers below ever touches.
+		if lister != nil {
+			_, _ = lister.ListRaw(ctx, kube.KindDeployment, namespace)
+		}
 
 		// §32a: Flux reconcile events become their own revision rows, so
 		// they must not also appear as ordinary event rows — the revision

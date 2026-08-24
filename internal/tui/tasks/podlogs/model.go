@@ -245,11 +245,17 @@ func (b *LogBuffer) Append(entry LogEntry) {
 	if b.MaxEntries <= 0 {
 		b.MaxEntries = DefaultMaxEntries
 	}
-	b.Entries = append(b.Entries, entry)
-	if over := len(b.Entries) - b.MaxEntries; over > 0 {
-		b.Entries = append([]LogEntry(nil), b.Entries[over:]...)
+	// Trim before append so a saturated buffer reuses its backing array. The
+	// old append-to-nil trim allocated and copied all 5,000 entries for every
+	// incoming line after saturation.
+	if over := len(b.Entries) - b.MaxEntries + 1; over > 0 {
+		copy(b.Entries, b.Entries[over:])
+		newLen := len(b.Entries) - over
+		clear(b.Entries[newLen:])
+		b.Entries = b.Entries[:newLen]
 		b.DroppedCount += over
 	}
+	b.Entries = append(b.Entries, entry)
 }
 
 func (m *Model) appendEntry(entry LogEntry) {

@@ -520,6 +520,17 @@ func (a *App) sync() {
 	}
 }
 
+// InputFence measures one inert event-loop turn. Soak scenarios use it while
+// the cluster is producing a burst to prove keyboard input is still serviced
+// promptly; unlike timing a navigation, this contains no informer or server
+// work and therefore isolates the Bubble Tea loop itself.
+func (a *App) InputFence() time.Duration {
+	a.t.Helper()
+	start := time.Now()
+	a.sync()
+	return time.Since(start)
+}
+
 // Press sends one key. Names follow bubbletea's own vocabulary ("enter",
 // "esc", "ctrl+d", "down", …); anything else is sent as literal runes.
 func (a *App) Press(key string) {

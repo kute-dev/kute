@@ -261,6 +261,19 @@ Every mutation test should:
 
 ## Phase 4: event-storm and long-session suite
 
+Implementation status: complete. The nightly-only `e2e_soak` suite uses
+bounded, environment-overridable iteration counts and records input-fence,
+heap, allocation, goroutine, stream, forward, informer-watch, and proxy
+request budgets. The application bridge coalesces informer notifications on
+one per-kind timer so event bursts cannot enqueue one screen load per watch
+event or lose the final state behind a full notification channel. Saturated
+log-buffer appends reuse their backing storage instead of allocating a new
+5,000-entry slice for every line. Namespace-scoped caches deliberately use
+unbounded retention for the lifetime of one cluster context: revisits reuse
+the cache, while a context switch or application shutdown releases the whole
+set. The fan-out test enforces that linear policy rather than treating it as
+an accidental baseline.
+
 Add an `e2e_soak` build tag and a nightly job. The first version should run for
 10 to 20 minutes and use bounded iterations so failures are reproducible.
 
@@ -325,6 +338,14 @@ Before setting a strict pass budget, decide the intended cache policy:
 
 The test should enforce the chosen policy rather than accidentally blessing
 the current behavior.
+
+Decision: **unbounded retention for the active cluster context**. Each
+namespace/kind pair actually read retains its informer until context switch or
+shutdown. This preserves watch-current data when the user returns to a
+namespace and avoids LIST/WATCH churn during incident navigation. The soak
+test therefore requires one active ConfigMap watch per visited namespace,
+requires a revisit to create no new LIST or WATCH, and applies linear
+per-namespace heap and goroutine budgets.
 
 ## Phase 5: authentication and PTY coverage
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot end-to-end run: bring the kind cluster up, run the e2e suite
-# against it, tear it down again — the three commands CLAUDE.md documents
-# separately, wrapped so a failing test still takes the cluster down.
+# against it, tear it down again — the preferred CLAUDE.md workflow, with
+# cleanup guaranteed even when the test command fails.
 #
 # Usage:
 #   scripts/e2e-run.sh                       # whole suite

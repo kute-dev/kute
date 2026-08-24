@@ -70,3 +70,36 @@ jobs:
         run: scripts/e2e-scale-cluster.sh up
       - name: Run the scale suite
         run: go test -tags "e2e e2e_scale" -count=1 -timeout 30m -run TestScale ./test/e2e/...
+
+  soak:
+    name: e2e soak (kind, k8s 1.36)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+      - name: Create the cluster and apply fixtures
+        env:
+          K8S_VERSION: "1.36"
+        run: scripts/e2e-cluster.sh up
+      - name: Run the bounded long-session suite
+        run: go test -tags "e2e e2e_soak" -count=1 -timeout 25m -run 'Test(EventStorm|RepeatedWorkflowSoak|HighRateLogs|NamespaceFanOut)' ./test/e2e/...
+      - name: Collect the cluster's state on failure
+        if: failure()
+        run: |
+          export KUBECONFIG="${GITHUB_WORKSPACE}/.kube/e2e.config"
+          mkdir -p e2e-soak-artifacts
+          kubectl get all -A -o wide > e2e-soak-artifacts/resources.txt 2>&1 || true
+          kubectl describe pods -n kute-e2e > e2e-soak-artifacts/pods.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > e2e-soak-artifacts/events.txt 2>&1 || true
+      - name: Upload soak failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-soak-artifacts
+          path: e2e-soak-artifacts/
+          if-no-files-found: ignore
