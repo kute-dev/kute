@@ -123,8 +123,8 @@ func TestCronJobDetailScreen(t *testing.T) {
 }
 
 // waitForAttemptRows waits until exactly want rows of §37b's attempt table
-// name a pod with the given prefix, each reporting "failed" with the given
-// exit code.
+// name a pod with the given prefix, each reporting "Error" — the flat
+// table's own RESULT word for a failed attempt — with the given exit code.
 //
 // A row-shaped predicate rather than a substring: the ledger's own claim is
 // per-attempt, so "the exit code is somewhere on screen" is not the same
@@ -136,7 +136,7 @@ func (a *App) waitForAttemptRows(t *testing.T, podPrefix, exitCode string, want 
 	count := func(frame string) int {
 		n := 0
 		for _, line := range strings.Split(frame, "\n") {
-			if !strings.Contains(line, "failed") {
+			if !strings.Contains(line, "Error") {
 				continue
 			}
 			for _, field := range strings.Fields(line) {
