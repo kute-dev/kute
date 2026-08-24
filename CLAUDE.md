@@ -50,8 +50,9 @@ go test ./internal/tui/tasks/browse -run TestSomething  # single test
 go vet ./...
 UPDATE_GOLDEN=1 go test ./internal/tui/tasks/podlogs   # regenerate pod-logs golden fixtures
 
-./scripts/e2e-run.sh                                  # provision, run the full e2e suite, tear down
+./scripts/e2e-run.sh                                  # provision, run the PR-gate e2e suite, tear down
 ./scripts/e2e-run.sh -run TestFluxScreens             # run one e2e test through the same lifecycle
+KUTE_E2E_TAGS=e2e_soak ./scripts/e2e-run.sh -run TestEventStorm   # a nightly-only suite needs its tag
 ```
 
 Tooling is pinned via **mise** — `mise.toml` is the authoritative list of versions (go, kubectl, golangci-lint, git-cliff, govulncheck, kind, betamax, and `gopls`, which backs Go code intelligence via the LSP tool; prefer `findReferences`/`goToImplementation` over grep when changing an interface seam like `ClusterProvider`/`RawLister`/`Mutator`, where a missing forward behind an embedded type is silent). `KUBECONFIG` is set in `mise.toml` to `{{config_root}}/.kube/config` (repo-relative, gitignored — every checkout gets its own, no machine-specific setup needed); the app also falls back to `~/.kube/config` and then in-cluster config. Run `mise install` to get the pinned toolchain.
