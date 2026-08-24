@@ -385,7 +385,7 @@ func fatManagedFields() []metav1.ManagedFieldsEntry {
 			Operation:  metav1.ManagedFieldsOperationUpdate,
 			APIVersion: "v1",
 			FieldsType: "FieldsV1",
-			FieldsV1:   &metav1.FieldsV1{Raw: []byte(`{"f:metadata":{"f:annotations":{".":{},"f:` + strings.Repeat("a", 400) + `":{}}}}`)},
+			FieldsV1:   metav1.NewFieldsV1(`{"f:metadata":{"f:annotations":{".":{},"f:` + strings.Repeat("a", 400) + `":{}}}}`),
 		})
 	}
 	return out
