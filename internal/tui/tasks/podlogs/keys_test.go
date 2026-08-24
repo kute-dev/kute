@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func TestKeybarShowsLogsPillAndCoreGroups(t *testing.T) {
@@ -21,10 +22,39 @@ func TestKeybarShowsLogsPillAndCoreGroups(t *testing.T) {
 			found[hint.Key] = true
 		}
 	}
-	for _, key := range []string{"space", "w/e", "s", "tab", "Y"} {
+	for _, key := range []string{
+		verbs.LogPause.Key,
+		verbs.LogNextWarning.Key,
+		verbs.LogNextError.Key,
+		verbs.LogToggleWrap.Key,
+		verbs.LogCycleSince.Key,
+		verbs.LogCycleContainer.Key,
+		verbs.LogCopyView.Key,
+	} {
 		if !found[key] {
 			t.Fatalf("missing key hint %q in %+v", key, bar.Groups)
 		}
+	}
+}
+
+func TestKeybarDescribesSeverityJumpsSeparately(t *testing.T) {
+	t.Parallel()
+
+	bar := testModel().Keybar()
+	found := map[string]string{}
+	for _, group := range bar.Groups {
+		for _, hint := range group {
+			found[hint.Key] = hint.Label
+		}
+	}
+	if got := found[verbs.LogNextWarning.Key]; got != verbs.LogNextWarning.Label {
+		t.Fatalf("warning label = %q, want %q", got, verbs.LogNextWarning.Label)
+	}
+	if got := found[verbs.LogNextError.Key]; got != verbs.LogNextError.Label {
+		t.Fatalf("error label = %q, want %q", got, verbs.LogNextError.Label)
+	}
+	if _, exists := found["w/e"]; exists {
+		t.Fatalf("combined ambiguous warning/error hint remains: %+v", bar.Groups)
 	}
 }
 

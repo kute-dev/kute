@@ -98,6 +98,30 @@ func TestVerticalNavigationKeys(t *testing.T) {
 	}
 }
 
+func TestVerticalNavigationMovesByWrappedPhysicalRow(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.SetSize(40, 12)
+	model.stream = StreamStreaming
+	model.buffer.Append(LogEntry{Message: strings.Repeat("wrapped message ", 12)})
+	model.buffer.Append(LogEntry{Message: "next logical entry"})
+	model.view.AutoScroll = false
+	model.view.VerticalOffset = 0
+
+	rows := model.visualRows(model.filteredEntries(), model.view.Width)
+	if len(rows) < 3 || rows[0].EntryIndex != 0 || rows[1].EntryIndex != 0 {
+		t.Fatalf("unexpected wrapped layout: %+v", rows)
+	}
+	press(&model, "j")
+	if model.view.VerticalOffset != 1 {
+		t.Fatalf("j offset = %d, want the next physical row", model.view.VerticalOffset)
+	}
+	if got := model.visibleVisualRows(rows)[0].EntryIndex; got != 0 {
+		t.Fatalf("j skipped the first entry's continuation row; top entry = %d", got)
+	}
+}
+
 func TestHalfPageNavigationKeys(t *testing.T) {
 	t.Parallel()
 
@@ -177,6 +201,52 @@ func TestWrapAndTimestampTogglesAreDisplayOnly(t *testing.T) {
 	}
 }
 
+func TestWrapToggleReflowsAndKeepsFollowingAtBottom(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.SetSize(40, 10)
+	for range 4 {
+		model.appendEntry(LogEntry{Message: strings.Repeat("long log message ", 8)})
+	}
+	wrappedBottom := model.maxVerticalOffset()
+	if wrappedBottom == 0 || model.view.VerticalOffset != wrappedBottom {
+		t.Fatalf("wrapped following offset = %d, bottom = %d", model.view.VerticalOffset, wrappedBottom)
+	}
+
+	press(&model, "W")
+	if model.view.Wrap || model.view.VerticalOffset != model.maxVerticalOffset() {
+		t.Fatalf("nowrap view did not remain at bottom: %+v", model.view)
+	}
+	press(&model, "W")
+	if !model.view.Wrap || model.view.VerticalOffset != model.maxVerticalOffset() {
+		t.Fatalf("rewrapped view did not remain at bottom: %+v", model.view)
+	}
+}
+
+func TestFollowingStaysAtBottomWhenFirstDroppedNoticeAppears(t *testing.T) {
+	t.Parallel()
+
+	model := New(Config{
+		Pod:        SelectedPod{Name: "api", Containers: []string{"app"}},
+		MaxEntries: 2,
+	})
+	model.SetSize(40, 8)
+	for range 2 {
+		model.appendEntry(LogEntry{Message: strings.Repeat("long log message ", 10)})
+	}
+	before := model.view.VerticalOffset
+	model.appendEntry(LogEntry{Message: strings.Repeat("long log message ", 10)})
+	if model.buffer.DroppedCount != 1 {
+		t.Fatalf("dropped count = %d, want 1", model.buffer.DroppedCount)
+	}
+	if model.view.VerticalOffset != model.maxVerticalOffset() {
+		t.Fatalf("following offset = %d, bottom = %d after dropped notice appeared (before=%d rows=%d viewport=%d)",
+			model.view.VerticalOffset, model.maxVerticalOffset(), before,
+			len(model.visualRows(model.filteredEntries(), model.view.Width)), model.entryViewportHeight())
+	}
+}
+
 func TestTabCyclesContainerAndRestartsStream(t *testing.T) {
 	t.Parallel()
 
@@ -204,15 +274,16 @@ func TestSinceKeyCyclesWindowAndRestartsStream(t *testing.T) {
 	}
 }
 
-// entryVisible reports whether index idx (into model.filteredEntries())
-// falls within the current viewport window — a jump-to-severity result is
-// "correct" once the target line is on screen, whether or not it lands
-// exactly at the top (a target near the buffer's end clamps the offset to
-// maxVerticalOffset, per clampOffsets, which still keeps it visible).
+// entryVisible reports whether any physical row belonging to index idx (into
+// model.filteredEntries()) falls within the current viewport window.
 func entryVisible(model Model, idx int) bool {
-	offset := model.view.VerticalOffset
-	height := model.entryViewportHeight()
-	return idx >= offset && idx < offset+height
+	entries := model.filteredEntries()
+	for _, row := range model.visibleVisualRows(model.visualRows(entries, model.view.Width)) {
+		if row.EntryIndex == idx {
+			return true
+		}
+	}
+	return false
 }
 
 func TestJumpSeverityMovesToNextWarningOrError(t *testing.T) {
@@ -335,6 +406,21 @@ func TestCopyVisibleViewSetsClipboard(t *testing.T) {
 	_, cmd := model.Update(tea.KeyPressMsg{Text: "Y"})
 	if cmd == nil {
 		t.Fatalf("ctrl+y did not return a command")
+	}
+}
+
+func TestVisibleViewCopyIncludesWrappedEntryOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.SetSize(40, 9)
+	message := strings.Repeat("one logical message ", 8)
+	model.buffer.Append(LogEntry{Timestamp: "10:00:00", Severity: SeverityWarn, Message: message})
+	model.view.VerticalOffset = 1 // begin on a continuation row
+
+	got := model.visibleViewText()
+	if strings.Count(got, strings.TrimSpace(message)) != 1 {
+		t.Fatalf("wrapped logical entry was not copied exactly once: %q", got)
 	}
 }
 

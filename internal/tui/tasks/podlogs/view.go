@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -169,13 +170,11 @@ func (m Model) Body(width, height int) string {
 	// only the latest (highest-index) ERR entry gets the extra tinted
 	// background row.
 	lastErr := lastErrIndex(entries)
-	start := m.view.VerticalOffset
-	if start > len(entries) {
-		start = len(entries)
-	}
+	rows := m.visualRows(entries, width)
 	lines := make([]string, 0, height)
-	for i, entry := range m.visibleEntries(entries) {
-		lines = append(lines, m.formatEntry(theme, entry, width, start+i == lastErr))
+	for _, row := range m.visibleVisualRows(rows) {
+		entry := entries[row.EntryIndex]
+		lines = append(lines, m.formatVisualRow(theme, entry, row, width, row.EntryIndex == lastErr))
 	}
 	if m.buffer.DroppedCount > 0 {
 		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextFaint).Render(fmt.Sprintf("… %d older log lines dropped …", m.buffer.DroppedCount)))
@@ -226,16 +225,57 @@ func decorativeBars(width, height int, first, rest lipgloss.Style) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) visibleEntries(entries []LogEntry) []LogEntry {
+// visualLogRow is one physical terminal row produced from a logical log
+// entry. EntryIndex points into filteredEntries; First distinguishes the row
+// that carries timestamp/severity from a continuation row indented beneath
+// the message column.
+type visualLogRow struct {
+	EntryIndex int
+	First      bool
+	Message    string
+}
+
+// visualRows performs the width-dependent, pure layout pass for the current
+// view. VerticalOffset is measured against this result, so j/k, paging, live
+// following, filtering, and severity jumps all operate on the same physical
+// rows Body eventually renders.
+func (m Model) visualRows(entries []LogEntry, width int) []visualLogRow {
+	rows := make([]visualLogRow, 0, len(entries))
+	for i, entry := range entries {
+		if entry.Boundary {
+			rows = append(rows, visualLogRow{EntryIndex: i, First: true})
+			continue
+		}
+
+		message := strings.ToValidUTF8(entry.Message, "\uFFFD")
+		messages := []string{message}
+		if m.view.Wrap {
+			messageWidth := max(width-m.entryPrefixWidth(entry), 1)
+			messages = strings.Split(lipgloss.Wrap(message, messageWidth, ""), "\n")
+			if len(messages) == 0 {
+				messages = []string{""}
+			}
+		} else if m.view.HorizontalOffset > 0 {
+			messages[0] = ansi.Cut(message, m.view.HorizontalOffset, ansi.StringWidth(message))
+		}
+
+		for line, message := range messages {
+			rows = append(rows, visualLogRow{EntryIndex: i, First: line == 0, Message: message})
+		}
+	}
+	return rows
+}
+
+func (m Model) visibleVisualRows(rows []visualLogRow) []visualLogRow {
 	start := m.view.VerticalOffset
-	if start > len(entries) {
-		start = len(entries)
+	if start > len(rows) {
+		start = len(rows)
 	}
 	end := start + m.entryViewportHeight()
-	if end > len(entries) {
-		end = len(entries)
+	if end > len(rows) {
+		end = len(rows)
 	}
-	return entries[start:end]
+	return rows[start:end]
 }
 
 // lastErrIndex returns the index of the last (most recent) ERR-severity
@@ -249,11 +289,35 @@ func lastErrIndex(entries []LogEntry) int {
 	return -1
 }
 
-// formatEntry renders one log line. mostSignificantErr is true only for the
-// single ERR entry (lastErrIndex) that gets the spec's extra full-width
-// tinted background row — every ERR line still gets red message/level text
-// regardless (docs/design README.md §5b).
+// formatEntry preserves the old single-row helper used by focused tests. The
+// viewport itself calls formatVisualRow for every row returned by visualRows.
 func (m Model) formatEntry(theme tui.Theme, entry LogEntry, width int, mostSignificantErr bool) string {
+	rows := m.visualRows([]LogEntry{entry}, width)
+	if len(rows) == 0 {
+		return ""
+	}
+	return m.formatVisualRow(theme, entry, rows[0], width, mostSignificantErr)
+}
+
+func (m Model) entryPrefixWidth(entry LogEntry) int {
+	parts := make([]string, 0, 2)
+	if m.view.Timestamps && entry.Timestamp != "" {
+		parts = append(parts, entry.Timestamp)
+	}
+	if entry.Severity != "" {
+		parts = append(parts, entry.Severity)
+	}
+	if len(parts) == 0 {
+		return 0
+	}
+	return ansi.StringWidth(strings.Join(parts, " ")) + 1
+}
+
+// formatVisualRow renders one physical row. mostSignificantErr is true for
+// every continuation row belonging to the latest ERR entry, so its semantic
+// background remains a full-width band instead of disappearing after the
+// first wrapped row.
+func (m Model) formatVisualRow(theme tui.Theme, entry LogEntry, row visualLogRow, width int, mostSignificantErr bool) string {
 	if entry.Boundary {
 		return centeredRule(entry.Message+" · "+entry.Timestamp, width, lipgloss.NewStyle().Foreground(theme.TextFaint))
 	}
@@ -276,23 +340,26 @@ func (m Model) formatEntry(theme tui.Theme, entry LogEntry, width int, mostSigni
 		levelStyle = lipgloss.NewStyle().Foreground(theme.Warn)
 	}
 
-	parts := []string{}
-	if m.view.Timestamps && entry.Timestamp != "" {
-		parts = append(parts, dimTS.Render(entry.Timestamp))
-	}
-	if entry.Severity != "" {
-		parts = append(parts, levelStyle.Render(entry.Severity))
-	}
-	message := entry.Message
-	if !m.view.Wrap {
-		if m.view.HorizontalOffset < len(message) {
-			message = message[m.view.HorizontalOffset:]
-		} else {
-			message = ""
+	var prefix string
+	if row.First {
+		parts := []string{}
+		if m.view.Timestamps && entry.Timestamp != "" {
+			parts = append(parts, dimTS.Render(entry.Timestamp))
 		}
+		if entry.Severity != "" {
+			parts = append(parts, levelStyle.Render(entry.Severity))
+		}
+		if len(parts) > 0 {
+			prefix = strings.Join(parts, " ") + " "
+		}
+	} else if indent := m.entryPrefixWidth(entry); indent > 0 {
+		indentStyle := lipgloss.NewStyle()
+		if tinted {
+			indentStyle = indentStyle.Background(theme.ErrBannerBg)
+		}
+		prefix = indentStyle.Render(strings.Repeat(" ", indent))
 	}
-	parts = append(parts, msgStyle.Render(message))
-	line := strings.Join(parts, " ")
+	line := prefix + msgStyle.Render(row.Message)
 	if !tinted {
 		return line
 	}
@@ -331,9 +398,16 @@ func (m Model) statusLine(theme tui.Theme, width int) string {
 // visibleViewText renders the currently-visible lines as plain text for
 // ctrl-y's clipboard copy (docs/design README.md §5b).
 func (m Model) visibleViewText() string {
-	entries := m.visibleEntries(m.filteredEntries())
-	lines := make([]string, 0, len(entries))
-	for _, e := range entries {
+	entries := m.filteredEntries()
+	rows := m.visibleVisualRows(m.visualRows(entries, m.view.Width))
+	lines := make([]string, 0, len(rows))
+	seen := make(map[int]struct{}, len(rows))
+	for _, row := range rows {
+		if _, ok := seen[row.EntryIndex]; ok {
+			continue
+		}
+		seen[row.EntryIndex] = struct{}{}
+		e := entries[row.EntryIndex]
 		if e.Boundary {
 			lines = append(lines, "--- "+e.Message+" · "+e.Timestamp+" ---")
 			continue
@@ -352,7 +426,15 @@ func (m Model) visibleViewText() string {
 }
 
 func (m Model) visibleSeverityCounts() (warn, err int) {
-	for _, e := range m.visibleEntries(m.filteredEntries()) {
+	entries := m.filteredEntries()
+	rows := m.visibleVisualRows(m.visualRows(entries, m.view.Width))
+	seen := make(map[int]struct{}, len(rows))
+	for _, row := range rows {
+		if _, ok := seen[row.EntryIndex]; ok {
+			continue
+		}
+		seen[row.EntryIndex] = struct{}{}
+		e := entries[row.EntryIndex]
 		switch e.Severity {
 		case SeverityWarn:
 			warn++

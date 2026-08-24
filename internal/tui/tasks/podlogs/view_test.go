@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 func TestRenderShowsLoadingEmptyAndPermissionDeniedFeedback(t *testing.T) {
@@ -48,8 +50,8 @@ func TestRenderWaitingForContainerShowsReasonNotAnError(t *testing.T) {
 	if strings.Contains(view, "loading logs for") {
 		t.Fatalf("waiting view should not show the generic loading strip:\n%s", view)
 	}
-	if strings.Contains(view, "error") {
-		t.Fatalf("waiting view should not read as an error:\n%s", view)
+	if strings.Contains(view, tui.GlyphFailed+" error") || strings.Contains(view, "Permission denied") {
+		t.Fatalf("waiting view should not render an error state:\n%s", view)
 	}
 }
 
@@ -94,6 +96,70 @@ func TestFormatEntryTrimsHorizontalOffsetWhenWrapOff(t *testing.T) {
 	got := model.formatEntry(theme, LogEntry{Container: "app", Message: "0123456789"}, 80, false)
 	if strings.Contains(got, "0123456789") || !strings.Contains(got, "89") {
 		t.Fatalf("horizontal offset did not trim: %q", got)
+	}
+}
+
+func TestLongLogLineWrapsAndIndentsContinuationRows(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.view.Timestamps = true
+	entry := LogEntry{
+		Timestamp: "10:00:00",
+		Severity:  SeverityWarn,
+		Message:   "request failed while contacting the upstream service and will be retried automatically",
+	}
+	const width = 36
+	rows := model.visualRows([]LogEntry{entry}, width)
+	if len(rows) < 3 {
+		t.Fatalf("visual rows = %d, want a wrapped message", len(rows))
+	}
+
+	prefix := strings.Repeat(" ", model.entryPrefixWidth(entry))
+	var rendered []string
+	for i, row := range rows {
+		line := ansi.Strip(model.formatVisualRow(model.Theme(), entry, row, width, false))
+		if got := ansi.StringWidth(line); got > width {
+			t.Fatalf("row %d width = %d, want <= %d: %q", i, got, width, line)
+		}
+		if i > 0 && !strings.HasPrefix(line, prefix) {
+			t.Fatalf("continuation row %d is not aligned to the message column: %q", i, line)
+		}
+		rendered = append(rendered, strings.TrimSpace(line))
+	}
+	joined := strings.Join(rendered, " ")
+	for _, want := range []string{"request failed", "upstream service", "retried automatically"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("wrapped output lost %q: %q", want, joined)
+		}
+	}
+	if strings.Contains(joined, "…") || strings.Contains(joined, "...") {
+		t.Fatalf("wrapped output was ellipsized: %q", joined)
+	}
+}
+
+func TestWrappedLatestErrorTintsEveryPhysicalRow(t *testing.T) {
+	model := testModel()
+	entry := LogEntry{
+		Timestamp: "10:00:00",
+		Severity:  SeverityErr,
+		Message:   "fatal request failure repeated across enough words to occupy several terminal rows",
+	}
+	model.view.Timestamps = true
+	const width = 34
+	rows := model.visualRows([]LogEntry{entry}, width)
+	if len(rows) < 2 {
+		t.Fatalf("visual rows = %d, want wrapped error", len(rows))
+	}
+	bg := "48;2;42;21;24" // theme.ErrBannerBg dark-mode RGB
+	for i, row := range rows {
+		line := model.formatVisualRow(model.Theme(), entry, row, width, true)
+		if !strings.Contains(line, bg) {
+			t.Errorf("wrapped error row %d lacks the error background: %q", i, line)
+		}
+		if got := ansi.StringWidth(line); got != width {
+			t.Errorf("wrapped error row %d width = %d, want %d", i, got, width)
+		}
 	}
 }
 

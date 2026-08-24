@@ -259,16 +259,45 @@ func (b *LogBuffer) Append(entry LogEntry) {
 }
 
 func (m *Model) appendEntry(entry LogEntry) {
+	// Once following has enough rows to scroll, advance the bottom offset by
+	// only the rows added/evicted here. Re-laying out the full 5,000-entry
+	// buffer for every streamed line would make wrapping quadratic at steady
+	// state. Before the first scroll point, clampOffsets performs the small
+	// full calculation needed to detect when the viewport becomes full.
+	droppedRows := 0
+	oldViewportHeight := m.entryViewportHeight()
+	if over := len(m.buffer.Entries) - m.buffer.MaxEntries + 1; over > 0 {
+		for _, dropped := range m.buffer.Entries[:over] {
+			if m.entryMatchesFilter(dropped) {
+				droppedRows += len(m.visualRows([]LogEntry{dropped}, m.view.Width))
+			}
+		}
+	}
+	addedRows := 0
+	if m.entryMatchesFilter(entry) {
+		addedRows = len(m.visualRows([]LogEntry{entry}, m.view.Width))
+	}
+	wasScrollableFollow := m.view.AutoScroll && m.view.VerticalOffset > 0
+
 	m.buffer.Append(entry)
 	m.linesSinceTick++
 	if m.stream != StreamError {
 		m.stream = StreamStreaming
 	}
 	m.feedback = ""
-	if m.view.AutoScroll {
-		m.view.VerticalOffset = m.maxVerticalOffset()
+	switch {
+	case wasScrollableFollow:
+		// A state/strip change or the first persistent "older lines dropped"
+		// notice can also change the number of physical rows available.
+		viewportDelta := oldViewportHeight - m.entryViewportHeight()
+		m.view.VerticalOffset = max(0, m.view.VerticalOffset+addedRows-droppedRows+viewportDelta)
+	case m.view.AutoScroll:
+		m.clampOffsets()
+	case droppedRows > 0:
+		// Keep the same logical content anchored when the bounded buffer evicts
+		// physical rows above a paused viewport.
+		m.view.VerticalOffset = max(0, m.view.VerticalOffset-droppedRows)
 	}
-	m.clampOffsets()
 }
 
 // filteredEntries is the buffer narrowed by the live '/' filter (a plain
@@ -280,21 +309,28 @@ func (m Model) filteredEntries() []LogEntry {
 	if m.filterInput.Value() == "" {
 		return m.buffer.Entries
 	}
-	query := strings.ToLower(m.filterInput.Value())
 	out := make([]LogEntry, 0, len(m.buffer.Entries))
 	for _, e := range m.buffer.Entries {
-		if e.Boundary || strings.Contains(strings.ToLower(e.Message), query) {
+		if m.entryMatchesFilter(e) {
 			out = append(out, e)
 		}
 	}
 	return out
 }
 
+func (m Model) entryMatchesFilter(entry LogEntry) bool {
+	query := strings.ToLower(m.filterInput.Value())
+	return query == "" || entry.Boundary || strings.Contains(strings.ToLower(entry.Message), query)
+}
+
 func (m *Model) clampOffsets() {
 	if m.view.VerticalOffset < 0 {
 		m.view.VerticalOffset = 0
 	}
-	if maxOff := m.maxVerticalOffset(); m.view.VerticalOffset > maxOff {
+	maxOff := m.maxVerticalOffset()
+	if m.view.AutoScroll {
+		m.view.VerticalOffset = maxOff
+	} else if m.view.VerticalOffset > maxOff {
 		m.view.VerticalOffset = maxOff
 	}
 	if m.view.HorizontalOffset < 0 || m.view.Wrap {
@@ -304,7 +340,8 @@ func (m *Model) clampOffsets() {
 
 func (m Model) maxVerticalOffset() int {
 	visible := m.entryViewportHeight()
-	total := len(m.filteredEntries())
+	entries := m.filteredEntries()
+	total := len(m.visualRows(entries, m.view.Width))
 	if total <= visible {
 		return 0
 	}

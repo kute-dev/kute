@@ -165,6 +165,23 @@ var (
 	MarkAll = Verb{ID: "mark-all", Key: "*", Label: "mark all"}
 )
 
+// Log-view verbs (5b, docs/design README.md). These stay separate from the
+// resource-level Logs verb above: Logs opens the screen, while these operate
+// on the stream already in view. Pause/Follow intentionally share a key so
+// the keybar can describe the action space will perform in the current state
+// without inventing a label outside the registry.
+var (
+	LogPause          = Verb{ID: "log-pause", Key: "space", Label: "pause"}
+	LogFollow         = Verb{ID: "log-follow", Key: "space", Label: "follow"}
+	LogNextWarning    = Verb{ID: "log-next-warning", Key: "w", Label: "next warning"}
+	LogNextError      = Verb{ID: "log-next-error", Key: "e", Label: "next error"}
+	LogToggleWrap     = Verb{ID: "log-toggle-wrap", Key: "W", Label: "wrap"}
+	LogToggleTime     = Verb{ID: "log-toggle-timestamps", Key: "t", Label: "timestamps"}
+	LogCycleSince     = Verb{ID: "log-cycle-since", Key: "s", Label: "since"}
+	LogCycleContainer = Verb{ID: "log-cycle-container", Key: "tab", Label: "cycle container"}
+	LogCopyView       = Verb{ID: "log-copy-view", Key: "Y", Label: "copy view"}
+)
+
 // Mutating verbs — every write path funnels through kube.Mutator, gated by
 // Tier + actions.Controller (mvp-plan.md §0.4, §8b).
 var (
@@ -591,6 +608,8 @@ var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
+	LogPause, LogFollow, LogNextWarning, LogNextError, LogToggleWrap, LogToggleTime,
+	LogCycleSince, LogCycleContainer, LogCopyView,
 	FluxReconcile, FluxSuspend, FluxSource,
 	ArgoRefresh, ArgoSync, ArgoURL,
 	CertRenew,

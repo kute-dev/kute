@@ -9,6 +9,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // pasteTarget is the '/' filter buffer while it's open, clamping the
@@ -143,29 +144,26 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveVertical(max(1, m.entryViewportHeight()/2))
 	case "ctrl+u":
 		m.moveVertical(-max(1, m.entryViewportHeight()/2))
-	case "space":
+	case verbs.LogPause.Key:
 		m.view.AutoScroll = !m.view.AutoScroll
-		if m.view.AutoScroll {
-			m.view.VerticalOffset = m.maxVerticalOffset()
-		}
-	case "W":
+	case verbs.LogToggleWrap.Key:
 		m.view.Wrap = !m.view.Wrap
 		if m.view.Wrap {
 			m.view.HorizontalOffset = 0
 		}
-	case "t":
+	case verbs.LogToggleTime.Key:
 		m.view.Timestamps = !m.view.Timestamps
-	case "tab":
+	case verbs.LogCycleContainer.Key:
 		m.cycleContainer()
 		return m, m.beginStream(StreamReconnecting)
-	case "s":
+	case verbs.LogCycleSince.Key:
 		m.cycleSince()
 		return m, m.beginStream(StreamReconnecting)
-	case "w":
+	case verbs.LogNextWarning.Key:
 		m.jumpSeverity(SeverityWarn)
-	case "e":
+	case verbs.LogNextError.Key:
 		m.jumpSeverity(SeverityErr)
-	case "/":
+	case verbs.Filter.Key:
 		if m.stream != StreamLoading {
 			m.filterActive = true
 			m.filterInput = textinput.New()
@@ -173,7 +171,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.filterInput.Prompt = ""
 			m.filterInput.Focus()
 		}
-	case "Y":
+	case verbs.LogCopyView.Key:
 		return m, tea.SetClipboard(m.visibleViewText())
 	}
 	m.clampOffsets()
@@ -223,18 +221,21 @@ func (m *Model) moveHorizontal(delta int) {
 	}
 }
 
-// jumpSeverity moves the viewport to the next entry (after the current
-// top-of-view position, wrapping to the start) carrying severity —
-// docs/design README.md §5b's "w/e jump to previous/next warning/error".
+// jumpSeverity moves the viewport to the first physical row of the next
+// matching entry after the current top-of-view position, wrapping to the
+// start. Continuation rows are skipped so one long wrapped warning cannot
+// consume several presses before navigation advances to the next warning.
 func (m *Model) jumpSeverity(severity string) {
 	entries := m.filteredEntries()
-	if len(entries) == 0 {
+	rows := m.visualRows(entries, m.view.Width)
+	if len(rows) == 0 {
 		return
 	}
 	start := m.view.VerticalOffset
-	for i := 1; i <= len(entries); i++ {
-		idx := (start + i) % len(entries)
-		if entries[idx].Severity == severity {
+	for i := 1; i <= len(rows); i++ {
+		idx := (start + i) % len(rows)
+		row := rows[idx]
+		if row.First && entries[row.EntryIndex].Severity == severity {
 			m.view.AutoScroll = false
 			m.view.VerticalOffset = idx
 			m.clampOffsets()
