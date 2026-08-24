@@ -136,7 +136,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(max(1, m.tableDataRows()/2))
 	case "ctrl+u":
 		m.moveSelection(-max(1, m.tableDataRows()/2))
-	case "R":
+	case verbs.Rollback.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if rev, ok := m.selectedRevision(); ok {
 				return m, m.beginRollback(rev)

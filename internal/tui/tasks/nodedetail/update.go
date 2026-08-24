@@ -228,7 +228,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
-	case "/":
+	case verbs.Filter.Key:
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
 			m.filterInput = textinput.New()
@@ -240,11 +240,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedPod(); ok {
 			return task, cmd
 		}
-	case "l":
+	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
 		}
-	case "x":
+	case verbs.Exec.Key:
 		// Exec is Mutating: refused while offline (docs/design README.md
 		// §52), same as this screen's cordon/drain.
 		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
@@ -256,11 +256,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case "f":
+	case verbs.Forward.Key:
 		if task, cmd, ok := m.openSelectedForward(); ok {
 			return task, cmd
 		}
-	case "s":
+	case verbs.NodeDebugDetail.Key:
 		// The debug panel launches a privileged node-debugger pod, so it's
 		// gated like cordon/drain (verbs.NodeDebugDetail.HiddenWhileOffline).
 		if verbs.NodeDebugDetail.HiddenWhileOffline(m.conn.Offline()) {
@@ -279,11 +279,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedNodeDebug(); ok {
 			return task, cmd
 		}
-	case "C":
+	case verbs.Cordon.Key:
 		return m, m.beginCordon()
-	case "ctrl+d":
+	case verbs.Drain.Key:
 		return m, m.beginDrain()
-	case "E":
+	case verbs.Edit.Key:
 		// kubectl edit applies whatever the user saves, so it's gated with
 		// the other mutating verbs while offline (docs/design README.md
 		// §4a: "delete/exec/edit verbs are disabled while offline").
@@ -293,15 +293,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "t":
+	case verbs.Timeline.Key:
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}

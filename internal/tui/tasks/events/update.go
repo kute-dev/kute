@@ -11,6 +11,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // pasteTarget is the '/' filter buffer while it's open. The filter is
@@ -236,11 +237,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openSelectedObject(); ok {
 			return m, cmd
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
-	case "tab":
+	case verbs.ToggleGroup.Key:
 		m.normalExpanded = !m.normalExpanded
 		m.recomputeVisible()
 	case "w":
@@ -248,9 +249,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.recomputeVisible()
 	case "t":
 		m.cycleWindow()
-	case "a":
+	case verbs.AllNamespaces.Key:
 		return m, m.switchNamespace("")
-	case "/":
+	case verbs.Filter.Key:
 		if m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty {
 			m.filterActive = true
 			m.filterInput = textinput.New()

@@ -297,7 +297,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openSelectedObject(); ok {
 			return m, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
@@ -308,7 +308,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.warningsOnly = !m.warningsOnly
 			m.recomputeVisible()
 		}
-	case "/":
+	case verbs.Filter.Key:
 		if !m.objectScoped() && (m.state == tui.TaskStateReady || m.state == tui.TaskStateEmpty) {
 			m.filterActive = true
 			m.filterInput = textinput.New()
@@ -322,7 +322,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if e, ok := m.selectedRow(); ok && (e.Kind == kube.TimelineRevision || e.Kind == kube.TimelineSync) && e.GitRevision != "" {
 			return m, tea.SetClipboard(e.GitRevision)
 		}
-	case "R":
+	case verbs.RolloutUndo.Key:
 		if m.railFocused && m.mutator != nil {
 			if rev, ok := m.selectedRevision(); ok {
 				return m, m.beginRollback(rev)

@@ -169,7 +169,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveContainerHalfPage(1)
 	case "ctrl+u":
 		m.moveContainerHalfPage(-1)
-	case "l":
+	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
 		}
@@ -185,15 +185,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, execCmd(m.namespace, m.name, eph.Name)
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "t":
+	case verbs.Timeline.Key:
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}
@@ -201,7 +201,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openRelated(int(msg.String()[0] - '1')); ok {
 			return m, cmd
 		}
-	case "x":
+	case verbs.Exec.Key:
 		// Exec is Mutating: refused while offline (docs/design README.md
 		// §52). keys.go has already dropped the hint and switched the keybar
 		// to OFFLINE · "mutating actions disabled".
@@ -214,7 +214,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case "w":
+	case verbs.WhoCan.Key:
 		// §41a's RBAC pre-check offers this handoff for a denied debug
 		// launch — pre-filled with the exact create/resource/namespace
 		// query that came back denied (docs/design v.0.11.0.dc.html §41a:
@@ -227,11 +227,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
-	case "f":
+	case verbs.Forward.Key:
 		if task, cmd, ok := m.openSelectedForward(); ok {
 			return task, cmd
 		}
-	case "E":
+	case verbs.Edit.Key:
 		// kubectl edit applies whatever the user saves, so it's gated with
 		// the other mutating verbs while offline (docs/design README.md
 		// §4a: "delete/exec/edit verbs are disabled while offline").
@@ -241,7 +241,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
-	case "D":
+	case verbs.Delete.Key:
 		return m, m.beginDelete()
 	}
 	return m, nil

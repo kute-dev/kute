@@ -11,6 +11,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // Reload implements tui.Reloader — see its doc comment: this screen misses
@@ -114,22 +115,22 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return tui.GotoResourceMsg{Kind: it.Kind, Namespace: it.Namespace, Name: it.Name}
 			}
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if m.openYAML != nil {
 			task, cmd := m.openYAML(m.kind, m.namespace, m.name, m.width, m.height)
 			if task != nil {
 				return task, cmd
 			}
 		}
-	case "r":
+	case verbs.FluxReconcile.Key:
 		if m.mutator != nil && !m.offline() {
 			return m, m.beginReconcile()
 		}
-	case "s":
+	case verbs.FluxSuspend.Key:
 		if m.mutator != nil && !m.offline() {
 			return m, m.beginSuspend()
 		}
-	case "o":
+	case verbs.FluxSource.Key:
 		if m.chn.SourceKind != "" && m.chn.SourceName != "" {
 			src := m.chn
 			ns := m.namespace

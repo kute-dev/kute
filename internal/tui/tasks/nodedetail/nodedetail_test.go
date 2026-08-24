@@ -334,6 +334,9 @@ func TestEscSendsBackMsg(t *testing.T) {
 }
 
 func TestDKeyConfirmsThenDrains(t *testing.T) {
+	if verbs.Drain.Key != "ctrl+d" {
+		t.Fatalf("Drain.Key = %q, want Bubble Tea key spelling ctrl+d", verbs.Drain.Key)
+	}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindNode: {testNode("node-a")},
 		kube.KindPod:  {schedPod("default", "big", "node-a", "1Gi")},
@@ -343,7 +346,7 @@ func TestDKeyConfirmsThenDrains(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	if !m.actions.Active() {
 		t.Fatal("expected D to open a drain confirmation")
 	}

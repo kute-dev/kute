@@ -130,21 +130,21 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return tui.GotoResourceMsg{Kind: kind, Namespace: ns, Name: name}
 			}
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if m.openYAML != nil {
 			task, cmd := m.openYAML(kube.KindCertificate, m.namespace, m.name, m.width, m.height)
 			if task != nil {
 				return task, cmd
 			}
 		}
-	case "e":
+	case verbs.Events.Key:
 		if m.openEvents != nil {
 			task, cmd := m.openEvents(kube.KindCertificate, m.namespace, m.name, m.width, m.height)
 			if task != nil {
 				return task, cmd
 			}
 		}
-	case "r":
+	case verbs.CertRenew.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady && !m.conn.Offline() {
 			return m, m.beginCertRenew()
 		}

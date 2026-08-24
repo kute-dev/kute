@@ -9,6 +9,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // Reload implements tui.Reloader — see its doc comment: this screen misses
@@ -189,7 +190,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
-	case "tab":
+	case verbs.FocusTLSStrip.Key:
 		if m.flavor == flavorIngress && len(m.tlsFacts) > 0 {
 			m.tlsFocused = !m.tlsFocused
 			m.tlsSelected = clamp(m.tlsSelected, 0, len(m.tlsFacts)-1)
@@ -216,19 +217,19 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openSelectedEnter(); ok {
 			return m, cmd
 		}
-	case "p":
+	case verbs.OpenParentGateway.Key:
 		if cmd, ok := m.openParentGateway(); ok {
 			return m, cmd
 		}
-	case "y":
+	case verbs.CopyRouteURL.Key:
 		if cmd, ok := m.copySelectedURL(); ok {
 			return m, cmd
 		}
-	case "Y":
+	case verbs.CopyRouteYAML.Key:
 		if cmd, ok := m.copyYAML(); ok {
 			return m, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openObjectEvents(); ok {
 			return task, cmd
 		}

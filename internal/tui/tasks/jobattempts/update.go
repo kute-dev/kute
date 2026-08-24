@@ -273,7 +273,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case "l":
+	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			if task != nil {
 				return task, cmd
@@ -284,11 +284,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(m.summary.Attempts) >= 2 {
 			m.diffMode = true
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
@@ -297,7 +297,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.failedOnly = !m.failedOnly
 			m.selectedAttempt, m.offset = 0, 0
 		}
-	case "R":
+	case verbs.JobRetry.Key:
 		if verbs.JobRetry.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}

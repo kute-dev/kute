@@ -611,11 +611,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.backToOrigin()
 		}
 		return m, func() tea.Msg { return tui.BackMsg{} }
-	case "space":
+	case verbs.Mark.Key:
 		if m.state == tui.TaskStateReady {
 			m.markCursorAndAdvance()
 		}
-	case "*":
+	case verbs.MarkAll.Key:
 		if m.state == tui.TaskStateReady {
 			m.markAllFiltered()
 		}
@@ -629,13 +629,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.state == tui.TaskStateReady {
 			m.handleSortKey(int(msg.String()[0] - '0'))
 		}
-	case "/":
+	case verbs.Filter.Key:
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
 			m.filterListFocused = false
 			m.filterInput.Focus()
 		}
-	case "l":
+	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
 		}
@@ -671,13 +671,13 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedEnter(); ok {
 			return task, cmd
 		}
-	case "C":
+	case verbs.Cordon.Key:
 		if m.kind == kube.KindNode {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginCordon(row)
 			}
 		}
-	case "S":
+	case verbs.CronJobSetSchedule.Key:
 		if m.argoVerbsApply() {
 			// §33a's sync. Disjoint from the CronJob schedule push below
 			// (Kinds never overlap — a row is never both an Application and
@@ -693,40 +693,40 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.beginScale(1)
 	case "-":
 		m.beginScale(-1)
-	case "i":
+	case verbs.SetImage.Key:
 		m.beginSetImage()
 	case "V":
 		if resourceEditable(m.kind) && m.mutator != nil {
 			m.beginSetResources()
 		}
-	case "m":
+	case verbs.Meta.Key:
 		if metaEditable(m.kind) && m.mutator != nil {
 			m.beginMeta()
 		}
-	case "a":
+	case verbs.AllNamespaces.Key:
 		if !m.desc.ClusterScoped {
 			return m, m.switchNamespace("")
 		}
-	case "N":
+	case verbs.JumpNamespace.Key:
 		if m.grouped() {
 			if ns, ok := m.selectedNamespace(); ok {
 				return m, m.switchNamespace(ns)
 			}
 		}
-	case "tab":
+	case verbs.ToggleGroup.Key:
 		// Grouped mode expands a namespace group; a §30a Flux or §33a Argo
 		// list expands its single healthy-tail fold, which exists ungrouped
 		// too.
 		if m.grouped() || m.desc.Flux || m.desc.Argo {
 			m.toggleGroup()
 		}
-	case "o":
+	case verbs.FluxSource.Key:
 		if m.fluxVerbsApply() {
 			if cmd, ok := m.openSelectedFluxSource(); ok {
 				return m, cmd
 			}
 		}
-	case "R":
+	case verbs.RolloutRestart.Key:
 		if m.kind == kube.KindDeployment && m.state == tui.TaskStateReady && m.mutator != nil {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginRolloutRestart(row)
@@ -749,7 +749,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.beginRollback(row)
 			}
 		}
-	case "r":
+	case verbs.SetResources.Key:
 		switch {
 		case resourceEditable(m.kind) && m.state == tui.TaskStateReady && m.mutator != nil:
 			m.beginSetResources()
@@ -784,7 +784,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// informer, but this gives the user an immediate retry path.
 			return m, m.resetAndLoad()
 		}
-	case "w":
+	case verbs.WhoCan.Key:
 		if m.state == tui.TaskStatePermissionDenied {
 			if task, cmd, ok := m.openWhoCanFromCurrentKind(); ok {
 				return task, cmd
@@ -801,7 +801,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if m.state == tui.TaskStatePermissionDenied || m.state == tui.TaskStateError {
 			return m, tea.SetClipboard(m.feedback)
 		}
@@ -813,39 +813,39 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
-	case "u":
+	case verbs.ArgoURL.Key:
 		if m.argoVerbsApply() {
 			return m, m.copySelectedArgoDashboardURL()
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "alt+c":
+	case verbs.CopyServiceClusterIP.Key:
 		if m.kind == kube.KindService {
 			return m, m.copySelectedServiceAddress(2)
 		}
-	case "alt+e":
+	case verbs.CopyServiceExternalIP.Key:
 		if m.kind == kube.KindService {
 			return m, m.copySelectedServiceAddress(3)
 		}
-	case "t":
+	case verbs.Timeline.Key:
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}
-	case "v":
+	case verbs.HelmValues.Key:
 		if task, cmd, ok := m.openSelectedHelmValues(); ok {
 			return task, cmd
 		}
-	case "h":
+	case verbs.HelmHistory.Key:
 		if task, cmd, ok := m.openSelectedHelmHistory(); ok {
 			return task, cmd
 		}
-	case "f":
+	case verbs.Forward.Key:
 		if task, cmd, ok := m.openSelectedForward(); ok {
 			return task, cmd
 		}
-	case "x":
+	case verbs.Exec.Key:
 		if m.kind == kube.KindForward {
 			return m, m.stopSelectedForward()
 		}
@@ -876,17 +876,17 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case "ctrl+d":
+	case verbs.Drain.Key:
 		if m.kind == kube.KindNode {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginDrain(row)
 			}
 		}
-	case "X":
+	case verbs.StopAllForwards.Key:
 		if m.kind == kube.KindForward && m.state == tui.TaskStateReady {
 			m.beginStopAllForwards()
 		}
-	case "s":
+	case verbs.FluxSuspend.Key:
 		if m.fluxVerbsApply() {
 			// §30a's suspend/resume. NodeShell's own 's' below is Node-only,
 			// so the two never contend on the same row.
@@ -912,7 +912,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, m.beginCronJobSuspendOrResume(row)
 			}
 		}
-	case "E":
+	case verbs.Edit.Key:
 		// kubectl edit applies whatever the user saves, so it's gated with
 		// the other mutating verbs while offline (docs/design README.md
 		// §4a: "delete/exec/edit verbs are disabled while offline").
@@ -922,7 +922,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.beginEdit(); ok {
 			return m, cmd
 		}
-	case "D":
+	case verbs.Delete.Key:
 		if m.state == tui.TaskStateReady && m.mutator != nil && m.kind != kube.KindForward && m.kind != kube.KindHelmRelease {
 			if verbs.Delete.Bulk && len(m.marks) > 0 {
 				return m, m.beginBulkDelete()
@@ -1161,7 +1161,7 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveHalfPage(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
-	case "*":
+	case verbs.MarkAll.Key:
 		// 20a: "filter-then-mark is the bulk grammar" — '*' marks every row
 		// the live query currently matches without leaving filter mode.
 		// Intercepted here rather than falling to the default typing branch

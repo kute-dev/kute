@@ -154,7 +154,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveHalfPage(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
-	case "a", "insert":
+	case verbs.AddConfigMapKey.Key, "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
 			keyInput := textinput.New()
@@ -181,7 +181,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.multiline = newMultilineEditState(row.key, row.value, m.Theme())
 			}
 		}
-	case "D":
+	case verbs.RemoveConfigMapKey.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {
 				return m, m.beginRemove(row)
@@ -239,7 +239,7 @@ func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.keyInput.Focus()
 	case "enter":
 		return m, m.commitAdd(false)
-	case "R":
+	case verbs.RestartConfigMapConsumers.Key:
 		if a.onValue {
 			return m, m.commitAdd(true)
 		}
@@ -267,7 +267,7 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.editing = nil
 	case "enter":
 		return m, m.commitEdit(false)
-	case "R":
+	case verbs.RestartConfigMapConsumers.Key:
 		return m, m.commitEdit(true)
 	default:
 		var cmd tea.Cmd
@@ -291,7 +291,7 @@ func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.multiline = nil
 	case "alt+a":
 		return m, m.commitMultiline(false)
-	case "R":
+	case verbs.RestartConfigMapConsumers.Key:
 		return m, m.commitMultiline(true)
 	default:
 		var cmd tea.Cmd

@@ -13,6 +13,7 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // pasteTarget is whichever buffer currently has focus — schedule by
@@ -187,7 +188,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc":
 		return m, func() tea.Msg { return tui.BackMsg{} }
-	case "tab", "shift+tab":
+	case verbs.CronJobFocusTimezone.Key, "shift+tab":
 		if m.tzEditable() {
 			m.tzFocused = !m.tzFocused
 			if m.tzFocused {
@@ -199,7 +200,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "Y":
+	case verbs.CronJobScheduleFullEdit.Key:
 		if m.mutator != nil && !m.conn.Offline() {
 			return m, editCmd(m.namespace, m.name)
 		}
@@ -219,9 +220,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// both below rather than each stopping to check it individually.
 	if !m.tzFocused {
 		switch msg.String() {
-		case "y":
+		case verbs.CronJobCopyCommand.Key:
 			return m, tea.SetClipboard(m.willRunCommand())
-		case "u":
+		case verbs.CronJobScheduleUndo.Key:
 			if m.previous != nil && m.mutator != nil && !m.conn.Offline() && m.pendingCommit == nil {
 				return m, m.commitUndo()
 			}

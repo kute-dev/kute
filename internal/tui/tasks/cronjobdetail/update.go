@@ -275,32 +275,32 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if cmd, ok := m.openSelectedJob(); ok {
 			return m, cmd
 		}
-	case "l":
+	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			if task != nil {
 				return task, cmd
 			}
 			return m, cmd
 		}
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "R":
+	case verbs.CronJobRunNow.Key:
 		if verbs.CronJobRunNow.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}
 		m.beginRunNow()
-	case "s":
+	case verbs.CronJobSuspend.Key:
 		if verbs.CronJobSuspend.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}
 		return m, m.beginSuspendOrResume()
-	case "S":
+	case verbs.CronJobSetSchedule.Key:
 		if task, cmd, ok := m.openSelectedSchedule(); ok {
 			return task, cmd
 		}

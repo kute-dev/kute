@@ -131,7 +131,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "end":
 		m.selectLast()
 		return m, nil
-	case "tab":
+	case verbs.ToggleGroup.Key:
 		if m.foldedSources > 0 || m.expanded {
 			m.expanded = !m.expanded
 			m.recomputeVisible()

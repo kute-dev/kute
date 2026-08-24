@@ -11,6 +11,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // pasteTarget is the '/' search buffer while it's open, jumping to the
@@ -118,7 +119,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(-1)
 	case "down", "j":
 		m.moveCursor(1)
-	case "tab":
+	case verbs.ToggleGroup.Key:
 		if m.folded != nil {
 			rendered := m.rendered()
 			// FoldableKey (managedfields.go) marks an expanded header not
@@ -136,7 +137,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			unfoldAll(m.folded)
 			m.clampCursor()
 		}
-	case "/":
+	case verbs.Filter.Key:
 		m.searchActive = true
 		m.searchInput = textinput.New()
 		m.searchInput.SetStyles(tui.TextInputStyles(m.Theme()))

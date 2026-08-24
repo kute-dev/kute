@@ -6,6 +6,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -163,14 +164,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelected(); ok {
 			return task, cmd
 		}
-	case "t":
+	case verbs.Timeline.Key:
 		if m.openTimeline != nil {
 			task, cmd := m.openTimeline("", m.width, m.height)
 			if task != nil {
 				return task, cmd
 			}
 		}
-	case "e":
+	case verbs.Events.Key:
 		if m.openEvents != nil {
 			task, cmd := m.openEvents("", m.width, m.height)
 			if task != nil {

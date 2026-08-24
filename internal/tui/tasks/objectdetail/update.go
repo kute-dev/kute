@@ -135,15 +135,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.moveSibling(1)
 	case "k":
 		return m, m.moveSibling(-1)
-	case "y":
+	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
 			return task, cmd
 		}
-	case "e":
+	case verbs.Events.Key:
 		if task, cmd, ok := m.openSelectedEvents(); ok {
 			return task, cmd
 		}
-	case "D":
+	case verbs.Delete.Key:
 		return m, m.beginDelete()
 	}
 	return m, nil

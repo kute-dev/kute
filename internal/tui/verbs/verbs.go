@@ -19,7 +19,7 @@ import (
 // Verb is one registry entry.
 type Verb struct {
 	ID    string // stable id ("delete", "logs") — future key-remapping hook
-	Key   string // "ctrl-d"
+	Key   string // "ctrl+d"
 	Label string // "delete"
 	Tier  actions.Tier
 	Kinds []kube.ResourceKind // applicable kinds; nil = all
@@ -431,7 +431,7 @@ var (
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	Drain = Verb{
-		ID: "drain", Key: "ctrl-d", Label: "drain",
+		ID: "drain", Key: "ctrl+d", Label: "drain",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	// Rollback is 18a's 'R' on a Helm release — "inherits 8b friction":

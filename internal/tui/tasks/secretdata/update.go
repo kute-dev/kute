@@ -146,7 +146,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveHalfPage(1)
 	case "ctrl+u":
 		m.moveHalfPage(-1)
-	case "a", "insert":
+	case verbs.AddSecretKey.Key, "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
 			keyInput := newSecretInput(theme)
@@ -163,7 +163,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.editing = &editKeyState{key: row.key, original: row.value, valueInput: valueInput}
 			}
 		}
-	case "D":
+	case verbs.RemoveSecretKey.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {
 				return m, m.beginRemove(row)
