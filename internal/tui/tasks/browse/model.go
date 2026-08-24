@@ -918,9 +918,15 @@ func (m Model) namespaceScopedHint() string {
 	return "kute --namespace-scoped=" + m.namespace + " may see more, if that namespace grants it"
 }
 
-// pollsMetrics reports whether kind's CPU/MEM columns need the 2s metrics
-// poll — Pods (pod usage) and Nodes (11a's live cluster/node bars) today.
+// pollsMetrics reports whether kind's CPU/MEM columns currently need the 2s
+// metrics poll — Pods (pod usage) and Nodes (11a's live cluster/node bars)
+// today. Offline screens keep their last values frozen: a metrics request is
+// authenticated cluster traffic and must not keep invoking an expired exec
+// credential plugin after the health loop has stopped.
 func (m Model) pollsMetrics() bool {
+	if m.offline() {
+		return false
+	}
 	switch m.kind {
 	case kube.KindPod:
 		return m.metrics != nil

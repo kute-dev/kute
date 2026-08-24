@@ -349,6 +349,15 @@ per-namespace heap and goroutine budgets.
 
 ## Phase 5: authentication and PTY coverage
 
+Implementation status: complete. The nightly-only `e2e_auth` suite drives a
+real client-go exec Authenticator through a proxy mode that forwards the
+client's bearer token to the apiserver, and separately injects a direct 401.
+It pins cached-row preservation, the offline write gate, paused plugin/probe
+execution, explicit retry, and watch recovery. The `e2e_pty` suite builds the
+shipping binary, runs it under a kernel PTY, exercises clean and non-zero
+`kubectl exec` exits, proves redraw/input recovery, and compares the terminal
+mode before launch and after a quit queued across an active handoff.
+
 These scenarios belong in nightly jobs because they require extra process and
 terminal infrastructure.
 

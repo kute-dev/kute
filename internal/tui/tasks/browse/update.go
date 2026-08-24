@@ -115,9 +115,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
 	case kube.ConnStateMsg:
+		wasOffline := m.offline()
+		wasPollingMetrics := m.pollsMetrics()
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
 		m.now = time.Now()
+		if !wasOffline && m.offline() && wasPollingMetrics {
+			// A metrics tick is another authenticated cluster request. Letting
+			// its 2s chain continue while an exec credential is expired would
+			// keep re-running the failed plugin even though health polling has
+			// deliberately stopped. Advancing the epoch invalidates the pending
+			// tick and any in-flight result.
+			m.metricsEpoch++
+		}
+		if wasOffline && !m.offline() && m.pollsMetrics() {
+			// The offline transition killed the old tick chain. Start one fresh
+			// poll only after the explicit retry (or ordinary network recovery)
+			// has returned the connection to Connected.
+			m.metricsEpoch++
+			return m, tea.Batch(m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+		}
 	case tui.GotoKindMsg:
 		if msg.Kind == kube.KindWhoCan {
 			// KindWhoCan has no resources.Descriptor to list — like Ingress/

@@ -23,9 +23,10 @@ through a real `tea.Program`.
 1. **Cluster provisioning** (shell). kind is the primary substrate: it has a real kubelet,
    so pod logs, exec, and port-forward are genuinely exercisable, and it runs on GitHub
    Actions runners. kwok is the opt-in substrate for the scale row, which kind cannot reach.
-2. **A headless program harness** (Go, `test/e2e`). The real `app.NewModel` run through a
-   real `tea.Program` with `WithInput`/`WithOutput`/`WithWindowSize`, fed real key bytes and
-   asserted on captured frames. No PTY.
+2. **Program harnesses** (Go, `test/e2e`). The ordinary suite runs the real `app.NewModel`
+   through a real `tea.Program` with `WithInput`/`WithOutput`/`WithWindowSize`, fed real key
+   bytes and asserted on captured frames. The nightly `e2e_pty` variant builds the shipping
+   binary and drives it through a kernel PTY for subprocess handoff and terminal-mode checks.
 3. **Wire-level invariants** (Go, `package kube`). The lazy-informer rules, asserted against
    a real apiserver by reading the unexported `kindInformers` map, exactly as
    `internal/kube/count_test.go` already does against the fake clientset.
@@ -109,9 +110,10 @@ nothing extra.
 ## 3. Go harness — `test/e2e/`
 
 The PR suite uses `//go:build e2e`. Expensive rows add a second tag:
-`e2e && e2e_scale` for kwok and `e2e && e2e_soak` for the bounded long-session suite.
-The TLS fault-injection proxy is part of ordinary `e2e`, not another tag. `e2e_pty` is
-reserved for Phase 5's real-terminal subprocess handoff and is not implemented yet.
+`e2e && e2e_scale` for kwok, `e2e && e2e_soak` for the bounded long-session suite,
+`e2e && e2e_auth` for credential expiry, and `e2e && e2e_pty` for real-terminal
+subprocess handoff. The TLS fault-injection proxy is part of ordinary `e2e`, not another
+tag. The PTY suite is POSIX-only; the nightly job runs it on Linux.
 
 `harness.go` — `Launch(t, opts...) *App`. Points `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at
 `t.TempDir()`, then calls `app.run` with `tea.WithInput`, `tea.WithOutput`,
@@ -134,6 +136,13 @@ and `Resize` to inject explicit Bubble Tea messages through the retained real pr
 `Frame` to read the current screen (ANSI-stripped); `WaitFor`/`WaitForAll`/`WaitGone`/`WaitForWrapped`/
 `WaitLoaded` to poll against a deadline; `Never` to assert a substring stays absent across a
 window; `Quit` to shut down. On failure the harness dumps the last frame.
+
+`auth_test.go` adds a temporary POSIX exec credential plugin whose mode, response, and run
+counter are controlled by atomic files. Its proxy variant strips the proxy's own upstream
+credentials and forwards the client's bearer token, so the kind apiserver—not merely the
+proxy—validates the token. `pty_test.go` builds `cmd/kute`, attaches stdin/stdout/stderr to a
+fresh kernel PTY, records the initial terminal state, and retains raw output checkpoints for
+assertions across Bubble Tea renderer suspension and redraw.
 
 `harness_support.go` adds `WaitForTCPRefused`, heap/allocation/goroutine
 `SnapshotRuntime` classification, and `BuildMergedKubeconfig`. `InputFence` measures one
@@ -180,6 +189,8 @@ status patches, 360 Event objects (each created and updated), eight full workflo
 | `soak_test.go` | build tag `e2e && e2e_soak`: repeated detail/log/event/timeline/YAML, ten-kind, three-palette, forward, context, and namespace workflows return near their settled runtime baseline |
 | `high_rate_logs_test.go` | build tag `e2e && e2e_soak`: two 12k-line live batches overflow the bounded log buffer, advance its dropped counter, plateau heap, and remain responsive |
 | `namespace_fanout_test.go` | build tag `e2e && e2e_soak`: 24 scoped namespaces enforce one retained cache/watch per namespace and zero new requests on revisit |
+| `auth_test.go` | build tag `e2e && e2e_auth`: direct 401 and short-lived exec credential failure, cached rows/write gate, stopped automatic retries, and watch recovery after explicit `r` |
+| `pty_test.go` | build tag `e2e && e2e_pty` (POSIX): clean/non-zero real exec exits, redraw and continued input, quit across an active handoff, and terminal-mode restoration |
 
 ## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`
 
@@ -209,9 +220,9 @@ actually read (`lazy-informers.md` §5.6).
   cluster state (`kubectl get all`/`describe pods`/`get events`) on failure. Runs kind 1.35
   on every PR.
 - **`.github/workflows/e2e-nightly.yml`** — both supported kind versions on a schedule, plus
-  the `e2e_soak` lifecycle job and `e2e_scale` kwok run. The soak job runs only the four
-  bounded long-session scenarios and uploads the same cluster diagnostics as the ordinary
-  kind legs.
+  the `e2e_soak` lifecycle job, `e2e_auth`/`e2e_pty` process-and-terminal job, and
+  `e2e_scale` kwok run. The soak job runs only the four bounded long-session scenarios and
+  uploads the same cluster diagnostics as the ordinary kind legs.
 
 ---
 
@@ -222,6 +233,7 @@ Local, in order:
 ```sh
 scripts/e2e-cluster.sh up                        # kind + fixtures, ~90s cold
 go test -tags e2e -count=1 -timeout 15m ./test/e2e/... ./internal/kube/...
+go test -tags "e2e e2e_auth e2e_pty" -count=1 -timeout 15m -run 'Test(DirectUnauthorizedPausesHealthChecks|ExecCredentialExpiryRecoversWithoutRestart|PTYExecSubprocessHandoff)$' ./test/e2e/...
 go test -tags "e2e e2e_soak" -count=1 -timeout 25m -run 'Test(EventStorm|RepeatedWorkflowSoak|HighRateLogs|NamespaceFanOut)' ./test/e2e/...
 K8S_VERSION=1.36 scripts/e2e-cluster.sh recreate && go test -tags e2e ./test/e2e/...
 scripts/e2e-scale-cluster.sh up && go test -tags "e2e e2e_scale" -run TestScale ./test/e2e/...

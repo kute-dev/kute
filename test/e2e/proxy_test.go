@@ -101,6 +101,33 @@ func TestAPIProxyForwardsAndInjectsStatus(t *testing.T) {
 	}
 }
 
+func TestAPIProxyCanForwardClientAuthentication(t *testing.T) {
+	seen := make(chan string, 1)
+	source, _ := proxyFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	p := NewAPIProxyForwardingClientAuth(t, source)
+	client := proxyClient(t, p.KubeconfigPath())
+	cfg, err := clientcmd.BuildConfigFromFlags("", p.KubeconfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Get(cfg.Host + "/livez")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	select {
+	case got := <-seen:
+		if got != "Bearer fixture-token" {
+			t.Fatalf("upstream Authorization = %q, want the proxy client's bearer token", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("upstream never received the proxied request")
+	}
+}
+
 func TestAPIProxyInjectsConflict(t *testing.T) {
 	source, _ := proxyFixture(t, http.NotFoundHandler())
 	p := NewAPIProxy(t, source)

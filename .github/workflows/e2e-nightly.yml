@@ -103,3 +103,39 @@ jobs:
           name: e2e-soak-artifacts
           path: e2e-soak-artifacts/
           if-no-files-found: ignore
+
+  auth-pty:
+    name: e2e authentication and PTY (kind, k8s 1.36)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup mise
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+      - name: Create the cluster and apply fixtures
+        env:
+          K8S_VERSION: "1.36"
+        run: scripts/e2e-cluster.sh up
+      - name: Run authentication expiry and PTY handoff suites
+        run: >-
+          go test -tags "e2e e2e_auth e2e_pty" -count=1 -timeout 15m
+          -run 'Test(DirectUnauthorizedPausesHealthChecks|ExecCredentialExpiryRecoversWithoutRestart|PTYExecSubprocessHandoff)$'
+          ./test/e2e/...
+      - name: Collect the cluster's state on failure
+        if: failure()
+        run: |
+          export KUBECONFIG="${GITHUB_WORKSPACE}/.kube/e2e.config"
+          mkdir -p e2e-auth-pty-artifacts
+          kubectl get all -A -o wide > e2e-auth-pty-artifacts/resources.txt 2>&1 || true
+          kubectl describe pods -n kute-e2e > e2e-auth-pty-artifacts/pods.txt 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > e2e-auth-pty-artifacts/events.txt 2>&1 || true
+      - name: Upload authentication and PTY failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-auth-pty-artifacts
+          path: e2e-auth-pty-artifacts/
+          if-no-files-found: ignore

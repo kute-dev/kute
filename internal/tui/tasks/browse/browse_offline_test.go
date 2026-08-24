@@ -127,6 +127,44 @@ func TestConnectedClearsOfflineTreatment(t *testing.T) {
 	}
 }
 
+func TestOfflineStopsMetricsPollingAndConnectedRestartsIt(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {pod("default", "a")}}}
+	m := New(Config{Session: newSession(), Lister: lister, Metrics: fakeMetrics{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+	oldEpoch := m.metricsEpoch
+
+	updated, cmd := m.Update(kube.ConnStateMsg{Phase: kube.ConnUnauthenticated, Err: "expired"})
+	m = *updated.(*Model)
+	if cmd != nil {
+		t.Fatal("entering the unauthenticated state scheduled more cluster work")
+	}
+	if m.pollsMetrics() {
+		t.Fatal("pollsMetrics = true while unauthenticated")
+	}
+	if m.metricsEpoch == oldEpoch {
+		t.Fatal("offline transition did not invalidate the pending metrics tick")
+	}
+	updated, cmd = m.Update(metricsTickMsg{epoch: oldEpoch})
+	m = *updated.(*Model)
+	if cmd != nil {
+		t.Fatal("a metrics tick from before authentication expiry restarted the poll chain")
+	}
+
+	recoveryEpoch := m.metricsEpoch
+	updated, cmd = m.Update(kube.ConnStateMsg{Phase: kube.ConnConnected, Latency: time.Millisecond})
+	m = *updated.(*Model)
+	if cmd == nil {
+		t.Fatal("Connected transition did not restart metrics polling")
+	}
+	if !m.pollsMetrics() {
+		t.Fatal("pollsMetrics = false after recovery")
+	}
+	if m.metricsEpoch == recoveryEpoch {
+		t.Fatal("recovery did not start a fresh metrics epoch")
+	}
+}
+
 // forbiddenLister always errors with a typed apierrors.Forbidden for the
 // given kind, everything else falls through to a normal fakeLister.
 type forbiddenLister struct {

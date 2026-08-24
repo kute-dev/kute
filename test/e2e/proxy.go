@@ -132,6 +132,20 @@ type APIProxy struct {
 // NewAPIProxy starts a TLS proxy for the current context in kubeconfig and
 // writes a temporary kubeconfig whose selected cluster points at the proxy.
 func NewAPIProxy(t *testing.T, kubeconfig string) *APIProxy {
+	return newAPIProxy(t, kubeconfig, false)
+}
+
+// NewAPIProxyForwardingClientAuth is the authentication-suite variant: the
+// upstream transport carries only the source cluster's TLS trust, so the
+// bearer credential presented to the proxy is the credential the real API
+// server validates. Ordinary E2E proxies authenticate upstream with their
+// source kubeconfig because client-certificate kubeconfigs send no HTTP
+// Authorization header for a reverse proxy to forward.
+func NewAPIProxyForwardingClientAuth(t *testing.T, kubeconfig string) *APIProxy {
+	return newAPIProxy(t, kubeconfig, true)
+}
+
+func newAPIProxy(t *testing.T, kubeconfig string, forwardClientAuth bool) *APIProxy {
 	t.Helper()
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	rules.ExplicitPath = kubeconfig
@@ -153,7 +167,10 @@ func NewAPIProxy(t *testing.T, kubeconfig string) *APIProxy {
 	// Upgrade: SPDY/3.1 request fails locally with "http2: invalid Upgrade
 	// request header" and never reaches the apiserver.
 	upstreamCfg := rest.CopyConfig(restCfg)
-	upstreamCfg.TLSClientConfig.NextProtos = []string{"http/1.1"}
+	if forwardClientAuth {
+		upstreamCfg = rest.AnonymousClientConfig(restCfg)
+	}
+	upstreamCfg.NextProtos = []string{"http/1.1"}
 	transport, err := rest.TransportFor(upstreamCfg)
 	if err != nil {
 		t.Fatalf("building proxy upstream transport: %v", err)
@@ -216,6 +233,34 @@ func (p *APIProxy) WaitForRequest(after uint64, matcher RequestMatcher, timeout 
 		case <-changed:
 		case <-deadline.C:
 			p.t.Fatalf("proxy saw no request after fence %d matching %+v within %s", after, matcher, timeout)
+		}
+	}
+}
+
+// NeverRequest requires that no matching request begins after the fence
+// during window. It is the wire-level counterpart to App.Never: authentication
+// tests use it to prove the health loop has stopped invoking an expired exec
+// plugin, rather than taking one request-count snapshot that could race the
+// next scheduled probe.
+func (p *APIProxy) NeverRequest(after uint64, matcher RequestMatcher, window time.Duration) {
+	p.t.Helper()
+	timer := time.NewTimer(window)
+	defer timer.Stop()
+	for {
+		p.mu.Lock()
+		for id := after + 1; id <= p.nextID; id++ {
+			if rec := p.records[id]; rec != nil && matcher.matches(*rec) {
+				out := *rec
+				p.mu.Unlock()
+				p.t.Fatalf("proxy unexpectedly saw request after fence %d matching %+v: %+v", after, matcher, out)
+			}
+		}
+		changed := p.changed
+		p.mu.Unlock()
+		select {
+		case <-changed:
+		case <-timer.C:
+			return
 		}
 	}
 }
