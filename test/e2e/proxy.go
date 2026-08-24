@@ -301,7 +301,7 @@ func (p *APIProxy) FailNext(matcher RequestMatcher, status, n int) {
 		p.t.Fatalf("proxy FailNext count must be positive, got %d", n)
 	}
 	switch status {
-	case 401, 403, 410, 429, 503:
+	case 401, 403, 409, 410, 429, 503:
 	default:
 		p.t.Fatalf("proxy unsupported Kubernetes status %d", status)
 	}
@@ -543,6 +543,8 @@ func writeKubernetesStatus(w http.ResponseWriter, code int) {
 		reason = metav1.StatusReasonUnauthorized
 	case 403:
 		reason = metav1.StatusReasonForbidden
+	case 409:
+		reason = metav1.StatusReasonConflict
 	case 410:
 		reason = metav1.StatusReasonGone
 	case 429:

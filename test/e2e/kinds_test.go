@@ -155,6 +155,7 @@ func (a *App) openFrom(t *testing.T, query, list, row string) {
 	t.Helper()
 	a.gotoKind(t, query, list)
 	a.WaitFor(row, Settle)
+	a.selectRow(t, row)
 	a.Enter()
 }
 

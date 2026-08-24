@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +98,37 @@ func TestAPIProxyForwardsAndInjectsStatus(t *testing.T) {
 	counts := p.Counts()
 	if counts.Total != 2 || counts.ByResourceVerb["pods/LIST"] != 2 {
 		t.Errorf("counts = %+v", counts)
+	}
+}
+
+func TestAPIProxyInjectsConflict(t *testing.T) {
+	source, _ := proxyFixture(t, http.NotFoundHandler())
+	p := NewAPIProxy(t, source)
+	client := proxyClient(t, p.KubeconfigPath())
+	base, err := clientcmd.BuildConfigFromFlags("", p.KubeconfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p.FailNext(RequestMatcher{Resource: "secrets", Verb: "PATCH"}, http.StatusConflict, 1)
+	req, err := http.NewRequest(http.MethodPatch, base.Host+"/api/v1/namespaces/fixture/secrets/example", strings.NewReader(`{"stringData":{"key":"value"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("fault status = %d, want 409", resp.StatusCode)
+	}
+	var status metav1.Status
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Reason != metav1.StatusReasonConflict {
+		t.Errorf("reason = %q, want Conflict", status.Reason)
 	}
 }
 

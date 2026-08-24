@@ -26,6 +26,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -139,6 +140,19 @@ type setResourcesTarget struct {
 	// note until the next edit, never a modal (docs/design README.md §25a:
 	// "same idiom as 17a").
 	dryRunErr string
+
+	// pendingCommit identifies the real apply which follows a successful
+	// dry-run. message/lastError are the panel-local result line. Keeping
+	// all three on the target lets the editor follow the same
+	// confirm -> execute -> refresh -> remain contract as set image and
+	// metadata instead of closing as soon as the dry-run succeeds.
+	pendingCommit *setResourcesPendingCommit
+	message       string
+	lastError     string
+}
+
+type setResourcesPendingCommit struct {
+	container string
 }
 
 // activeContainer is the container the panel is currently editing.
@@ -184,24 +198,30 @@ func (m *Model) beginSetResources() bool {
 	if !ok {
 		return false
 	}
-	obj, ok := workloadObject(m.session.ClusterContext(), m.lister, m.kind, row.Namespace, row.Name)
+	t, ok := m.buildSetResourcesTarget(m.kind, row.Namespace, row.Name, currentReplicas(row))
 	if !ok {
 		return false
-	}
-	containers := workloadContainerInfos(obj)
-	if len(containers) == 0 {
-		return false
-	}
-	t := &setResourcesTarget{
-		kind: m.kind, namespace: row.Namespace, name: row.Name,
-		obj: obj, containers: containers,
-		desiredCount:     currentReplicas(row),
-		pods:             workloadPods(m.session.ClusterContext(), m.lister, m.kind, row.Namespace, row.Name),
-		containerMetrics: m.containerMetricsSnapshot(row.Namespace),
 	}
 	m.pendingSetResources = t
 	m.selectSetResourcesContainer(0)
 	return true
+}
+
+func (m *Model) buildSetResourcesTarget(kind kube.ResourceKind, namespace, name string, desiredCount int32) (*setResourcesTarget, bool) {
+	obj, ok := workloadObject(m.session.ClusterContext(), m.lister, kind, namespace, name)
+	if !ok {
+		return nil, false
+	}
+	containers := workloadContainerInfos(obj)
+	if len(containers) == 0 {
+		return nil, false
+	}
+	return &setResourcesTarget{
+		kind: kind, namespace: namespace, name: name,
+		obj: obj, containers: containers, desiredCount: desiredCount,
+		pods:             workloadPods(m.session.ClusterContext(), m.lister, kind, namespace, name),
+		containerMetrics: m.containerMetricsSnapshot(namespace),
+	}, true
 }
 
 // containerMetricsSnapshot reads one ContainerMetricsByNamespace poll — nil
@@ -429,7 +449,7 @@ func (m *Model) setResourcesPasteTarget() tui.PasteTarget {
 // showing.
 func (m *Model) updateSetResourcesKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	t := m.pendingSetResources
-	t.dryRunErr = "" // any further interaction clears the last dry-run rejection
+	t.dryRunErr, t.message, t.lastError = "", "", "" // any further interaction clears the last result
 	switch msg.String() {
 	case "esc":
 		m.pendingSetResources = nil
@@ -585,7 +605,7 @@ func (m *Model) commitSetResources(t setResourcesTarget) tea.Cmd {
 
 // handleDryRunSetResources routes a commitSetResources dry-run result: a
 // rejection stays in the panel (dryRunErr rendered by the will-run strip);
-// success clears the panel and hands off to actions.Controller/kube.Mutator
+// success keeps the panel open and hands off to actions.Controller/kube.Mutator
 // for the real apply, TierNone outside PROD (executes immediately, mirroring
 // commitSetImage) or TierInline in PROD (the ordinary inline y/N Controller
 // already renders for rollback/delete/set-image).
@@ -597,8 +617,8 @@ func (m *Model) handleDryRunSetResources(msg dryRunSetResourcesMsg) (tea.Model, 
 		m.pendingSetResources.dryRunErr = msg.err.Error()
 		return m, nil
 	}
-	m.pendingSetResources = nil
 	edits := msg.target.edits()
+	m.pendingSetResources.pendingCommit = &setResourcesPendingCommit{container: msg.target.activeContainer().Name}
 	return m, m.actions.Begin(verbs.TierForSetResources(m.isProd()), tui.TaskAction{
 		ID:    "set-resources-" + msg.target.namespace + "/" + msg.target.name,
 		Label: fmt.Sprintf("Set resources for %s?", msg.target.name),
@@ -614,12 +634,65 @@ func (m *Model) handleDryRunSetResources(msg dryRunSetResourcesMsg) (tea.Model, 
 	})
 }
 
+// handleSetResourcesResult refreshes the still-open editor from the cache
+// after a successful apply, or preserves the attempted fields and surfaces
+// the server error after a failure. Only esc closes the panel.
+func (m *Model) handleSetResourcesResult(msg actions.ResultMsg) tea.Cmd {
+	t := m.pendingSetResources
+	pc := t.pendingCommit
+	t.pendingCommit = nil
+	if msg.Err != nil {
+		t.lastError = msg.Err.Error()
+		t.message = ""
+		return nil
+	}
+
+	container := ""
+	if pc != nil {
+		container = pc.container
+	}
+	fresh, ok := m.buildSetResourcesTarget(t.kind, t.namespace, t.name, t.desiredCount)
+	if !ok {
+		m.pendingSetResources = nil
+		return nil
+	}
+	m.pendingSetResources = fresh
+	idx := 0
+	for i, c := range fresh.containers {
+		if c.Name == container {
+			idx = i
+			break
+		}
+	}
+	m.selectSetResourcesContainer(idx)
+	m.pendingSetResources.message = "set resources: " + container
+	return nil
+}
+
+func (m *Model) refreshSetResourcesTarget() {
+	t := m.pendingSetResources
+	container, message, lastError := t.activeContainer().Name, t.message, t.lastError
+	fresh, ok := m.buildSetResourcesTarget(t.kind, t.namespace, t.name, t.desiredCount)
+	if !ok {
+		return
+	}
+	m.pendingSetResources = fresh
+	idx := 0
+	for i, c := range fresh.containers {
+		if c.Name == container {
+			idx = i
+			break
+		}
+	}
+	m.selectSetResourcesContainer(idx)
+	m.pendingSetResources.message = message
+	m.pendingSetResources.lastError = lastError
+}
+
 // setResourcesWillRunLine renders the exact "will run: kubectl set
 // resources ..." line for a pending TierInline (PROD) confirmation's keybar
 // RightNote — same idiom as setImageWillRunLine, reading straight off the
-// already-resolved actions.Controller Scope (pendingSetResources is nil by
-// the time a PROD confirm is showing — handleDryRunSetResources clears it
-// before Begin).
+// already-resolved actions.Controller Scope.
 func setResourcesWillRunLine(scope tui.TaskScope) string {
 	return "will run: " + kube.SetResourcesCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Container, *scope.Resources)
 }

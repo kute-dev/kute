@@ -124,6 +124,7 @@ func (a *App) selectAPIPod(t *testing.T) string {
 	if name == "" {
 		t.Fatalf("no api- pod row in the filtered list:\n%s", a.Frame())
 	}
+	a.selectRow(t, name)
 	return name
 }
 
@@ -140,7 +141,17 @@ func (a *App) filterTo(t *testing.T, term string) {
 	a.WaitFor(term, Settle)
 	a.Press("/")
 	a.Type(term)
-	a.WaitFor("hidden by filter", Settle)
+	frame, ok := a.poll(func(frame string) bool {
+		for _, line := range strings.Split(frame, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "/ "+term) {
+				return true
+			}
+		}
+		return false
+	}, Settle)
+	if !ok {
+		t.Fatalf("filter query %q never reached the filter strip:\n%s", term, frame)
+	}
 	// enter leaves typing mode with the filter applied — esc would clear it.
 	a.Enter()
 }

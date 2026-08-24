@@ -83,7 +83,7 @@ func (m Model) Keybar() tui.Keybar {
 			RightNote: "watch the rollout in 9a",
 		}
 	}
-	if m.pendingSetResources != nil {
+	if m.pendingSetResources != nil && !m.actions.Active() {
 		hints := []tui.KeyHint{{Key: "↵", Label: "apply changed fields"}, {Key: "↑↓", Label: "field"}, {Key: "+/−", Label: "nudge (64Mi / 50m)"}}
 		if len(m.pendingSetResources.containers) > 1 {
 			hints = append(hints, tui.KeyHint{Key: tui.GlyphTab, Label: "container"})

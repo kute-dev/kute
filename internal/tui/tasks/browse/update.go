@@ -84,6 +84,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
+		if m.pendingSetResources != nil && m.pendingSetResources.message != "" &&
+			msg.Kind == m.pendingSetResources.kind && !m.actions.Active() {
+			// Keep 25a's still-open panel honest after its own write. The
+			// ordinary m.load below refreshes the
+			// table hidden behind the panel; this refreshes the panel's CURRENT
+			// column from the same informer event.
+			m.refreshSetResourcesTarget()
+		}
 		// A CRD change may mean this kind's columns just arrived — they're
 		// fetched per-kind on first read, so the first render of a custom
 		// kind uses neutral ones. The root shell has already rebuilt the
@@ -288,6 +296,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// table's ROLLOUT/IMAGE columns behind the still-open panel on
 			// success, same as the meta/cron-schedule branches above.
 			cmd := m.handleSetImageResult(msg)
+			if msg.Err == nil {
+				return m, tea.Batch(cmd, m.load())
+			}
+			return m, cmd
+		}
+		if isSetResourcesActionID(msg.ActionID) && m.pendingSetResources != nil {
+			cmd := m.handleSetResourcesResult(msg)
 			if msg.Err == nil {
 				return m, tea.Batch(cmd, m.load())
 			}
@@ -1038,6 +1053,10 @@ func (m *Model) cancelInlineConfirm() {
 		resetSetImageBuffer(m.pendingSetImage)
 		m.pendingSetImage.historyIdx = matchHistoryIndex(m.pendingSetImage)
 	}
+	if m.pendingSetResources != nil {
+		m.pendingSetResources.pendingCommit = nil
+		m.selectSetResourcesContainer(m.pendingSetResources.containerIdx)
+	}
 	m.actions.Cancel()
 }
 
@@ -1055,6 +1074,10 @@ func isMetaActionID(id string) bool {
 // the generic m.load()-only path.
 func isSetImageActionID(id string) bool {
 	return strings.HasPrefix(id, "set-image-")
+}
+
+func isSetResourcesActionID(id string) bool {
+	return strings.HasPrefix(id, "set-resources-")
 }
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes

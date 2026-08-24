@@ -752,6 +752,13 @@ func encodeKey(key string) (string, bool) {
 			return string([]byte{c - 'a' + 1}), false
 		}
 	}
+	name, ok = strings.CutPrefix(key, "alt+")
+	if !ok {
+		name, ok = strings.CutPrefix(key, "alt-")
+	}
+	if ok && len(name) == 1 {
+		return "\x1b" + name, false
+	}
 	return key, false
 }
 

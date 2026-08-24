@@ -28,6 +28,18 @@ metadata:
   namespace: kute-e2e
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: shop-web
+  template:
+    metadata:
+      labels:
+        app: shop-web
+    spec:
+      containers:
+        - name: web
+          image: busybox:1.37
+          command: ["/bin/sh", "-c", "while true; do sleep 30; done"]
 """
 
 REVISIONS = [

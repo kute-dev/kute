@@ -95,7 +95,8 @@ cluster.
 | `01-secondary-namespace.yaml` — `kute-e2e-b`, a Pod and ConfigMap unique to it | real A→B→A namespace switching and distinct scoped-cache keys |
 | `10-workloads.yaml` — Deployments `api`, `worker` (`exit 1`) | list → detail → logs → exec; rollout-restart; CrashLoopBackOff status derivation, poddetail's termination banner, timeline restarts |
 | `20-config.yaml` — ConfigMap `app-config`, Secret `app-secret` | §27a in-place `↵` edit and the `e` buffer editor; §27b masked grid, `ctrl-x`, add/remove key |
-| `30-helm-releases.yaml` — two `helm.sh/release.v1` Secrets, revisions 1 and 2 | §18a history rail and rollback, with no helm binary anywhere |
+| `25-batch.yaml` — suspended Job `phase3-job`, suspended CronJob `phase3-cron` | dedicated reusable sources for Job rerun, CronJob run-now, and schedule editing without ambient scheduled work |
+| `30-helm-releases.yaml` — two `helm.sh/release.v1` Secrets, revisions 1 and 2 | §18a history rail reads directly from Secrets; the rollback scenario alone uses the pinned Helm CLI |
 | `40-routing.yaml` — Services `api`/`web`, Ingress `shop` | §23a routing table, live backend resolution |
 | `50-crd.yaml` + `51-widgets.yaml` — CRD `widgets.kute.dev`, two Widgets | discovery → kind registry → §14d, the "CRD support is data, not code" invariant |
 | `52-flux-crds.yaml` + `53-flux-objects.yaml` — Kustomization/HelmRelease/GitRepository CRDs, hand-written status, no controller | §30a/§31a, and the Flux-vs-Helm-3 `HelmRelease` name collision the substitution table exists for |
@@ -154,6 +155,11 @@ keys per named context so two proxies derived from the same kind kubeconfig rema
 | `churn_test.go` | external create/update/delete, selection clamping, empty settlement, UID replacement, and Pod-detail gone state |
 | `log_lifecycle_test.go` | deleted-Pod terminal state plus follow-request cancellation on esc, context switch, quit, and disconnect navigation |
 | `terminal_test.go` | resize survival and real bracketed-paste routing through filters, palettes, confirmations, port input, and multiline editors |
+| `mutation_delete_test.go` | committed non-prod/PROD deletes, selection clamping, and disposable-Pod force-delete escalation |
+| `mutation_editors_test.go` | ConfigMap multiline/add/remove/restart mutations and Secret rewrite recovery after an injected 409 Conflict |
+| `mutation_workloads_test.go` | cordon/uncordon with cleanup plus scale, set-image, resources, and metadata editors against a disposable Deployment |
+| `mutation_batch_test.go` | Job rerun and CronJob run-now/schedule editing against dedicated fixtures |
+| `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
 | `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: connect-time budget, first-frame render, informer heap via `runtime.ReadMemStats` — excluded from the PR job |
 
 ## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`

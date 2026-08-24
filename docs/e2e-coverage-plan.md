@@ -228,6 +228,13 @@ Paste with no active buffer and verify no command is executed accidentally.
 
 ## Phase 3: mutation and screen breadth
 
+Implementation status: complete. The PR suite now performs every write
+against a disposable object or a shared fixture with an explicit restore.
+The API proxy can inject 409 Conflict responses for deterministic editor
+recovery coverage, the resources editor now follows the context-preserving
+refresh-and-remain contract, and Helm is pinned in `mise.toml` because
+rollback is the one Helm path that intentionally shells out to the CLI.
+
 Expand real write coverage in risk order.
 
 1. Commit non-prod and PROD deletes against disposable resources and verify

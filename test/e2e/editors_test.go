@@ -169,15 +169,51 @@ func TestSecretUnmaskAddAndRemoveKey(t *testing.T) {
 // selected. The selection marker is the only thing that says which is which.
 func (a *App) selectRow(t *testing.T, want string) {
 	t.Helper()
-	for range 12 {
-		for _, line := range strings.Split(a.Frame(), "\n") {
-			if strings.Contains(line, want) && strings.Contains(line, "›") {
+	for range 24 {
+		selected, target := -1, -1
+		for i, line := range strings.Split(a.Frame(), "\n") {
+			if selectedTableRow(line, want) {
 				return
 			}
+			if selectionMarkedRow(line) {
+				selected = i
+			}
+			if lineHasExactField(line, want) {
+				target = i
+			}
 		}
-		a.Down()
+		if selected >= 0 && target >= 0 && target < selected {
+			a.Press("up")
+		} else {
+			a.Down()
+		}
 	}
 	t.Fatalf("never reached row %q:\n%s", want, a.Frame())
+}
+
+// selectedTableRow distinguishes an exact table cell from both similarly
+// named rows (worker/worker2) and matching text elsewhere in the frame.
+// Browse uses the leading ▎ bar while the ConfigMap/Secret data grids retain
+// the compact › marker, so both are valid only at the start of a rendered row.
+func selectedTableRow(line, want string) bool {
+	if !selectionMarkedRow(line) {
+		return false
+	}
+	return lineHasExactField(line, want)
+}
+
+func selectionMarkedRow(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, "▎") || strings.HasPrefix(trimmed, "›")
+}
+
+func lineHasExactField(line, want string) bool {
+	for _, field := range strings.Fields(line) {
+		if field == want {
+			return true
+		}
+	}
+	return false
 }
 
 func e2eClientset(t *testing.T) kubernetes.Interface {

@@ -64,6 +64,7 @@ type fakeMutator struct {
 	cronJobSuspends      []string // "namespace/name=true|false" of every SetCronJobSuspend call
 	cronJobSchedules     []string // "namespace/name=schedule" of every SetCronJobSchedule call
 	dryRun               bool     // true if the most recent SetResources call was a dry-run
+	setResourcesApplyErr error    // returned only by the real apply, after a successful dry-run
 	metaPatches          []string // "namespace/name labels|annotations key=value" or "...key-" for a removal
 	secretDataPatches    []string // "namespace/name key=value" or "...key-" for a removal
 	configMapDataPatches []string // "namespace/name key=value" or "...key-" for a removal
@@ -181,6 +182,9 @@ func (f *fakeMutator) SetResources(_ context.Context, _ kube.ResourceKind, names
 	}
 	f.dryRun = dryRun
 	f.setResources = append(f.setResources, namespace+"/"+name+" "+container)
+	if !dryRun && f.setResourcesApplyErr != nil {
+		return f.setResourcesApplyErr
+	}
 	return nil
 }
 func (f *fakeMutator) PatchMeta(_ context.Context, kind kube.ResourceKind, namespace, name string, isAnnotation bool, key, value string, remove bool) error {

@@ -1,6 +1,8 @@
 package browse
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -340,10 +342,44 @@ func TestSetResourcesCommitsThroughMutatorNonProd(t *testing.T) {
 	if mut.dryRun {
 		t.Fatal("expected the last recorded call to be the real (non-dry-run) apply")
 	}
-	if m.pendingSetResources != nil {
-		t.Fatal("expected the panel to close after a successful dry-run")
+	if m.pendingSetResources == nil {
+		t.Fatal("expected the panel to remain open after apply")
+	}
+	if got := m.pendingSetResources.message; got != "set resources: worker" {
+		t.Fatalf("result message = %q, want set resources: worker", got)
+	}
+	if view := plain(m.Render()); !strings.Contains(view, "set resources: worker") {
+		t.Fatalf("result is absent from the still-open panel:\n%s", view)
 	}
 	if m.actions.Active() {
 		t.Fatal("set-resources is TierNone outside PROD and should execute immediately, not show a confirm")
+	}
+}
+
+func TestSetResourcesFailedApplyPreservesPanelAndAttempt(t *testing.T) {
+	dep := resourcesDeployment("default", "nva-worker")
+	rs, pod := resourcesOwnerChain("default", "nva-worker")
+	mut := &fakeMutator{setResourcesApplyErr: errors.New("resource quota changed after dry-run")}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: resourcesLister(dep, rs, pod), Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m.beginSetResources()
+
+	m = step(t, m, tea.KeyPressMsg{Text: "+"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if m.pendingSetResources == nil {
+		t.Fatal("failed apply closed the resources panel")
+	}
+	if got := m.pendingSetResources.fields[fieldCPURequest].input.Value(); got != "300m" {
+		t.Fatalf("attempted cpu request = %q, want 300m", got)
+	}
+	if got := m.pendingSetResources.lastError; !strings.Contains(got, "resource quota changed") {
+		t.Fatalf("lastError = %q", got)
+	}
+	if view := plain(m.Render()); !strings.Contains(view, "resource quota changed after dry-run") {
+		t.Fatalf("server error is absent from the still-open panel:\n%s", view)
 	}
 }

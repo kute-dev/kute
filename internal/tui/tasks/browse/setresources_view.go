@@ -304,20 +304,28 @@ func (m Model) setResourcesWillRunStrip(theme tui.Theme, width int) string {
 	cmd := fill.Foreground(theme.TextSecondary)
 	warn := fill.Foreground(theme.Warn)
 	bad := fill.Foreground(theme.BadText)
+	good := fill.Foreground(theme.Good)
 
 	edits := t.edits()
 	changed := edits.CPURequest != nil || edits.CPULimit != nil || edits.MEMRequest != nil || edits.MEMLimit != nil
 
-	left := label.Render("will run") + fill.Render(" ")
-	right := ""
+	var left, right string
 	switch {
+	case t.lastError != "":
+		left = label.Render("error") + fill.Render(" ") + bad.Render(t.lastError)
+	case t.message != "":
+		left = good.Render(t.message)
 	case t.dryRunErr != "":
-		left += bad.Render(t.dryRunErr)
+		left = label.Render("error") + fill.Render(" ") + bad.Render(t.dryRunErr)
 	case !changed:
-		left += cmd.Render("no changed fields — apply is a no-op")
+		left = label.Render("will run") + fill.Render(" ") + cmd.Render("no changed fields — apply is a no-op")
 	default:
-		left += cmd.Render(kube.SetResourcesCommandString(t.kind, t.namespace, t.name, t.activeContainer().Name, edits))
-		right = warn.Render(fmt.Sprintf("applying rolls out %d pods", t.desiredCount))
+		left = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.SetResourcesCommandString(t.kind, t.namespace, t.name, t.activeContainer().Name, edits))
+		if m.actions.Active() {
+			right = warn.Render("confirm to apply · y/N")
+		} else {
+			right = warn.Render(fmt.Sprintf("applying rolls out %d pods", t.desiredCount))
+		}
 	}
 
 	rule := lipgloss.NewStyle().Foreground(theme.BorderSubtle).Render(strings.Repeat("─", width))

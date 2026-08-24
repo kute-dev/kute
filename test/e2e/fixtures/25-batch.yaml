@@ -1,0 +1,48 @@
+# Dedicated Phase 3 mutation fixtures. The source Job is suspended so the
+# fixture itself never consumes a worker; kute's rerun path deliberately
+# clears suspend on the clone. The CronJob is also suspended so only the
+# explicit run-now action can create a Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: phase3-job
+  namespace: kute-e2e
+  labels:
+    app: phase3-job
+spec:
+  suspend: true
+  template:
+    metadata:
+      labels:
+        app: phase3-job
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c", "echo KUTE-E2E-PHASE3-JOB"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: phase3-cron
+  namespace: kute-e2e
+spec:
+  schedule: "0 2 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        app: phase3-cron
+    spec:
+      template:
+        metadata:
+          labels:
+            app: phase3-cron
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: job
+              image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+              command: ["/bin/sh", "-c", "echo KUTE-E2E-PHASE3-CRON"]
