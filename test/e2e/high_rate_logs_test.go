@@ -68,15 +68,24 @@ func TestHighRateLogsStayBoundedAndResponsive(t *testing.T) {
 	}
 	firstAlloc := plateauA.TotalAlloc - baseline.TotalAlloc
 	secondAlloc := plateauB.TotalAlloc - plateauA.TotalAlloc
+	// Logged on a passing run too: this is the number the budget below is
+	// derived from, and a budget nobody can see drifting is a budget that
+	// stops meaning anything.
+	t.Logf("batch allocations: first %.1f MiB, second %.1f MiB", mib(firstAlloc), mib(secondAlloc))
 	// TotalAlloc includes every complete Bubble Tea frame and PTY diff built
-	// for these 12,000 individual stream turns, not only LogBuffer storage.
-	// A healthy saturated run is currently about 2.2 GiB per batch; the old
-	// append-to-nil buffer path adds several more GiB of 5,000-entry copies.
-	// Keep an absolute regression ceiling while the ratio below is the sharper
-	// test that saturation itself does not make the second batch degrade.
-	const allocationBudget = 4 << 30
+	// for these 12,000 lines, not only LogBuffer storage. A healthy saturated
+	// run measures about 50 MiB per batch (kind on Docker Desktop). It was
+	// ~2.2 GiB before the viewer stopped laying out the whole 5,000-entry
+	// buffer for every frame (docs/performance.md), so this ceiling sits an
+	// order of magnitude above what's measured and still an order of
+	// magnitude below the old behaviour: a regression back to whole-buffer
+	// layout has to fail here rather than slip under a budget sized for it.
+	// The ratio below is the sharper test that saturation itself does not
+	// make the second batch degrade.
+	const allocationBudget = 512 << 20
 	if firstAlloc > allocationBudget || secondAlloc > allocationBudget {
-		t.Errorf("high-rate log batch allocations exceeded 4 GiB: first %.1f MiB, second %.1f MiB", mib(firstAlloc), mib(secondAlloc))
+		t.Errorf("high-rate log batch allocations exceeded %.0f MiB: first %.1f MiB, second %.1f MiB",
+			mib(allocationBudget), mib(firstAlloc), mib(secondAlloc))
 	}
 	if secondAlloc > firstAlloc*2+(64<<20) {
 		t.Errorf("allocations degraded after saturation: first %.1f MiB, second %.1f MiB", mib(firstAlloc), mib(secondAlloc))
