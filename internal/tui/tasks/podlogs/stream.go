@@ -27,6 +27,17 @@ type logLineMsg struct {
 	streamID int
 	entry    LogEntry
 }
+
+// logBatchMsg is what waitForStream actually hands back for a burst: every
+// line it could take off the channel without blocking, plus the message that
+// ended the drain (a stream error/close, or a line from a superseded
+// stream) when one did. tail is nil for the common case of simply running
+// out of queued lines.
+type logBatchMsg struct {
+	streamID int
+	entries  []LogEntry
+	tail     tea.Msg
+}
 type streamErrorMsg struct {
 	streamID int
 	err      error
@@ -52,6 +63,14 @@ type containerWaitingMsg struct {
 // practice.
 const containerCheckTimeout = 10 * time.Second
 
+// streamChanBuffer is how far the streaming goroutine may run ahead of the
+// update loop; maxLogBatch bounds one waitForStream drain to the same number,
+// so a producer that outruns the viewer can't hold the command goroutine in
+// its drain loop indefinitely — it just yields a frame and comes straight
+// back for the next batch.
+const streamChanBuffer = 128
+const maxLogBatch = streamChanBuffer
+
 // beginStream is the single entry point for (re)starting the active
 // container's stream — Start() (cold open) and the tab/s key handlers
 // (container/since change) all go through it, replacing the old
@@ -76,6 +95,7 @@ func (m *Model) beginStream(state StreamState) tea.Cmd {
 	m.waitingReason = ""
 	m.buffer.Entries = nil
 	m.buffer.DroppedCount = 0
+	m.rebuildLayout() // the row index is parallel to the buffer just cleared
 	m.view.VerticalOffset = 0
 	m.linesSinceTick = 0
 	m.lastRate = 0
@@ -96,7 +116,7 @@ func (m *Model) connect(streamID int) tea.Cmd {
 	if streamID != m.streamID {
 		return nil
 	}
-	m.streamCh = make(chan tea.Msg, 128)
+	m.streamCh = make(chan tea.Msg, streamChanBuffer)
 	// Parented on the session's cluster context, not Background: this one is
 	// open-ended by design (a follow stream has no timeout to expire), so
 	// without a cancellable parent the goroutine and its HTTP connection
@@ -142,13 +162,45 @@ func rateTickCmd(gen int) tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return rateTickMsg{gen: gen} })
 }
 
+// waitForStream blocks for the next stream message, then batches: once a log
+// line arrives it takes every other line already queued behind it in one go.
+// Bubble Tea renders the whole screen for each message it delivers, so the
+// old one-line-per-message shape made the render cycle — not the kubelet, not
+// the channel — the throughput ceiling: a 12,000-line burst drained at
+// roughly 45 lines/sec, since the next line was only read after the previous
+// one's frame was painted (docs/performance.md). The drain is non-blocking,
+// so a quiet stream still delivers each line the moment it arrives, and it
+// stops at anything that isn't a live log line so error/close/supersede
+// messages keep their exact ordering against the lines around them.
 func waitForStream(ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-ch
 		if !ok {
 			return streamWaitMsg{}
 		}
-		return msg
+		line, ok := msg.(logLineMsg)
+		if !ok {
+			return msg
+		}
+		batch := logBatchMsg{streamID: line.streamID, entries: []LogEntry{line.entry}}
+		for len(batch.entries) < maxLogBatch {
+			select {
+			case next, open := <-ch:
+				if !open {
+					batch.tail = streamWaitMsg{}
+					return batch
+				}
+				nextLine, isLine := next.(logLineMsg)
+				if !isLine || nextLine.streamID != batch.streamID {
+					batch.tail = next
+					return batch
+				}
+				batch.entries = append(batch.entries, nextLine.entry)
+			default:
+				return batch
+			}
+		}
+		return batch
 	}
 }
 

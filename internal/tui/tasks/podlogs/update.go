@@ -67,6 +67,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.appendEntry(msg.entry)
 		return m, m.nextStreamCmd()
+	case logBatchMsg:
+		// One render for the whole burst — see waitForStream. Each entry still
+		// goes through appendEntry, so the incremental scroll/eviction
+		// bookkeeping is identical to arriving one line at a time.
+		if msg.streamID == 0 || msg.streamID == m.streamID {
+			for _, entry := range msg.entries {
+				m.appendEntry(entry)
+			}
+		}
+		if msg.tail != nil {
+			return m.Update(msg.tail)
+		}
+		return m, m.nextStreamCmd()
 	case streamEmptyMsg:
 		if msg.streamID != 0 && msg.streamID != m.streamID {
 			return m, m.nextStreamCmd()
@@ -228,22 +241,33 @@ func (m *Model) moveHorizontal(delta int) {
 // start. Continuation rows are skipped so one long wrapped warning cannot
 // consume several presses before navigation advances to the next warning.
 func (m *Model) jumpSeverity(severity string) {
-	entries := m.filteredEntries()
-	rows := m.visualRows(entries, m.view.Width)
-	if len(rows) == 0 {
+	m.syncLayout()
+	// Walking the row index rather than laying the buffer out: the target is
+	// always an entry's *first* row, which the index already locates.
+	next, first, offset := -1, -1, 0
+	for i, rows := range m.rowCounts {
+		if rows == 0 {
+			continue
+		}
+		if m.buffer.Entries[i].Severity == severity {
+			if first < 0 {
+				first = offset
+			}
+			if next < 0 && offset > m.view.VerticalOffset {
+				next = offset
+			}
+		}
+		offset += rows
+	}
+	if next < 0 {
+		next = first // wrap to the earliest match, as scanning past the end did
+	}
+	if next < 0 {
 		return
 	}
-	start := m.view.VerticalOffset
-	for i := 1; i <= len(rows); i++ {
-		idx := (start + i) % len(rows)
-		row := rows[idx]
-		if row.First && entries[row.EntryIndex].Severity == severity {
-			m.view.AutoScroll = false
-			m.view.VerticalOffset = idx
-			m.clampOffsets()
-			return
-		}
-	}
+	m.view.AutoScroll = false
+	m.view.VerticalOffset = next
+	m.clampOffsets()
 }
 
 // CapturingInput reports whether the '/' filter input is open, so the root

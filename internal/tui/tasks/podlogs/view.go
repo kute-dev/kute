@@ -2,7 +2,6 @@ package podlogs
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -151,7 +150,7 @@ func (m Model) filterStripLine(width int) string {
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
 	left := accent.Render("/ ") + m.filterInput.View()
-	total, matched := len(m.buffer.Entries), len(m.filteredEntries())
+	total, matched := len(m.buffer.Entries), m.matchedCount()
 	right := dim.Render(fmt.Sprintf("%d/%d", matched, total))
 	if matched < total {
 		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
@@ -171,16 +170,14 @@ func (m Model) Body(width, height int) string {
 	}
 
 	theme := m.Theme()
-	entries := m.filteredEntries()
 	// docs/design README.md §5b: "a full-width red-tinted row for the most
 	// significant one" — every ERR line gets red message/level text, but
 	// only the latest (highest-index) ERR entry gets the extra tinted
 	// background row.
-	lastErr := lastErrIndex(entries)
-	rows := m.visualRows(entries, width)
+	lastErr := m.lastErrEntry()
 	lines := make([]string, 0, height)
-	for _, row := range m.visibleVisualRows(rows) {
-		entry := entries[row.EntryIndex]
+	for _, row := range m.visibleWindow(width) {
+		entry := m.buffer.Entries[row.EntryIndex]
 		lines = append(lines, m.formatVisualRow(theme, entry, row, width, row.EntryIndex == lastErr))
 	}
 	if m.buffer.DroppedCount > 0 {
@@ -242,58 +239,97 @@ type visualLogRow struct {
 	Message    string
 }
 
-// visualRows performs the width-dependent, pure layout pass for the current
-// view. VerticalOffset is measured against this result, so j/k, paging, live
-// following, filtering, and severity jumps all operate on the same physical
-// rows Body eventually renders.
+// appendEntryRows lays out one entry, tagging each physical row with the
+// caller's own index for it. Every layout path funnels through here so the
+// windowed and whole-buffer passes can't drift apart.
+func (m Model) appendEntryRows(dst []visualLogRow, entry LogEntry, index, width int) []visualLogRow {
+	if entry.Boundary {
+		return append(dst, visualLogRow{EntryIndex: index, First: true})
+	}
+
+	message := strings.ToValidUTF8(entry.Message, "\uFFFD")
+	messages := []string{message}
+	if m.view.Wrap {
+		messageWidth := max(width-m.entryPrefixWidth(entry), 1)
+		messages = strings.Split(lipgloss.Wrap(message, messageWidth, ""), "\n")
+		if len(messages) == 0 {
+			messages = []string{""}
+		}
+	} else if m.view.HorizontalOffset > 0 {
+		messages[0] = ansi.Cut(message, m.view.HorizontalOffset, ansi.StringWidth(message))
+	}
+
+	for line, message := range messages {
+		dst = append(dst, visualLogRow{EntryIndex: index, First: line == 0, Message: message})
+	}
+	return dst
+}
+
+// entryRowCount is appendEntryRows' row count without building the rows —
+// what the layout index stores per entry. Counting newlines instead of
+// splitting keeps the per-line append path allocation-free.
+func (m Model) entryRowCount(entry LogEntry) int {
+	if entry.Boundary || !m.view.Wrap {
+		return 1
+	}
+	messageWidth := max(m.view.Width-m.entryPrefixWidth(entry), 1)
+	message := strings.ToValidUTF8(entry.Message, "\uFFFD")
+	return strings.Count(lipgloss.Wrap(message, messageWidth, ""), "\n") + 1
+}
+
+// visualRows performs the width-dependent, pure layout pass over entries,
+// indexed relative to the slice it is given. The viewport itself no longer
+// calls this — see visibleWindow — but the per-entry helpers and tests do.
 func (m Model) visualRows(entries []LogEntry, width int) []visualLogRow {
 	rows := make([]visualLogRow, 0, len(entries))
 	for i, entry := range entries {
-		if entry.Boundary {
-			rows = append(rows, visualLogRow{EntryIndex: i, First: true})
-			continue
-		}
-
-		message := strings.ToValidUTF8(entry.Message, "\uFFFD")
-		messages := []string{message}
-		if m.view.Wrap {
-			messageWidth := max(width-m.entryPrefixWidth(entry), 1)
-			messages = strings.Split(lipgloss.Wrap(message, messageWidth, ""), "\n")
-			if len(messages) == 0 {
-				messages = []string{""}
-			}
-		} else if m.view.HorizontalOffset > 0 {
-			messages[0] = ansi.Cut(message, m.view.HorizontalOffset, ansi.StringWidth(message))
-		}
-
-		for line, message := range messages {
-			rows = append(rows, visualLogRow{EntryIndex: i, First: line == 0, Message: message})
-		}
+		rows = m.appendEntryRows(rows, entry, i, width)
 	}
 	return rows
 }
 
-func (m Model) visibleVisualRows(rows []visualLogRow) []visualLogRow {
-	start := m.view.VerticalOffset
-	if start > len(rows) {
-		start = len(rows)
+// allVisualRows lays out every entry the filter keeps, indexed into
+// buffer.Entries. This is the whole-buffer pass the row index exists to
+// avoid; it remains as the fallback for a buffer the index hasn't seen
+// (layoutValid), so a hand-populated model still renders correctly.
+func (m Model) allVisualRows(width int) []visualLogRow {
+	rows := make([]visualLogRow, 0, len(m.buffer.Entries))
+	for i, entry := range m.buffer.Entries {
+		if !m.entryMatchesFilter(entry) {
+			continue
+		}
+		rows = m.appendEntryRows(rows, entry, i, width)
 	}
-	end := start + m.entryViewportHeight()
-	if end > len(rows) {
-		end = len(rows)
-	}
-	return rows[start:end]
+	return rows
 }
 
-// lastErrIndex returns the index of the last (most recent) ERR-severity
-// entry in entries, or -1 if none.
-func lastErrIndex(entries []LogEntry) int {
-	for i, e := range slices.Backward(entries) {
-		if e.Severity == SeverityErr {
-			return i
-		}
+// visibleWindow is the viewport's own physical rows, indexed into
+// buffer.Entries. It lays out only the entries the window actually shows:
+// the row index answers where the window starts, so the cost is the visible
+// rows rather than the 5,000-entry buffer behind them
+// (docs/performance.md). Every caller that used to lay out the whole buffer
+// and slice it — Body, the toolbar's severity counts, ctrl-y's copy — goes
+// through here.
+func (m Model) visibleWindow(width int) []visualLogRow {
+	height := m.entryViewportHeight()
+	if !m.layoutValid() || width != m.view.Width {
+		return clampWindow(m.allVisualRows(width), m.view.VerticalOffset, height)
 	}
-	return -1
+	index, rowsBefore := m.entryAtRow(m.view.VerticalOffset)
+	skip := m.view.VerticalOffset - rowsBefore
+	rows := make([]visualLogRow, 0, height+skip)
+	for ; index < len(m.buffer.Entries) && len(rows) < height+skip; index++ {
+		if m.rowCounts[index] == 0 {
+			continue
+		}
+		rows = m.appendEntryRows(rows, m.buffer.Entries[index], index, width)
+	}
+	return clampWindow(rows, skip, height)
+}
+
+func clampWindow(rows []visualLogRow, start, height int) []visualLogRow {
+	start = min(start, len(rows))
+	return rows[start:min(start+height, len(rows))]
 }
 
 // formatEntry preserves the old single-row helper used by focused tests. The
@@ -405,8 +441,7 @@ func (m Model) statusLine(theme tui.Theme, width int) string {
 // visibleViewText renders the currently-visible lines as plain text for
 // ctrl-y's clipboard copy (docs/design README.md §5b).
 func (m Model) visibleViewText() string {
-	entries := m.filteredEntries()
-	rows := m.visibleVisualRows(m.visualRows(entries, m.view.Width))
+	rows := m.visibleWindow(m.view.Width)
 	lines := make([]string, 0, len(rows))
 	seen := make(map[int]struct{}, len(rows))
 	for _, row := range rows {
@@ -414,7 +449,7 @@ func (m Model) visibleViewText() string {
 			continue
 		}
 		seen[row.EntryIndex] = struct{}{}
-		e := entries[row.EntryIndex]
+		e := m.buffer.Entries[row.EntryIndex]
 		if e.Boundary {
 			lines = append(lines, "--- "+e.Message+" · "+e.Timestamp+" ---")
 			continue
@@ -433,15 +468,14 @@ func (m Model) visibleViewText() string {
 }
 
 func (m Model) visibleSeverityCounts() (warn, err int) {
-	entries := m.filteredEntries()
-	rows := m.visibleVisualRows(m.visualRows(entries, m.view.Width))
+	rows := m.visibleWindow(m.view.Width)
 	seen := make(map[int]struct{}, len(rows))
 	for _, row := range rows {
 		if _, ok := seen[row.EntryIndex]; ok {
 			continue
 		}
 		seen[row.EntryIndex] = struct{}{}
-		e := entries[row.EntryIndex]
+		e := m.buffer.Entries[row.EntryIndex]
 		switch e.Severity {
 		case SeverityWarn:
 			warn++

@@ -3,6 +3,7 @@ package podlogs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -484,5 +485,134 @@ func TestRunStreamTreatsContainerNotStartedErrorAsWaiting(t *testing.T) {
 	}
 	if waiting.reason == "" {
 		t.Fatalf("waiting.reason is empty, want a non-empty fallback reason")
+	}
+}
+
+// TestWaitForStreamBatchesQueuedLines is the throughput fix from
+// docs/performance.md: everything already sitting on the channel has to come
+// back as one message, because Bubble Tea renders once per message and a
+// per-line render capped a saturating burst at roughly 45 lines/sec.
+func TestWaitForStreamBatchesQueuedLines(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan tea.Msg, streamChanBuffer)
+	for i := range 10 {
+		ch <- logLineMsg{streamID: 3, entry: LogEntry{Container: "app", Message: fmt.Sprintf("line-%d", i)}}
+	}
+	batch, ok := waitForStream(ch)().(logBatchMsg)
+	if !ok {
+		t.Fatalf("waitForStream did not return a logBatchMsg")
+	}
+	if len(batch.entries) != 10 || batch.streamID != 3 || batch.tail != nil {
+		t.Fatalf("batch = %+v, want 10 entries for stream 3 and no tail", batch)
+	}
+	for i, entry := range batch.entries {
+		if want := fmt.Sprintf("line-%d", i); entry.Message != want {
+			t.Fatalf("entries[%d] = %q, want %q — batching must preserve order", i, entry.Message, want)
+		}
+	}
+	if len(ch) != 0 {
+		t.Fatalf("%d messages left queued, want the drain to have taken them all", len(ch))
+	}
+}
+
+// The drain must not swallow the ordering of the messages around the lines:
+// a stream error/close, or a line from a superseded stream, ends the batch
+// and rides along as its tail for Update to handle next.
+func TestWaitForStreamStopsBatchingAtNonLineMessages(t *testing.T) {
+	t.Parallel()
+
+	streamErr := streamErrorMsg{streamID: 3, err: errors.New("boom")}
+	tests := map[string]struct {
+		queue     []tea.Msg
+		wantLines int
+		wantTail  tea.Msg
+	}{
+		"error ends the batch": {
+			queue:     []tea.Msg{logLineMsg{streamID: 3, entry: LogEntry{Message: "a"}}, streamErr},
+			wantLines: 1,
+			wantTail:  streamErr,
+		},
+		"superseded stream ends the batch": {
+			queue: []tea.Msg{
+				logLineMsg{streamID: 3, entry: LogEntry{Message: "a"}},
+				logLineMsg{streamID: 4, entry: LogEntry{Message: "b"}},
+			},
+			wantLines: 1,
+			wantTail:  logLineMsg{streamID: 4, entry: LogEntry{Message: "b"}},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ch := make(chan tea.Msg, streamChanBuffer)
+			for _, msg := range tc.queue {
+				ch <- msg
+			}
+			batch, ok := waitForStream(ch)().(logBatchMsg)
+			if !ok {
+				t.Fatalf("waitForStream did not return a logBatchMsg")
+			}
+			if len(batch.entries) != tc.wantLines {
+				t.Fatalf("entries = %+v, want %d", batch.entries, tc.wantLines)
+			}
+			if batch.tail != tc.wantTail {
+				t.Fatalf("tail = %#v, want %#v", batch.tail, tc.wantTail)
+			}
+		})
+	}
+}
+
+// A message that isn't a log line at all still comes back untouched, so the
+// existing streamErrorMsg/streamEmptyMsg/streamClosedMsg cases in Update keep
+// seeing exactly what they always have.
+func TestWaitForStreamPassesNonLineMessagesThrough(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan tea.Msg, 1)
+	ch <- streamEmptyMsg{streamID: 3}
+	if msg := waitForStream(ch)(); msg != (tea.Msg(streamEmptyMsg{streamID: 3})) {
+		t.Fatalf("msg = %#v, want the streamEmptyMsg unchanged", msg)
+	}
+}
+
+// A batch may not run away with the command goroutine: a producer faster
+// than the viewer would otherwise keep the drain loop fed forever and never
+// yield a frame.
+func TestWaitForStreamCapsBatchSize(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan tea.Msg, maxLogBatch*2)
+	for range maxLogBatch + 20 {
+		ch <- logLineMsg{streamID: 1, entry: LogEntry{Message: "x"}}
+	}
+	batch, ok := waitForStream(ch)().(logBatchMsg)
+	if !ok {
+		t.Fatalf("waitForStream did not return a logBatchMsg")
+	}
+	if len(batch.entries) != maxLogBatch {
+		t.Fatalf("entries = %d, want the batch capped at %d", len(batch.entries), maxLogBatch)
+	}
+	if batch.tail != nil {
+		t.Fatalf("tail = %#v, want nil — a capped batch just comes back for more", batch.tail)
+	}
+	if len(ch) != 20 {
+		t.Fatalf("%d messages left queued, want the 20 the cap deferred", len(ch))
+	}
+}
+
+func TestWaitForStreamReportsClosedChannel(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan tea.Msg, 1)
+	ch <- logLineMsg{streamID: 1, entry: LogEntry{Message: "last"}}
+	close(ch)
+	batch, ok := waitForStream(ch)().(logBatchMsg)
+	if !ok {
+		t.Fatalf("waitForStream did not return a logBatchMsg")
+	}
+	if len(batch.entries) != 1 || batch.tail != (tea.Msg(streamWaitMsg{})) {
+		t.Fatalf("batch = %+v, want the final line plus a streamWaitMsg tail", batch)
 	}
 }

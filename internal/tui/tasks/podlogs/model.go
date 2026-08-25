@@ -7,6 +7,7 @@ package podlogs
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
@@ -151,6 +152,19 @@ type Model struct {
 	filterActive bool
 	filterInput  textinput.Model
 
+	// rowCounts is the layout index: how many physical rows each entry in
+	// buffer.Entries occupies, 0 for an entry the '/' filter hides. It exists
+	// so a frame costs the visible rows rather than the whole buffer —
+	// laying out all 5,000 entries to show 30 of them is what capped a
+	// saturating log burst at ~45 lines/sec (docs/performance.md). Maintained
+	// incrementally by appendEntry from numbers it already computes, and
+	// rebuilt wholesale only when layoutKey changes.
+	rowCounts  []int
+	totalRows  int // sum of rowCounts
+	matchCount int // entries passing the filter, for the filter strip's "matched/total"
+	lastErr    int // newest ERR entry passing the filter, -1 for none
+	layout     layoutKey
+
 	rateGen        int
 	linesSinceTick int
 	lastRate       int
@@ -177,7 +191,7 @@ func New(cfg Config) Model {
 		}
 	}
 
-	return Model{
+	model := Model{
 		width:        tui.DefaultWidth,
 		height:       tui.DefaultHeight,
 		session:      cfg.Session,
@@ -198,6 +212,8 @@ func New(cfg Config) Model {
 		sinceIdx:  defaultSinceIndex,
 		spinner:   components.NewSpinner(),
 	}
+	model.rebuildLayout()
+	return model
 }
 
 // FromPod builds podlogs for pod, opened from browse/poddetail — the shape
@@ -259,28 +275,165 @@ func (b *LogBuffer) Append(entry LogEntry) {
 	b.Entries = append(b.Entries, entry)
 }
 
+// layoutKey is every input that changes how many physical rows an entry
+// occupies. HorizontalOffset is deliberately absent: it only applies when
+// wrap is off, where an entry is exactly one row whatever the offset — so
+// h/l scrolling never invalidates the index.
+type layoutKey struct {
+	width      int
+	wrap       bool
+	timestamps bool
+	filter     string
+}
+
+func (m Model) currentLayoutKey() layoutKey {
+	return layoutKey{
+		width:      m.view.Width,
+		wrap:       m.view.Wrap,
+		timestamps: m.view.Timestamps,
+		filter:     m.filterInput.Value(),
+	}
+}
+
+// layoutValid reports whether rowCounts still describes the current buffer at
+// the current layout. Every mutating path syncs (clampOffsets, appendEntry),
+// so this is true in the app; the render path checks it anyway because tests
+// and golden fixtures populate buffer.Entries directly and must keep
+// rendering correctly — a stale index degrades to the old full pass rather
+// than to a wrong screen.
+func (m Model) layoutValid() bool {
+	return len(m.rowCounts) == len(m.buffer.Entries) && m.layout == m.currentLayoutKey()
+}
+
+// syncLayout is the single place a stale index is repaired. It sits at the
+// top of clampOffsets — which every key, resize and append path already runs
+// through — rather than being called from each of them, so a new toggle
+// can't forget it. Never call it from a render path: Render stays pure.
+func (m *Model) syncLayout() {
+	if !m.layoutValid() {
+		m.rebuildLayout()
+	}
+}
+
+// rebuildLayout is the one O(buffer) layout pass, reached only on the
+// human-rate events that genuinely invalidate the index: a resize, the wrap
+// or timestamps toggle, and each edit of the '/' query.
+func (m *Model) rebuildLayout() {
+	if cap(m.rowCounts) < len(m.buffer.Entries) {
+		m.rowCounts = make([]int, len(m.buffer.Entries))
+	}
+	m.rowCounts = m.rowCounts[:len(m.buffer.Entries)]
+	m.totalRows, m.matchCount, m.lastErr = 0, 0, -1
+	for i, entry := range m.buffer.Entries {
+		rows := 0
+		if m.entryMatchesFilter(entry) {
+			rows = m.entryRowCount(entry)
+			m.matchCount++
+			if entry.Severity == SeverityErr {
+				m.lastErr = i
+			}
+		}
+		m.rowCounts[i] = rows
+		m.totalRows += rows
+	}
+	m.layout = m.currentLayoutKey()
+}
+
+// entryAtRow maps a physical row offset to the entry containing it and that
+// entry's own first row, walking rowCounts from whichever end is closer — a
+// following viewport sits at the tail, so the common case never touches the
+// front of the buffer. Returns len(rowCounts) when offset is past the last
+// row.
+func (m Model) entryAtRow(offset int) (index, rowsBefore int) {
+	if offset*2 > m.totalRows {
+		i, rows := len(m.rowCounts), m.totalRows
+		for i > 0 {
+			n := m.rowCounts[i-1]
+			if rows-n <= offset {
+				if rows > offset {
+					return i - 1, rows - n
+				}
+				break
+			}
+			i--
+			rows -= n
+		}
+		return i, rows
+	}
+	rows := 0
+	for i, n := range m.rowCounts {
+		if rows+n > offset {
+			return i, rows
+		}
+		rows += n
+	}
+	return len(m.rowCounts), rows
+}
+
+// totalRowCount, matchedCount and lastErrEntry are the three whole-buffer
+// facts the chrome needs. Each answers from the index, falling back to the
+// full computation for a buffer the index hasn't seen (see layoutValid).
+func (m Model) totalRowCount() int {
+	if m.layoutValid() {
+		return m.totalRows
+	}
+	return len(m.visualRows(m.filteredEntries(), m.view.Width))
+}
+
+func (m Model) matchedCount() int {
+	if m.layoutValid() {
+		return m.matchCount
+	}
+	return len(m.filteredEntries())
+}
+
+// lastErrEntry is the index into buffer.Entries of the newest ERR entry the
+// filter keeps — docs/design README.md §5b's "full-width red-tinted row for
+// the most significant one".
+func (m Model) lastErrEntry() int {
+	if m.layoutValid() {
+		return m.lastErr
+	}
+	for i, e := range slices.Backward(m.buffer.Entries) {
+		if e.Severity == SeverityErr && m.entryMatchesFilter(e) {
+			return i
+		}
+	}
+	return -1
+}
+
 func (m *Model) appendEntry(entry LogEntry) {
+	// Load-bearing, not defensive: everything below reads and splices
+	// rowCounts positionally against buffer.Entries, so the index has to
+	// describe the buffer before the first line lands (a caller can have
+	// filled the buffer directly, and clampOffsets — the usual choke point —
+	// only runs at the end of the follow path).
+	m.syncLayout()
 	// Once following has enough rows to scroll, advance the bottom offset by
 	// only the rows added/evicted here. Re-laying out the full 5,000-entry
 	// buffer for every streamed line would make wrapping quadratic at steady
 	// state. Before the first scroll point, clampOffsets performs the small
 	// full calculation needed to detect when the viewport becomes full.
-	droppedRows := 0
 	oldViewportHeight := m.entryViewportHeight()
-	if over := len(m.buffer.Entries) - m.buffer.MaxEntries + 1; over > 0 {
-		for _, dropped := range m.buffer.Entries[:over] {
-			if m.entryMatchesFilter(dropped) {
-				droppedRows += len(m.visualRows([]LogEntry{dropped}, m.view.Width))
-			}
-		}
+	// Normalized exactly as LogBuffer.Append normalizes it: the index trims in
+	// lockstep with the buffer, so the two must agree on how many entries the
+	// coming append evicts.
+	maxEntries := m.buffer.MaxEntries
+	if maxEntries <= 0 {
+		maxEntries = DefaultMaxEntries
 	}
+	// The evicted entries' row counts are already in the index — reading them
+	// back beats re-wrapping every evicted line, which at steady state is one
+	// re-wrap per streamed line.
+	droppedRows := m.trimRowIndex(len(m.buffer.Entries) - maxEntries + 1)
 	addedRows := 0
 	if m.entryMatchesFilter(entry) {
-		addedRows = len(m.visualRows([]LogEntry{entry}, m.view.Width))
+		addedRows = m.entryRowCount(entry)
 	}
 	wasScrollableFollow := m.view.AutoScroll && m.view.VerticalOffset > 0
 
 	m.buffer.Append(entry)
+	m.pushRowIndex(addedRows, entry.Severity)
 	m.linesSinceTick++
 	if m.stream != StreamError {
 		m.stream = StreamStreaming
@@ -298,6 +451,44 @@ func (m *Model) appendEntry(entry LogEntry) {
 		// Keep the same logical content anchored when the bounded buffer evicts
 		// physical rows above a paused viewport.
 		m.view.VerticalOffset = max(0, m.view.VerticalOffset-droppedRows)
+	}
+}
+
+// trimRowIndex drops the oldest n entries from the row index, mirroring
+// LogBuffer.Append's own trim — the same copy-down, so a saturated buffer
+// keeps reusing its backing array — and reports how many physical rows went
+// with them.
+func (m *Model) trimRowIndex(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	rows, matches := 0, 0
+	for _, count := range m.rowCounts[:n] {
+		if count > 0 {
+			rows += count
+			matches++
+		}
+	}
+	copy(m.rowCounts, m.rowCounts[n:])
+	m.rowCounts = m.rowCounts[:len(m.rowCounts)-n]
+	m.totalRows -= rows
+	m.matchCount -= matches
+	// lastErr indexes the *newest* ERR entry, so if eviction reaches it,
+	// nothing newer was an ERR and there is none left to tint.
+	m.lastErr = max(m.lastErr-n, -1)
+	return rows
+}
+
+// pushRowIndex records the entry LogBuffer.Append has just added; rows is 0
+// for an entry the filter hides.
+func (m *Model) pushRowIndex(rows int, severity string) {
+	m.rowCounts = append(m.rowCounts, rows)
+	m.totalRows += rows
+	if rows > 0 {
+		m.matchCount++
+		if severity == SeverityErr {
+			m.lastErr = len(m.rowCounts) - 1
+		}
 	}
 }
 
@@ -325,6 +516,10 @@ func (m Model) entryMatchesFilter(entry LogEntry) bool {
 }
 
 func (m *Model) clampOffsets() {
+	// The choke point for the row index: every key, resize, filter edit and
+	// append path already ends here, so the index is repaired in one place
+	// instead of at each mutation site.
+	m.syncLayout()
 	if m.view.VerticalOffset < 0 {
 		m.view.VerticalOffset = 0
 	}
@@ -341,8 +536,7 @@ func (m *Model) clampOffsets() {
 
 func (m Model) maxVerticalOffset() int {
 	visible := m.entryViewportHeight()
-	entries := m.filteredEntries()
-	total := len(m.visualRows(entries, m.view.Width))
+	total := m.totalRowCount()
 	if total <= visible {
 		return 0
 	}

@@ -117,7 +117,7 @@ func TestVerticalNavigationMovesByWrappedPhysicalRow(t *testing.T) {
 	if model.view.VerticalOffset != 1 {
 		t.Fatalf("j offset = %d, want the next physical row", model.view.VerticalOffset)
 	}
-	if got := model.visibleVisualRows(rows)[0].EntryIndex; got != 0 {
+	if got := model.visibleWindow(model.view.Width)[0].EntryIndex; got != 0 {
 		t.Fatalf("j skipped the first entry's continuation row; top entry = %d", got)
 	}
 }
@@ -275,10 +275,9 @@ func TestSinceKeyCyclesWindowAndRestartsStream(t *testing.T) {
 }
 
 // entryVisible reports whether any physical row belonging to index idx (into
-// model.filteredEntries()) falls within the current viewport window.
+// model.buffer.Entries) falls within the current viewport window.
 func entryVisible(model Model, idx int) bool {
-	entries := model.filteredEntries()
-	for _, row := range model.visibleVisualRows(model.visualRows(entries, model.view.Width)) {
+	for _, row := range model.visibleWindow(model.view.Width) {
 		if row.EntryIndex == idx {
 			return true
 		}
@@ -545,5 +544,63 @@ func TestTypedForbiddenErrorReachesPermissionDeniedState(t *testing.T) {
 	}
 	if got := model.taskState(); got != tui.TaskStatePermissionDenied {
 		t.Fatalf("taskState = %s, want permission-denied", got)
+	}
+}
+
+func TestLogBatchAppendsEveryEntryAndKeepsReading(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.streamCh = make(chan tea.Msg, streamChanBuffer)
+	_, cmd := model.Update(logBatchMsg{entries: []LogEntry{
+		{Container: "app", Message: "one"},
+		{Container: "app", Message: "two"},
+		{Container: "app", Message: "three"},
+	}})
+	if len(model.buffer.Entries) != 3 {
+		t.Fatalf("entries = %+v, want all three appended", model.buffer.Entries)
+	}
+	if model.stream != StreamStreaming {
+		t.Fatalf("stream = %s, want streaming", model.stream)
+	}
+	if model.linesSinceTick != 3 {
+		t.Fatalf("linesSinceTick = %d, want 3 — the rate counter must still count lines, not batches", model.linesSinceTick)
+	}
+	if cmd == nil {
+		t.Fatalf("cmd is nil, want the batch to keep reading the stream")
+	}
+}
+
+// A batch's tail is the message that ended the drain, and it has to be
+// handled after the lines in front of it — an error arriving behind a burst
+// must still put the screen in its error state.
+func TestLogBatchHandlesItsTail(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	_, _ = model.Update(logBatchMsg{
+		entries: []LogEntry{{Container: "app", Message: "last gasp"}},
+		tail:    streamErrorMsg{err: errors.New("stream broke")},
+	})
+	if len(model.buffer.Entries) != 1 {
+		t.Fatalf("entries = %+v, want the line ahead of the tail kept", model.buffer.Entries)
+	}
+	if model.stream != StreamError || !strings.Contains(model.feedback, "stream broke") {
+		t.Fatalf("state = %s %q, want the tail's error surfaced", model.stream, model.feedback)
+	}
+}
+
+func TestLogBatchFromSupersededStreamIsDropped(t *testing.T) {
+	t.Parallel()
+
+	model := testModel()
+	model.streamCh = make(chan tea.Msg, streamChanBuffer)
+	model.streamID = 7
+	_, cmd := model.Update(logBatchMsg{streamID: 6, entries: []LogEntry{{Container: "app", Message: "stale"}}})
+	if len(model.buffer.Entries) != 0 {
+		t.Fatalf("entries = %+v, want a superseded stream's lines dropped", model.buffer.Entries)
+	}
+	if cmd == nil {
+		t.Fatalf("cmd is nil, want the superseded channel still drained to close")
 	}
 }

@@ -12,7 +12,10 @@ import (
 // goldenModel builds a deterministic 5b screen: two containers (so the
 // toolbar's "(tab: sidecar)" hint renders), one line of each severity, and
 // a restart boundary — covering every distinct render path a single
-// fixture can hit.
+// fixture can hit. Lines go in through appendEntry rather than
+// buffer.Append so the fixtures pin the windowed layout the live stream
+// takes; a buffer filled behind appendEntry's back renders through
+// visibleWindow's whole-buffer fallback instead (see layoutValid).
 func goldenModel(width, height int) Model {
 	model := New(Config{Pod: SelectedPod{
 		Context:    "prod-eks",
@@ -24,11 +27,11 @@ func goldenModel(width, height int) Model {
 	model.SetSize(width, height)
 	model.stream = StreamStreaming
 	model.view.Timestamps = true
-	model.buffer.Append(LogEntry{Container: "worker", Timestamp: "10:23:58", Message: "starting server", Severity: SeverityInfo})
-	model.buffer.Append(LogEntry{Container: "worker", Timestamp: "10:24:00", Message: "queue depth rising", Severity: SeverityWarn})
-	model.buffer.Append(LogEntry{Boundary: true, Timestamp: "10:24:02", Message: "container restarted · restart 6"})
-	model.buffer.Append(LogEntry{Container: "worker", Timestamp: "10:24:05", Message: "panic: nil pointer dereference", Severity: SeverityErr})
-	model.buffer.Append(LogEntry{Container: "worker", Timestamp: "10:24:06", Message: "back to normal"})
+	model.appendEntry(LogEntry{Container: "worker", Timestamp: "10:23:58", Message: "starting server", Severity: SeverityInfo})
+	model.appendEntry(LogEntry{Container: "worker", Timestamp: "10:24:00", Message: "queue depth rising", Severity: SeverityWarn})
+	model.appendEntry(LogEntry{Boundary: true, Timestamp: "10:24:02", Message: "container restarted · restart 6"})
+	model.appendEntry(LogEntry{Container: "worker", Timestamp: "10:24:05", Message: "panic: nil pointer dereference", Severity: SeverityErr})
+	model.appendEntry(LogEntry{Container: "worker", Timestamp: "10:24:06", Message: "back to normal"})
 	return model
 }
 
