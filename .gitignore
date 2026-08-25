@@ -26,3 +26,4 @@ dist/
 /site
 .playwright-mcp
 .opencode
+.claude
