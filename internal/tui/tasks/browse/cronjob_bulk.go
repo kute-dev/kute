@@ -65,7 +65,7 @@ func (m Model) bulkCronJobSuspendConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeCountModal(title, objectsLine, "running jobs are unaffected — this only stops future scheduling", count, m.actions.TypedName(), m.isProd(), styles, width, height)
+	return components.TypeCountModal(title, objectsLine, "running jobs are unaffected — this only stops future scheduling", count, m.actions.TypedName(), m.actions.TypedCursor(), m.isProd(), styles, width, height)
 }
 
 // bulkTargetNamespace/bulkTargetLabels mirror bulkNamespace/bulkObjectLabels

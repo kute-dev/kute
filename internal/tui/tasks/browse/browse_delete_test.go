@@ -149,6 +149,59 @@ func TestCtrlDProdOpensTypeNameModal(t *testing.T) {
 	}
 }
 
+// TestProdModalCaretFollowsArrowKeys is the regression test for the caret
+// that never moved: left/right/Home/End always reached the type-ahead
+// buffer (updateModalConfirmKey routes every unclaimed key to
+// HandleTypeKey), but the modal drew "█" pinned to the end of the string, so
+// the motion was invisible. Asserted through the real key path rather than
+// on the controller, since the modal's own key routing is what has to leave
+// these keys alone instead of treating them as list navigation.
+func TestProdModalCaretFollowsArrowKeys(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {pod("default", "api-0")},
+	}}
+	sess := newSession()
+	sess.Config = config.Config{ProdContexts: []string{sess.Location.Context}}
+	m := New(Config{Session: sess, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
+	for _, r := range "api-0" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	if !strings.Contains(plain(m.Render()), "api-0█") {
+		t.Fatalf("expected the caret parked at the end of the buffer:\n%s", plain(m.Render()))
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := m.actions.TypedCursor(); got != 4 {
+		t.Fatalf("TypedCursor() after left = %d, want 4 — the modal swallowed the key", got)
+	}
+	// plain() downsamples to NoTTY, which drops the reverse-video caret
+	// entirely; the visible proof here is that the trailing block is gone
+	// while the buffer itself is untouched.
+	view := plain(m.Render())
+	if strings.Contains(view, "api-0█") {
+		t.Errorf("caret still pinned to the end of the buffer after left:\n%s", view)
+	}
+	if !strings.Contains(view, "api-0") {
+		t.Errorf("left arrow changed the typed name:\n%s", view)
+	}
+
+	// The arrow must not have leaked through to the list underneath.
+	if m.actions.TypedName() != "api-0" {
+		t.Errorf("TypedName() = %q, want %q", m.actions.TypedName(), "api-0")
+	}
+
+	// ...and enter still matches, so moving the caret can't strand a
+	// correctly-typed name.
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnd})
+	if !m.actions.NameMatches() {
+		t.Error("expected the typed name to still match after caret motion")
+	}
+}
+
 // TestCtrlKEscalatesToForceDelete confirms the ctrl-k chord inside an
 // active Pod-delete modal calls DeleteResourceForced, not DeleteResource.
 func TestCtrlKEscalatesToForceDelete(t *testing.T) {

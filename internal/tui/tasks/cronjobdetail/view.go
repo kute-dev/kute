@@ -461,7 +461,7 @@ func (m Model) suspendConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", detail, target, m.actions.TypedName(), "suspend", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", detail, target, m.actions.TypedName(), m.actions.TypedCursor(), "suspend", m.isProd(), styles, width, height)
 }
 
 // shortAge renders how long ago t was, relative to now — mirrors

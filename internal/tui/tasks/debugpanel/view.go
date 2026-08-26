@@ -107,7 +107,7 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", "", target, m.actions.TypedName(), "delete", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", "", target, m.actions.TypedName(), m.actions.TypedCursor(), "delete", m.isProd(), styles, width, height)
 }
 
 // panelContent builds the panel body: header, mode selector (pod target

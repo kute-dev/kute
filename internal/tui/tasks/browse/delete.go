@@ -183,5 +183,5 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), actionVerb, m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedName(), m.actions.TypedCursor(), actionVerb, m.isProd(), styles, width, height)
 }

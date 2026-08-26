@@ -547,6 +547,53 @@ func TestBackspaceRemovesLastRuneUnicodeSafe(t *testing.T) {
 	}
 }
 
+// TestTypedCursorTracksMotionKeys pins the caret position the modal draws
+// its block cursor at. The motion keys always reached the buffer — it was
+// TypedCursor that didn't exist, so components.TypeNameModal pinned "█" to
+// the end of the string and every left/right/Home/End press looked like a
+// no-op.
+func TestTypedCursorTracksMotionKeys(t *testing.T) {
+	c := New(&fakeMutator{})
+	c.Begin(TierModal, deleteAction())
+	for _, r := range "aβc" {
+		typeRune(&c, r)
+	}
+	if got := c.TypedCursor(); got != 3 {
+		t.Fatalf("TypedCursor() after typing = %d, want 3 (end of buffer)", got)
+	}
+
+	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := c.TypedCursor(); got != 2 {
+		t.Fatalf("TypedCursor() after left = %d, want 2", got)
+	}
+	if c.TypedName() != "aβc" {
+		t.Fatalf("left moved the caret but changed the text to %q", c.TypedName())
+	}
+
+	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyHome})
+	if got := c.TypedCursor(); got != 0 {
+		t.Fatalf("TypedCursor() after home = %d, want 0", got)
+	}
+
+	// A rune index, not a byte offset: β is two bytes, so an End that
+	// reported 4 here would put the modal's cursor past the last rune.
+	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyEnd})
+	if got := c.TypedCursor(); got != 3 {
+		t.Fatalf("TypedCursor() after end = %d, want 3", got)
+	}
+
+	// Typing at a moved caret inserts there, which is exactly what the
+	// pinned-to-the-end cursor used to misreport.
+	c.HandleTypeKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	typeRune(&c, 'x')
+	if c.TypedName() != "aβxc" {
+		t.Fatalf("TypedName() = %q, want %q", c.TypedName(), "aβxc")
+	}
+	if got := c.TypedCursor(); got != 3 {
+		t.Fatalf("TypedCursor() after mid-buffer insert = %d, want 3", got)
+	}
+}
+
 func TestTypeRuneAndBackspaceNoOpOutsideTierModal(t *testing.T) {
 	c := New(&fakeMutator{})
 	c.Begin(TierInline, deleteAction())

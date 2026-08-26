@@ -34,9 +34,9 @@ type bulkDeleteTarget struct {
 	// typedInput is the type-ahead buffer for a TierModal (PROD) confirm —
 	// unused for TierInline. Never rendered via its own View() (components.
 	// TypeCountModal keeps its own bespoke progress-counter look, reading
-	// Value() as a plain string), so it's never styled — this exists purely
-	// for HandleTypeKey-equivalent input handling (Home/End; paste arrives
-	// via pasteTarget), matching
+	// Value() for the text and Position() for the caret), so it's never
+	// styled — this exists purely for HandleTypeKey-equivalent input
+	// handling (Home/End; paste arrives via pasteTarget), matching
 	// actions.Controller's own typedInput.
 	typedInput textinput.Model
 }
@@ -313,5 +313,5 @@ func (m Model) bulkDeleteConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedInput.Value(), m.isProd(), styles, width, height)
+	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedInput.Value(), t.typedInput.Position(), m.isProd(), styles, width, height)
 }

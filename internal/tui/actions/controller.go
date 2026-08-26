@@ -1,7 +1,7 @@
 // Package actions is the shared confirm→execute framework for mutating
 // operations. A screen embeds a Controller, calls Begin with the action's
 // resolved Tier (verbs.TierFor) when the user presses a mutating key,
-// routes confirm-state keys to Confirm/Cancel/TypeRune/Backspace/Escalate
+// routes confirm-state keys to Confirm/Cancel/HandleTypeKey/Escalate
 // while the controller is Active, and feeds ResultMsg back through
 // HandleResult. Execution runs through kube.Mutator, so no screen calls a
 // write verb directly and the confirmation gate is enforced in exactly one
@@ -82,11 +82,13 @@ type Controller struct {
 	// TierNone/TierInline. Never rendered via its own View(): components/
 	// confirmmodal.go's TypeNameModal/TypeCountModal keep their own bespoke
 	// "N/M" progress-counter + "█" cursor look (a deliberate departure from
-	// every other text-entry site in the app), reading TypedName() as a
-	// plain string — this exists purely so HandleTypeKey gets Home/End/
-	// Ctrl-arrow word-jump for free instead of hand-rolling a 10th
-	// implementation. Paste reaches it through PasteTarget, not from here:
-	// a bracketed paste is never a keypress.
+	// every other text-entry site in the app), reading TypedName() for the
+	// text and TypedCursor() for the caret — both, because a modal that read
+	// only the value drew its cursor pinned to the end of the buffer while
+	// every motion key silently moved the real one. This exists so
+	// HandleTypeKey gets Home/End/Ctrl-arrow word-jump for free instead of
+	// hand-rolling a 10th implementation. Paste reaches it through
+	// PasteTarget, not from here: a bracketed paste is never a keypress.
 	typedInput textinput.Model
 	// forceArmed stages a pending TierInline Pod "delete" for force-delete
 	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
@@ -137,6 +139,11 @@ func (c Controller) Tier() Tier { return c.tier }
 
 // TypedName is the current type-ahead buffer for a TierModal confirmation.
 func (c Controller) TypedName() string { return c.typedInput.Value() }
+
+// TypedCursor is the caret's rune index within TypedName — what the modal
+// draws its block cursor at, so Home/End/Ctrl-arrow motion and a paste
+// landing mid-buffer are visible rather than silent.
+func (c Controller) TypedCursor() int { return c.typedInput.Position() }
 
 // NameMatches reports whether TypedName equals the pending action's target
 // resource name — the gate Confirm() checks for TierModal.

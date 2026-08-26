@@ -446,7 +446,7 @@ func (m Model) replaceConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", detail, target, m.actions.TypedName(), "replace", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", detail, target, m.actions.TypedName(), m.actions.TypedCursor(), "replace", m.isProd(), styles, width, height)
 }
 
 // shortAge/shortDur mirror resources.shortAge's compact "12m"/"3h"/"5d"

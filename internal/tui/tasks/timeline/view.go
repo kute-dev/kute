@@ -277,7 +277,7 @@ func (m Model) rollbackConfirmModal(width, height int) string {
 		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", detail, target, m.actionsCtl.TypedName(), "rollback", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", detail, target, m.actionsCtl.TypedName(), m.actionsCtl.TypedCursor(), "rollback", m.isProd(), styles, width, height)
 }
 
 func (m Model) emptyMessage() string {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 )
@@ -75,14 +76,15 @@ type TypeModalStyles struct {
 // TypeNameModal renders 8b's type-the-name destructive confirm (docs/design
 // README.md §8b): title (+ a right-aligned PROD CONTEXT tag when prod), an
 // optional owner line ("Deployment/x — will be recreated"), a detail line
-// (grace period / force-delete hint), the type-ahead prompt with a trailing
-// cursor and "N/M" progress count, and the key row. ↵ only executes once
+// (grace period / force-delete hint), the type-ahead prompt with a block
+// cursor at the caret (see typedWithCursor) and "N/M" progress count, and
+// the key row. ↵ only executes once
 // typed == target — screens gate that via actions.Controller.Confirm, this
 // component is purely presentational. actionVerb names the key row's verb
 // ("delete", "rollback", …) — 16b's rollout-undo reuses this same modal for
 // its own PROD confirm (docs/design README.md §16b) rather than "delete"
 // being hardcoded there.
-func TypeNameModal(title, ownerLine, detailLine, target, typed, actionVerb string, prod bool, styles TypeModalStyles, width, height int) string {
+func TypeNameModal(title, ownerLine, detailLine, target, typed string, cursor int, actionVerb string, prod bool, styles TypeModalStyles, width, height int) string {
 	titleLine := styles.Title.Render(title)
 
 	body := []string{}
@@ -93,7 +95,8 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed, actionVerb strin
 		body = append(body, styles.Detail.Render(detailLine))
 	}
 	body = append(body, "", styles.Detail.Render("type \""+target+"\" to confirm"))
-	body = append(body, styles.Input.Render(typed+"█")+"  "+styles.Progress.Render(fmt.Sprintf("%d/%d", len(typed), len(target))))
+	body = append(body, typedWithCursor(typed, cursor, styles.Input)+"  "+
+		styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target))))
 	keyLine := styles.Key.Render("↵") + styles.Label.Render(" "+actionVerb+" (when name matches)") + "   " +
 		styles.Key.Render("esc") + styles.Label.Render(" cancel")
 
@@ -119,7 +122,7 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed, actionVerb strin
 // and the key row. ↵ only executes once typed == strconv of count — screens
 // gate that themselves (browse's updateBulkDeleteKey), this component is
 // purely presentational, same contract as TypeNameModal.
-func TypeCountModal(title, objectsLine, detailLine string, count int, typed string, prod bool, styles TypeModalStyles, width, height int) string {
+func TypeCountModal(title, objectsLine, detailLine string, count int, typed string, cursor int, prod bool, styles TypeModalStyles, width, height int) string {
 	target := strconv.Itoa(count)
 	titleLine := styles.Title.Render(title)
 
@@ -131,7 +134,8 @@ func TypeCountModal(title, objectsLine, detailLine string, count int, typed stri
 		body = append(body, styles.Detail.Render(detailLine))
 	}
 	body = append(body, "", styles.Detail.Render("type \""+target+"\" to confirm"))
-	body = append(body, styles.Input.Render(typed+"█")+"  "+styles.Progress.Render(fmt.Sprintf("%d/%d", len(typed), len(target))))
+	body = append(body, typedWithCursor(typed, cursor, styles.Input)+"  "+
+		styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target))))
 	keyLine := styles.Key.Render("↵") + styles.Label.Render(" delete (when count matches)") + "   " +
 		styles.Key.Render("esc") + styles.Label.Render(" cancel")
 
@@ -146,6 +150,25 @@ func TypeCountModal(title, objectsLine, detailLine string, count int, typed stri
 	content := strings.Join(lines, "\n")
 	box := styles.Border.Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(content)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// typedWithCursor renders the type-ahead buffer with a block cursor at
+// cursor (a rune index, from actions.Controller.TypedCursor). At the end of
+// the buffer the cursor is the appended "█" this modal has always drawn;
+// inside it, the character under the caret is drawn reverse-video instead —
+// a terminal block cursor — so left/right/Home/End/Ctrl-arrow motion and a
+// paste landing mid-buffer are visible rather than silent. Reverse is an SGR
+// attribute rather than a color, so this stays Theme-agnostic like the rest
+// of the component (and survives the 256-color degradation path, which only
+// remaps colors).
+func typedWithCursor(typed string, cursor int, input lipgloss.Style) string {
+	runes := []rune(typed)
+	if cursor < 0 || cursor >= len(runes) {
+		return input.Render(typed + "█")
+	}
+	return input.Render(string(runes[:cursor])) +
+		input.Reverse(true).Render(string(runes[cursor])) +
+		input.Render(string(runes[cursor+1:]))
 }
 
 // padBetween2 right-pads left so right lands at width — the title row's
