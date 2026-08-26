@@ -1813,9 +1813,22 @@ func demoNode(name string, ready, memoryPressure, cordoned bool) *corev1.Node {
 		Spec:       corev1.NodeSpec{Unschedulable: cordoned},
 		Status: corev1.NodeStatus{
 			Conditions: conditions,
-			Allocatable: corev1.ResourceList{
+			// Capacity is the machine; Allocatable is what's left after
+			// kube-reserved/system-reserved/eviction-threshold. The gap is
+			// modelled on a real managed node (AKS reserves ~3Gi of 16Gi)
+			// because the two are different denominators — usage bars
+			// divide by Capacity, request bars by Allocatable — and a
+			// fixture where they're equal would let that distinction
+			// regress without any test noticing.
+			Capacity: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("4"),
 				corev1.ResourceMemory: resource.MustParse("16Gi"),
+				corev1.ResourcePods:   resource.MustParse("110"),
+			},
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("3860m"),
+				corev1.ResourceMemory: resource.MustParse("13Gi"),
+				corev1.ResourcePods:   resource.MustParse("110"),
 			},
 		},
 	}

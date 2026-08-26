@@ -1147,7 +1147,11 @@ func (c *Cluster) CountInstances(kind ResourceKind) int {
 }
 
 // PodMetricsByNamespace fetches all pod metrics in namespace in a single List,
-// replacing the previous per-pod Get (the N+1 loop). Keyed by pod name.
+// replacing the previous per-pod Get (the N+1 loop). Keyed by PodKey, not by
+// bare name: callers pass "" for cluster-wide reads (11b's node detail, and
+// browse in all-namespaces mode), where two pods with the same name in
+// different namespaces — a DaemonSet, or one chart installed twice — would
+// otherwise overwrite each other and show one pod the other's usage.
 func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (map[string]PodMetrics, error) {
 	if c.metrics == nil {
 		return nil, fmt.Errorf("pod metrics client is not configured")
@@ -1160,7 +1164,7 @@ func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (
 	for i := range list.Items {
 		pm := list.Items[i]
 		if len(pm.Containers) == 0 {
-			out[pm.Name] = PodMetrics{CPU: "n/a", MEM: "n/a"}
+			out[PodKey(pm.Namespace, pm.Name)] = PodMetrics{CPU: "n/a", MEM: "n/a"}
 			continue
 		}
 		cpu := pm.Containers[0].Usage.Cpu().DeepCopy()
@@ -1169,7 +1173,7 @@ func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (
 			cpu.Add(*pm.Containers[j].Usage.Cpu())
 			mem.Add(*pm.Containers[j].Usage.Memory())
 		}
-		out[pm.Name] = PodMetrics{CPU: FormatCPU(cpu), MEM: FormatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
+		out[PodKey(pm.Namespace, pm.Name)] = PodMetrics{CPU: FormatCPU(cpu), MEM: FormatMemory(mem), CPUMilli: cpu.MilliValue(), MemBytes: mem.Value()}
 	}
 	return out, nil
 }
@@ -1177,7 +1181,9 @@ func (c *Cluster) PodMetricsByNamespace(ctx context.Context, namespace string) (
 // ContainerMetricsByNamespace fetches all pod metrics in namespace in a
 // single List, like PodMetricsByNamespace, but keeps each container's own
 // usage separate instead of summing them — 25a's per-field USAGE bar needs
-// the active container's own number, not the whole pod's.
+// the active container's own number, not the whole pod's. Keyed by PodKey
+// for consistency with PodMetricsByNamespace; this one has no cluster-wide
+// caller today, so the namespace in the key is uniformity, not a fix.
 func (c *Cluster) ContainerMetricsByNamespace(ctx context.Context, namespace string) (map[string]map[string]PodMetrics, error) {
 	if c.metrics == nil {
 		return nil, fmt.Errorf("pod metrics client is not configured")
@@ -1198,7 +1204,7 @@ func (c *Cluster) ContainerMetricsByNamespace(ctx context.Context, namespace str
 				CPUMilli: cpu.MilliValue(), MemBytes: mem.Value(),
 			}
 		}
-		out[pm.Name] = containers
+		out[PodKey(pm.Namespace, pm.Name)] = containers
 	}
 	return out, nil
 }

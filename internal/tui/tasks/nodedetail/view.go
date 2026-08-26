@@ -157,8 +157,7 @@ func (m Model) Body(width, height int) string {
 // the body past height.
 func (m Model) readyBody(width, height int) string {
 	theme := m.Theme()
-	left := m.conditionsBlock(theme)
-	right := m.allocationBlock(theme)
+	left, right := m.factsBlocks(theme, height)
 	topHeight, bottomHeight := panelHeights(height, len(left), len(right))
 
 	top := m.factsPanel(left, right, width, topHeight)
@@ -171,9 +170,24 @@ func (m Model) readyBody(width, height int) string {
 // (selection.go's scroll-offset clamp) can compute the same split before a
 // render happens, without duplicating the formula.
 func panelHeights(bodyHeight, leftLines, rightLines int) (top, bottom int) {
-	top = min(max(leftLines, rightLines)+1, max(bodyHeight/2, 6))
+	_, capped := panelBudget(bodyHeight)
+	top = min(max(leftLines, rightLines)+1, capped)
 	bottom = max(bodyHeight-top-1, 3)
 	return top, bottom
+}
+
+// panelBudget is the most lines the top facts panel may take, and how many
+// of those a single column's content may fill (the panel adds one line of
+// breathing room below the taller column).
+//
+// The cap is deliberately generous enough for the full two-group
+// allocation block plus TAINTS at 120x36, and factsBlocks falls back to the
+// compact block below that rather than letting factsPanel silently clip the
+// taints off the bottom — a dropped taint is a wrong answer about the node,
+// where a tighter layout is only a plainer one.
+func panelBudget(bodyHeight int) (panel, capped int) {
+	panel = max(bodyHeight/2, 6)
+	return panel, panel - 1
 }
 
 // tableDataRows is how many pod rows the bottom pane can show at once,
@@ -182,8 +196,7 @@ func panelHeights(bodyHeight, leftLines, rightLines int) (top, bottom int) {
 func (m Model) tableDataRows() int {
 	body := tui.FrameBodyHeight(m.height, m.stripLineCount())
 	theme := m.Theme()
-	left := m.conditionsBlock(theme)
-	right := m.allocationBlock(theme)
+	left, right := m.factsBlocks(theme, body)
 	_, bottomHeight := panelHeights(body, len(left), len(right))
 	// -5: podsPanel's own health-strip line + its rule (2 lines) and the
 	// table's FooterLine (1 line) sit outside the table's own Height budget
@@ -272,18 +285,68 @@ func (m Model) conditionLines() []string {
 	return lines
 }
 
-func (m Model) allocationBlock(theme tui.Theme) []string {
-	title := lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("ALLOCATED / ALLOCATABLE")
-	lines := []string{
-		title,
-		allocationBarLine("cpu", m.allocated.cpuMilli, m.allocatable.cpuMilli, theme, func(v int64) string { return fmt.Sprintf("%dm", v) }),
-		allocationBarLine("mem", m.allocated.memBytes, m.allocatable.memBytes, theme, formatBytes),
-		allocationBarLine("pods", int64(len(m.pods)), m.allocatable.pods, theme, func(v int64) string { return strconv.FormatInt(v, 10) }),
-		"",
+func formatMilli(v int64) string { return fmt.Sprintf("%dm", v) }
+
+// allocationBlock is 11b's right-hand column: what the node has promised,
+// what it is actually using, and its taints.
+//
+// The two bar groups are separate on purpose. REQUESTED / ALLOCATABLE is a
+// scheduling statement — the pods' effective requests against what the
+// scheduler may still hand out. USED / CAPACITY is a live statement — this
+// node's whole-machine usage against the whole machine, the same number
+// (and now the same denominator) 11a's list shows. They differ, often by a
+// lot, and showing only one of them under a bare "MEM" label is what made
+// the two screens look like they were contradicting each other.
+//
+// compact drops the blank separator lines when the panel's height budget
+// can't fit the airy form; it never drops a number.
+func (m Model) allocationBlock(theme tui.Theme, compact bool) []string {
+	title := func(text string) string {
+		return lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render(text)
 	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("TAINTS"))
+	lines := []string{
+		title("REQUESTED / ALLOCATABLE"),
+		allocationBarLine("cpu", m.allocated.cpuMilli, m.allocatable.cpuMilli, theme, formatMilli),
+		allocationBarLine("mem", m.allocated.memBytes, m.allocatable.memBytes, theme, formatBytes),
+		// allPods, not pods: this is the node's pod count against its
+		// capacity, so it must not move when the table below is filtered.
+		allocationBarLine("pods", int64(len(m.allPods)), m.allocatable.pods, theme, func(v int64) string { return strconv.FormatInt(v, 10) }),
+	}
+	if !compact {
+		lines = append(lines, "")
+	}
+	lines = append(lines, title("USED / CAPACITY"))
+	if m.usedOK {
+		lines = append(lines,
+			allocationBarLine("cpu", m.used.cpuMilli, m.capacity.cpuMilli, theme, formatMilli),
+			allocationBarLine("mem", m.used.memBytes, m.capacity.memBytes, theme, formatBytes),
+		)
+	} else {
+		// A zeroed bar would claim the node is idle. Say why there's no
+		// reading instead — the same degradation overview's capacityLines
+		// and browse's nodeSummaryText already apply.
+		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextDim).Render("cpu / mem — no metrics-server installed"))
+	}
+	if !compact {
+		lines = append(lines, "")
+	}
+	lines = append(lines, title("TAINTS"))
 	lines = append(lines, m.taintLines()...)
 	return lines
+}
+
+// factsBlocks builds the two facts-panel columns for a given body height,
+// choosing the compact allocation block when the airy one would overflow
+// the panel's share of that height. readyBody and tableDataRows both go
+// through here so the height they lay out against and the height they
+// scroll against cannot drift apart.
+func (m Model) factsBlocks(theme tui.Theme, bodyHeight int) (left, right []string) {
+	left = m.conditionsBlock(theme)
+	right = m.allocationBlock(theme, false)
+	if _, capped := panelBudget(bodyHeight); len(right) > capped {
+		right = m.allocationBlock(theme, true)
+	}
+	return left, right
 }
 
 func (m Model) taintLines() []string {
@@ -312,6 +375,14 @@ func allocationBarLine(label string, used, total int64, theme tui.Theme, format 
 		Fill:  lipgloss.NewStyle().Foreground(theme.Accent),
 		Warn:  lipgloss.NewStyle().Foreground(theme.Warn),
 		Bad:   lipgloss.NewStyle().Foreground(theme.Bad),
+	}
+	if total <= 0 {
+		// The kubelet hasn't reported this resource's capacity. "13 / 0" is
+		// a false statement about the node, and a full bar over a zero
+		// denominator is worse — show the bare figure, the same fallback
+		// browse's nodePodsCell and overview's capacityLines already use.
+		return dim.Render(fmt.Sprintf("%-4s ", label)) +
+			components.MiniBar(0, 0, barWidth, bars) + " " + dim.Render(format(used))
 	}
 	bar := components.MiniBar(used, total, barWidth, bars)
 	// docs/design README.md §11b: "used / total text, hot values yellow" —

@@ -41,7 +41,10 @@ func (m *Model) Reload() tea.Cmd {
 		return nil
 	}
 	m.reloadEpoch++
-	return m.scheduleReload(m.reloadEpoch)
+	// Re-arm the usage poll too: while this screen sat in the stack its
+	// ticks were delivered to whatever was active instead, so the chain is
+	// dead by the time we get here.
+	return tea.Batch(m.scheduleReload(m.reloadEpoch), m.armMetricsTick())
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -62,11 +65,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
 	case kube.ConnStateMsg:
+		wasOffline := m.conn.Offline()
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
 		m.now = time.Now()
+		if wasOffline && !m.conn.Offline() {
+			// pollsMetrics refuses to arm while offline, so the chain died
+			// when the connection dropped; coming back up has to restart it.
+			return m, m.armMetricsTick()
+		}
 	case loadedMsg:
 		return m.applyLoaded(msg)
+	case metricsTickMsg:
+		// A tick from a retired chain is dropped rather than re-armed —
+		// that is what keeps exactly one poll loop alive.
+		if msg.epoch != m.metricsEpoch {
+			return m, nil
+		}
+		return m, m.loadMetrics()
+	case metricsLoadedMsg:
+		return m.applyMetrics(msg)
 	case reloadDueMsg:
 		if msg.epoch == m.reloadEpoch {
 			return m, m.load()
@@ -165,12 +183,39 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.node = msg.node
 	m.allocated = msg.allocated
 	m.allocatable = msg.allocatable
+	m.used = msg.used
+	m.capacity = msg.capacity
+	m.usedOK = msg.usedOK
 	m.allPods = msg.pods
 	m.recomputeFiltered()
 
 	m.state = tui.TaskStateReady
 	m.feedback = ""
 	return m, nil
+}
+
+// applyMetrics folds one usage poll into the model and arms the next tick.
+// It touches only usage — never the pod set, the node, or the selection —
+// so a poll landing mid-scroll or mid-filter can't move anything under the
+// user.
+func (m *Model) applyMetrics(msg metricsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.epoch != m.metricsEpoch {
+		return m, nil
+	}
+	m.used, m.usedOK = msg.used, msg.usedOK
+	if msg.podMetrics != nil {
+		for i := range m.allPods {
+			pod := &m.allPods[i].pod
+			if pm, found := msg.podMetrics[kube.PodKey(pod.Namespace, pod.Name)]; found {
+				pod.CPU, pod.MEM = pm.CPU, pm.MEM
+				pod.CPUMilli, pod.MEMBytes = pm.CPUMilli, pm.MemBytes
+			}
+		}
+		// pods holds copies of allPods' rows, so the filtered view has to
+		// be rebuilt for the refreshed numbers to reach the table.
+		m.recomputeFiltered()
+	}
+	return m, m.scheduleMetricsTick(m.metricsEpoch)
 }
 
 // recomputeFiltered reapplies filterQuery to allPods (called after a reload

@@ -287,7 +287,7 @@ func TestPodMetricsRenderAsBars(t *testing.T) {
 		kube.KindPod: {pod("default", "api-1")},
 	}}
 	metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
-		"api-1": {CPU: "45m", MEM: "128Mi", CPUMilli: 45, MemBytes: 128 * 1024 * 1024},
+		kube.PodKey("default", "api-1"): {CPU: "45m", MEM: "128Mi", CPUMilli: 45, MemBytes: 128 * 1024 * 1024},
 	}}
 	m := New(Config{Session: newSession(), Lister: lister, Metrics: metrics})
 	m.SetSize(120, 36)
@@ -315,7 +315,7 @@ func TestPodMetricsRenderRoundedRatherThanTruncated(t *testing.T) {
 		kube.KindPod: {pod("default", "api-1")},
 	}}
 	metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
-		"api-1": {
+		kube.PodKey("default", "api-1"): {
 			CPU:      kube.FormatCPU(*resource.NewMilliQuantity(45, resource.DecimalSI)),
 			MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
 			CPUMilli: 45,
@@ -347,7 +347,7 @@ func TestUnavailablePodMetricsRenderAsDash(t *testing.T) {
 		kube.KindPod: {pod("default", "api-1")},
 	}}
 	metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
-		"api-1": {CPU: "n/a", MEM: "n/a"},
+		kube.PodKey("default", "api-1"): {CPU: "n/a", MEM: "n/a"},
 	}}
 	m := New(Config{Session: newSession(), Lister: lister, Metrics: metrics})
 	m.SetSize(120, 36)

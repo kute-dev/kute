@@ -78,9 +78,14 @@ func loadOverview(ctx context.Context, lister resources.RawLister, nodeMetricsSr
 			}
 		}
 		if n, ok := obj.(*corev1.Node); ok {
-			data.capCPUTotal += allocatable(n, corev1.ResourceCPU)
-			data.capMemTotal += allocatable(n, corev1.ResourceMemory)
-			data.capPodsTotal += allocatable(n, corev1.ResourcePods)
+			// cpu/mem divide by Capacity because their numerator below is
+			// metrics-server's whole-node usage (kube.NodeCapacity explains
+			// why mixing that with Allocatable reads hot); pods divides by
+			// Allocatable, which is what the scheduler will actually place.
+			capacity := kube.NodeCapacity(n)
+			data.capCPUTotal += capacity.CPUMilli
+			data.capMemTotal += capacity.MemBytes
+			data.capPodsTotal += kube.NodeAllocatable(n).Pods
 			if v := n.Status.NodeInfo.KubeletVersion; v != "" {
 				versions[v]++
 			}
@@ -210,17 +215,6 @@ func sortTrouble(rows []resources.Row) {
 
 func podTerminal(p *corev1.Pod) bool {
 	return p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed
-}
-
-func allocatable(n *corev1.Node, name corev1.ResourceName) int64 {
-	q, ok := n.Status.Allocatable[name]
-	if !ok {
-		return 0
-	}
-	if name == corev1.ResourceCPU {
-		return q.MilliValue()
-	}
-	return q.Value()
 }
 
 func majorityVersion(counts map[string]int) string {

@@ -49,12 +49,14 @@ func loadingConditionsBlock(theme tui.Theme) []string {
 	return lines
 }
 
-// loadingAllocationBlock is ALLOCATED/ALLOCATABLE + TAINTS' skeleton: same
-// line shape as allocationBlock/allocationBarLine (label, then a
-// placeholder standing in for the bar+value), so the swap to live data
-// doesn't relayout.
-func loadingAllocationBlock(theme tui.Theme) []string {
-	title := lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("ALLOCATED / ALLOCATABLE")
+// loadingAllocationBlock is the allocation column's skeleton: the same line
+// shape allocationBlock produces (real titles, a placeholder standing in
+// for each bar+value), including the same compact collapse, so the swap to
+// live data doesn't relayout the panel under the user.
+func loadingAllocationBlock(theme tui.Theme, compact bool) []string {
+	title := func(text string) string {
+		return lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render(text)
+	}
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	style := lipgloss.NewStyle().Foreground(theme.TextGhost)
 
@@ -65,15 +67,30 @@ func loadingAllocationBlock(theme tui.Theme) []string {
 	}
 
 	lines := []string{
-		title,
+		title("REQUESTED / ALLOCATABLE"),
 		bar("cpu"),
 		bar("mem"),
 		bar("pods"),
-		"",
-		lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("TAINTS"),
-		style.Render(strings.Repeat(loadingBarGlyph, 14)),
 	}
+	if !compact {
+		lines = append(lines, "")
+	}
+	lines = append(lines, title("USED / CAPACITY"), bar("cpu"), bar("mem"))
+	if !compact {
+		lines = append(lines, "")
+	}
+	lines = append(lines, title("TAINTS"), style.Render(strings.Repeat(loadingBarGlyph, 14)))
 	return lines
+}
+
+// loadingFactsBlocks mirrors factsBlocks' compact fallback for the skeleton.
+func loadingFactsBlocks(theme tui.Theme, bodyHeight int) (left, right []string) {
+	left = loadingConditionsBlock(theme)
+	right = loadingAllocationBlock(theme, false)
+	if _, capped := panelBudget(bodyHeight); len(right) > capped {
+		right = loadingAllocationBlock(theme, true)
+	}
+	return left, right
 }
 
 // loadingPodRows is how many skeleton rows the bottom pane shows —
@@ -185,8 +202,7 @@ func (m Model) loadingPodsPanel(theme tui.Theme, width, height int) string {
 // spinner-only blank screen (docs/design README.md §15a).
 func (m Model) loadingBody(width, height int) string {
 	theme := m.Theme()
-	left := loadingConditionsBlock(theme)
-	right := loadingAllocationBlock(theme)
+	left, right := loadingFactsBlocks(theme, height)
 	topHeight, bottomHeight := panelHeights(height, len(left), len(right))
 
 	top := m.factsPanel(left, right, width, topHeight)

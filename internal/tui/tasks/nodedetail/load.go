@@ -43,13 +43,21 @@ func (m Model) scheduleReload(epoch int) tea.Cmd {
 }
 
 // load fetches the node itself and its non-terminal pods (spec.nodeName
-// match), sums their CPU/MEM requests against the node's Allocatable
-// capacity (ALLOCATED/ALLOCATABLE, docs/design README.md §11b — request
-// sums, not live usage, so this works even without metrics-server), and
-// best-effort enriches the pods with live usage for the MEM/CPU columns.
+// match) and builds both halves of the facts panel:
+//
+//   - REQUESTED / ALLOCATABLE — the pods' effective requests against what
+//     the scheduler may hand out. Requests, not usage, so this half still
+//     renders on a cluster with no metrics-server.
+//   - USED / CAPACITY — this node's live metrics-server usage against the
+//     whole machine. Best-effort: a failed read leaves usedOK false and the
+//     block says so.
+//
+// It also best-effort enriches the pod rows with live usage for their own
+// MEM/CPU columns.
 func (m Model) load() tea.Cmd {
 	lister := m.lister
 	metrics := m.metrics
+	nodeMetrics := m.nodeMetrics
 	nodeName := m.nodeName
 	timeout := m.timeout
 	parent := m.session.ClusterContext()
@@ -71,6 +79,7 @@ func (m Model) load() tea.Cmd {
 		if metrics != nil {
 			podMetrics, _ = metrics.PodMetricsByNamespace(ctx, "")
 		}
+		used, usedOK := readNodeUsage(ctx, nodeMetrics, nodeName)
 
 		podDesc, _ := resources.DefaultRegistry().Descriptor(kube.KindPod)
 
@@ -82,10 +91,15 @@ func (m Model) load() tea.Cmd {
 				continue
 			}
 			pod := kube.PodFromObject(p)
-			allocated.cpuMilli += pod.CPURequestMilli
-			allocated.memBytes += pod.MEMRequestBytes
+			// The pod's *effective* request, not the bare sum over
+			// spec.containers that kube.Pod carries: native sidecars, a
+			// heavy init container and spec.overhead all reserve room on
+			// the node too, and kubectl describe node counts them.
+			cpuReq, memReq := kube.PodEffectiveRequests(p)
+			allocated.cpuMilli += cpuReq
+			allocated.memBytes += memReq
 
-			if pm, found := podMetrics[pod.Name]; found {
+			if pm, found := podMetrics[kube.PodKey(pod.Namespace, pod.Name)]; found {
 				pod.CPU, pod.MEM = pm.CPU, pm.MEM
 				pod.CPUMilli, pod.MEMBytes = pm.CPUMilli, pm.MemBytes
 			}
@@ -102,6 +116,9 @@ func (m Model) load() tea.Cmd {
 			node:        node,
 			allocated:   allocated,
 			allocatable: nodeAllocatable(node),
+			used:        used,
+			capacity:    nodeCapacity(node),
+			usedOK:      usedOK,
 			pods:        rows,
 		}
 	}
@@ -121,17 +138,38 @@ func findNode(ctx context.Context, lister resources.RawLister, name string) (*co
 }
 
 func nodeAllocatable(n *corev1.Node) allocation {
-	a := allocation{}
-	if q, ok := n.Status.Allocatable[corev1.ResourceCPU]; ok {
-		a.cpuMilli = q.MilliValue()
+	return fromNodeResources(kube.NodeAllocatable(n))
+}
+
+// nodeCapacity is the USED bar's denominator — the whole machine, since
+// node usage is measured across the whole machine (kube.NodeCapacity).
+func nodeCapacity(n *corev1.Node) allocation {
+	return fromNodeResources(kube.NodeCapacity(n))
+}
+
+func fromNodeResources(r kube.NodeResources) allocation {
+	return allocation{cpuMilli: r.CPUMilli, memBytes: r.MemBytes, pods: r.Pods}
+}
+
+// readNodeUsage pulls this node's live usage out of one NodeMetrics poll.
+// ok is false for every way the reading can be absent — no seam wired, the
+// poll failed (no metrics-server), the node isn't in the map, or it reports
+// kube.NodeMetric's own ""/"n/a" sentinel — so the caller has a single flag
+// to decide between a real bar and the "no metrics-server" note. This is
+// the same sentinel check overview's loadOverview applies.
+func readNodeUsage(ctx context.Context, src NodeMetricsReader, nodeName string) (allocation, bool) {
+	if src == nil {
+		return allocation{}, false
 	}
-	if q, ok := n.Status.Allocatable[corev1.ResourceMemory]; ok {
-		a.memBytes = q.Value()
+	metrics, err := src.NodeMetrics(ctx)
+	if err != nil {
+		return allocation{}, false
 	}
-	if q, ok := n.Status.Allocatable[corev1.ResourcePods]; ok {
-		a.pods = q.Value()
+	nm, found := metrics[nodeName]
+	if !found || nm.CPU == "" || nm.CPU == "n/a" {
+		return allocation{}, false
 	}
-	return a
+	return allocation{cpuMilli: nm.CPUMilli, memBytes: nm.MemBytes}, true
 }
 
 func nodeDetailTerminalPod(p *corev1.Pod) bool {
@@ -152,5 +190,65 @@ func healthRank(class resources.StatusClass) int {
 		return 2
 	default:
 		return 3
+	}
+}
+
+// pollInterval is how often the USED / CAPACITY block and the pod rows'
+// own CPU/MEM cells refresh — the same cadence browse polls at, so walking
+// from the nodes list into a node doesn't change how fresh the number is.
+const pollInterval = 2 * time.Second
+
+// scheduleMetricsTick arranges the next tick of an existing chain.
+func (m Model) scheduleMetricsTick(epoch int) tea.Cmd {
+	if !m.pollsMetrics() {
+		return nil
+	}
+	return tea.Tick(pollInterval, func(time.Time) tea.Msg {
+		return metricsTickMsg{epoch: epoch}
+	})
+}
+
+// armMetricsTick starts a *new* poll chain, retiring any chain already
+// running. Called when the screen first appears and whenever it is restored
+// from the stack, where the previous chain's tick was delivered to whatever
+// screen was active instead and so never came back.
+func (m *Model) armMetricsTick() tea.Cmd {
+	m.metricsEpoch++
+	return m.scheduleMetricsTick(m.metricsEpoch)
+}
+
+// pollsMetrics reports whether a usage poll is worth making: there has to
+// be a seam to read, and the cluster has to be reachable — polling a
+// cluster we know is offline just burns a timeout per tick, the same gate
+// browse.pollsMetrics applies.
+func (m Model) pollsMetrics() bool {
+	if m.metrics == nil && m.nodeMetrics == nil {
+		return false
+	}
+	return !m.conn.Offline()
+}
+
+// loadMetrics is the poll itself: usage only, deliberately not a full
+// load(). A node's pod set changes on a watch event, which already
+// triggers a reload — re-listing every pod in the cluster every two
+// seconds to refresh a number would make this screen more expensive than
+// the list it was opened from.
+func (m Model) loadMetrics() tea.Cmd {
+	metrics := m.metrics
+	nodeMetrics := m.nodeMetrics
+	nodeName := m.nodeName
+	timeout := m.timeout
+	epoch := m.metricsEpoch
+	parent := m.session.ClusterContext()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, timeout)
+		defer cancel()
+
+		msg := metricsLoadedMsg{epoch: epoch}
+		msg.used, msg.usedOK = readNodeUsage(ctx, nodeMetrics, nodeName)
+		if metrics != nil {
+			msg.podMetrics, _ = metrics.PodMetricsByNamespace(ctx, "")
+		}
+		return msg
 	}
 }

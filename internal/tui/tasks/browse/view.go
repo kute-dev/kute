@@ -1199,9 +1199,9 @@ func (m Model) rowCells(r resources.Row, matches []int, cols []components.Column
 				cells[i].Style = st.dim
 			}
 		case m.kind == kube.KindPod && cols[i].Title == "CPU":
-			cells[i] = m.metricCell(r.Name, true, cpuMax, st)
+			cells[i] = m.metricCell(r.Namespace, r.Name, true, cpuMax, st)
 		case m.kind == kube.KindPod && cols[i].Title == "MEM":
-			cells[i] = m.metricCell(r.Name, false, memMax, st)
+			cells[i] = m.metricCell(r.Namespace, r.Name, false, memMax, st)
 		case m.kind == kube.KindNode && cols[i].Title == "CPU":
 			cells[i] = m.nodeMetricCell(r.Name, true, st)
 		case m.kind == kube.KindNode && cols[i].Title == "MEM":
@@ -1468,11 +1468,11 @@ func groupLineStyle(theme tui.Theme, kind displayRowKind, selected bool) lipglos
 // (mockup 2a's bar-then-number order; no request/limit data reaches
 // browse's Row, so this is a relative-usage bar rather than a request/limit
 // zone bar) — "–" for both while metrics haven't loaded yet.
-func (m Model) metricCell(name string, cpu bool, maxVal int64, st rowCellStyles) components.Cell {
+func (m Model) metricCell(namespace, name string, cpu bool, maxVal int64, st rowCellStyles) components.Cell {
 	const barWidth = 6
 	valWidth := resources.MetricColumnWidth - barWidth - 1
 
-	pm, ok := m.podMetrics[name]
+	pm, ok := m.podMetrics[kube.PodKey(namespace, name)]
 	value, used := "–", int64(0)
 	if ok {
 		if cpu {
@@ -1494,7 +1494,7 @@ func (m Model) metricCell(name string, cpu bool, maxVal int64, st rowCellStyles)
 // rows, the bar denominator described in metricCell.
 func (m Model) metricsMax() (cpuMax, memMax int64) {
 	for _, r := range m.rows {
-		if pm, ok := m.podMetrics[r.Name]; ok {
+		if pm, ok := m.podMetrics[kube.PodKey(r.Namespace, r.Name)]; ok {
 			cpuMax = max(cpuMax, pm.CPUMilli)
 			memMax = max(memMax, pm.MemBytes)
 		}

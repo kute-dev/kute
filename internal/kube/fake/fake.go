@@ -1226,7 +1226,7 @@ func (c *Cluster) PodMetricsByNamespace(_ context.Context, namespace string) (ma
 		if pod.Status.Phase != corev1.PodRunning {
 			// Real metrics-server has nothing to report for a pod that
 			// isn't running yet (or anymore) either.
-			out[pod.Name] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
+			out[kube.PodKey(pod.Namespace, pod.Name)] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
 			continue
 		}
 		var cpuLimMilli, memLimBytes int64
@@ -1237,7 +1237,7 @@ func (c *Cluster) PodMetricsByNamespace(_ context.Context, namespace string) (ma
 		ratio := demoUsageRatio(pod.Name)
 		cpuMilli := int64(float64(cpuLimMilli) * ratio)
 		memBytes := int64(float64(memLimBytes) * ratio)
-		out[pod.Name] = kube.PodMetrics{
+		out[kube.PodKey(pod.Namespace, pod.Name)] = kube.PodMetrics{
 			CPU:      kube.FormatCPU(*resource.NewMilliQuantity(cpuMilli, resource.DecimalSI)),
 			MEM:      kube.FormatMemory(*resource.NewQuantity(memBytes, resource.BinarySI)),
 			CPUMilli: cpuMilli,
@@ -1267,7 +1267,7 @@ func (c *Cluster) ContainerMetricsByNamespace(_ context.Context, namespace strin
 			for _, ctr := range pod.Spec.Containers {
 				containers[ctr.Name] = kube.PodMetrics{CPU: "n/a", MEM: "n/a"}
 			}
-			out[pod.Name] = containers
+			out[kube.PodKey(pod.Namespace, pod.Name)] = containers
 			continue
 		}
 		for _, ctr := range pod.Spec.Containers {
@@ -1283,7 +1283,7 @@ func (c *Cluster) ContainerMetricsByNamespace(_ context.Context, namespace strin
 				MemBytes: memBytes,
 			}
 		}
-		out[pod.Name] = containers
+		out[kube.PodKey(pod.Namespace, pod.Name)] = containers
 	}
 	return out, nil
 }

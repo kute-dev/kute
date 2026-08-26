@@ -243,7 +243,7 @@ func buildContainerInfos(pod *corev1.Pod) []ContainerInfo {
 		initByName[s.Name] = s
 	}
 	for _, c := range pod.Spec.InitContainers {
-		if c.RestartPolicy == nil || *c.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+		if !isRestartableInit(c) {
 			continue // a regular (non-sidecar) init container, not part of the running-containers grid
 		}
 		info := ContainerInfo{Name: c.Name, Image: c.Image, IsSidecar: true}

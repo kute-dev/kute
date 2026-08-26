@@ -1,13 +1,14 @@
   kute │ test-cluster › Nodes › worker-01                    ● connected · 8ms  
 ────────────────────────────────────────────────────────────────────────────────
-CONDITIONS                                ALLOCATED / ALLOCATABLE               
+CONDITIONS                                REQUESTED / ALLOCATABLE               
 ● Ready                                   cpu  ▮▮▮▮▮▮▮▯▯▯▯▯ 2200m / 4000m       
 ▲ MemoryPressure — kubelet has insuffic…  mem  ▮▮▮▮▮▮▮▮▮▮▮▮ 7.4Gi / 8.0Gi       
 ● DiskPressure false                      pods ▮▯▯▯▯▯▯▯▯▯▯▯ 3 / 110             
-● PIDPressure false                                                             
+● PIDPressure false                       USED / CAPACITY                       
+                                          cpu  ▮▮▮▯▯▯▯▯▯▯▯▯ 940m / 4000m        
+                                          mem  ▮▮▮▮▮▮▮▯▯▯▯▯ 5.4Gi / 10.0Gi      
                                           TAINTS                                
                                           node.kubernetes.io/memory-pressure:No…
-                                                                                
 ────────────────────────────────────────────────────────────────────────────────
   ● 2 running   ✕ 1 crashloop                                           3 pods  
 ────────────────────────────────────────────────────────────────────────────────
@@ -17,7 +18,6 @@ CONDITIONS                                ALLOCATED / ALLOCATABLE
   ●  nva-w…  1/1    Running           0     ▮▮▮▮▮▮ 410m   ▮▮▮▮▮▮ 3.6Gi  nva-s...
   ●  sidec…  1/1    Running           0     ▮▯▯▯▯▯ 35m    ▮▯▯▯▯▯ 512Mi  istio...
   1–3 of 3                                                              ██████  
-                                                                                
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────

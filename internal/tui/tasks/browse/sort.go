@@ -325,11 +325,11 @@ func (m Model) cellLess(canonicalTitle string, idx int) func(a, b resources.Row)
 		}
 	case "CPU":
 		return func(a, b resources.Row) bool {
-			return m.metricValue(a.Name, true) < m.metricValue(b.Name, true)
+			return m.metricValue(a.Namespace, a.Name, true) < m.metricValue(b.Namespace, b.Name, true)
 		}
 	case "MEM":
 		return func(a, b resources.Row) bool {
-			return m.metricValue(a.Name, false) < m.metricValue(b.Name, false)
+			return m.metricValue(a.Namespace, a.Name, false) < m.metricValue(b.Namespace, b.Name, false)
 		}
 	default:
 		return func(a, b resources.Row) bool {
@@ -360,10 +360,10 @@ func cellAt(r resources.Row, idx int) string {
 // loading, or the row is neither a Pod nor a Node), so it sorts below every
 // real reading regardless of direction rather than colliding with a
 // genuine zero-usage row.
-func (m Model) metricValue(name string, cpu bool) int64 {
+func (m Model) metricValue(namespace, name string, cpu bool) int64 {
 	switch m.kind {
 	case kube.KindPod:
-		if pm, ok := m.podMetrics[name]; ok {
+		if pm, ok := m.podMetrics[kube.PodKey(namespace, name)]; ok {
 			if cpu {
 				return pm.CPUMilli
 			}

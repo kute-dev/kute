@@ -32,6 +32,16 @@ type MetricsReader interface {
 	PodMetricsByNamespace(ctx context.Context, namespace string) (map[string]kube.PodMetrics, error)
 }
 
+// NodeMetricsReader is the live node-usage seam 11b's USED / CAPACITY block
+// needs — the same shape as browse.NodeMetricsReader, duplicated per the
+// repo's package-local-seam convention. It is deliberately separate from
+// MetricsReader above: that one answers for the pods in the bottom table,
+// this one for the node itself, and the two are different numbers (a node's
+// usage includes kubelet and the container runtime, which belong to no pod).
+type NodeMetricsReader interface {
+	NodeMetrics(ctx context.Context) (map[string]kube.NodeMetric, error)
+}
+
 // OpenPodFunc pushes a view for the named pod — nodedetail hands it the same
 // kube.Pod/width/height shape browse.OpenLogsFunc does, so app.go can wire
 // both from the same closure.
@@ -82,6 +92,7 @@ type Config struct {
 	Session       *tui.Session
 	Lister        resources.RawLister
 	Metrics       MetricsReader
+	NodeMetrics   NodeMetricsReader
 	Mutator       kube.Mutator
 	OpenPod       OpenPodFunc
 	OpenLogs      OpenLogsFunc
@@ -119,6 +130,7 @@ type Model struct {
 	session       *tui.Session
 	lister        resources.RawLister
 	metrics       MetricsReader
+	nodeMetrics   NodeMetricsReader
 	mutator       kube.Mutator
 	actions       actions.Controller
 	openPod       OpenPodFunc
@@ -136,10 +148,20 @@ type Model struct {
 	node        *corev1.Node
 	allocated   allocation
 	allocatable allocation
-	allPods     []nodePodRow // every pod load() found on this node, before the filter
-	pods        []nodePodRow // allPods after filterQuery — what's selectable/rendered
-	selected    int
-	offset      int
+	// used/capacity back the USED / CAPACITY block: live metrics-server
+	// usage for this node over its full machine size. Distinct from
+	// allocated/allocatable above, which are the pods' summed requests over
+	// what the scheduler may hand out — the two answer different questions,
+	// and conflating them is why 11a and 11b used to disagree about a node's
+	// memory. usedOK is false when no reading has landed, in which case the
+	// block says so rather than drawing a flatlined zero bar.
+	used     allocation
+	capacity allocation
+	usedOK   bool
+	allPods  []nodePodRow // every pod load() found on this node, before the filter
+	pods     []nodePodRow // allPods after filterQuery — what's selectable/rendered
+	selected int
+	offset   int
 
 	filterActive bool
 	filterInput  textinput.Model
@@ -149,6 +171,15 @@ type Model struct {
 	// arriving after a newer one's already in flight — mirrors browse's own
 	// reloadEpoch.
 	reloadEpoch int
+
+	// metricsEpoch identifies the live usage-poll chain. Exactly one tick is
+	// ever in flight: Init and Reload arm a chain (bumping this), and each
+	// poll's reply arms the next tick of its own chain. It is deliberately
+	// not reloadEpoch — a reload must not silently kill the poll loop, and
+	// re-entering the screen from the stack must not leave two loops
+	// running when the previous chain's tick is still pending in the
+	// runtime.
+	metricsEpoch int
 
 	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
 	// header badge's real connection state (never a hardcoded "connected").
@@ -183,8 +214,31 @@ type loadedMsg struct {
 	node        *corev1.Node
 	allocated   allocation
 	allocatable allocation
+	used        allocation
+	capacity    allocation
+	usedOK      bool
 	pods        []nodePodRow
 	err         error
+}
+
+// metricsTickMsg drives the 2s usage refresh — 11b polls metrics the same
+// way browse does (CLAUDE.md sanctions "metrics poll on the sync interval
+// only"), because everything else here is watch-driven and a node's usage
+// emits no watch event. Without it the USED block would freeze at whatever
+// the last Node/Pod change left behind and drift away from the list the
+// user just came from, which is the disagreement this block exists to end.
+type metricsTickMsg struct{ epoch int }
+
+// metricsLoadedMsg carries one poll's node + pod usage. epoch guards a
+// stale reply the same way reloadEpoch guards a stale reload.
+// Capacity is deliberately absent: it comes off the Node object and only
+// changes when the node itself does, which is a watch event and so a full
+// reload.
+type metricsLoadedMsg struct {
+	epoch      int
+	used       allocation
+	usedOK     bool
+	podMetrics map[string]kube.PodMetrics
 }
 
 func New(cfg Config) Model {
@@ -203,6 +257,7 @@ func New(cfg Config) Model {
 		session:       cfg.Session,
 		lister:        cfg.Lister,
 		metrics:       cfg.Metrics,
+		nodeMetrics:   cfg.NodeMetrics,
 		mutator:       cfg.Mutator,
 		actions:       actions.New(cfg.Mutator),
 		openPod:       cfg.OpenPod,
@@ -220,6 +275,7 @@ func New(cfg Config) Model {
 		now:           time.Now(),
 		loadStartedAt: time.Now(),
 		spinner:       components.NewSpinner(),
+		metricsEpoch:  1,
 	}
 }
 
@@ -227,7 +283,9 @@ func (m Model) Init() tea.Cmd {
 	if m.lister == nil {
 		return nil
 	}
-	return tea.Batch(m.load(), m.spinner.Tick)
+	// Init runs on a value copy, so arm the first chain at epoch 1 directly
+	// rather than through armMetricsTick's pointer receiver.
+	return tea.Batch(m.load(), m.spinner.Tick, m.scheduleMetricsTick(1))
 }
 
 func (m *Model) SetSize(width, height int) {

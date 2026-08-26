@@ -137,7 +137,7 @@ func TestLoadRendersConditionsAllocationAndPods(t *testing.T) {
 	}
 
 	view := plain(m.Render())
-	for _, want := range []string{"node-a", "CONDITIONS", "MemoryPressure", "ALLOCATED", "TAINTS", "dedicated=gpu", "big", "small"} {
+	for _, want := range []string{"node-a", "CONDITIONS", "MemoryPressure", "REQUESTED / ALLOCATABLE", "USED / CAPACITY", "TAINTS", "dedicated=gpu", "big", "small"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -279,7 +279,7 @@ func TestLoadingStateRender(t *testing.T) {
 		"Nodes", "node-a", // shell breadcrumb
 		"loading node-a",                                                  // header timer
 		"fetching node-a…", "conditions, allocation & pods load together", // strip
-		"CONDITIONS", "ALLOCATED / ALLOCATABLE", "TAINTS", // real facts-panel titles
+		"CONDITIONS", "REQUESTED / ALLOCATABLE", "USED / CAPACITY", "TAINTS", // real facts-panel titles
 		"NAME", "NAMESPACE", "MEM", "CPU", "AGE", // real pods-table columns
 		"facts & pods enable when data lands", // disabled-verbs note
 	} {

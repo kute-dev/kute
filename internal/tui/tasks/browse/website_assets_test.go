@@ -56,8 +56,8 @@ func TestGenerateWebsiteAssets(t *testing.T) {
 			},
 		}}
 		metrics := fakeMetrics{metrics: map[string]kube.PodMetrics{
-			"api-7d9f6c8-abcde": {CPU: "45m", MEM: "128Mi", CPUMilli: 45, MemBytes: 128 * 1024 * 1024},
-			"worker-0":          {CPU: "890m", MEM: "612Mi", CPUMilli: 890, MemBytes: 612 * 1024 * 1024},
+			kube.PodKey("default", "api-7d9f6c8-abcde"): {CPU: "45m", MEM: "128Mi", CPUMilli: 45, MemBytes: 128 * 1024 * 1024},
+			kube.PodKey("default", "worker-0"):          {CPU: "890m", MEM: "612Mi", CPUMilli: 890, MemBytes: 612 * 1024 * 1024},
 		}}
 
 		sess := &tui.Session{

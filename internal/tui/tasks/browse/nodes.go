@@ -31,14 +31,18 @@ type NodeMetricsReader interface {
 	NodeMetrics(ctx context.Context) (map[string]kube.NodeMetric, error)
 }
 
-// nodeCapacity is one node's schedulable capacity (Status.Allocatable) —
-// the PODS/CPU/MEM bar denominators. resources.Row only carries display
-// Cells, so this rides alongside rowsLoadedMsg the same way podMetrics does
-// for Pods.
+// nodeCapacity carries both of a node's denominators, because 11a needs
+// different ones for different columns: PODS divides by Allocatable (what
+// the scheduler will actually place, and kubectl's own denominator), while
+// the CPU/MEM bars divide by Capacity, since their numerator is
+// metrics-server's whole-node usage — kubelet and container runtime
+// included — and dividing that by Allocatable mixes two units of measure
+// and reads hotter than `kubectl top node`. resources.Row only carries
+// display Cells, so this rides alongside rowsLoadedMsg the same way
+// podMetrics does for Pods.
 type nodeCapacity struct {
-	cpuMilli int64
-	memBytes int64
-	pods     int64
+	allocatable kube.NodeResources
+	capacity    kube.NodeResources
 }
 
 // nodeMetricsLoadedMsg carries one Nodes-kind metrics poll's result. epoch
@@ -73,7 +77,7 @@ func (m Model) loadNodeMetrics(epoch int) tea.Cmd {
 }
 
 // loadNodeExtras re-lists raw Node/Pod objects for data resources.Row can't
-// carry: each node's Allocatable capacity, how many non-terminal pods are
+// carry: each node's Capacity/Allocatable pair, how many non-terminal pods are
 // currently scheduled on it (kubectl describe node's convention), the
 // cluster-wide non-terminal pod total for the health strip's right side, and
 // each node's pod-health tally for the HEALTH column (nodeHealthCell) —
@@ -88,17 +92,10 @@ func loadNodeExtras(ctx context.Context, lister resources.RawLister, projectPod 
 			if !ok {
 				continue
 			}
-			cap := nodeCapacity{}
-			if q, found := n.Status.Allocatable[corev1.ResourceCPU]; found {
-				cap.cpuMilli = q.MilliValue()
+			capacity[n.Name] = nodeCapacity{
+				allocatable: kube.NodeAllocatable(n),
+				capacity:    kube.NodeCapacity(n),
 			}
-			if q, found := n.Status.Allocatable[corev1.ResourceMemory]; found {
-				cap.memBytes = q.Value()
-			}
-			if q, found := n.Status.Allocatable[corev1.ResourcePods]; found {
-				cap.pods = q.Value()
-			}
-			capacity[n.Name] = cap
 		}
 	}
 
@@ -136,19 +133,20 @@ func nodeTerminalPod(p *corev1.Pod) bool {
 	return p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed
 }
 
-// nodeMetricCell renders one Node row's CPU/MEM cell: a MiniBar against the
-// node's real Allocatable capacity (unlike Pod's busiest-visible-pod
-// relative bar, this is a true request/limit-style zone bar — Warn ≥70%,
+// nodeMetricCell renders one Node row's CPU/MEM cell: a MiniBar of live
+// metrics-server usage against the node's Capacity (unlike Pod's
+// busiest-visible-pod relative bar, this is a true zone bar — Warn ≥70%,
 // Bad at/over capacity), then the compact usage value — "–" for both while
-// metrics haven't loaded.
+// metrics haven't loaded. Capacity rather than Allocatable is what makes
+// this percentage agree with `kubectl top node`; see kube.NodeCapacity.
 func (m Model) nodeMetricCell(name string, cpu bool, st rowCellStyles) components.Cell {
 	const barWidth = 6
 	valWidth := resources.MetricColumnWidth - barWidth - 1
 
 	cap := m.nodeCapacity[name]
-	denom := cap.memBytes
+	denom := cap.capacity.MemBytes
 	if cpu {
-		denom = cap.cpuMilli
+		denom = cap.capacity.CPUMilli
 	}
 
 	nm, ok := m.nodeMetrics[name]
@@ -173,10 +171,10 @@ func (m Model) nodeMetricCell(name string, cpu bool, st rowCellStyles) component
 // Allocatable pod capacity, or a bare count when capacity is unknown.
 func (m Model) nodePodsCell(name string) string {
 	cap, ok := m.nodeCapacity[name]
-	if !ok || cap.pods == 0 {
+	if !ok || cap.allocatable.Pods == 0 {
 		return strconv.Itoa(m.podCountByNode[name])
 	}
-	return fmt.Sprintf("%d/%d", m.podCountByNode[name], cap.pods)
+	return fmt.Sprintf("%d/%d", m.podCountByNode[name], cap.allocatable.Pods)
 }
 
 // nodeHealthCell renders the HEALTH column: a compact per-status glyph tally
@@ -260,8 +258,11 @@ func (m Model) clusterUsagePct() (cpuPct, memPct int, ok bool) {
 	}
 	var usedCPU, usedMem, capCPU, capMem int64
 	for name, cap := range m.nodeCapacity {
-		capCPU += cap.cpuMilli
-		capMem += cap.memBytes
+		// Capacity, matching the per-row bars above — this clause and those
+		// bars are the same statement at two scales, so they must divide by
+		// the same thing.
+		capCPU += cap.capacity.CPUMilli
+		capMem += cap.capacity.MemBytes
 		if nm, found := m.nodeMetrics[name]; found {
 			usedCPU += nm.CPUMilli
 			usedMem += nm.MemBytes

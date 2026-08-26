@@ -90,3 +90,11 @@ func FormatMemory(q resource.Quantity) string {
 	}
 	return strconv.FormatInt(bytes, 10) + "B"
 }
+
+// PodKey is the map key every pod-metrics lookup uses. Pod names are only
+// unique within a namespace, and the metrics maps are built from
+// cluster-wide Lists whenever the caller passes "" — so the namespace has
+// to be in the key or same-named pods silently collide.
+func PodKey(namespace, name string) string {
+	return namespace + "/" + name
+}

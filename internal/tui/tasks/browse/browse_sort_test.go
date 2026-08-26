@@ -185,8 +185,8 @@ func TestSortCPULiveReorderOnMetricsPoll(t *testing.T) {
 		epoch:     m.metricsEpoch,
 		namespace: m.countNamespace(),
 		metrics: map[string]kube.PodMetrics{
-			"api-1": {CPU: "500m", CPUMilli: 500},
-			"api-2": {CPU: "10m", CPUMilli: 10},
+			kube.PodKey("default", "api-1"): {CPU: "500m", CPUMilli: 500},
+			kube.PodKey("default", "api-2"): {CPU: "10m", CPUMilli: 10},
 		},
 	})
 	if want := []string{"api-1", "api-2"}; !equalStrings(displayRowNames(m), want) {
@@ -197,8 +197,8 @@ func TestSortCPULiveReorderOnMetricsPoll(t *testing.T) {
 		epoch:     m.metricsEpoch,
 		namespace: m.countNamespace(),
 		metrics: map[string]kube.PodMetrics{
-			"api-1": {CPU: "5m", CPUMilli: 5},
-			"api-2": {CPU: "900m", CPUMilli: 900},
+			kube.PodKey("default", "api-1"): {CPU: "5m", CPUMilli: 5},
+			kube.PodKey("default", "api-2"): {CPU: "900m", CPUMilli: 900},
 		},
 	})
 	if want := []string{"api-2", "api-1"}; !equalStrings(displayRowNames(m), want) {

@@ -931,6 +931,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 			Session:       sess,
 			Lister:        active,
 			Metrics:       active,
+			NodeMetrics:   active,
 			Mutator:       active,
 			OpenPod:       nodedetail.OpenPodFunc(openPod),
 			OpenLogs:      nodedetail.OpenLogsFunc(openLogs),

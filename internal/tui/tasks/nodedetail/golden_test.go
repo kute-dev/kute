@@ -145,10 +145,18 @@ func goldenNodeDetailModel(t *testing.T, width, height int) Model {
 	// (yellow), pinning 11b's "hot values yellow" bar+text treatment.
 	memAllocatable := int64(8 * giByte)
 	memAllocated := int64(float64(memAllocatable) * 0.925)
+	// USED / CAPACITY is deliberately a different shape from REQUESTED /
+	// ALLOCATABLE above — lower cpu, and a capacity larger than allocatable
+	// — because the whole point of the second block is that the two are not
+	// the same number, and a fixture where they agreed would let them
+	// silently collapse back together.
 	m = step(t, m, loadedMsg{
 		node:        node,
 		allocated:   allocation{cpuMilli: 2200, memBytes: memAllocated},
 		allocatable: allocation{cpuMilli: 4000, memBytes: memAllocatable, pods: 110},
+		used:        allocation{cpuMilli: 940, memBytes: 5*giByte + giByte*2/5},
+		capacity:    allocation{cpuMilli: 4000, memBytes: int64(10 * giByte)},
+		usedOK:      true,
 		pods:        goldenNodePods(),
 	})
 	// The header badge's "· 8ms" comes from the conn-state ping loop — a

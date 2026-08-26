@@ -112,7 +112,7 @@ func goldenPodDetailModel(t *testing.T, width, height int) Model {
 	}}
 	metrics := fakeGoldenMetrics{metrics: map[string]kube.PodMetrics{
 		// mock 5a: CPU 4m / 500m, MEM 246Mi / 256Mi (≥96% ⇒ red bar + text).
-		"nva-worker-9k2ss": {CPU: "4m", MEM: "246Mi", CPUMilli: 4, MemBytes: 246 * 1024 * 1024},
+		kube.PodKey("nva-stage", "nva-worker-9k2ss"): {CPU: "4m", MEM: "246Mi", CPUMilli: 4, MemBytes: 246 * 1024 * 1024},
 	}}
 	sess := newSession()
 	sess.Location.Namespace = "nva-stage"

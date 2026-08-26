@@ -47,7 +47,7 @@ func (m Model) load() tea.Cmd {
 
 		if metrics != nil {
 			if podMetrics, err := metrics.PodMetricsByNamespace(ctx, namespace); err == nil {
-				if pm, ok := podMetrics[name]; ok {
+				if pm, ok := podMetrics[kube.PodKey(namespace, name)]; ok {
 					pod.CPU, pod.MEM = pm.CPU, pm.MEM
 					pod.CPUMilli, pod.MEMBytes = pm.CPUMilli, pm.MemBytes
 				}

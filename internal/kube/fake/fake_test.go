@@ -642,7 +642,7 @@ func TestNewDemoIsFeatureComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PodMetricsByNamespace: %v", err)
 	}
-	if pm, ok := podMetrics["api-7d9f6c8-abcde"]; !ok || pm.CPU == "n/a" || pm.CPUMilli == 0 {
+	if pm, ok := podMetrics[kube.PodKey("default", "api-7d9f6c8-abcde")]; !ok || pm.CPU == "n/a" || pm.CPUMilli == 0 {
 		t.Fatalf("expected real (non-n/a) CPU usage for a Running pod, got %+v (ok=%v)", pm, ok)
 	}
 	if nm, err := c.NodeMetrics(ctx); err != nil || len(nm) != 4 {
@@ -778,7 +778,7 @@ func TestPodAndNodeMetricsAreDeterministicNotNA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PodMetricsByNamespace: %v", err)
 	}
-	pm, ok := first["api-7d9f6c8-abcde"]
+	pm, ok := first[kube.PodKey("default", "api-7d9f6c8-abcde")]
 	if !ok {
 		t.Fatal("expected api-7d9f6c8-abcde in the fixture set")
 	}
@@ -787,8 +787,8 @@ func TestPodAndNodeMetricsAreDeterministicNotNA(t *testing.T) {
 	}
 
 	second, _ := c.PodMetricsByNamespace(ctx, "default")
-	if second["api-7d9f6c8-abcde"] != pm {
-		t.Fatalf("expected deterministic usage across calls, got %+v then %+v", pm, second["api-7d9f6c8-abcde"])
+	if second[kube.PodKey("default", "api-7d9f6c8-abcde")] != pm {
+		t.Fatalf("expected deterministic usage across calls, got %+v then %+v", pm, second[kube.PodKey("default", "api-7d9f6c8-abcde")])
 	}
 
 	nodeMetrics, err := c.NodeMetrics(ctx)
