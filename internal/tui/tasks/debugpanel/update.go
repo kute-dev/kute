@@ -253,13 +253,14 @@ func (m *Model) cycleTargetOrContainer() {
 	}
 }
 
-// cycleProfile is 'p' — a no-op in copy mode, which has no profile field.
+// cycleProfile is 'p'. Pod attach and copy modes share one profile; node
+// debug keeps its independent sysadmin-default selection.
 func (m *Model) cycleProfile() {
-	switch {
-	case m.tgt == targetNode:
+	switch m.tgt {
+	case targetNode:
 		m.cycleNodeProfile()
-	case m.mode == modeAttach:
-		m.cycleAttachProfile()
+	case targetPod:
+		m.cyclePodProfile()
 	}
 }
 
@@ -312,7 +313,7 @@ func (m Model) launchCmd() tea.Cmd {
 		if m.demo {
 			return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeAttach})
 		}
-		spec := kube.PodDebugAttachSpec(m.namespace, m.podName, m.attachImage, target, m.attachProfile)
+		spec := kube.PodDebugAttachSpec(m.namespace, m.podName, m.attachImage, target, m.podProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
 			return launchResultMsg{err: err, tgt: targetPod, mode: modeAttach}
 		})
@@ -322,7 +323,7 @@ func (m Model) launchCmd() tea.Cmd {
 	if m.demo {
 		return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeCopy, copyName: copyName})
 	}
-	spec := kube.PodDebugCopySpec(m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses)
+	spec := kube.PodDebugCopySpec(m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return launchResultMsg{err: err, tgt: targetPod, mode: modeCopy, copyName: copyName}
 	})

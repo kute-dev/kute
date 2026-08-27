@@ -132,7 +132,9 @@ type Model struct {
 
 	attachImage     string
 	attachTargetIdx int
-	attachProfile   kube.DebugProfile
+	// podProfile is shared by attach and copy mode, so changing mode does
+	// not silently discard the user's selected debugging privileges.
+	podProfile kube.DebugProfile
 
 	copyName           string
 	copyContainerIdx   int
@@ -187,7 +189,7 @@ func New(cfg Config) Model {
 
 	m.attachImage = kube.DefaultDebugImage
 	m.attachTargetIdx = containerIndexOrDefault(cfg.Containers, cfg.InitialTargetContainer)
-	m.attachProfile = kube.ProfileGeneral
+	m.podProfile = kube.ProfileGeneral
 
 	m.copyName = kube.DefaultDebugCopyName(cfg.Name)
 	m.copyContainerIdx = firstNonSidecarIndex(cfg.Containers)

@@ -120,15 +120,21 @@ func PodDebugAttachCommandString(namespace, pod, image, target string, profile D
 
 // podDebugCopyArgs builds the kubectl debug argv for §41c: a copy of pod
 // with entrypoint replacing its command — what actually breaks a crash
-// loop, so a pod that won't stay running can be inspected at all.
-func podDebugCopyArgs(namespace, pod, copyName, container, entrypoint string, shareProcesses bool) []string {
+// loop, so a pod that won't stay running can be inspected at all. An empty
+// profile defaults to general, matching attach mode and avoiding kubectl's
+// deprecated legacy fallback on versions where it is still the default.
+func podDebugCopyArgs(namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) []string {
 	if entrypoint == "" {
 		entrypoint = DefaultDebugCopyEntrypoint
+	}
+	if profile == "" {
+		profile = ProfileGeneral
 	}
 	args := []string{
 		"debug", "-it", pod, "-n", namespace,
 		"--copy-to", copyName,
 		"--container", container,
+		"--profile", string(profile),
 	}
 	if shareProcesses {
 		args = append(args, "--share-processes")
@@ -139,14 +145,14 @@ func podDebugCopyArgs(namespace, pod, copyName, container, entrypoint string, sh
 // PodDebugCopySpec builds the kubectl debug command for §41c's "copy pod"
 // launch. Same tea.ExecProcess handoff as PodDebugAttachSpec/ExecSpec; the
 // original pod is untouched, still crash-looping, once this exits.
-func PodDebugCopySpec(namespace, pod, copyName, container, entrypoint string, shareProcesses bool) *exec.Cmd {
-	return exec.Command("kubectl", podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses)...)
+func PodDebugCopySpec(namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) *exec.Cmd {
+	return exec.Command("kubectl", podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile)...)
 }
 
 // PodDebugCopyCommandString renders the exact kubectl invocation
 // PodDebugCopySpec builds, for §41c's "will run" line.
-func PodDebugCopyCommandString(namespace, pod, copyName, container, entrypoint string, shareProcesses bool) string {
-	return commandString(podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses))
+func PodDebugCopyCommandString(namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) string {
+	return commandString(podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile))
 }
 
 // nodeDebugArgs builds the kubectl debug argv for §41d — the node-debug

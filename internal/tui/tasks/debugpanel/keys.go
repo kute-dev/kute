@@ -88,6 +88,7 @@ func (m Model) readyKeybar() tui.Keybar {
 			tui.KeyHint{Key: "m", Label: "mode"},
 			tui.KeyHint{Key: "i", Label: "copy name"},
 			tui.KeyHint{Key: "t", Label: "container"},
+			tui.KeyHint{Key: "p", Label: "profile"},
 			tui.KeyHint{Key: "e", Label: "entrypoint"},
 			tui.KeyHint{Key: "s", Label: "processes"},
 		)
@@ -105,4 +106,12 @@ func (m Model) readyKeybar() tui.Keybar {
 // shell's global shortcuts — mirrors forwardpicker's own contract.
 func (m Model) CapturingInput() bool {
 	return m.editingField != fieldNone || m.actions.Active() || m.launchPending
+}
+
+// BackOnEscape opts the ready panel into the root's synchronous task pop, so
+// an immediately repeated x is handled by the restored caller instead of
+// racing the BackMsg command and being swallowed here. Editors and confirms
+// keep their existing first-Escape-means-cancel behavior.
+func (m Model) BackOnEscape() bool {
+	return m.editingField == fieldNone && !m.actions.Active() && !m.launchPending
 }

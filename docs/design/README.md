@@ -518,12 +518,12 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 ### 41c — Debug panel · copy mode (the pod won't stay up)
 - `x` on a not-running pod (CrashLoopBackOff etc.) opens the panel **directly in copy mode** — exec and ephemeral attach are both impossible. Header right: `✕ CrashLoopBackOff · ↺ 6 · copy mode`.
 - **The impossible tier stays listed and dim with its reason** (`attach ephemeral — needs a running container — this one is in backoff`) rather than vanishing; the panel teaches which tool applies when.
-- Fields: `copy name <pod>-debug` (edited in place), `container worker` (`t` cycle — image kept, so you debug the real thing), **`entrypoint sh` in `Warn` — "replaces the command — that is what stops the crash loop"** (the whole trick, on a row, not buried in a flag), `processes shared` (`s` toggle).
+- Fields: `copy name <pod>-debug` (edited in place), `container worker` (`t` cycle — image kept, so you debug the real thing), `profile general` (`p` cycle, shared with attach mode), **`entrypoint sh` in `Warn` — "replaces the command — that is what stops the crash loop"** (the whole trick, on a row, not buried in a flag), `processes shared` (`s` toggle).
 - Caution line: `⚑ creates a real pod — it counts against quota and it is yours to delete`.
-- `will run`: `kubectl debug -it <pod> -n <ns> --copy-to=<pod>-debug --container=worker --share-processes -- sh`.
+- `will run`: `kubectl debug -it <pod> -n <ns> --copy-to=<pod>-debug --container=worker --profile=general --share-processes -- sh`.
 - **Cleanup is named, not silent:** on exit, an inline keybar prompt (never a modal) — pill `CLEAN UP` + `<pod>-debug still running · 4m` + `ctrl-d delete it` (key `BadSoft`) / `esc keep`. The copy also carries a `⚑ debug copy` tag in the pods table for the rest of the session (session registry, same as forwards 13c).
 - Copy mode is a create and the result is deletable → 8b's reversible tier: inline `y/N` in PROD, no type-the-name.
-- Keys: `↵ create + attach · m mode · t container · s processes · esc cancel`.
+- Keys: `↵ create + attach · m mode · t container · p profile · s processes · esc cancel`.
 
 ### 41d — Node debug (`x` on a node) · **replaces the legacy `s` node-shell**
 - Exec on a node is meaningless, so on Nodes (11a/11b) `x` means `kubectl debug node/…`. Header: `⚑ debug › node/<name>` + right `host namespaces · privileged · ↵ runs as-is`.

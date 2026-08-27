@@ -94,6 +94,37 @@ func TestRootModelBackMessageReloadsRestoredTask(t *testing.T) {
 	}
 }
 
+type escapeBackTask struct{ staticTask }
+
+func (*escapeBackTask) BackOnEscape() bool { return true }
+
+// TestRootModelEscapeBackIsSynchronous pins the open → Escape → immediate
+// reopen race: the key after Escape must reach the restored task without
+// waiting for an asynchronously returned BackMsg command.
+func TestRootModelEscapeBackIsSynchronous(t *testing.T) {
+	t.Parallel()
+
+	panel := &escapeBackTask{staticTask: staticTask{name: "debug-panel"}}
+	pods := &staticTask{name: "Pods api", next: panel}
+	model := tui.New(pods)
+
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "open"})
+	updated, cmd := updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		// A resumed task may legitimately return Reload; this test's static
+		// parent does not, so any command here would reintroduce the race.
+		t.Fatal("ready Escape back returned an unexpected asynchronous command")
+	}
+	if view := updated.(tui.Model).View().Content; !strings.Contains(view, "Pods api") {
+		t.Fatalf("Escape did not restore the parent synchronously:\n%s", view)
+	}
+
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
+	if view := updated.(tui.Model).View().Content; !strings.Contains(view, "debug-panel") {
+		t.Fatalf("immediate reopen key was swallowed:\n%s", view)
+	}
+}
+
 // screenTask implements both tui.Task and tui.Screen (Chrome v2), so it
 // exercises the root shell's overlay/mode routing — staticTask above
 // deliberately does not, to guard the legacy-screen passthrough path.

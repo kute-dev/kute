@@ -196,7 +196,7 @@ func (m Model) fieldLines(theme tui.Theme) []string {
 	case m.tgt == targetNode:
 		return []string{
 			m.fieldRow(theme, "image", fieldImage, m.nodeImage, "i edit · tab recents"),
-			m.fieldRow(theme, "profile", fieldNone, string(m.nodeProfile), "p cycle · "+profileHint(m.nodeProfile)),
+			m.fieldRow(theme, "profile", fieldNone, string(m.nodeProfile), "p cycle · "+profileHint(m.nodeProfile, true)),
 			m.fieldRow(theme, "rootfs", fieldNone, "/host", "chroot /host once you land"),
 			m.fieldRow(theme, "creates", fieldNone, "a real pod on this node", "kute finds it and offers to delete it after"),
 		}
@@ -204,12 +204,13 @@ func (m Model) fieldLines(theme tui.Theme) []string {
 		return []string{
 			m.fieldRow(theme, "image", fieldImage, m.attachImage, "i edit · tab recents"),
 			m.fieldRow(theme, "target", fieldNone, m.attachTargetContainer().Name, "t cycle · shares the process namespace, so its pid is visible"),
-			m.fieldRow(theme, "profile", fieldNone, string(m.attachProfile), "p cycle · "+profileHint(m.attachProfile)),
+			m.fieldRow(theme, "profile", fieldNone, string(m.podProfile), "p cycle · "+profileHint(m.podProfile, false)),
 		}
 	default:
 		return []string{
 			m.fieldRow(theme, "copy name", fieldCopyName, m.copyName, "i edit"),
 			m.fieldRow(theme, "container", fieldNone, m.copyContainer().Name, "t cycle · image kept, so you debug the real thing"),
+			m.fieldRow(theme, "profile", fieldNone, string(m.podProfile), "p cycle · "+profileHint(m.podProfile, false)),
 			m.fieldRow(theme, "entrypoint", fieldEntrypoint, m.copyEntrypoint, "e edit · replaces the command — that is what stops the crash loop"),
 			m.fieldRow(theme, "processes", fieldNone, processesText(m.copyShareProcesses), "s toggle"),
 		}
@@ -249,10 +250,13 @@ func processesText(shared bool) string {
 	return "isolated"
 }
 
-func profileHint(p kube.DebugProfile) string {
+func profileHint(p kube.DebugProfile, node bool) string {
 	switch p {
 	case kube.ProfileSysadmin:
-		return "host pid + privileged"
+		if node {
+			return "host pid + privileged"
+		}
+		return "privileged container"
 	case kube.ProfileNetadmin:
 		return "network admin capabilities"
 	case kube.ProfileRestricted:
@@ -295,9 +299,9 @@ func (m Model) willRunLine(theme tui.Theme) string {
 	case m.tgt == targetNode:
 		cmdText = kube.NodeDebugCommandString(m.nodeName, m.nodeImage, m.nodeProfile)
 	case m.mode == modeAttach:
-		cmdText = kube.PodDebugAttachCommandString(m.namespace, m.podName, m.attachImage, m.attachTargetContainer().Name, m.attachProfile)
+		cmdText = kube.PodDebugAttachCommandString(m.namespace, m.podName, m.attachImage, m.attachTargetContainer().Name, m.podProfile)
 	default:
-		cmdText = kube.PodDebugCopyCommandString(m.namespace, m.podName, m.copyName, m.copyContainer().Name, m.copyEntrypoint, m.copyShareProcesses)
+		cmdText = kube.PodDebugCopyCommandString(m.namespace, m.podName, m.copyName, m.copyContainer().Name, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
 	}
 	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	indent := strings.Repeat(" ", lipgloss.Width(labelText))

@@ -50,9 +50,9 @@ func TestPodDebugAttachCommandStringMatchesSpec(t *testing.T) {
 
 func TestPodDebugCopySpecSharedProcesses(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true)
+	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileNetadmin)
 	got := strings.Join(cmd.Args, " ")
-	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --share-processes -- sh"
+	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --profile netadmin --share-processes -- sh"
 	if got != want {
 		t.Fatalf("PodDebugCopySpec args = %q, want %q", got, want)
 	}
@@ -60,7 +60,7 @@ func TestPodDebugCopySpecSharedProcesses(t *testing.T) {
 
 func TestPodDebugCopySpecWithoutSharedProcesses(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", false)
+	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", false, ProfileGeneral)
 	got := strings.Join(cmd.Args, " ")
 	if strings.Contains(got, "--share-processes") {
 		t.Fatalf("PodDebugCopySpec must omit --share-processes when false: %q", got)
@@ -69,16 +69,19 @@ func TestPodDebugCopySpecWithoutSharedProcesses(t *testing.T) {
 
 func TestPodDebugCopySpecDefaultsEntrypoint(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("default", "api-1", "api-1-debug", "worker", "", false)
+	cmd := PodDebugCopySpec("default", "api-1", "api-1-debug", "worker", "", false, "")
 	if !slices.Contains(cmd.Args, DefaultDebugCopyEntrypoint) {
 		t.Fatalf("expected default entrypoint %q in %v", DefaultDebugCopyEntrypoint, cmd.Args)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, "--profile general") {
+		t.Fatalf("empty profile did not default to general: %q", got)
 	}
 }
 
 func TestPodDebugCopyCommandStringMatchesSpec(t *testing.T) {
 	t.Parallel()
-	got := PodDebugCopyCommandString("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true)
-	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --share-processes -- sh"
+	got := PodDebugCopyCommandString("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileSysadmin)
+	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --profile sysadmin --share-processes -- sh"
 	if got != want {
 		t.Fatalf("PodDebugCopyCommandString = %q, want %q", got, want)
 	}

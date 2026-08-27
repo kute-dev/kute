@@ -240,6 +240,15 @@ type Reloader interface {
 	Reload() tea.Cmd
 }
 
+// EscapeBacker lets a pushed task whose ready-state Escape action is always
+// "go back" ask the root to pop it synchronously. Returning BackMsg from a
+// tea.Cmd leaves a small input race: the next key can arrive at the task being
+// closed before Bubble Tea runs that command. Tasks with local Escape handling
+// (an open editor or confirmation) report false until that state is closed.
+type EscapeBacker interface {
+	BackOnEscape() bool
+}
+
 // BackMsg requests returning to the previous task without quitting the program.
 type BackMsg struct{}
 
@@ -545,14 +554,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.setAllSizes(msg.Width, msg.Height)
 	case BackMsg:
-		if len(m.stack) > 0 {
-			m.task = m.stack[len(m.stack)-1]
-			m.stack = m.stack[:len(m.stack)-1]
-			if r, ok := m.task.(Reloader); ok {
-				return m, r.Reload()
-			}
-		}
-		return m, nil
+		return m, m.popTask()
 	case kube.ConnStateMsg:
 		// Also forwarded to the task below (unchanged msg), so browse can
 		// render its own stale strip (Phase 4).
@@ -775,6 +777,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return next, tea.Batch(cmd, keycastCmd)
 			}
 		}
+		if msg.String() == "esc" && m.palette == nil && !m.helpOpen && !m.quitConfirm {
+			if backer, ok := m.task.(EscapeBacker); ok && backer.BackOnEscape() && len(m.stack) > 0 {
+				return m, tea.Batch(m.popTask(), rewatch, keycastCmd)
+			}
+		}
 		rewatch = tea.Batch(rewatch, keycastCmd)
 	}
 
@@ -790,6 +797,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+// popTask restores one task-stack level and refreshes the resumed task when
+// necessary. Both BackMsg and EscapeBacker's synchronous path use this so
+// their reload behavior stays identical.
+func (m *Model) popTask() tea.Cmd {
+	if len(m.stack) == 0 {
+		return nil
+	}
+	m.task = m.stack[len(m.stack)-1]
+	m.stack = m.stack[:len(m.stack)-1]
+	if r, ok := m.task.(Reloader); ok {
+		return r.Reload()
+	}
+	return nil
 }
 
 // handleShellKey routes keys the root shell owns: overlay navigation while

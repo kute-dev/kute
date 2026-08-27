@@ -12,8 +12,9 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
-// cycleAttachProfile steps §41b's profile field ('p' on a pod attach panel).
-func (m *Model) cycleAttachProfile() { m.attachProfile = m.attachProfile.Next() }
+// cyclePodProfile steps the shared §41b/§41c profile field ('p' in either
+// pod mode), preserving the selection when the user toggles modes.
+func (m *Model) cyclePodProfile() { m.podProfile = m.podProfile.Next() }
 
 // cycleNodeProfile steps §41d's profile field ('p' on a node debug panel) —
 // the same field the retired 's' NodeShell verb hardcoded to "sysadmin".

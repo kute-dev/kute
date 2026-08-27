@@ -3,6 +3,7 @@ package debugpanel
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,14 +193,42 @@ func TestCycleModeAllowedForRunningPod(t *testing.T) {
 func TestProfileCycleWraps(t *testing.T) {
 	t.Parallel()
 	m := New(Config{Session: nonProdSession(), Namespace: "default", Name: "api-0", Containers: podContainers()})
-	if m.attachProfile != kube.ProfileGeneral {
-		t.Fatalf("expected default profile general, got %q", m.attachProfile)
+	if m.podProfile != kube.ProfileGeneral {
+		t.Fatalf("expected default profile general, got %q", m.podProfile)
 	}
 	for _, want := range []kube.DebugProfile{kube.ProfileSysadmin, kube.ProfileNetadmin, kube.ProfileRestricted, kube.ProfileGeneral} {
-		m.cycleAttachProfile()
-		if m.attachProfile != want {
-			t.Errorf("attachProfile = %q, want %q", m.attachProfile, want)
+		m.cyclePodProfile()
+		if m.podProfile != want {
+			t.Errorf("podProfile = %q, want %q", m.podProfile, want)
 		}
+	}
+}
+
+func TestPodProfileIsSharedAcrossAttachAndCopyModes(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), Namespace: "default", Name: "api-0", Containers: podContainers()})
+	m.cycleProfile() // general -> sysadmin
+	m.cycleMode()
+	if m.mode != modeCopy || m.podProfile != kube.ProfileSysadmin {
+		t.Fatalf("copy mode profile = %q, want shared sysadmin", m.podProfile)
+	}
+	m.cycleProfile() // sysadmin -> netadmin, while in copy mode
+	m.cycleMode()
+	if m.mode != modeAttach || m.podProfile != kube.ProfileNetadmin {
+		t.Fatalf("attach mode profile = %q, want shared netadmin", m.podProfile)
+	}
+	m.cycleMode()
+	foundProfileHint := false
+	for _, group := range m.Keybar().Groups {
+		for _, hint := range group {
+			foundProfileHint = foundProfileHint || hint.Key == "p" && hint.Label == "profile"
+		}
+	}
+	if !foundProfileHint {
+		t.Fatal("copy-mode keybar does not expose p profile")
+	}
+	if got := m.willRunLine(m.Theme()); !strings.Contains(got, "--profile netadmin") {
+		t.Fatalf("copy-mode command preview does not carry shared profile: %q", got)
 	}
 }
 
@@ -352,6 +381,24 @@ func TestCleanUpKeybarShowsWhilePending(t *testing.T) {
 	kb := m.Keybar()
 	if kb.PillText != "CLEAN UP" {
 		t.Errorf("PillText = %q, want CLEAN UP", kb.PillText)
+	}
+}
+
+func TestBackOnEscapeOnlyWhenPanelIsReadyToClose(t *testing.T) {
+	t.Parallel()
+	m := New(Config{Session: nonProdSession(), Namespace: "default", Name: "worker-0", Containers: podContainers()})
+	if !m.BackOnEscape() {
+		t.Fatal("ready debug panel should close synchronously on Escape")
+	}
+
+	m.beginImageOrCopyNameEdit()
+	if m.BackOnEscape() {
+		t.Fatal("Escape must cancel an open field before closing the panel")
+	}
+	m.editingField = fieldNone
+	m.launchPending = true
+	if m.BackOnEscape() {
+		t.Fatal("Escape must cancel a launch confirmation before closing the panel")
 	}
 }
 
