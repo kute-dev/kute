@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -401,6 +402,115 @@ func TestIAppliesToStatefulSetsAndDaemonSets(t *testing.T) {
 	want := "default/db db=postgres:156"
 	if len(mut.setImages) != 1 || mut.setImages[0] != want {
 		t.Fatalf("setImages = %v, want [%q]", mut.setImages, want)
+	}
+}
+
+func TestIAppliesToCronJobFutureJobs(t *testing.T) {
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", CreationTimestamp: setImageAge(10 * 24 * time.Hour)},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 2 * * *",
+			JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "job", Image: "backup:1.0"}}},
+			}}},
+		},
+	}
+	objs := map[kube.ResourceKind][]runtime.Object{kube.KindCronJob: {cronJob}}
+	lister := fakeLister{objs: objs}
+	mut := &fakeMutator{setImageObjs: objs}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+
+	keybar := m.Keybar()
+	foundSetImage := false
+	for _, group := range keybar.Groups {
+		for _, hint := range group {
+			foundSetImage = foundSetImage || hint.Key == "i" && hint.Label == "set image"
+		}
+	}
+	if !foundSetImage {
+		t.Fatalf("CronJob keybar = %+v, want set-image hint", keybar)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	if m.pendingSetImage == nil || m.pendingSetImage.input.Value() != "1.0" {
+		t.Fatalf("expected CronJob's 'i' to open prefilled to tag 1.0, got %+v", m.pendingSetImage)
+	}
+	if got := m.Keybar().RightNote; !strings.Contains(got, "future jobs") || !strings.Contains(got, "running jobs unaffected") {
+		t.Fatalf("set-image RightNote = %q, want future/running Job consequence", got)
+	}
+	if got := m.Render(); !strings.Contains(got, "same image — apply is a no-op") || strings.Contains(got, "use rollout restart") {
+		t.Fatalf("CronJob unchanged-image message is not CronJob-specific:\n%s", got)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "1"})
+	if got := m.Render(); !strings.Contains(got, "kubectl set image cronjob/nightly job=backup:1.01 -n default") || !strings.Contains(got, "future jobs only · running jobs unaffected") {
+		t.Fatalf("CronJob command/consequence missing from set-image panel:\n%s", got)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	want := "default/nightly job=backup:1.01"
+	if len(mut.setImages) != 1 || mut.setImages[0] != want {
+		t.Fatalf("setImages = %v, want [%q]", mut.setImages, want)
+	}
+	if m.pendingSetImage == nil || !m.pendingSetImage.unchanged() {
+		t.Fatal("CronJob set-image should refresh and remain open on the applied image")
+	}
+}
+
+func TestSetImageDoesNotRevertWhileInformerCacheCatchesUp(t *testing.T) {
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default", CreationTimestamp: setImageAge(10 * 24 * time.Hour)},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 2 * * *",
+			JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "job", Image: "backup:1.0.0"}}},
+			}}},
+		},
+	}
+	objs := map[kube.ResourceKind][]runtime.Object{kube.KindCronJob: {cronJob}}
+	lister := fakeLister{objs: objs}
+	// Deliberately leave setImageObjs nil: the API result arrives while this
+	// lister still contains the pre-write informer snapshot.
+	mut := &fakeMutator{}
+	session := newSession()
+	session.Location.Kind = kube.KindCronJob
+	m := New(Config{Session: session, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.load()())
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "1"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+
+	if got := m.pendingSetImage.input.Value(); got != "1.0.01" {
+		t.Fatalf("input after successful apply = %q, want submitted tag 1.0.01", got)
+	}
+	if m.pendingSetImage.awaitingRefresh == nil {
+		t.Fatal("expected the panel to await informer confirmation of the applied image")
+	}
+	if !m.pendingSetImage.unchanged() {
+		t.Fatal("the submitted image should be treated as current while awaiting the watch update")
+	}
+
+	// A same-kind event for another object must not confirm stale data.
+	updated, _ := m.Update(kube.ResourceChangedMsg{Kind: kube.KindCronJob})
+	m = *updated.(*Model)
+	if m.pendingSetImage.awaitingRefresh == nil || m.pendingSetImage.input.Value() != "1.0.01" {
+		t.Fatal("an unrelated CronJob event should leave the submitted image awaiting confirmation")
+	}
+
+	setContainerImage(cronJob, "job", "backup:1.0.01")
+	updated, _ = m.Update(kube.ResourceChangedMsg{Kind: kube.KindCronJob})
+	m = *updated.(*Model)
+	if m.pendingSetImage.awaitingRefresh != nil {
+		t.Fatal("expected matching informer update to confirm the applied image")
+	}
+	if got := m.pendingSetImage.input.Value(); got != "1.0.01" {
+		t.Fatalf("input after watch-confirmed refresh = %q, want 1.0.01", got)
+	}
+	if got := m.pendingSetImage.activeContainer().Image; got != "backup:1.0.01" {
+		t.Fatalf("cached container image = %q, want backup:1.0.01", got)
 	}
 }
 

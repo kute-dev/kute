@@ -847,6 +847,35 @@ func TestSetImagePatchesNamedContainer(t *testing.T) {
 	}
 }
 
+func TestSetImagePatchesCronJobTemplate(t *testing.T) {
+	t.Parallel()
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+				{Name: "job", Image: "job:1.0"},
+				{Name: "sidecar", Image: "sidecar:1.0"},
+			}}},
+		}}},
+	}
+	c, cs := newTestCluster(cronJob)
+
+	if err := c.SetImage(t.Context(), KindCronJob, "default", "nightly", "job", "job:2.0"); err != nil {
+		t.Fatalf("SetImage: %v", err)
+	}
+	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	containers := got.Spec.JobTemplate.Spec.Template.Spec.Containers
+	if containers[0].Image != "job:2.0" {
+		t.Fatalf("job image = %q, want job:2.0", containers[0].Image)
+	}
+	if containers[1].Image != "sidecar:1.0" {
+		t.Fatalf("sidecar image = %q, want unchanged sidecar:1.0", containers[1].Image)
+	}
+}
+
 func TestSetImageRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
@@ -864,6 +893,7 @@ func TestSetImageCommandStringAcrossKinds(t *testing.T) {
 		{KindDeployment, "kubectl set image deploy/api app=app:2.0 -n default"},
 		{KindStatefulSet, "kubectl set image sts/api app=app:2.0 -n default"},
 		{KindDaemonSet, "kubectl set image ds/api app=app:2.0 -n default"},
+		{KindCronJob, "kubectl set image cronjob/api app=app:2.0 -n default"},
 	}
 	for _, tt := range tests {
 		if got := SetImageCommandString(tt.kind, "default", "api", "app", "app:2.0"); got != tt.want {

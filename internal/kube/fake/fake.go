@@ -677,9 +677,9 @@ func (c *Cluster) Scale(_ context.Context, kind kube.ResourceKind, namespace, na
 	return fmt.Errorf("%s %q not found", kind, name)
 }
 
-// SetImage sets one named container's image on Deployment/StatefulSet/
-// DaemonSet's pod template in place — 24a's tag-first inline editor against
-// the fake cluster.
+// SetImage sets one named container's image on an apps workload or CronJob
+// pod template in place — 24a's tag-first inline editor against the fake
+// cluster.
 func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -701,6 +701,11 @@ func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace,
 				continue
 			}
 			containers = o.Spec.Template.Spec.Containers
+		case *batchv1.CronJob:
+			if o.Name != name || o.Namespace != namespace {
+				continue
+			}
+			containers = o.Spec.JobTemplate.Spec.Template.Spec.Containers
 		default:
 			continue
 		}

@@ -265,11 +265,17 @@ func (m Model) setImageWillRunStrip(theme tui.Theme, width int) string {
 	case t.message != "":
 		left = fill.Foreground(theme.Good).Render(t.message)
 	case t.unchanged():
-		left = label.Render("will run") + fill.Render(" ") + cmd.Render("same image — apply is a no-op; use rollout restart")
+		message := "same image — apply is a no-op; use rollout restart"
+		if t.kind == kube.KindCronJob {
+			message = "same image — apply is a no-op"
+		}
+		left = label.Render("will run") + fill.Render(" ") + cmd.Render(message)
 	default:
 		left = label.Render("will run") + fill.Render(" ") + cmd.Render(kube.SetImageCommandString(t.kind, t.namespace, t.name, t.activeContainer().Name, t.composedImage()))
 		if m.actions.Active() {
 			right = warn.Render("confirm to apply · y/N")
+		} else if t.kind == kube.KindCronJob {
+			right = warn.Render("future jobs only · running jobs unaffected")
 		} else {
 			right = warn.Render(fmt.Sprintf("applying rolls out %d pods", t.desiredCount))
 		}

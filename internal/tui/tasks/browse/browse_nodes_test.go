@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -150,7 +151,7 @@ func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namesp
 
 // setContainerImage mutates obj's pod-template container (regular or native
 // sidecar) named container to image in place — setImageObjs's own version of
-// PatchMeta's local-object mutation, covering the three kinds 24a supports.
+// PatchMeta's local-object mutation, covering every kind 24a supports.
 func setContainerImage(obj runtime.Object, container, image string) {
 	var containers, initContainers *[]corev1.Container
 	switch o := obj.(type) {
@@ -160,6 +161,8 @@ func setContainerImage(obj runtime.Object, container, image string) {
 		containers, initContainers = &o.Spec.Template.Spec.Containers, &o.Spec.Template.Spec.InitContainers
 	case *appsv1.DaemonSet:
 		containers, initContainers = &o.Spec.Template.Spec.Containers, &o.Spec.Template.Spec.InitContainers
+	case *batchv1.CronJob:
+		containers, initContainers = &o.Spec.JobTemplate.Spec.Template.Spec.Containers, &o.Spec.JobTemplate.Spec.Template.Spec.InitContainers
 	default:
 		return
 	}

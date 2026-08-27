@@ -305,12 +305,13 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 *(0.2.0 addendum — inline mutation editors, sourced from `v.0.2.0.dc.html`)*
 
 ### 24a — Set image / set tag (`i` on a workload row)
+- Available on Deployment, StatefulSet, DaemonSet, and CronJob rows. CronJob edits update `spec.jobTemplate`: running Jobs are unaffected and only future Jobs use the new image.
 - Same inline tier as scale (17b) — no modal. Panel opens under the row (bg `#101018`, border `#3b3b58`); container tabs across the top (`↹` switches container, sidecars labeled dim).
 - **Tag-first editing:** the `image ›` field pre-fills the current ref with the cursor on the tag, repo prefix dim — the 95% case is "bump the tag." `ctrl-e` unlocks the full ref for the rename case. One verb, two depths, no separate "set tag" screen.
 - **History from the watch cache, never a registry call:** a TAG · SEEN · FROM table lists this workload's own ReplicaSet revision history (rollback targets, labeled by revision) plus the same image tag seen on other workloads/namespaces (`3.4.2 · seen 40m ago · nva-prod` — the "promote what prod runs" case).
-- Re-entering the current tag flips the strip to `same image — apply is a no-op; use rollout restart` and `↵` does nothing.
-- `will run` line: `kubectl set image deploy/nva-worker worker=registry.nva.dev/nva-worker:3.4.2 -n nva-stage`, right-aligned `applying rolls out 4 pods`. Multi-container workloads cycle with `↹`; the will-run line always names the container.
-- Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-e full ref · esc cancel`; footer points to 9a to watch the rollout. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
+- Re-entering the current tag flips the strip to `same image — apply is a no-op` and `↵` does nothing; rollout-capable workloads additionally suggest rollout restart.
+- `will run` line: `kubectl set image deploy/nva-worker worker=registry.nva.dev/nva-worker:3.4.2 -n nva-stage`, right-aligned `applying rolls out 4 pods`. CronJobs instead show `future jobs only · running jobs unaffected`. Multi-container workloads cycle with `↹`; the will-run line always names the container.
+- Keys: `↵ apply · ↑↓ pick from history · ↹ container · ctrl-e full ref · esc cancel`; rollout-capable workloads point to 9a, while CronJobs repeat the future-Jobs consequence. PROD contexts get the inline y/N on apply, per 8b's tiering. Keybar pill `SET IMAGE`.
 
 ### 25a — Resources — set limits next to live usage (`r` on a workload)
 - **Case keeps the two workload actions distinct:** lowercase `r` opens the resources editor on Deployment/StatefulSet/DaemonSet rows; uppercase `R` remains Deployment rollout-restart with its inline `y/N` confirmation.
@@ -565,7 +566,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `w` on a 403 card opens who-can pre-filled (22a); also reachable as a registry kind via `g`.
 - Helm releases browse without the helm binary; rollback shells out with a `will run` line (18a).
 - Ingress/HTTPRoute `↵` opens a live routing table (23a/23b) — backends resolved from the watch, never a describe page; `p` on an HTTPRoute opens its parent Gateway.
-- `i` opens the set-image/tag editor on a workload row (24a); history comes from the watch cache (ReplicaSet revisions + cross-workload image sightings), never a registry call.
+- `i` opens the set-image/tag editor on a Deployment, StatefulSet, DaemonSet, or CronJob row (24a); CronJob changes affect future Jobs only. History comes from the watch cache, never a registry call.
 - `r` on a workload row opens the resources editor (25a); uppercase `R` remains rollout-restart on Deployments (inline `y/N` confirm).
 - `m` opens the labels/annotations editor (26a) on any object, CRDs included; selector-linked labels carry an inline join warning before you can edit them.
 - ConfigMap/Secret `Data` views: `↵` edits a value in place (27a), `a` inserts a new key as a line-insert (27b); `ctrl-r` on a ConfigMap value chains the apply with a rollout-restart of every consumer.
@@ -587,7 +588,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - `whoCan`: current query {verb, resource, namespace} + resolved subject rows (from cached bindings/roles).
 - `editBuffer`: YAML edit state {baseResourceVersion, text, dirty, dryRunResult|conflict} — exists only in edit mode.
 - `timeline`: merged feed window (events + restarts + rollout revisions) per scope.
-- `imageHistory`: per-workload tag history derived from the watch (ReplicaSet revisions + cross-namespace image sightings) — feeds 24a, no network calls of its own.
+- `imageHistory`: per-workload tag history derived from the watch (controller revisions where available + cross-namespace image sightings) — feeds 24a, no network calls of its own.
 - `updateCheck`: {lastChecked, latestVersion, seenVersions} — cached in the state dir, drives the 28a chip and 28b's per-version dismissal; absent/inert when `update.check: false`.
 - Watch streams update the table in place; metrics poll on the `sync` interval shown in the header.
 

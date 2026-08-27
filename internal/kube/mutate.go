@@ -988,8 +988,8 @@ func ScaleCommandString(kind ResourceKind, namespace, name string, replicas int3
 
 // SetImage patches container's image on kind's pod template via the same
 // strategic-merge-patch idiom as Scale/Cordon — the container list patches
-// by its "name" merge key, so one patch shape covers Deployment/StatefulSet/
-// DaemonSet without a per-kind container index lookup.
+// by its "name" merge key, so no per-kind container index lookup is needed.
+// CronJob nests the pod template one level deeper under spec.jobTemplate.
 func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error {
 	if name == "" {
 		return fmt.Errorf("cannot set image on %s: empty name", kind)
@@ -998,6 +998,12 @@ func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, na
 		`{"spec":{"template":{"spec":{"containers":[{"name":%q,"image":%q}]}}}}`,
 		container, image,
 	)
+	if kind == KindCronJob {
+		patch = fmt.Sprintf(
+			`{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"containers":[{"name":%q,"image":%q}]}}}}}}`,
+			container, image,
+		)
+	}
 	var err error
 	switch kind {
 	case KindDeployment:
@@ -1006,6 +1012,8 @@ func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, na
 		_, err = c.clientset.AppsV1().StatefulSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	case KindDaemonSet:
 		_, err = c.clientset.AppsV1().DaemonSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	case KindCronJob:
+		_, err = c.clientset.BatchV1().CronJobs(namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	default:
 		err = fmt.Errorf("set image is not supported for kind %s", kind)
 	}
@@ -1394,13 +1402,15 @@ func ForceDeleteCommandString(kind ResourceKind, namespace, name string) string 
 
 // workloadResourceArg renders kind as kubectl's short resource arg for a
 // "will run" line (ScaleCommandString/SetImageCommandString) — Deployment is
-// the default for any kind that isn't StatefulSet/DaemonSet.
+// the default for any kind that isn't StatefulSet/DaemonSet/CronJob.
 func workloadResourceArg(kind ResourceKind) string {
 	switch kind {
 	case KindStatefulSet:
 		return "sts"
 	case KindDaemonSet:
 		return "ds"
+	case KindCronJob:
+		return "cronjob"
 	default:
 		return "deploy"
 	}

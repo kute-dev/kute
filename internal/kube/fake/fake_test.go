@@ -43,6 +43,60 @@ func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
 	}
 }
 
+func TestSetImagePatchesCronJobTemplate(t *testing.T) {
+	t.Parallel()
+	c := New("default", "dev")
+	c.Seed(kube.KindCronJob, &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{
+				{Name: "job", Image: "job:1.0"},
+				{Name: "sidecar", Image: "sidecar:1.0"},
+			}}},
+		}}},
+	})
+
+	if err := c.SetImage(t.Context(), kube.KindCronJob, "default", "nightly", "job", "job:2.0"); err != nil {
+		t.Fatalf("SetImage: %v", err)
+	}
+	objs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
+	containers := objs[0].(*batchv1.CronJob).Spec.JobTemplate.Spec.Template.Spec.Containers
+	if containers[0].Image != "job:2.0" {
+		t.Fatalf("job image = %q, want job:2.0", containers[0].Image)
+	}
+	if containers[1].Image != "sidecar:1.0" {
+		t.Fatalf("sidecar image = %q, want unchanged sidecar:1.0", containers[1].Image)
+	}
+	select {
+	case msg := <-c.Events():
+		if msg.Kind != kube.KindCronJob {
+			t.Fatalf("notify kind = %v, want CronJob", msg.Kind)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected a KindCronJob ResourceChangedMsg after SetImage")
+	}
+}
+
+func TestDemoCronJobsSupportSetImage(t *testing.T) {
+	t.Parallel()
+	c := NewDemo()
+	objs, err := c.ListRaw(t.Context(), kube.KindCronJob, "default")
+	if err != nil {
+		t.Fatalf("ListRaw(CronJob): %v", err)
+	}
+	if len(objs) == 0 {
+		t.Fatal("demo has no CronJobs")
+	}
+	cronJob := objs[0].(*batchv1.CronJob)
+	containers := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers
+	if len(containers) == 0 {
+		t.Fatalf("demo CronJob %q has no set-image target", cronJob.Name)
+	}
+	if err := c.SetImage(t.Context(), kube.KindCronJob, cronJob.Namespace, cronJob.Name, containers[0].Name, "busybox:1.37"); err != nil {
+		t.Fatalf("SetImage on demo CronJob: %v", err)
+	}
+}
+
 func TestSetImageRejectsUnknownContainer(t *testing.T) {
 	t.Parallel()
 	c := New("default", "dev")

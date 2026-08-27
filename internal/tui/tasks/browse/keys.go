@@ -76,11 +76,15 @@ func (m Model) Keybar() tui.Keybar {
 			hints = append(hints, tui.KeyHint{Key: tui.GlyphTab, Label: "container"})
 		}
 		hints = append(hints, tui.KeyHint{Key: "ctrl-e", Label: "full ref"}, tui.KeyHint{Key: "esc", Label: "cancel"})
+		rightNote := "watch the rollout in 9a"
+		if t.kind == kube.KindCronJob {
+			rightNote = "future jobs use the new image · running jobs unaffected"
+		}
 		return tui.Keybar{
 			Pill:      tui.ModeBrowse,
 			PillText:  "SET IMAGE",
 			Groups:    [][]tui.KeyHint{hints},
-			RightNote: "watch the rollout in 9a",
+			RightNote: rightNote,
 		}
 	}
 	if m.pendingSetResources != nil && !m.actions.Active() {

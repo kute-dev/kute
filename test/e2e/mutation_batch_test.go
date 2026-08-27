@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +86,8 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 	RequireCluster(t)
 	const name = "phase3-cron"
 	const beforeSchedule, afterSchedule = "0 2 * * *", "15 3 * * *"
+	const beforeTag = "1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028"
+	const beforeImage, afterImage = "busybox:" + beforeTag, "busybox:1.36"
 	client := mutationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	before, err := client.BatchV1().CronJobs(Namespace).Get(ctx, name, metav1.GetOptions{})
@@ -108,9 +111,10 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		_, err := client.BatchV1().CronJobs(Namespace).Patch(ctx, name, types.MergePatchType, []byte("{\"spec\":{\"schedule\":\"0 2 * * *\"}}"), metav1.PatchOptions{})
+		patch := fmt.Sprintf(`{"spec":{"schedule":%q,"jobTemplate":{"spec":{"template":{"spec":{"containers":[{"name":"job","image":%q}]}}}}}}`, beforeSchedule, beforeImage)
+		_, err := client.BatchV1().CronJobs(Namespace).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 		if err != nil {
-			t.Errorf("restoring CronJob schedule: %v", err)
+			t.Errorf("restoring CronJob schedule and image: %v", err)
 		}
 	})
 
@@ -119,12 +123,36 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 	a.gotoKind(t, "cronjobs", "CronJobs")
 	a.WaitFor(name, Settle)
 	a.filterTo(t, name)
+
+	// Set image edits the CronJob's Job template and remains in the panel.
+	a.Press("i")
+	a.WaitForAll(Settle, "SET IMAGE", "busybox")
+	replaceTypedValue(a, beforeTag, "1.36")
+	a.Enter()
+	a.WaitFor("set image: job="+afterImage, Settle)
+	var imageRV string
+	waitForAPI(t, "CronJob set image", func(ctx context.Context) (bool, error) {
+		cj, err := client.BatchV1().CronJobs(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		imageRV = cj.ResourceVersion
+		return cj.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image == afterImage, nil
+	})
+	requireNewResourceVersion(t, before.ResourceVersion, imageRV)
+	a.WaitForAll(Settle, "SET IMAGE", afterImage)
+	a.Esc()
+	a.WaitFor("concurrency", Settle)
+
 	a.Press("R")
 	a.WaitForAll(Settle, "RUN NOW", "create job", name)
 	a.Enter()
 	a.WaitFor("job created", Settle)
 	manual := getJobByAnnotation(t, kube.AnnotationCronJobName, name)
 	t.Cleanup(func() { deleteJobNow(t, manual.Name) })
+	if got := manual.Spec.Template.Spec.Containers[0].Image; got != afterImage {
+		t.Fatalf("manual Job image = %q, want CronJob's updated image %q", got, afterImage)
+	}
 	a.WaitForAll(Settle, "CronJobs", manual.Name)
 
 	// Schedule is a pushed, context-preserving editor with a real
@@ -143,6 +171,6 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 		scheduleRV = cj.ResourceVersion
 		return cj.Spec.Schedule == afterSchedule, nil
 	})
-	requireNewResourceVersion(t, before.ResourceVersion, scheduleRV)
+	requireNewResourceVersion(t, imageRV, scheduleRV)
 	a.WaitForAll(Settle, "SCHEDULE", afterSchedule, "u undo")
 }

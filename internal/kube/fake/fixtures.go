@@ -1287,7 +1287,13 @@ func demoCronJob(name, ns, schedule string, suspend bool, created metav1.Time) *
 			Name: name, Namespace: ns, CreationTimestamp: created,
 			UID: types.UID("demo-cronjob-" + ns + "-" + name), ResourceVersion: "1", Generation: 1,
 		},
-		Spec: batchv1.CronJobSpec{Schedule: schedule},
+		Spec: batchv1.CronJobSpec{
+			Schedule: schedule,
+			JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				RestartPolicy: corev1.RestartPolicyNever,
+				Containers:    []corev1.Container{{Name: "job", Image: "busybox:1.36"}},
+			}}}},
+		},
 	}
 	if suspend {
 		cj.Spec.Suspend = &suspend

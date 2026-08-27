@@ -465,7 +465,7 @@ var (
 		ID: "scale", Key: "+/−", Label: "scale",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet}, Mutating: true,
 	}
-	// SetImage is 24a's 'i' on a Deployment/StatefulSet/DaemonSet row — like
+	// SetImage is 24a's 'i' on a Deployment/StatefulSet/DaemonSet/CronJob row — like
 	// Scale, TierNone here is a nominal default: the real tier comes from
 	// TierForSetImage below (TierNone outside PROD, TierInline in PROD),
 	// since Controller.Begin needs a resolved actions.Tier and TierFor only
@@ -473,7 +473,7 @@ var (
 	// TierForEdit's own doc comment on this same constraint).
 	SetImage = Verb{
 		ID: "set-image", Key: "i", Label: "set image",
-		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}, Mutating: true,
+		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet, kube.KindCronJob}, Mutating: true,
 	}
 	// SetResources is 'r' on a Deployment/StatefulSet/DaemonSet row. Deployment
 	// rollout restart owns uppercase R; lowercase r remains distinct by case.

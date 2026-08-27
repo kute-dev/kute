@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   CRONJOBS  R run now  s resume  S edit schedule │ D delete                                                    ? help  
+   CRONJOBS  R run now  s resume  S edit schedule  i set image │ D delete                                       ? help  

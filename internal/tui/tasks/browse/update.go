@@ -84,6 +84,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.SetSize(msg.Width, msg.Height)
 	case kube.ResourceChangedMsg:
+		if m.pendingSetImage != nil && m.pendingSetImage.awaitingRefresh != nil &&
+			msg.Kind == m.pendingSetImage.kind && !m.actions.Active() {
+			// The API result can arrive before the informer observes the new
+			// image. Confirm it from the matching watch update without ever
+			// restoring the stale tag in the open editor.
+			m.refreshSetImageTarget()
+		}
 		if m.pendingSetResources != nil && m.pendingSetResources.message != "" &&
 			msg.Kind == m.pendingSetResources.kind && !m.actions.Active() {
 			// Keep 25a's still-open panel honest after its own write. The

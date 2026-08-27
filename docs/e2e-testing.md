@@ -205,7 +205,7 @@ those values explicitly; smaller positive values are useful for local iteration.
 | `mutation_delete_test.go` | committed non-prod/PROD deletes, selection clamping, and disposable-Pod force-delete escalation |
 | `mutation_editors_test.go` | ConfigMap multiline/add/remove/restart mutations and Secret rewrite recovery after an injected 409 Conflict |
 | `mutation_workloads_test.go` | cordon/uncordon with cleanup plus scale, set-image, resources, and metadata editors against a disposable Deployment |
-| `mutation_batch_test.go` | Job rerun and CronJob run-now/schedule editing against dedicated fixtures |
+| `mutation_batch_test.go` | Job rerun plus CronJob set-image, run-now inheritance, and schedule editing against dedicated fixtures |
 | `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
 | `certchain_test.go` | §35a's Certificate → CertificateRequest → Order → Challenge walk across two API groups: deepest-failure promotion on the ACME chain, the short CA chain with no banner, and both refs-strip branches (missing Secret + ClusterIssuer, existing Secret + namespaced Issuer) |
 | `batch_screens_test.go` | §37b's attempt ledger (per-attempt pods joined by controller ownerRef, real exit codes, no index grid on a non-Indexed Job) and §36e's CronJob detail (facts grid, retention limits, settled with zero Jobs) |

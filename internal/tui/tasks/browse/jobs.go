@@ -331,6 +331,7 @@ func (m Model) cronJobKeybarGroup() []tui.KeyHint {
 		{Key: verbs.CronJobRunNow.Key, Label: verbs.CronJobRunNow.Label},
 		{Key: suspend.Key, Label: suspend.Label},
 		{Key: verbs.CronJobSetSchedule.Key, Label: verbs.CronJobSetSchedule.Label},
+		verbs.SetImage.Hint(),
 	}
 	if m.openLogs != nil {
 		// §36a's keybar: "l logs" — verbs.Logs' Kinds already includes

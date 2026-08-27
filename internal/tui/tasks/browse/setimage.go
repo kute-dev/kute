@@ -22,6 +22,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,7 +53,7 @@ type setImageTarget struct {
 	// clock for StatefulSet/DaemonSet, which have no ReplicaSet revision
 	// layer to read a more precise one from.
 	created      time.Time
-	desiredCount int32 // "applying rolls out N pods" — this workload's own currentReplicas(row)
+	desiredCount int32 // "applying rolls out N pods" — apps workloads' own currentReplicas(row)
 	containers   []kube.ContainerInfo
 	containerIdx int
 	// repo is the active container's image repo, the dim prefix in
@@ -73,6 +74,11 @@ type setImageTarget struct {
 	// handleSetImageResult applies its outcome — mirrors metaTarget's own
 	// field of the same name/purpose.
 	pendingCommit *setImagePendingCommit
+	// awaitingRefresh keeps the just-applied value authoritative in the
+	// editor until the informer cache observes the write. The API response
+	// can beat that watch update, so rebuilding immediately from the cache
+	// would briefly restore the old tag.
+	awaitingRefresh *setImagePendingCommit
 	// message/lastError are the panel's own transient inline result line —
 	// "set image: worker=..." on success, the raw server error on failure —
 	// cleared the next time a commit starts or the user does anything else
@@ -115,14 +121,17 @@ func (t setImageTarget) composedImage() string {
 // current image — §24a: "re-entering the current tag flips the strip to
 // 'same image — apply is a no-op'".
 func (t setImageTarget) unchanged() bool {
+	if t.awaitingRefresh != nil && t.activeContainer().Name == t.awaitingRefresh.container && t.composedImage() == t.awaitingRefresh.image {
+		return true
+	}
 	return t.composedImage() == t.activeContainer().Image
 }
 
 // imageEditable reports whether kind takes 24a's set-image prompt —
-// Deployment, StatefulSet, and DaemonSet, the three kinds with a pod
-// template `kubectl set image` can target.
+// Deployment, StatefulSet, DaemonSet, and CronJob: the four browse kinds with
+// a pod template `kubectl set image` can target.
 func imageEditable(kind kube.ResourceKind) bool {
-	return kind == kube.KindDeployment || kind == kube.KindStatefulSet || kind == kube.KindDaemonSet
+	return kind == kube.KindDeployment || kind == kube.KindStatefulSet || kind == kube.KindDaemonSet || kind == kube.KindCronJob
 }
 
 // beginSetImage opens 24a's panel for the selected row. ok is false when
@@ -342,6 +351,7 @@ func (m *Model) armSetImageCommit(pc *setImagePendingCommit) {
 		return
 	}
 	m.pendingSetImage.pendingCommit = pc
+	m.pendingSetImage.awaitingRefresh = nil
 	m.pendingSetImage.message = ""
 	m.pendingSetImage.lastError = ""
 }
@@ -352,10 +362,10 @@ func (m *Model) armSetImageCommit(pc *setImagePendingCommit) {
 // comment and docs/design README.md §26a's contract: "confirm → execute →
 // refresh → show result → remain on screen."
 //
-// On success, the object is re-fetched and the panel rebuilt from the real,
-// current cluster state (buildSetImageTarget — never an optimistic local
-// patch), re-selecting the container that was just edited (by name, falling
-// back to index 0) so its now-current tag/history are what's showing.
+// On success, the object is re-fetched and the panel rebuilt only once the
+// informer has observed the applied image. The API response can arrive before
+// that watch update; until then awaitingRefresh keeps the submitted buffer in
+// place and the matching ResourceChangedMsg calls refreshSetImageTarget.
 //
 // On failure, nothing is refetched: the buffer still holds the attempted
 // value (updateSetImageKey never cleared it), and the server's error is
@@ -387,6 +397,14 @@ func (m *Model) handleSetImageResult(msg actions.ResultMsg) tea.Cmd {
 		m.pendingSetImage = nil
 		return nil
 	}
+	if pc != nil && !setImageTargetHasImage(fresh, pc.container, pc.image) {
+		// The API write won the race with the informer. Keep the submitted
+		// value visible; the matching watch event will rebuild from cache.
+		t.awaitingRefresh = pc
+		t.message = message
+		t.lastError = ""
+		return nil
+	}
 	m.pendingSetImage = fresh
 	idx := 0
 	if pc != nil {
@@ -400,6 +418,43 @@ func (m *Model) handleSetImageResult(msg actions.ResultMsg) tea.Cmd {
 	m.selectSetImageContainer(idx)
 	m.pendingSetImage.message = message
 	return nil
+}
+
+// refreshSetImageTarget confirms a successful apply from the informer cache.
+// A same-kind event may belong to another object, so the panel is replaced
+// only when the expected container image is actually present.
+func (m *Model) refreshSetImageTarget() {
+	t := m.pendingSetImage
+	pc := t.awaitingRefresh
+	if pc == nil {
+		return
+	}
+	selected := t.activeContainer().Name
+	fresh, ok := m.buildSetImageTarget(t.kind, t.namespace, t.name, t.desiredCount)
+	if !ok || !setImageTargetHasImage(fresh, pc.container, pc.image) {
+		return
+	}
+	message, lastError := t.message, t.lastError
+	m.pendingSetImage = fresh
+	idx := 0
+	for i, c := range fresh.containers {
+		if c.Name == selected {
+			idx = i
+			break
+		}
+	}
+	m.selectSetImageContainer(idx)
+	m.pendingSetImage.message = message
+	m.pendingSetImage.lastError = lastError
+}
+
+func setImageTargetHasImage(t *setImageTarget, container, image string) bool {
+	for _, c := range t.containers {
+		if c.Name == container {
+			return c.Image == image
+		}
+	}
+	return false
 }
 
 // setImageWillRunLine renders the exact "will run: kubectl set image ..."
@@ -448,6 +503,8 @@ func workloadContainerInfos(obj runtime.Object) []kube.ContainerInfo {
 		spec = o.Spec.Template.Spec
 	case *appsv1.DaemonSet:
 		spec = o.Spec.Template.Spec
+	case *batchv1.CronJob:
+		spec = o.Spec.JobTemplate.Spec.Template.Spec
 	default:
 		return nil
 	}
@@ -645,7 +702,13 @@ func crossWorkloadHistory(ctx context.Context, lister resources.RawLister, kind 
 		return nil
 	}
 	var out []imageHistoryEntry
-	for _, k := range []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet} {
+	kinds := []kube.ResourceKind{kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet}
+	if kind == kube.KindCronJob {
+		// CronJob's own informer is already warm on this screen, so include
+		// other schedules without making CronJob an extra read for apps views.
+		kinds = append(kinds, kube.KindCronJob)
+	}
+	for _, k := range kinds {
 		objs, err := lister.ListRaw(ctx, k, "")
 		if err != nil {
 			continue
@@ -699,6 +762,8 @@ func workloadArg(kind kube.ResourceKind) string {
 		return "sts"
 	case kube.KindDaemonSet:
 		return "ds"
+	case kube.KindCronJob:
+		return "cronjob"
 	default:
 		return "deploy"
 	}
