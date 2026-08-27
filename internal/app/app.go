@@ -621,7 +621,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug, false)
 	openForward := openForwardFunc(sess, lister, cluster)
 	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug, openWhoCanFunc(sess, cluster))
-	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
+	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openDebug, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, cluster, openYAML)
 	openTimeline := openTimelineFunc(sess, cluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, cluster, openYAML)
@@ -713,7 +713,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	openExec := openExecFunc(sess, demoCluster, openExecDebug, true)
 	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
 	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug, openWhoCanFunc(sess, demoCluster))
-	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openForward, openNodeDebug)
+	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openDebug, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, demoCluster, openYAML)
 	openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
 	openObjectEvents := openObjectEventsFunc(sess, demoCluster, openYAML)
@@ -920,7 +920,7 @@ func kubeconfigPathOrEmpty() string {
 // = [pod.Name]), so poddetail's j/k is inert from this entry point; wiring
 // real prev/next through nodedetail's own pod table is a natural follow-up,
 // not required here.
-func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, openNodeDebug func(name string, podCount, width, height int) (tea.Model, tea.Cmd)) browse.OpenNodeDetailFunc {
+func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, openNodeDebug func(name string, podCount, width, height int) (tea.Model, tea.Cmd)) browse.OpenNodeDetailFunc {
 	openPod := func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd) {
 		return openPodDetail(pod, []string{pod.Name}, 0, width, height)
 	}
@@ -936,6 +936,9 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 			OpenPod:       nodedetail.OpenPodFunc(openPod),
 			OpenLogs:      nodedetail.OpenLogsFunc(openLogs),
 			OpenExec:      nodedetail.OpenExecFunc(openExec),
+			OpenDebug:     nodedetail.OpenDebugFunc(openDebug),
+			RBAC:          active,
+			OpenWhoCan:    nodedetail.OpenWhoCanFunc(openWhoCanFunc(sess, active)),
 			OpenYAML:      nodedetail.OpenYAMLFunc(openYAML),
 			OpenEvents:    nodedetail.OpenEventsFunc(openObjectEvents),
 			OpenTimeline:  nodedetail.OpenTimelineFunc(openObjectTimeline),

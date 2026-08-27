@@ -21,6 +21,66 @@ func (f fakeShellDetector) DetectShells(_ context.Context, _, _, container strin
 	return f[container], nil
 }
 
+type countingShellDetector struct{ calls int }
+
+func (f *countingShellDetector) DetectShells(context.Context, string, string, string) ([]string, error) {
+	f.calls++
+	return []string{"sh"}, nil
+}
+
+// TestFailedPodSkipsShellProbeAndOpensCopyDebug is the failed-Job
+// regression: terminal state must win before DetectShells, whose kubectl
+// exec probe cannot run against a completed pod.
+func TestFailedPodSkipsShellProbeAndOpensCopyDebug(t *testing.T) {
+	p := podWithContainers("default", "batch-0", "worker")
+	p.Status.Phase = corev1.PodFailed
+	p.Status.ContainerStatuses[0].Ready = false
+	p.Status.ContainerStatuses[0].State = corev1.ContainerState{
+		Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {p}}}
+	detector := &countingShellDetector{}
+	rbac := &fakeRBACChecker{result: kube.WhoCanResult{CurrentUser: "dev@example.com", CurrentUserGranted: true}}
+	pickerCalled := false
+	var gotPhase string
+	m := New(Config{
+		Session: newSession(), Lister: lister, Shells: detector, RBAC: rbac,
+		OpenExec: func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) {
+			pickerCalled = true
+			return stubTask{}, nil
+		},
+		OpenDebug: func(_, _ string, _ []kube.ContainerInfo, podPhase string, waiting bool, _, _ int) (tea.Model, tea.Cmd) {
+			gotPhase = podPhase
+			if waiting {
+				t.Error("terminal container unexpectedly reported Waiting")
+			}
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected copy-debug panel, got %T", updated)
+	}
+	if cmd != nil {
+		t.Fatal("terminal pod routing returned a shell-probe/exec command")
+	}
+	if detector.calls != 0 {
+		t.Fatalf("DetectShells calls = %d, want 0", detector.calls)
+	}
+	if pickerCalled {
+		t.Fatal("execpicker opened for a terminal pod")
+	}
+	if gotPhase != "Failed" {
+		t.Fatalf("pod phase = %q, want Failed", gotPhase)
+	}
+	if rbac.gotQuery.Resource != kube.DebugCopyResource {
+		t.Fatalf("WhoCan resource = %q, want %q", rbac.gotQuery.Resource, kube.DebugCopyResource)
+	}
+}
+
 // TestDistrolessSingleContainerRoutesToDebugPanel confirms §41a's fork: a
 // single-container pod with no shell in it, once Shells is wired, routes to
 // the debug panel instead of execing blind (the old behavior, still exact
@@ -155,8 +215,8 @@ func TestMixedShellsStillPushesPicker(t *testing.T) {
 }
 
 // TestDebugPanelDefaultModeFromCrashLoop confirms routePodShellsProbed
-// resolves the pod's own CrashLoopBackOff reason for OpenDebug's podPhase
-// argument, the signal debugpanel.New uses to default to copy mode.
+// passes the actual Running phase plus the Waiting state that makes the
+// debug panel default to copy mode.
 func TestDebugPanelDefaultModeFromCrashLoop(t *testing.T) {
 	crashPod := podWithContainers("default", "worker-0", "app")
 	crashPod.Status.ContainerStatuses[0].State = corev1.ContainerState{
@@ -166,21 +226,27 @@ func TestDebugPanelDefaultModeFromCrashLoop(t *testing.T) {
 		kube.KindPod: {crashPod},
 	}}
 	var gotPhase string
+	var gotWaiting bool
 	m := New(Config{
 		Session: newSession(), Lister: lister,
 		Shells: fakeShellDetector{},
-		OpenDebug: func(_, _ string, _ []kube.ContainerInfo, podPhase string, _ bool, _, _ int) (tea.Model, tea.Cmd) {
-			gotPhase = podPhase
+		OpenDebug: func(_, _ string, _ []kube.ContainerInfo, podPhase string, waiting bool, _, _ int) (tea.Model, tea.Cmd) {
+			gotPhase, gotWaiting = podPhase, waiting
 			return stubTask{}, nil
 		},
 	})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
-	m.Update(cmd())
-	if gotPhase != "CrashLoopBackOff" {
-		t.Fatalf("podPhase = %q, want CrashLoopBackOff", gotPhase)
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("expected crash-looping pod to open debug directly, got %T", updated)
+	}
+	if cmd != nil {
+		t.Fatal("crash-looping pod returned a shell-probe command")
+	}
+	if gotPhase != "Running" || !gotWaiting {
+		t.Fatalf("pod state = (%q, %v), want (Running, true)", gotPhase, gotWaiting)
 	}
 }
 

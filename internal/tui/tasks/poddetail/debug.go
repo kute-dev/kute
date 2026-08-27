@@ -117,9 +117,14 @@ func detectPodShellsCmd(parent context.Context, namespace, podName string, conta
 
 // beginExecOrDebug resolves 'x' for the loaded pod — see browse's own
 // beginExecOrDebug doc comment for the full contract.
-func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
+func (m *Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if !m.found || len(m.pod.ContainerInfos) == 0 {
 		return nil, nil, false
+	}
+	waiting := podHasWaitingContainer(m.pod.ContainerInfos)
+	if kube.PodWontStayRunning(m.pod.Status, waiting) {
+		task, cmd := m.openPodDebug(m.namespace, m.name, m.pod.ContainerInfos, m.pod.Status, waiting)
+		return task, cmd, true
 	}
 	if m.shells == nil {
 		return m.openSelectedExec()
@@ -127,32 +132,43 @@ func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	return nil, detectPodShellsCmd(m.session.ClusterContext(), m.namespace, m.name, m.pod.ContainerInfos, m.shells), true
 }
 
+func podHasWaitingContainer(containers []kube.ContainerInfo) bool {
+	for _, c := range containers {
+		if c.State == "Waiting" {
+			return true
+		}
+	}
+	return false
+}
+
+// openPodDebug performs the mode-matched RBAC pre-check and pushes the
+// existing debug panel. Terminal pod routing calls this before any shell
+// probe; the running distroless path calls it after probing.
+func (m *Model) openPodDebug(namespace, podName string, containers []kube.ContainerInfo, podPhase string, waiting bool) (tea.Model, tea.Cmd) {
+	if m.openDebug == nil {
+		m.execFeedback = podName + ": debug is unavailable"
+		return m, nil
+	}
+	if denial := m.debugCapabilityDenied(namespace, podPhase, waiting); denial != nil {
+		m.pendingDebugDenial = denial
+		m.execFeedback = denial.feedback()
+		return m, nil
+	}
+	m.pendingDebugDenial = nil
+	task, cmd := m.openDebug(namespace, podName, containers, podPhase, waiting, m.width, m.height)
+	if task != nil {
+		return task, cmd
+	}
+	return m, cmd
+}
+
 // routePodShellsProbed decides which of exec/execpicker/debugpanel 'x'
 // meant, now that every container's probe result is in — see browse's own
 // routePodShellsProbed doc comment.
 func (m *Model) routePodShellsProbed(msg podShellsProbedMsg) (tea.Model, tea.Cmd) {
 	if msg.allShellless() {
-		if m.openDebug == nil {
-			return m, nil
-		}
-		waiting := false
-		for _, c := range msg.containers {
-			if c.State == "Waiting" {
-				waiting = true
-				break
-			}
-		}
-		if denial := m.debugCapabilityDenied(msg.namespace, m.pod.Reason, waiting); denial != nil {
-			m.pendingDebugDenial = denial
-			m.execFeedback = denial.feedback()
-			return m, nil
-		}
-		m.pendingDebugDenial = nil
-		task, cmd := m.openDebug(msg.namespace, msg.podName, msg.containers, m.pod.Reason, waiting, m.width, m.height)
-		if task != nil {
-			return task, cmd
-		}
-		return m, cmd
+		waiting := podHasWaitingContainer(msg.containers)
+		return m.openPodDebug(msg.namespace, msg.podName, msg.containers, m.pod.Status, waiting)
 	}
 	if len(msg.containers) == 1 {
 		return m, execCmd(msg.namespace, msg.podName, msg.containers[0].Name)

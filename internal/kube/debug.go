@@ -57,13 +57,14 @@ const (
 )
 
 // PodWontStayRunning reports whether a pod is in the state §41c's copy-mode
-// gate exists for — CrashLoopBackOff, or any container currently Waiting
-// (e.g. ImagePullBackOff) — shared by the debug panel's own mode default
-// (debugpanel.Model.podWontStayRunning) and the routing callers that need
-// to know the mode before the panel exists (browse/poddetail's §41a RBAC
-// pre-check), so the two predicates can't drift apart.
+// gate exists for. Any known non-Running phase needs a copy: Pending pods do
+// not have an exec target yet, and terminal Succeeded/Failed pods no longer
+// have one. A Waiting container covers Running-phase states such as
+// CrashLoopBackOff and ImagePullBackOff. An empty phase is deliberately not
+// classified: execpicker's shell-less-row fork has no pod snapshot and must
+// retain its attach-mode default.
 func PodWontStayRunning(podPhase string, waiting bool) bool {
-	return waiting || podPhase == "CrashLoopBackOff"
+	return waiting || (podPhase != "" && podPhase != "Running")
 }
 
 // commandString renders args as a copy-pasteable kubectl invocation,

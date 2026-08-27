@@ -113,13 +113,32 @@ func TestNewPodTargetDefaultsToCopyOnCrashLoop(t *testing.T) {
 	t.Parallel()
 	m := New(Config{
 		Session: nonProdSession(), Namespace: "default", Name: "worker-0",
-		Containers: podContainers(), PodPhase: "CrashLoopBackOff",
+		Containers: podContainers(), PodPhase: "Running", Waiting: true,
 	})
 	if m.mode != modeCopy {
 		t.Errorf("mode = %v, want modeCopy for a CrashLoopBackOff pod", m.mode)
 	}
 	if m.copyName != "worker-0-debug" {
 		t.Errorf("copyName = %q, want worker-0-debug", m.copyName)
+	}
+}
+
+func TestNewPodTargetDefaultsToCopyForTerminalPod(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"Succeeded", "Failed"} {
+		t.Run(phase, func(t *testing.T) {
+			m := New(Config{
+				Session: nonProdSession(), Namespace: "default", Name: "worker-0",
+				Containers: podContainers(), PodPhase: phase,
+			})
+			if m.mode != modeCopy {
+				t.Errorf("mode = %v, want modeCopy for a %s pod", m.mode, phase)
+			}
+			m.cycleMode()
+			if m.mode != modeCopy {
+				t.Errorf("cycleMode moved to %v for a %s pod", m.mode, phase)
+			}
+		})
 	}
 }
 

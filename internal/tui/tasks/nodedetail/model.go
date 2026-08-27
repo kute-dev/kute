@@ -59,6 +59,19 @@ type OpenLogsFunc func(pod kube.Pod, container string, width, height int) (tea.M
 // kube.ExecSpec without pushing a task.
 type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd)
 
+// OpenDebugFunc pushes tasks/debugpanel (§41c) for a selected pod row that
+// is not running. podPhase is the API phase, not the display reason.
+type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
+
+// RBACChecker answers §41a's mode-matched capability pre-check. It is
+// package-local by the consuming-interface convention.
+type RBACChecker interface {
+	WhoCan(ctx context.Context, query kube.WhoCanQuery) (kube.WhoCanResult, error)
+}
+
+// OpenWhoCanFunc pushes tasks/whocan with a denied debug query pre-filled.
+type OpenWhoCanFunc func(verb, resource, namespace string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenYAMLFunc pushes tasks/yamlview (8a) for the named object — same shape
 // as browse.OpenYAMLFunc/poddetail.OpenYAMLFunc.
 type OpenYAMLFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -97,6 +110,9 @@ type Config struct {
 	OpenPod       OpenPodFunc
 	OpenLogs      OpenLogsFunc
 	OpenExec      OpenExecFunc
+	OpenDebug     OpenDebugFunc
+	RBAC          RBACChecker
+	OpenWhoCan    OpenWhoCanFunc
 	OpenYAML      OpenYAMLFunc
 	OpenEvents    OpenEventsFunc
 	OpenTimeline  OpenTimelineFunc
@@ -136,12 +152,19 @@ type Model struct {
 	openPod       OpenPodFunc
 	openLogs      OpenLogsFunc
 	openExec      OpenExecFunc
+	openDebug     OpenDebugFunc
+	rbac          RBACChecker
+	openWhoCan    OpenWhoCanFunc
 	openYAML      OpenYAMLFunc
 	openEvents    OpenEventsFunc
 	openTimeline  OpenTimelineFunc
 	openForward   OpenForwardFunc
 	openNodeDebug OpenNodeDebugFunc
 	timeout       time.Duration
+
+	// pendingDebugDenial keeps §41a's denied create-pods query available
+	// for the follow-up 'w who-can' handoff.
+	pendingDebugDenial *debugDenial
 
 	nodeName string
 
@@ -263,6 +286,9 @@ func New(cfg Config) Model {
 		openPod:       cfg.OpenPod,
 		openLogs:      cfg.OpenLogs,
 		openExec:      cfg.OpenExec,
+		openDebug:     cfg.OpenDebug,
+		rbac:          cfg.RBAC,
+		openWhoCan:    cfg.OpenWhoCan,
 		openYAML:      cfg.OpenYAML,
 		openEvents:    cfg.OpenEvents,
 		openTimeline:  cfg.OpenTimeline,

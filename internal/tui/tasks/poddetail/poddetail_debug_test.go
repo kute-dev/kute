@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -18,6 +19,67 @@ type fakeShellDetector map[string][]string
 
 func (f fakeShellDetector) DetectShells(_ context.Context, _, _, container string) ([]string, error) {
 	return f[container], nil
+}
+
+type countingShellDetector struct{ calls int }
+
+func (f *countingShellDetector) DetectShells(context.Context, string, string, string) ([]string, error) {
+	f.calls++
+	return []string{"sh"}, nil
+}
+
+// TestFailedJobPodSkipsShellProbeAndOpensCopyDebug pins the path reached by
+// Enter on a failed Job attempt: x must not run the kubectl exec shell probe
+// against the terminal pod.
+func TestFailedJobPodSkipsShellProbeAndOpensCopyDebug(t *testing.T) {
+	p := runningPod("batch-0", "default", "node-a")
+	p.Status.Phase = corev1.PodFailed
+	p.Status.ContainerStatuses[0].Ready = false
+	p.Status.ContainerStatuses[0].State = corev1.ContainerState{
+		Terminated: &corev1.ContainerStateTerminated{Reason: "Error", ExitCode: 1},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {p}}}
+	detector := &countingShellDetector{}
+	rbac := &fakeRBACChecker{result: kube.WhoCanResult{CurrentUser: "dev@example.com", CurrentUserGranted: true}}
+	pickerCalled := false
+	var gotPhase string
+	m := New(Config{
+		Session: newSession(), Lister: lister, Shells: detector, RBAC: rbac,
+		OpenExec: func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) {
+			pickerCalled = true
+			return sentinelTask{}, nil
+		},
+		OpenDebug: func(_, _ string, _ []kube.ContainerInfo, podPhase string, waiting bool, _, _ int) (tea.Model, tea.Cmd) {
+			gotPhase = podPhase
+			if waiting {
+				t.Error("terminal container unexpectedly reported Waiting")
+			}
+			return sentinelTask{}, nil
+		},
+		Namespace: "default", Name: "batch-0",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
+	if _, ok := updated.(sentinelTask); !ok {
+		t.Fatalf("expected copy-debug panel, got %T", updated)
+	}
+	if cmd != nil {
+		t.Fatal("terminal pod routing returned a shell-probe/exec command")
+	}
+	if detector.calls != 0 {
+		t.Fatalf("DetectShells calls = %d, want 0", detector.calls)
+	}
+	if pickerCalled {
+		t.Fatal("execpicker opened for a terminal pod")
+	}
+	if gotPhase != "Failed" {
+		t.Fatalf("pod phase = %q, want Failed", gotPhase)
+	}
+	if rbac.gotQuery.Resource != kube.DebugCopyResource {
+		t.Fatalf("WhoCan resource = %q, want %q", rbac.gotQuery.Resource, kube.DebugCopyResource)
+	}
 }
 
 // TestDistrolessSingleContainerRoutesToDebugPanel confirms §41a's fork on

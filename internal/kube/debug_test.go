@@ -143,11 +143,13 @@ func TestPodWontStayRunning(t *testing.T) {
 		waiting  bool
 		want     bool
 	}{
-		{"crash loop", "CrashLoopBackOff", false, true},
-		{"waiting container", "", true, true},
-		{"both", "CrashLoopBackOff", true, true},
-		{"neither", "", false, false},
-		{"unrelated phase", "OOMKilled", false, false},
+		{"running", "Running", false, false},
+		{"running with waiting container", "Running", true, true},
+		{"pending", "Pending", false, true},
+		{"succeeded", "Succeeded", false, true},
+		{"failed", "Failed", false, true},
+		{"unknown", "Unknown", false, true},
+		{"phase unavailable", "", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

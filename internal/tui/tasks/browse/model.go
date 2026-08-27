@@ -136,7 +136,7 @@ type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Mod
 // (exec.go's detectPodShellsCmd) decides when to call this instead of
 // OpenExec/execCmd; podPhase/waiting are how the panel picks its own
 // default mode (attach vs. copy) and hard-disables attach when it can't
-// work.
+// work. podPhase is the API phase, not the row's display reason.
 type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
 
 // OpenNodeDebugFunc pushes tasks/debugpanel (§41d) for a Node row's 'x' —

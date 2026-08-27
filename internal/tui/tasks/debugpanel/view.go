@@ -158,7 +158,12 @@ func (m Model) headerRight() string {
 func (m Model) modeSelectorLines(theme tui.Theme) []string {
 	disabledReason := ""
 	if m.podWontStayRunning() {
-		disabledReason = "needs a running container — this one is in backoff"
+		disabledReason = "needs a running container"
+		if m.podPhase != "" && m.podPhase != "Running" {
+			disabledReason += " — pod phase is " + m.podPhase
+		} else if m.waiting {
+			disabledReason += " — a container is waiting"
+		}
 	}
 	return []string{
 		m.modeRow(theme, "attach ephemeral", "shares this pod's namespaces · nothing restarts", m.mode == modeAttach, disabledReason),

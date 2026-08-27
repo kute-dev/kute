@@ -153,18 +153,13 @@ func detectPodShellsCmd(parent context.Context, namespace, podName string, conta
 	}
 }
 
-// beginExecOrDebug resolves 'x' for the selected Pod row: fires the async
-// shell pre-check above when Shells is wired (the actual push happens once
-// podShellsProbedMsg arrives, in routePodShellsProbed, since the decision
-// needs every container's result at once) — falls back to
-// openSelectedExec's old synchronous single-vs-multi-container routing when
-// Shells isn't wired, so 'x' keeps working without §41a's distroless fork.
-func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
+// beginExecOrDebug resolves 'x' for the selected Pod row. Pod state wins
+// before shell detection: kubectl exec cannot probe a Pending or terminal
+// pod, so those states open copy-mode debug directly. Running pods retain
+// the async shell pre-check and its exec/execpicker/attach-debug fork.
+func (m *Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if m.kind != kube.KindPod {
 		return nil, nil, false
-	}
-	if m.shells == nil {
-		return m.openSelectedExec()
 	}
 	row, ok := m.selectedRow()
 	if !ok {
@@ -174,7 +169,36 @@ func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if !ok || len(pod.ContainerInfos) == 0 {
 		return nil, nil, false
 	}
+	podPhase, waiting := podStatusAndWaiting(pod)
+	if kube.PodWontStayRunning(podPhase, waiting) {
+		task, cmd := m.openPodDebug(pod.Namespace, pod.Name, pod.ContainerInfos, podPhase, waiting)
+		return task, cmd, true
+	}
+	if m.shells == nil {
+		return m.openSelectedExec()
+	}
 	return nil, detectPodShellsCmd(m.session.ClusterContext(), pod.Namespace, pod.Name, pod.ContainerInfos, m.shells), true
+}
+
+// openPodDebug performs the mode-matched RBAC pre-check and pushes the
+// existing debug panel. Terminal pod routing calls this before any shell
+// probe; the running distroless path calls it after probing.
+func (m *Model) openPodDebug(namespace, podName string, containers []kube.ContainerInfo, podPhase string, waiting bool) (tea.Model, tea.Cmd) {
+	if m.openDebug == nil {
+		m.execFeedback = podName + ": debug is unavailable"
+		return m, nil
+	}
+	if denial := m.debugCapabilityDenied(namespace, podPhase, waiting); denial != nil {
+		m.pendingDebugDenial = denial
+		m.execFeedback = denial.feedback()
+		return m, nil
+	}
+	m.pendingDebugDenial = nil
+	task, cmd := m.openDebug(namespace, podName, containers, podPhase, waiting, m.width, m.height)
+	if task != nil {
+		return task, cmd
+	}
+	return m, cmd
 }
 
 // routePodShellsProbed decides, now that every container's probe result is
@@ -187,21 +211,8 @@ func (m Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 // execpicker as before.
 func (m *Model) routePodShellsProbed(msg podShellsProbedMsg) (tea.Model, tea.Cmd) {
 	if msg.allShellless() {
-		if m.openDebug == nil {
-			return m, nil
-		}
-		podPhase, waiting := m.podPhaseAndWaiting(msg.podName)
-		if denial := m.debugCapabilityDenied(msg.namespace, podPhase, waiting); denial != nil {
-			m.pendingDebugDenial = denial
-			m.execFeedback = denial.feedback()
-			return m, nil
-		}
-		m.pendingDebugDenial = nil
-		task, cmd := m.openDebug(msg.namespace, msg.podName, msg.containers, podPhase, waiting, m.width, m.height)
-		if task != nil {
-			return task, cmd
-		}
-		return m, cmd
+		podPhase, waiting := m.selectedPodStatusAndWaiting(msg.podName)
+		return m.openPodDebug(msg.namespace, msg.podName, msg.containers, podPhase, waiting)
 	}
 	if len(msg.containers) == 1 {
 		return m, execCmd(msg.namespace, msg.podName, msg.containers[0].Name, m.demo)
@@ -240,18 +251,23 @@ func (m *Model) decorateDebugCopies() {
 	}
 }
 
-// podPhaseAndWaiting reads the loaded pod's own Reason (e.g.
-// "CrashLoopBackOff") and whether any container currently sits Waiting
-// (e.g. ImagePullBackOff) — debugpanel's own default-mode gate for §41c.
-func (m Model) podPhaseAndWaiting(podName string) (string, bool) {
+// selectedPodStatusAndWaiting reads the loaded pod's actual API phase and
+// whether any container currently sits Waiting. The phase, not the display
+// Reason, is load-bearing for terminal Job pods: kubectl exec rejects both
+// Succeeded and Failed.
+func (m Model) selectedPodStatusAndWaiting(podName string) (string, bool) {
 	pod, ok := m.pods[podName]
 	if !ok {
 		return "", false
 	}
+	return podStatusAndWaiting(pod)
+}
+
+func podStatusAndWaiting(pod kube.Pod) (string, bool) {
 	for _, c := range pod.ContainerInfos {
 		if c.State == "Waiting" {
-			return pod.Reason, true
+			return pod.Status, true
 		}
 	}
-	return pod.Reason, false
+	return pod.Status, false
 }

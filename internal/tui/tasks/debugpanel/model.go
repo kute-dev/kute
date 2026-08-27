@@ -69,7 +69,7 @@ type Config struct {
 	Namespace  string
 	Name       string
 	Containers []kube.ContainerInfo
-	// PodPhase/Waiting pick the default mode (CrashLoopBackOff, or a
+	// PodPhase/Waiting pick the default mode (a non-Running API phase, or a
 	// Waiting container, default to modeCopy and hard-disable attach — the
 	// confirmed decision, docs/design v.0.11.0.dc.html §41c) and are also
 	// used to re-evaluate that gate live if the row's state changes while
@@ -222,9 +222,9 @@ func containerIndexOrDefault(containers []kube.ContainerInfo, name string) int {
 	return firstNonSidecarIndex(containers)
 }
 
-// podWontStayRunning reports whether §41c's copy-only gate applies —
-// CrashLoopBackOff or a Waiting container means an ephemeral attach has
-// nothing running to attach to.
+// podWontStayRunning reports whether §41c's copy-only gate applies — a
+// terminal/not-yet-running phase or a Waiting container means an ephemeral
+// attach has nothing running to attach to.
 func (m Model) podWontStayRunning() bool {
 	return kube.PodWontStayRunning(m.podPhase, m.waiting)
 }

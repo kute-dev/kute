@@ -295,8 +295,18 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
 			return m, nil
 		}
-		if task, cmd, ok := m.openSelectedExec(); ok {
+		if task, cmd, ok := m.openSelectedExecOrDebug(); ok {
 			if task != nil {
+				return task, cmd
+			}
+			return m, cmd
+		}
+	case verbs.WhoCan.Key:
+		if m.pendingDebugDenial != nil && m.openWhoCan != nil {
+			d := m.pendingDebugDenial
+			task, cmd := m.openWhoCan(d.verb, d.resource, d.namespace, m.width, m.height)
+			if task != nil {
+				m.pendingDebugDenial = nil
 				return task, cmd
 			}
 			return m, cmd

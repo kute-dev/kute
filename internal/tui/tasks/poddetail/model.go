@@ -73,7 +73,7 @@ type OpenForwardFunc func(target kube.ForwardTarget, width, height int) (tea.Mod
 // OpenDebugFunc pushes tasks/debugpanel (§41b/§41c) for the loaded pod when
 // no container has a shell, or the pod won't stay running — same shape as
 // browse.OpenDebugFunc, duplicated per the repo's package-local-seam
-// convention.
+// convention. podPhase is the API phase, not the display reason.
 type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
 
 // ShellDetector answers which shells a container actually has — same shape
