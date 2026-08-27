@@ -250,9 +250,9 @@ func TestPodFromObjectContainerWithoutStatusYet(t *testing.T) {
 // TestPodFromObjectFlagsNativeSidecars pins 10a (docs/design README.md:141:
 // "sidecars labeled sidecar"): a native sidecar (KEP-753's initContainer
 // with restartPolicy: Always) must be flagged IsSidecar and appended after
-// the regular containers; a plain init container (no RestartPolicy) must
-// not appear in ContainerInfos at all — the exec picker's grid is "the
-// running containers," not "everything in the spec."
+// the regular containers; a plain init container (no RestartPolicy) must be
+// projected separately so pod detail can show it without offering it to the
+// exec picker.
 func TestPodFromObjectFlagsNativeSidecars(t *testing.T) {
 	t.Parallel()
 	always := corev1.ContainerRestartPolicyAlways
@@ -267,6 +267,7 @@ func TestPodFromObjectFlagsNativeSidecars(t *testing.T) {
 		},
 		Status: corev1.PodStatus{
 			InitContainerStatuses: []corev1.ContainerStatus{
+				{Name: "migrate", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}}},
 				{Name: "envoy", Ready: true, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
 			},
 		},
@@ -285,6 +286,12 @@ func TestPodFromObjectFlagsNativeSidecars(t *testing.T) {
 	}
 	if sidecar.State != "Running" {
 		t.Errorf("sidecar State = %q, want Running (matched from InitContainerStatuses)", sidecar.State)
+	}
+	if len(got.InitContainerInfos) != 1 {
+		t.Fatalf("InitContainerInfos = %+v, want migrate only", got.InitContainerInfos)
+	}
+	if init := got.InitContainerInfos[0]; init.Name != "migrate" || init.State != "Terminated" || init.Reason != "Completed" {
+		t.Errorf("InitContainerInfos[0] = %+v, want completed migrate", init)
 	}
 }
 

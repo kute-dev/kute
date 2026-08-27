@@ -136,6 +136,8 @@ var (
 	// events (9b) and yamlview (8a) already use for their own local fold
 	// toggles.
 	ToggleGroup = Verb{ID: "toggle-group", Key: "tab", Label: "expand/collapse"}
+	PageUp      = Verb{ID: "page-up", Key: "pgup", Label: "page up"}
+	PageDown    = Verb{ID: "page-down", Key: "pgdown", Label: "page down"}
 	Help        = Verb{ID: "help", Key: "?", Label: "help"}
 	// Retry is the reconnect/re-probe key shared by the 4a offline banner,
 	// 4b's 403 card, and the 4c/10b tasks/setup screens (mvp-plan.md Phase
@@ -606,7 +608,7 @@ var (
 // columns and for ByID lookups.
 var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
-	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, Help, Retry, WhoCan,
+	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, PageUp, PageDown, Help, Retry, WhoCan,
 	HelmValues, HelmHistory, Mark, MarkAll,
 	LogPause, LogFollow, LogNextWarning, LogNextError, LogToggleWrap, LogToggleTime,
 	LogCycleSince, LogCycleContainer, LogCopyView,

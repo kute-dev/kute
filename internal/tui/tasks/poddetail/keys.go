@@ -59,6 +59,12 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 
+	maxBodyOffset := 0
+	if m.found {
+		maxBodyOffset = m.bodyMaxOffset()
+	}
+	narrowOverflow := maxBodyOffset > 0 && m.width < 100
+
 	groups := [][]tui.KeyHint{}
 	verbGroup := []tui.KeyHint{}
 	if m.openLogs != nil {
@@ -75,7 +81,7 @@ func (m Model) Keybar() tui.Keybar {
 	// each one out doesn't fit this band's width budget alongside everything
 	// else already curated here (5a's kitchen-sink fixture already renders
 	// at ~zero slack).
-	if n := len(m.related); n > 0 {
+	if n := len(m.related); n > 0 && (!narrowOverflow || m.bodyOffset == 0) {
 		key := "1"
 		if n > 1 {
 			key = fmt.Sprintf("1-%d", n)
@@ -88,10 +94,9 @@ func (m Model) Keybar() tui.Keybar {
 	if m.mutator != nil && !verbs.Delete.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{verbs.Delete.Hint()})
 	}
-	if len(m.siblings) > 1 {
+	if len(m.siblings) > 1 && !narrowOverflow {
 		groups = append(groups, []tui.KeyHint{{Key: "[/]", Label: "next/prev"}})
 	}
-
 	// 4a's offline treatment (docs/design README.md §52, §301): mutating
 	// verbs disappear from the keybar the same way browse's own list does,
 	// not just at the actions.Controller gate.
@@ -99,12 +104,22 @@ func (m Model) Keybar() tui.Keybar {
 	if m.conn.Offline() {
 		pill, pillText, rightNote = tui.ModeOffline, "OFFLINE", "mutating actions disabled"
 	}
+	rightHints := tui.UpdateRightHints(m.session)
+	if maxBodyOffset > 0 {
+		if m.bodyOffset > 0 {
+			rightHints = append(rightHints, verbs.PageUp.Hint())
+		}
+		if m.bodyOffset < maxBodyOffset {
+			rightHints = append(rightHints, verbs.PageDown.Hint())
+		}
+	}
+	rightHints = append(rightHints, verbs.Help.Hint())
 	return tui.Keybar{
 		Pill:       pill,
 		PillText:   pillText,
 		Groups:     groups,
 		RightNote:  rightNote,
-		RightHints: append(tui.UpdateRightHints(m.session), verbs.Help.Hint()),
+		RightHints: rightHints,
 	}
 }
 

@@ -228,12 +228,37 @@ func FromPod(session *tui.Session, lister resources.RawLister, pod kube.Pod, ini
 			Context:    pod.Context,
 			Namespace:  pod.Namespace,
 			Name:       pod.Name,
-			Containers: pod.Containers,
+			Containers: logContainerNames(pod),
 			Restarts:   pod.Restarts,
 		},
 		InitialContainer: initialContainer,
 		Streamer:         streamer,
 	})
+}
+
+func logContainerNames(pod kube.Pod) []string {
+	capacity := len(pod.Containers) + len(pod.ContainerInfos) + len(pod.InitContainerInfos) + len(pod.EphemeralContainerInfos)
+	names := make([]string, 0, capacity)
+	seen := make(map[string]bool, capacity)
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for _, name := range pod.Containers {
+		add(name)
+	}
+	for _, info := range pod.ContainerInfos {
+		add(info.Name)
+	}
+	for _, info := range pod.InitContainerInfos {
+		add(info.Name)
+	}
+	for _, info := range pod.EphemeralContainerInfos {
+		add(info.Name)
+	}
+	return names
 }
 
 func (m Model) Init() tea.Cmd { return nil }

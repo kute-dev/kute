@@ -807,6 +807,102 @@ func TestOpenLogsUsesSelectedContainer(t *testing.T) {
 	}
 }
 
+func TestInitContainerRendersAndCanOpenLogs(t *testing.T) {
+	pod := runningPod("api-0", "default", "node-a")
+	pod.Spec.InitContainers = []corev1.Container{{Name: "prepare-ssh", Image: "registry/software-escrow:1.0.0"}}
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name: "prepare-ssh", RestartCount: 5,
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+	}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {pod}}}
+	var openedContainer string
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		OpenLogs: func(_ kube.Pod, container string, _, _ int) (tea.Model, tea.Cmd) {
+			openedContainer = container
+			return sentinelTask{}, nil
+		},
+		Namespace: "default", Name: "api-0",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	for _, want := range []string{"INIT CONTAINERS", "prepare-ssh", "Waiting"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view missing %q:\n%s", want, view)
+		}
+	}
+	if got := m.pod.InitContainerInfos[0].Reason; got != "ImagePullBackOff" {
+		t.Fatalf("init-container reason = %q, want ImagePullBackOff", got)
+	}
+	m.moveContainerSelection(1)
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "l"})
+	if _, ok := updated.(sentinelTask); !ok {
+		t.Fatalf("expected init-container logs task, got %T", updated)
+	}
+	if openedContainer != "prepare-ssh" {
+		t.Fatalf("OpenLogs called with %q, want prepare-ssh", openedContainer)
+	}
+}
+
+func TestLongImagePullEventWrapsAndCanBePagedIntoView(t *testing.T) {
+	pod := runningPod("software-escrow-manual-1148-gwn9l", "software-escrow", "dharma")
+	pod.Spec.InitContainers = []corev1.Container{{Name: "prepare-ssh", Image: "r.vayner.systems:30080/aim/software-escrow:1.0.0"}}
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name: "prepare-ssh", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+	}}
+	detailed := `Failed to pull image "r.vayner.systems:30080/aim/software-escrow:1.0.0": rpc error: code = NotFound desc = failed to pull and unpack image: no match for platform in manifest: not found`
+	events := fakeEvents{events: []kube.Event{
+		{Type: "Warning", Reason: "Failed", Message: "Error: ImagePullBackOff"},
+		{Type: "Warning", Reason: "Failed", Message: "Error: ErrImagePull"},
+		{Type: "Warning", Reason: "Failed", Message: detailed},
+	}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {pod}}}
+	m := New(Config{Session: newSession(), Lister: lister, Events: events, Namespace: "software-escrow", Name: pod.Name})
+	m.SetSize(80, 24)
+	m = step(t, m, m.Init()())
+
+	eventsView := plain(m.eventsBlock(m.Theme(), 56))
+	for _, want := range []string{"image: no match", "for platform in", "manifest: not", "found"} {
+		if !strings.Contains(eventsView, want) {
+			t.Fatalf("wrapped event lost %q:\n%s", want, eventsView)
+		}
+	}
+	if !m.bodyOverflows() {
+		t.Fatal("expected the init-container detail and wrapped events to overflow a 80x24 body")
+	}
+	if !hasKeyHint(m.Keybar().RightHints, verbs.PageDown.Key) {
+		t.Fatalf("overflowing detail keybar does not advertise %s", verbs.PageDown.Key)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.PageDown.Key})
+	if m.bodyOffset == 0 {
+		t.Fatal("pgdown did not move the pod-detail viewport")
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.PageDown.Key})
+	if !hasKeyHint(m.Keybar().RightHints, verbs.PageUp.Key) {
+		t.Fatalf("paged detail keybar does not advertise %s", verbs.PageUp.Key)
+	}
+	view := plain(m.Render())
+	if !strings.Contains(view, "manifest: not") {
+		t.Fatalf("paged view does not expose the detailed image-pull diagnosis:\n%s", view)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.PageUp.Key})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.PageUp.Key})
+	if m.bodyOffset != 0 {
+		t.Fatalf("pgup left bodyOffset=%d, want 0", m.bodyOffset)
+	}
+}
+
+func hasKeyHint(hints []tui.KeyHint, key string) bool {
+	for _, hint := range hints {
+		if hint.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // TestOpenRelatedJumpsToOwner covers the RELATED sidebar's numbered jump
 // (docs/design README.md §5a): pressing '1' on a pod whose owner resolves to
 // a Deployment must fire tui.GotoResource for that Deployment — the digit

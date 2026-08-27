@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -58,38 +57,20 @@ func TestDedupeEventsOrdersNewestFirst(t *testing.T) {
 	}
 }
 
-// TestDedupeEventsFoldsDespiteDifferingMessage is the real-world case a live
-// cluster surfaced: a ReplicaSet's FailedCreate quota rejection, retried a
-// few minutes apart, each attempt naming a freshly-generated pod suffix in
-// its message ("...pods \"checkout-api-bc9cbfdc-r5z84\" is forbidden..." vs
-// "...-t7pr9..."). Same reason+object, different message — these must still
-// collapse into one ×2 group (docs/design README.md's `Kute Spec.dc.html
-// #9b` caption: "deduped by reason+object"), keeping the most recent
-// message rather than the message becoming part of the dedupe key.
-func TestDedupeEventsFoldsDespiteDifferingMessage(t *testing.T) {
+func TestDedupeEventsPreservesDistinctFailedMessages(t *testing.T) {
 	t.Parallel()
-	older := time.Now().Add(-16 * time.Minute)
-	newer := time.Now()
+	now := time.Now()
 	events := []Event{
-		mkEvent("FailedCreate", "ReplicaSet/checkout-api-bc9cbfdc",
-			`Error creating: pods "checkout-api-bc9cbfdc-r5z84" is forbidden: exceeded quota: compute-quota, requested: requests.memory=21Gi, used: requests.memory=31488Mi, limited: requests.memory=48Gi`,
-			1, older, "Warning"),
-		mkEvent("FailedCreate", "ReplicaSet/checkout-api-bc9cbfdc",
-			`Error creating: pods "checkout-api-bc9cbfdc-t7pr9" is forbidden: exceeded quota: compute-quota, requested: requests.memory=21Gi, used: requests.memory=31488Mi, limited: requests.memory=48Gi`,
-			1, newer, "Warning"),
+		mkEvent("Failed", "Pod/software-escrow-manual-1148-gwn9l", `Failed to pull image "registry/software-escrow:1.0.0": no match for platform in manifest: not found`, 5, now.Add(-time.Minute), "Warning"),
+		mkEvent("Failed", "Pod/software-escrow-manual-1148-gwn9l", "Error: ErrImagePull", 5, now.Add(-30*time.Second), "Warning"),
+		mkEvent("Failed", "Pod/software-escrow-manual-1148-gwn9l", "Error: ImagePullBackOff", 15, now, "Warning"),
 	}
 	groups := DedupeEvents(events)
-	if len(groups) != 1 {
-		t.Fatalf("got %d groups, want 1 (same reason+object should fold despite differing message), groups=%+v", len(groups), groups)
+	if len(groups) != 3 {
+		t.Fatalf("got %d groups, want all 3 distinct Failed messages, groups=%+v", len(groups), groups)
 	}
-	if groups[0].Count != 2 {
-		t.Fatalf("Count = %d, want 2 (summed)", groups[0].Count)
-	}
-	if !groups[0].LastSeen.Equal(newer) {
-		t.Fatalf("LastSeen = %v, want the most recent %v", groups[0].LastSeen, newer)
-	}
-	if !strings.Contains(groups[0].Message, "t7pr9") {
-		t.Fatalf("Message = %q, want the most recent occurrence's message (t7pr9)", groups[0].Message)
+	if groups[2].Message != events[0].Message {
+		t.Fatalf("detailed failure was lost: groups=%+v", groups)
 	}
 }
 

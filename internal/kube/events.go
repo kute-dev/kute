@@ -95,14 +95,15 @@ func filterEventsByInvolvedObject(events []*corev1.Event, kind, name string) []E
 // 9b, flipping two same-second events (e.g. a container's Pulling/Started
 // pair) back and forth on every reload. FirstSeen desc as a tiebreak both
 // fixes that and, for causally-linked events like Pulling→Started, surfaces
-// the one that actually happened later; Reason is the final, fully
-// deterministic fallback.
+// the one that actually happened later; Reason and Message are the final,
+// fully deterministic fallbacks.
 func sortEventsNewestFirst(events []Event) {
 	slices.SortFunc(events, func(a, b Event) int {
 		return cmp.Or(
 			b.LastSeen.Compare(a.LastSeen),
 			b.FirstSeen.Compare(a.FirstSeen),
 			cmp.Compare(a.Reason, b.Reason),
+			cmp.Compare(a.Message, b.Message),
 		)
 	})
 }
@@ -156,16 +157,12 @@ func eventFromObject(ev *corev1.Event) Event {
 	}
 }
 
-// DedupeEvents folds events sharing the same reason+object into one
-// EventGroup per key (docs/design README.md's `Kute Spec.dc.html#9b`
-// caption: "deduped by reason+object" — message is deliberately left out of
-// the key, since retries of the same failure routinely generate a fresh
-// message each attempt, e.g. a ReplicaSet's FailedCreate quota rejection
-// naming a newly-generated pod suffix every time; keying on message too
-// would silently defeat the dedupe for exactly the bursty-retry case 9b
-// exists to collapse), summing Count and keeping the latest LastSeen (and
-// that occurrence's Type/Message, in case either changed across
-// occurrences). Namespace is part of the key even though Object ("Kind/Name")
+// DedupeEvents folds true repeats sharing reason+object+message into one
+// EventGroup, summing Count and keeping the latest LastSeen. Message is part
+// of the identity because one object can emit several materially different
+// events under a generic reason such as Failed: the detailed image-pull
+// error, ErrImagePull, and ImagePullBackOff must all remain visible.
+// Namespace is part of the key even though Object ("Kind/Name")
 // doesn't carry it — 9b's all-namespaces mode (browse's 'e' with
 // namespace == "", mirroring 6b) would otherwise fold together two
 // same-named, same-kind objects with the same reason in different
@@ -174,12 +171,12 @@ func eventFromObject(ev *corev1.Event) Event {
 // ordered newest-first; screens partition warnings-first or otherwise
 // re-sort on top of this base order.
 func DedupeEvents(events []Event) []EventGroup {
-	type key struct{ reason, namespace, object string }
+	type key struct{ reason, namespace, object, message string }
 	groups := make(map[key]*EventGroup, len(events))
 	order := make([]key, 0, len(events))
 
 	for _, e := range events {
-		k := key{e.Reason, e.Namespace, e.Object}
+		k := key{e.Reason, e.Namespace, e.Object, e.Message}
 		g, ok := groups[k]
 		if !ok {
 			g = &EventGroup{Reason: e.Reason, Message: e.Message, Object: e.Object, Namespace: e.Namespace}
@@ -206,6 +203,7 @@ func DedupeEvents(events []Event) []EventGroup {
 			b.LastSeen.Compare(a.LastSeen),
 			cmp.Compare(a.Reason, b.Reason),
 			cmp.Compare(a.Object, b.Object),
+			cmp.Compare(a.Message, b.Message),
 		)
 	})
 	return out

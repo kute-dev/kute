@@ -35,8 +35,13 @@ func multiContainerPod(name, ns, node string) *corev1.Pod {
 // single-container pod (docs/design README.md §10a) without pushing
 // execpicker.
 func TestExecSingleContainerRunsDirectly(t *testing.T) {
+	pod := runningPod("api-0", "default", "node-a")
+	pod.Spec.InitContainers = []corev1.Container{{Name: "prepare", Image: "example.com/prepare:v1"}}
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{
+		Name: "prepare", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed"}},
+	}}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {runningPod("api-0", "default", "node-a")},
+		kube.KindPod: {pod},
 	}}
 	openExecCalled := false
 	m := New(Config{
@@ -58,7 +63,7 @@ func TestExecSingleContainerRunsDirectly(t *testing.T) {
 		t.Fatal("expected a non-nil exec Cmd")
 	}
 	if openExecCalled {
-		t.Fatal("OpenExec must not be called for a single-container pod")
+		t.Fatal("OpenExec must not be called when the only additional container is a conventional init container")
 	}
 }
 

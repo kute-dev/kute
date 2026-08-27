@@ -1,6 +1,8 @@
 package poddetail
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
@@ -169,6 +171,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveContainerHalfPage(1)
 	case "ctrl+u":
 		m.moveContainerHalfPage(-1)
+	case verbs.PageDown.Key:
+		m.moveBodyPage(1)
+	case verbs.PageUp.Key:
+		m.moveBodyPage(-1)
 	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
@@ -327,6 +333,7 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	m.eventsErr = nil
 	m.related = nil
 	m.selectedContainer = 0
+	m.bodyOffset = 0
 	m.state = tui.TaskStateLoading
 	m.feedback = "Loading " + m.name + "..."
 	if m.lister == nil {
@@ -337,25 +344,33 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	return tea.Batch(m.load(), m.spinner.Tick)
 }
 
-// totalContainerRows is the combined CONTAINERS + EPHEMERAL selection space
-// (§41e) — ephemeral rows come after the ordinary ones, so index arithmetic
-// stays a single offset rather than two independent cursors.
+// totalContainerRows is the combined CONTAINERS + INIT CONTAINERS +
+// EPHEMERAL selection space. Init rows are loggable but openSelectedExec
+// deliberately continues to use only ContainerInfos.
 func (m Model) totalContainerRows() int {
-	return len(m.pod.ContainerInfos) + len(m.pod.EphemeralContainerInfos)
+	return len(m.pod.ContainerInfos) + len(m.pod.InitContainerInfos) + len(m.pod.EphemeralContainerInfos)
+}
+
+func (m Model) selectedInitContainer() (kube.ContainerInfo, bool) {
+	i := m.selectedContainer - len(m.pod.ContainerInfos)
+	if i < 0 || i >= len(m.pod.InitContainerInfos) {
+		return kube.ContainerInfo{}, false
+	}
+	return m.pod.InitContainerInfos[i], true
 }
 
 // selectedEphemeralContainer resolves m.selectedContainer to an
 // EphemeralContainerInfo when the cursor is on the EPHEMERAL group, ok
 // false otherwise.
 func (m Model) selectedEphemeralContainer() (kube.EphemeralContainerInfo, bool) {
-	i := m.selectedContainer - len(m.pod.ContainerInfos)
+	i := m.selectedContainer - len(m.pod.ContainerInfos) - len(m.pod.InitContainerInfos)
 	if i < 0 || i >= len(m.pod.EphemeralContainerInfos) {
 		return kube.EphemeralContainerInfo{}, false
 	}
 	return m.pod.EphemeralContainerInfos[i], true
 }
 
-// moveContainerSelection shifts the combined CONTAINERS/EPHEMERAL
+// moveContainerSelection shifts the combined CONTAINERS/INIT/EPHEMERAL
 // selection by delta, clamped rather than wrapping — same as browse's own
 // moveSelection (j/k ≡ ↑↓ everywhere, CLAUDE.md convention).
 func (m *Model) moveContainerSelection(delta int) {
@@ -379,6 +394,22 @@ func (m *Model) moveContainerHalfPage(direction int) {
 	m.selectedContainer = position.Selected
 }
 
+func (m *Model) moveBodyPage(direction int) {
+	height := tui.FrameBodyHeight(m.height, 0)
+	contentHeight := len(strings.Split(m.readyContent(m.width), "\n"))
+	maxOffset := max(contentHeight-height, 0)
+	m.bodyOffset = min(max(m.bodyOffset+direction*max(height-2, 1), 0), maxOffset)
+}
+
+func (m Model) bodyOverflows() bool {
+	return m.bodyMaxOffset() > 0
+}
+
+func (m Model) bodyMaxOffset() int {
+	height := tui.FrameBodyHeight(m.height, 0)
+	return max(len(strings.Split(m.readyContent(m.width), "\n"))-height, 0)
+}
+
 // openSelectedLogs pushes the log-stream screen for the loaded pod — same
 // contract as browse.openSelectedLogs (ok is false when logs aren't wired
 // or nothing's loaded yet, so 'l' stays a no-op rather than pushing a
@@ -392,6 +423,8 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	container := ""
 	if m.selectedContainer < len(m.pod.ContainerInfos) {
 		container = m.pod.ContainerInfos[m.selectedContainer].Name
+	} else if init, ok := m.selectedInitContainer(); ok {
+		container = init.Name
 	} else if eph, ok := m.selectedEphemeralContainer(); ok {
 		container = eph.Name
 	}

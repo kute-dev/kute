@@ -189,9 +189,9 @@
       <h2>Diagnosing pods and nodes</h2>
       <p>Press <code>↵</code> on a pod and the screen opens with the reason it is unhappy, not with its labels. A crashlooping container leads with its last termination — exit code, reason, how long ago — above everything else, so the first line you read is the one you came for.</p>
       <ul class="deepdive-list">
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Containers, their images, and live CPU/memory against their limits sit below it.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Containers, init containers, their images, and live CPU/memory against their limits sit below it.</li>
         <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Numbered RELATED links — Deployment, ReplicaSet, Service, ConfigMap — go straight to the object. There is no sidebar to tab through.</li>
-        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>The pod's own events are on the same screen, so "why is it Pending" is usually answered without going anywhere.</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>The pod's own events wrap their complete messages on the same screen, so "why is it Pending" is usually answered without going anywhere.</li>
       </ul>
 
       <div class="term reveal" role="img" aria-label="kute's pod detail screen: a crashlooping pod's last termination reason promoted above the metadata, its containers, and a log excerpt showing the OOM crash and the restart boundary">
@@ -592,6 +592,8 @@
           <tr><td><kbd>l</kbd></td><td>logs — follow, filter, jump across restarts</td></tr>
           <tr><td><kbd>x</kbd></td><td>exec — a shell in the container; on a shell-less container or a pod that won't stay up, opens the debug panel instead</td></tr>
           <tr><td><kbd>f</kbd></td><td>forward — start a port-forward</td></tr>
+          <tr><td><kbd>pgup</kbd></td><td>page up through pod detail</td></tr>
+          <tr><td><kbd>pgdown</kbd></td><td>page down through pod detail</td></tr>
           <tr><td><kbd>ctrl-k</kbd></td><td>force delete (grace period 0)</td></tr>
         </tbody>
       </table>

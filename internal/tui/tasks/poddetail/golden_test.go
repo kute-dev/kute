@@ -44,6 +44,9 @@ func goldenCrashLoopPod() *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			NodeName: "worker-01",
+			InitContainers: []corev1.Container{{
+				Name: "prepare-config", Image: "nva/config-init:1.2.0",
+			}},
 			Containers: []corev1.Container{
 				{
 					Name:  "worker",
@@ -66,6 +69,12 @@ func goldenCrashLoopPod() *corev1.Pod {
 			Phase:    corev1.PodRunning,
 			QOSClass: corev1.PodQOSBurstable,
 			PodIP:    "10.1.34.19",
+			InitContainerStatuses: []corev1.ContainerStatus{{
+				Name: "prepare-config",
+				State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+					ExitCode: 0, Reason: "Completed", FinishedAt: metav1.NewTime(time.Now().Add(-3 * time.Hour)),
+				}},
+			}},
 			ContainerStatuses: []corev1.ContainerStatus{
 				{
 					Name: "worker", Ready: false, RestartCount: 6,

@@ -46,6 +46,11 @@ type Pod struct {
 	Labels         map[string]string
 	Tolerations    []string // formatted "key=value:Effect" / "key (exists):Effect"
 	ContainerInfos []ContainerInfo
+	// InitContainerInfos contains conventional init containers. Native
+	// sidecars remain in ContainerInfos because they keep running and are
+	// valid exec targets; conventional init containers are loggable but are
+	// never offered by the exec picker.
+	InitContainerInfos []ContainerInfo
 	// EphemeralContainerInfos is empty on almost every pod — only non-empty
 	// once a debug session (§41b/§41c, or `kubectl debug` run outside kute
 	// entirely) has attached at least one ephemeral container. Drives 5a's
@@ -185,6 +190,7 @@ func PodFromObject(pod *corev1.Pod) Pod {
 		Labels:                  pod.Labels,
 		Tolerations:             formatTolerations(pod.Spec.Tolerations),
 		ContainerInfos:          buildContainerInfos(pod),
+		InitContainerInfos:      buildInitContainerInfos(pod),
 		EphemeralContainerInfos: buildEphemeralContainerInfos(pod),
 		LastTermination:         findLastTermination(pod.Status.ContainerStatuses),
 		GracePeriodSeconds: func() int64 {
@@ -248,6 +254,28 @@ func buildContainerInfos(pod *corev1.Pod) []ContainerInfo {
 		}
 		info := ContainerInfo{Name: c.Name, Image: c.Image, IsSidecar: true}
 		if s, ok := initByName[c.Name]; ok {
+			applyContainerStatus(&info, s)
+		}
+		out = append(out, info)
+	}
+	return out
+}
+
+// buildInitContainerInfos returns conventional init containers for pod
+// detail. Restartable init containers are native sidecars and already appear
+// in buildContainerInfos, so excluding them here avoids duplicate rows.
+func buildInitContainerInfos(pod *corev1.Pod) []ContainerInfo {
+	byName := make(map[string]corev1.ContainerStatus, len(pod.Status.InitContainerStatuses))
+	for _, s := range pod.Status.InitContainerStatuses {
+		byName[s.Name] = s
+	}
+	out := make([]ContainerInfo, 0, len(pod.Spec.InitContainers))
+	for _, c := range pod.Spec.InitContainers {
+		if isRestartableInit(c) {
+			continue
+		}
+		info := ContainerInfo{Name: c.Name, Image: c.Image}
+		if s, ok := byName[c.Name]; ok {
 			applyContainerStatus(&info, s)
 		}
 		out = append(out, info)

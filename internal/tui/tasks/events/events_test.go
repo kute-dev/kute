@@ -120,6 +120,29 @@ func TestNamespaceScopedLoadDedupesAndFoldsNormal(t *testing.T) {
 	}
 }
 
+func TestDistinctFailedMessagesRemainVisible(t *testing.T) {
+	now := time.Now()
+	detailed := `Failed to pull image "registry/software-escrow:1.0.0": rpc error: no match for platform in manifest: not found`
+	events := []kube.Event{
+		{Type: "Warning", Reason: "Failed", Object: "Pod/software-escrow", Message: detailed, Count: 5, LastSeen: now.Add(-time.Minute)},
+		{Type: "Warning", Reason: "Failed", Object: "Pod/software-escrow", Message: "Error: ErrImagePull", Count: 5, LastSeen: now.Add(-30 * time.Second)},
+		{Type: "Warning", Reason: "Failed", Object: "Pod/software-escrow", Message: "Error: ImagePullBackOff", Count: 15, LastSeen: now},
+	}
+	m := New(Config{Session: newSession(), Events: fakeEvents{objectEvents: events}, Namespace: "default", ObjectKind: kube.KindPod, ObjectName: "software-escrow"})
+	m.SetSize(160, 36)
+	m = step(t, m, m.Init()())
+
+	if len(m.rows) != 3 {
+		t.Fatalf("rows = %d, want all three distinct Failed messages", len(m.rows))
+	}
+	view := plain(m.Render())
+	for _, want := range []string{"no match for platform in manifest", "Error: ErrImagePull", "Error: ImagePullBackOff"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("events view missing %q:\n%s", want, view)
+		}
+	}
+}
+
 // TestAllNamespacesKeepsCrossNamespaceObjectsSeparateAndLabelsNamespace is
 // 9b's all-namespaces mode (browse's 'e' with Namespace == "", mirroring
 // 6b): two different namespaces each have their own "cache-0" pod hitting

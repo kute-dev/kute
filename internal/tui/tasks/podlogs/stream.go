@@ -440,7 +440,13 @@ func lookupContainerInfo(ctx context.Context, lister resources.RawLister, namesp
 		if !ok || p.Name != podName {
 			continue
 		}
-		for _, ci := range kube.PodFromObject(p).ContainerInfos {
+		projected := kube.PodFromObject(p)
+		for _, ci := range projected.ContainerInfos {
+			if ci.Name == container {
+				return ci, true, true
+			}
+		}
+		for _, ci := range projected.InitContainerInfos {
 			if ci.Name == container {
 				return ci, true, true
 			}

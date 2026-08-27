@@ -20,17 +20,17 @@ CONTAINERS                                                                      
 CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi                     │                               
 ──────────────────────────────────────────────────────────────────────────────────────  │                               
                                                                                         │                               
+INIT CONTAINERS                                                                         │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
+     NAME                    IMAGE                    STATE                 RESTARTS    │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
+  ○  prepare-config          nva/config-init:1.2.0    Terminated · Comple…       0 ↺    │                               
+──────────────────────────────────────────────────────────────────────────────────────  │                               
+                                                                                        │                               
 EVENTS · newest first                                                                   │                               
 Warning   BackOff           1m      Back-off restarting failed container worker         │                               
 Warning   OOMKilled         4m      Container worker exceeded memory limit              │                               
 Normal    Pulled            4m      Image already present on machine                    │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
-                                                                                        │                               
+                                                                                                                        
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
    POD  l logs  x exec  1 related │ D delete │ [/] next/prev                                                    ? help  

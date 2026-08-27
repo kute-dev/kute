@@ -189,10 +189,14 @@ type Model struct {
 	// red "◌ disconnected" mid-outage).
 	conn kube.ConnState
 
-	// selectedContainer highlights a row in the CONTAINERS grid (↑↓/j/k
-	// move it) — display-only in this pass, no exec/logs container
-	// targeting wired yet.
+	// selectedContainer highlights a row across CONTAINERS, INIT CONTAINERS,
+	// and EPHEMERAL. Logs target every group; exec candidates remain limited
+	// to the running ContainerInfos projection.
 	selectedContainer int
+	// bodyOffset pages the complete detail body. Without a viewport, the
+	// fixed-height frame silently discarded older Events, including the
+	// detailed image-pull error that explains terse ErrImagePull rows.
+	bodyOffset int
 
 	state    tui.TaskState
 	feedback string

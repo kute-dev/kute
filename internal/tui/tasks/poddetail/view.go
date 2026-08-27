@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -95,6 +96,19 @@ func (m Model) Body(width, height int) string {
 // CONTAINERS grid + CPU/MEM bars, EVENTS, and a right sidebar composited
 // alongside the main column.
 func (m Model) readyBody(width, height int) string {
+	content := m.readyContent(width)
+	lines := strings.Split(content, "\n")
+	maxOffset := max(len(lines)-height, 0)
+	offset := min(max(m.bodyOffset, 0), maxOffset)
+	end := min(offset+height, len(lines))
+	visible := append([]string(nil), lines[offset:end]...)
+	for len(visible) < height {
+		visible = append(visible, "")
+	}
+	return strings.Join(visible, "\n")
+}
+
+func (m Model) readyContent(width int) string {
 	theme := m.Theme()
 	// +2 keeps the sidebar's content width at a quarter of the screen after
 	// its border gutter ("│ ") is drawn.
@@ -108,6 +122,9 @@ func (m Model) readyBody(width, height int) string {
 	}
 	main = append(main, "", m.metaGrid(theme))
 	main = append(main, "", m.containersBlock(theme, mainWidth))
+	if len(m.pod.InitContainerInfos) > 0 {
+		main = append(main, "", m.initContainersBlock(theme, mainWidth))
+	}
 	if len(m.pod.EphemeralContainerInfos) > 0 {
 		main = append(main, "", m.ephemeralBlock(theme, mainWidth))
 	}
@@ -115,7 +132,7 @@ func (m Model) readyBody(width, height int) string {
 
 	mainBlock := strings.Join(main, "\n")
 	sidebar := m.sidebarBlock(theme)
-	return joinColumns(theme, mainBlock, sidebar, mainWidth, sidebarWidth, height)
+	return joinColumns(theme, mainBlock, sidebar, mainWidth, sidebarWidth, 0)
 }
 
 // joinColumns lays main/sidebar out side by side, line by line — pre-styled
@@ -292,8 +309,16 @@ func (m Model) metaGrid(theme tui.Theme) string {
 }
 
 func (m Model) containersBlock(theme tui.Theme, width int) string {
-	title := lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render("CONTAINERS")
-	if len(m.pod.ContainerInfos) == 0 {
+	return m.containerTableBlock(theme, width, "CONTAINERS", m.pod.ContainerInfos, 0, true)
+}
+
+func (m Model) initContainersBlock(theme tui.Theme, width int) string {
+	return m.containerTableBlock(theme, width, "INIT CONTAINERS", m.pod.InitContainerInfos, len(m.pod.ContainerInfos), false)
+}
+
+func (m Model) containerTableBlock(theme tui.Theme, width int, titleText string, infos []kube.ContainerInfo, selectionBase int, showBars bool) string {
+	title := lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true).Render(titleText)
+	if len(infos) == 0 {
 		return title + "\n" + lipgloss.NewStyle().Foreground(theme.TextDim).Render("none")
 	}
 
@@ -304,8 +329,8 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 		{Title: "State", Min: 20},
 		{Title: "Restarts", Min: 8, Align: components.AlignRight},
 	}
-	rows := make([]components.Row, 0, len(m.pod.ContainerInfos))
-	for _, c := range m.pod.ContainerInfos {
+	rows := make([]components.Row, 0, len(infos))
+	for _, c := range infos {
 		var glyph string
 		var glyphStyle lipgloss.Style
 		stateStyle := lipgloss.NewStyle().Foreground(theme.Good)
@@ -362,8 +387,8 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 	// too, not just the cell text (components.Table.renderRowV2's own doc
 	// comment on the class of bug this avoids).
 	selected := -1
-	if m.totalContainerRows() > 1 && m.selectedContainer < len(m.pod.ContainerInfos) {
-		selected = m.selectedContainer
+	if m.totalContainerRows() > 1 && m.selectedContainer >= selectionBase && m.selectedContainer < selectionBase+len(infos) {
+		selected = m.selectedContainer - selectionBase
 	}
 	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	t := components.Table{
@@ -380,8 +405,11 @@ func (m Model) containersBlock(theme tui.Theme, width int) string {
 		RuleStyle:      rule,
 	}
 	hr := rule.Render(strings.Repeat("─", width))
-	bars := m.barsLine(theme)
-	return title + "\n" + hr + "\n" + t.Render() + "\n" + hr + "\n" + bars + "\n" + hr
+	block := title + "\n" + hr + "\n" + t.Render() + "\n" + hr
+	if showBars {
+		block += "\n" + m.barsLine(theme) + "\n" + hr
+	}
+	return block
 }
 
 // ephemeralBlock renders §41e's EPHEMERAL group — a debug container
@@ -436,8 +464,9 @@ func (m Model) ephemeralBlock(theme tui.Theme, width int) string {
 		}})
 	}
 	selected := -1
-	if m.selectedContainer >= len(m.pod.ContainerInfos) {
-		selected = m.selectedContainer - len(m.pod.ContainerInfos)
+	base := len(m.pod.ContainerInfos) + len(m.pod.InitContainerInfos)
+	if m.selectedContainer >= base {
+		selected = m.selectedContainer - base
 	}
 	rule := lipgloss.NewStyle().Foreground(theme.TextGhost2)
 	t := components.Table{
@@ -551,12 +580,17 @@ func (m Model) eventsBlock(theme tui.Theme, width int) string {
 			}
 		}
 		age := shortAge(e.LastSeen)
-		msg := ellipsize(e.Message, max(width-40, 10))
-		lines = append(lines, fmt.Sprintf("%s  %s  %s  %s",
+		prefix := fmt.Sprintf("%s  %s  %s  ",
 			typeStyle.Render(padTo(e.Type, 8)),
 			dim.Render(padTo(e.Reason, 16)),
-			dim.Render(padTo(age, 6)),
-			msgStyle.Render(msg)))
+			dim.Render(padTo(age, 6)))
+		messageOffset := lipgloss.Width(prefix)
+		msgWidth := max(width-messageOffset-4, 10)
+		msgLines := strings.Split(lipgloss.NewStyle().Width(msgWidth).Render(e.Message), "\n")
+		lines = append(lines, prefix+msgStyle.Render(msgLines[0]))
+		for _, continuation := range msgLines[1:] {
+			lines = append(lines, strings.Repeat(" ", messageOffset)+msgStyle.Render(continuation))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -697,11 +731,4 @@ func shortDur(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
-}
-
-func ellipsize(s string, width int) string {
-	if width <= 1 || len(s) <= width {
-		return s
-	}
-	return s[:width-1] + "…"
 }
