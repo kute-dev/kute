@@ -49,7 +49,7 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{}
-	attemptGroup := []tui.KeyHint{{Key: "↵", Label: "logs of this attempt"}}
+	attemptGroup := []tui.KeyHint{{Key: "l", Label: "logs"}}
 	if len(m.summary.Attempts) >= 2 {
 		attemptGroup = append(attemptGroup, tui.KeyHint{Key: "d", Label: "diff vs attempt 1"})
 	}

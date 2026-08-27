@@ -40,6 +40,13 @@ import (
 // cronjobdetail.OpenLogsFunc.
 type OpenLogsFunc func(pod kube.Pod, container string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenPodDetailFunc pushes tasks/poddetail (5a) for the selected attempt's
+// pod — same shape as browse.OpenPodDetailFunc; jobattempts hands it a
+// single-pod handoff (siblings=[pod.Name], index=0), mirroring
+// nodedetail's own OpenPod wiring (poddetail's j/k across attempts is
+// deferred, not required here).
+type OpenPodDetailFunc func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd)
+
 // OpenYAMLFunc pushes tasks/yamlview (8a) for the named object — same shape
 // as cronjobdetail.OpenYAMLFunc.
 type OpenYAMLFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -57,16 +64,17 @@ type SiblingRef struct {
 
 // Config are jobattempts' dependencies, per repo convention.
 type Config struct {
-	Session      *tui.Session
-	Lister       resources.RawLister
-	Mutator      kube.Mutator
-	OpenLogs     OpenLogsFunc
-	OpenYAML     OpenYAMLFunc
-	OpenEvents   OpenEventsFunc
-	Namespace    string
-	Name         string
-	Siblings     []SiblingRef
-	SiblingIndex int
+	Session       *tui.Session
+	Lister        resources.RawLister
+	Mutator       kube.Mutator
+	OpenLogs      OpenLogsFunc
+	OpenPodDetail OpenPodDetailFunc
+	OpenYAML      OpenYAMLFunc
+	OpenEvents    OpenEventsFunc
+	Namespace     string
+	Name          string
+	Siblings      []SiblingRef
+	SiblingIndex  int
 	// CurrentUser is who §37c's rerun "create" path stamps into
 	// kube.AnnotationTriggeredBy — mirrors browse.Config.CurrentUser.
 	CurrentUser string
@@ -76,15 +84,16 @@ type Config struct {
 type Model struct {
 	width, height int
 
-	session     *tui.Session
-	lister      resources.RawLister
-	mutator     kube.Mutator
-	actions     actions.Controller
-	openLogs    OpenLogsFunc
-	openYAML    OpenYAMLFunc
-	openEvents  OpenEventsFunc
-	timeout     time.Duration
-	currentUser string
+	session       *tui.Session
+	lister        resources.RawLister
+	mutator       kube.Mutator
+	actions       actions.Controller
+	openLogs      OpenLogsFunc
+	openPodDetail OpenPodDetailFunc
+	openYAML      OpenYAMLFunc
+	openEvents    OpenEventsFunc
+	timeout       time.Duration
+	currentUser   string
 
 	namespace string
 	name      string
@@ -158,25 +167,26 @@ func New(cfg Config) Model {
 		feedback = "no cluster connection"
 	}
 	return Model{
-		width:        tui.DefaultWidth,
-		height:       tui.DefaultHeight,
-		session:      cfg.Session,
-		lister:       cfg.Lister,
-		mutator:      cfg.Mutator,
-		actions:      actions.New(cfg.Mutator),
-		openLogs:     cfg.OpenLogs,
-		openYAML:     cfg.OpenYAML,
-		openEvents:   cfg.OpenEvents,
-		timeout:      cfg.LoadTimeout,
-		currentUser:  cfg.CurrentUser,
-		namespace:    cfg.Namespace,
-		name:         cfg.Name,
-		siblings:     cfg.Siblings,
-		siblingIndex: cfg.SiblingIndex,
-		now:          time.Now(),
-		state:        state,
-		feedback:     feedback,
-		spinner:      components.NewSpinner(),
+		width:         tui.DefaultWidth,
+		height:        tui.DefaultHeight,
+		session:       cfg.Session,
+		lister:        cfg.Lister,
+		mutator:       cfg.Mutator,
+		actions:       actions.New(cfg.Mutator),
+		openLogs:      cfg.OpenLogs,
+		openPodDetail: cfg.OpenPodDetail,
+		openYAML:      cfg.OpenYAML,
+		openEvents:    cfg.OpenEvents,
+		timeout:       cfg.LoadTimeout,
+		currentUser:   cfg.CurrentUser,
+		namespace:     cfg.Namespace,
+		name:          cfg.Name,
+		siblings:      cfg.Siblings,
+		siblingIndex:  cfg.SiblingIndex,
+		now:           time.Now(),
+		state:         state,
+		feedback:      feedback,
+		spinner:       components.NewSpinner(),
 	}
 }
 

@@ -267,7 +267,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.moveAttemptSelection(1)
 	case "enter":
-		if task, cmd, ok := m.openSelectedLogs(); ok {
+		if task, cmd, ok := m.openSelectedPodDetail(); ok {
 			if task != nil {
 				return task, cmd
 			}
@@ -354,6 +354,26 @@ func (m *Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	}
 	m.execFeedback = ""
 	task, cmd := m.openLogs(pod, "", m.width, m.height)
+	return task, cmd, task != nil
+}
+
+// openSelectedPodDetail pushes tasks/poddetail (5a) for the selected
+// attempt's pod — single-pod handoff, mirrors nodedetail's openSelectedPod.
+func (m *Model) openSelectedPodDetail() (tea.Model, tea.Cmd, bool) {
+	if m.openPodDetail == nil {
+		return nil, nil, false
+	}
+	a, ok := m.selectedAttemptData()
+	if !ok {
+		return nil, nil, false
+	}
+	pod, ok := m.pods[a.PodName]
+	if !ok {
+		m.execFeedback = a.PodName + ": pod no longer in cache — no retained log tail (v0.9.0 scope)"
+		return nil, nil, false
+	}
+	m.execFeedback = ""
+	task, cmd := m.openPodDetail(pod, []string{pod.Name}, 0, m.width, m.height)
 	return task, cmd, task != nil
 }
 

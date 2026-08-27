@@ -9,6 +9,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
+	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 )
@@ -121,6 +122,122 @@ func TestCommitRerunReplaceGoesThroughOrdinaryConfirm(t *testing.T) {
 	}
 	if !m.actions.Active() || m.actions.Tier() != actions.TierInline {
 		t.Fatalf("expected replace to land on the ordinary TierInline confirm, tier=%v", m.actions.Tier())
+	}
+}
+
+// stubTask is a trivial tea.Model good enough to prove a callback fired and
+// its return value was threaded through — mirrors browse_nodes_test.go's own
+// stubTask rather than constructing a real poddetail.Model.
+type stubTask struct{}
+
+func (stubTask) Init() tea.Cmd                       { return nil }
+func (stubTask) Update(tea.Msg) (tea.Model, tea.Cmd) { return stubTask{}, nil }
+func (stubTask) View() tea.View                      { return tea.NewView("") }
+
+func TestEnterOpensPodDetailForSelectedAttempt(t *testing.T) {
+	c, _ := newFakeJob("default", "batch-1")
+	pod := kube.Pod{Namespace: "default", Name: "batch-1-attempt-1"}
+
+	var gotPod kube.Pod
+	var gotSiblings []string
+	var gotIndex int
+	openPodDetailCalled := false
+	openLogsCalled := false
+
+	m := New(Config{
+		Session: newSession("default"),
+		Lister:  c,
+		Mutator: c,
+		OpenPodDetail: func(p kube.Pod, siblings []string, index, w, h int) (tea.Model, tea.Cmd) {
+			openPodDetailCalled = true
+			gotPod, gotSiblings, gotIndex = p, siblings, index
+			return stubTask{}, nil
+		},
+		OpenLogs: func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) {
+			openLogsCalled = true
+			return stubTask{}, nil
+		},
+		Namespace: "default",
+		Name:      "batch-1",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.load()())
+
+	// Seed a fabricated attempt so selectedAttemptData resolves to our pod —
+	// mirrors how a real load() would populate m.summary/m.pods from the
+	// fake cluster's Job+Pod aggregation.
+	m.summary.Attempts = []resources.JobAttempt{{PodName: pod.Name}}
+	m.pods = map[string]kube.Pod{pod.Name: pod}
+	m.selectedAttempt = 0
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "enter", Code: tea.KeyEnter})
+	if cmd != nil {
+		cmd()
+	}
+	_ = updated
+
+	if !openPodDetailCalled {
+		t.Fatalf("expected enter to invoke OpenPodDetail")
+	}
+	if openLogsCalled {
+		t.Fatalf("expected enter not to invoke OpenLogs")
+	}
+	if gotPod.Name != pod.Name {
+		t.Errorf("OpenPodDetail pod = %q, want %q", gotPod.Name, pod.Name)
+	}
+	if len(gotSiblings) != 1 || gotSiblings[0] != pod.Name {
+		t.Errorf("OpenPodDetail siblings = %v, want [%q] (single-pod handoff)", gotSiblings, pod.Name)
+	}
+	if gotIndex != 0 {
+		t.Errorf("OpenPodDetail index = %d, want 0", gotIndex)
+	}
+}
+
+func TestLogsKeyStillOpensLogsForSelectedAttempt(t *testing.T) {
+	c, _ := newFakeJob("default", "batch-1")
+	pod := kube.Pod{Namespace: "default", Name: "batch-1-attempt-1"}
+
+	openPodDetailCalled := false
+	openLogsCalled := false
+	var gotPod kube.Pod
+
+	m := New(Config{
+		Session: newSession("default"),
+		Lister:  c,
+		Mutator: c,
+		OpenPodDetail: func(kube.Pod, []string, int, int, int) (tea.Model, tea.Cmd) {
+			openPodDetailCalled = true
+			return stubTask{}, nil
+		},
+		OpenLogs: func(p kube.Pod, container string, w, h int) (tea.Model, tea.Cmd) {
+			openLogsCalled = true
+			gotPod = p
+			return stubTask{}, nil
+		},
+		Namespace: "default",
+		Name:      "batch-1",
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.load()())
+
+	m.summary.Attempts = []resources.JobAttempt{{PodName: pod.Name}}
+	m.pods = map[string]kube.Pod{pod.Name: pod}
+	m.selectedAttempt = 0
+
+	updated, cmd := m.Update(tea.KeyPressMsg{Text: "l", Code: 'l'})
+	if cmd != nil {
+		cmd()
+	}
+	_ = updated
+
+	if !openLogsCalled {
+		t.Fatalf("expected 'l' to invoke OpenLogs")
+	}
+	if openPodDetailCalled {
+		t.Fatalf("expected 'l' not to invoke OpenPodDetail")
+	}
+	if gotPod.Name != pod.Name {
+		t.Errorf("OpenLogs pod = %q, want %q", gotPod.Name, pod.Name)
 	}
 }
 
