@@ -32,3 +32,10 @@ func (m Model) Keybar() tui.Keybar {
 // CapturingInput reports false: the picker has no free-text input, every
 // key is a fixed binding.
 func (m Model) CapturingInput() bool { return false }
+
+// BackOnEscape opts the picker into the root's synchronous task pop. Without
+// it, Escape returns BackMsg from a Cmd and an immediately repeated x can land
+// on the picker before that message is processed, swallowing the reopen key.
+// The picker has no editor or confirmation state that needs to claim Escape
+// first, so it is always ready to close.
+func (m Model) BackOnEscape() bool { return true }

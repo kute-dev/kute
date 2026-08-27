@@ -81,6 +81,40 @@ func TestEscPopsBack(t *testing.T) {
 	}
 }
 
+type execPickerParent struct {
+	picker *Model
+	opens  int
+}
+
+func (m *execPickerParent) Init() tea.Cmd    { return nil }
+func (m *execPickerParent) SetSize(int, int) {}
+func (m *execPickerParent) View() tea.View   { return tea.NewView("pods") }
+func (m *execPickerParent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyPressMsg); ok && key.String() == "x" {
+		m.opens++
+		return m.picker, nil
+	}
+	return m, nil
+}
+
+// TestEscapeThenXReopensPicker pins the input race from the Pods view: Escape
+// must restore the parent synchronously so the next x cannot be swallowed by
+// the picker while an asynchronous BackMsg is still pending.
+func TestEscapeThenXReopensPicker(t *testing.T) {
+	t.Parallel()
+	picker := newModel()
+	parent := &execPickerParent{picker: &picker}
+	root := tui.New(parent)
+
+	updated, _ := root.Update(tea.KeyPressMsg{Text: "x"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	_, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "x"})
+
+	if parent.opens != 2 {
+		t.Fatalf("picker opened %d times, want 2", parent.opens)
+	}
+}
+
 func TestEnterExecsSelectedContainer(t *testing.T) {
 	t.Parallel()
 	m := newModel()
