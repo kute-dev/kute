@@ -502,7 +502,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - The exec picker (10a) already detects shells. A container with none renders its right-hand cell as `no shell` (`Warn`) instead of a shell list, and the panel's explain block reads `no sh or bash in gateway — nothing to exec into` + `debug attaches a shell alongside it, sharing the pod's process namespace`.
 - **`↵` follows the cursor and never dead-ends:** on a shell-less row the key label is `↵ debug <container>` (routes to 41b); on a row with a shell it stays `↵ open shell`. Keybar pill stays `EXEC`.
 - If **no** container in the pod has a shell, skip this panel and open 41b directly — a picker with nothing to pick is chrome.
-- **Capability is checked before `↵`, never after:** if `create pods/ephemeralcontainers` is denied (or the server predates the subresource), the explain block carries the verbatim reason and offers `w who-can` (22a). Same discipline as helm-missing-from-PATH (18a).
+- **Capability is checked authoritatively inside DEBUG, before launch:** opening the panel issues one live `SelfSubjectAccessReview` for the current mode (`create pods/ephemeralcontainers` for attach, `create pods` for copy). While it runs, `↵` is unavailable; an explicit denial stays visible in the panel with the server's reason and `w who-can` (22a). The cache-local who-can graph explains RBAC but never decides whether launch is allowed, because another authorizer or an authenticated group absent from token data may change the real answer. A failed/inconclusive review warns and fails open so the launch itself remains the API-server backstop.
 
 ### 41b — Debug panel · ephemeral container on a running pod
 - Same centered-panel recipe as 10a/13a, ~880px-equivalent wide (the `will run` line must not clip). Header: `⚑ debug › <pod>` + right `pod running · ephemeral container`. Keybar pill `DEBUG`.
@@ -510,6 +510,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 - **Fields edited in place on their row** (13a's local-port idiom), label in `TextFaint`, value bright, hint in `TextGhost`: `image nicolaka/netshoot▎` (`i` edit · recents), `target gateway` (`t` cycle · "shares the process namespace, so its pid is visible"), `profile general` (`p` cycle · netadmin · sysadmin · restricted). Image recents are remembered per context in the existing persisted state — **no image registry, no config file, no wizard**.
 - **Profile is shown, never hidden** — `general` default; `sysadmin`/`netadmin` are visible escalations.
 - **Warn-tinted caution line** above `will run`: `⚑ becomes part of this pod — an ephemeral container cannot be removed, only outlived`.
+- The live access status appears above `will run`, so leaving with `esc` and immediately pressing `x` always reopens this panel; lazy RBAC informer state cannot consume the second key.
 - `will run`: `kubectl debug -it <pod> -n <ns> --image=<img> --target=<container> --profile=general`.
 - **Friction tier:** irreversible mutation of a live pod earns the panel + the `will run` line, not a modal; PROD contexts add an inline `y/N` in the keybar on `↵`. The red border stays reserved for delete and drain (8b).
 - Handoff is exec's: kute suspends, `kubectl debug` owns the tty, exit lands back on the same pod. No embedded terminal.

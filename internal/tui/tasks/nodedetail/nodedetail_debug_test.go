@@ -1,7 +1,6 @@
 package nodedetail
 
 import (
-	"context"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,16 +9,6 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 )
-
-type debugRBACChecker struct {
-	result   kube.WhoCanResult
-	gotQuery kube.WhoCanQuery
-}
-
-func (f *debugRBACChecker) WhoCan(_ context.Context, query kube.WhoCanQuery) (kube.WhoCanResult, error) {
-	f.gotQuery = query
-	return f.result, nil
-}
 
 func TestWaitingPodRowOpensCopyDebugInsteadOfExec(t *testing.T) {
 	p := schedPodWithContainers("default", "pending-0", "node-a", "worker")
@@ -32,11 +21,10 @@ func TestWaitingPodRowOpensCopyDebugInsteadOfExec(t *testing.T) {
 		kube.KindNode: {testNode("node-a")},
 		kube.KindPod:  {p},
 	}}
-	rbac := &debugRBACChecker{result: kube.WhoCanResult{CurrentUser: "dev@example.com", CurrentUserGranted: true}}
 	pickerCalled := false
 	var gotPhase string
 	m := New(Config{
-		Session: newSession(), Lister: lister, NodeName: "node-a", RBAC: rbac,
+		Session: newSession(), Lister: lister, NodeName: "node-a",
 		OpenExec: func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) {
 			pickerCalled = true
 			return sentinelTask{}, nil
@@ -64,8 +52,5 @@ func TestWaitingPodRowOpensCopyDebugInsteadOfExec(t *testing.T) {
 	}
 	if gotPhase != "Pending" {
 		t.Fatalf("pod phase = %q, want Pending", gotPhase)
-	}
-	if rbac.gotQuery.Resource != kube.DebugCopyResource {
-		t.Fatalf("WhoCan resource = %q, want %q", rbac.gotQuery.Resource, kube.DebugCopyResource)
 	}
 }

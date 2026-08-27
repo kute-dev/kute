@@ -37,6 +37,17 @@ func (f fakePodLister) ListRaw(context.Context, kube.ResourceKind, string) ([]ru
 // actually confirms the action.
 type fakeMutator struct{ kube.Mutator }
 
+type fakeAccessReviewer struct {
+	result  kube.AccessReviewResult
+	err     error
+	queries []kube.WhoCanQuery
+}
+
+func (f *fakeAccessReviewer) CanI(_ context.Context, query kube.WhoCanQuery) (kube.AccessReviewResult, error) {
+	f.queries = append(f.queries, query)
+	return f.result, f.err
+}
+
 func nodeDebuggerPod(namespace, name, node string, created time.Time) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, CreationTimestamp: metav1.Time{Time: created}},
@@ -60,6 +71,109 @@ func podContainers() []kube.ContainerInfo {
 	return []kube.ContainerInfo{
 		{Name: "app", Image: "app:1.0", State: "Running"},
 		{Name: "sidecar", Image: "sidecar:1.0", State: "Running", IsSidecar: true},
+	}
+}
+
+func TestPodAccessReviewDenialStaysInsideDebugPanel(t *testing.T) {
+	reviewer := &fakeAccessReviewer{result: kube.AccessReviewResult{
+		Denied: true,
+		Reason: "admission authorizer denies ephemeral containers",
+	}}
+	var whoCanQuery kube.WhoCanQuery
+	m := New(Config{
+		Session: nonProdSession(), Namespace: "default", Name: "api-0",
+		Containers: podContainers(), Access: reviewer,
+		OpenWhoCan: func(verb, resource, namespace string, _, _ int) (tea.Model, tea.Cmd) {
+			whoCanQuery = kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace}
+			return nil, nil
+		},
+	})
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("expected the pod panel to review access on open")
+	}
+	updated, _ := m.Update(cmd())
+	mm := updated.(*Model)
+	if mm.accessState != accessDenied {
+		t.Fatalf("access state = %v, want denied", mm.accessState)
+	}
+	if len(reviewer.queries) != 1 || reviewer.queries[0] != (kube.WhoCanQuery{Verb: "create", Resource: kube.DebugAttachResource, Namespace: "default"}) {
+		t.Fatalf("queries = %+v, want one attach review", reviewer.queries)
+	}
+	if body := mm.Body(120, 36); !strings.Contains(body, "admission authorizer denies ephemeral containers") {
+		t.Fatalf("denial is not visible inside the panel: %q", body)
+	}
+	_, launch := mm.Update(tea.KeyPressMsg{Text: "enter"})
+	if launch != nil {
+		t.Fatal("enter launched after an explicit access denial")
+	}
+	mm.Update(tea.KeyPressMsg{Text: "w"})
+	if whoCanQuery != reviewer.queries[0] {
+		t.Fatalf("who-can query = %+v, want %+v", whoCanQuery, reviewer.queries[0])
+	}
+}
+
+func TestCopyModeReviewsCreatePodsAndIgnoresStaleAttachVerdict(t *testing.T) {
+	reviewer := &fakeAccessReviewer{}
+	m := New(Config{
+		Session: nonProdSession(), Namespace: "default", Name: "api-0",
+		Containers: podContainers(), Access: reviewer,
+	})
+	attachGen := m.accessGen
+	updated, copyCmd := m.Update(tea.KeyPressMsg{Text: "m"})
+	mm := updated.(*Model)
+	if mm.mode != modeCopy || copyCmd == nil {
+		t.Fatalf("mode/state = %v/%v, want copy with a new review", mm.mode, mm.accessState)
+	}
+	mm.handleAccessReviewed(accessReviewedMsg{
+		gen:    attachGen,
+		query:  kube.WhoCanQuery{Verb: "create", Resource: kube.DebugAttachResource, Namespace: "default"},
+		result: kube.AccessReviewResult{Denied: true},
+	})
+	if mm.accessState != accessChecking {
+		t.Fatalf("stale attach result changed state to %v", mm.accessState)
+	}
+	mm.Update(copyCmd())
+	want := kube.WhoCanQuery{Verb: "create", Resource: kube.DebugCopyResource, Namespace: "default"}
+	if len(reviewer.queries) != 1 || reviewer.queries[0] != want {
+		t.Fatalf("queries = %+v, want copy review %+v", reviewer.queries, want)
+	}
+}
+
+func TestAccessReviewFailureFailsOpenWithVisibleWarning(t *testing.T) {
+	reviewer := &fakeAccessReviewer{err: errors.New("review endpoint unavailable")}
+	m := New(Config{
+		Session: nonProdSession(), Namespace: "default", Name: "api-0",
+		Containers: podContainers(), Access: reviewer,
+	})
+	updated, _ := m.Update(m.Init()())
+	mm := updated.(*Model)
+	if mm.accessState != accessAllowed {
+		t.Fatalf("access state = %v, want fail-open allowed", mm.accessState)
+	}
+	if body := mm.Body(120, 36); !strings.Contains(body, "review endpoint unavailable") || !strings.Contains(body, "couldn't verify access") {
+		t.Fatalf("review failure warning is not visible: %q", body)
+	}
+	if cmd := mm.beginLaunch(); cmd == nil {
+		t.Fatal("review failure unexpectedly disabled launch")
+	}
+}
+
+func TestAccessReviewStatusRendersInBothThemes(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		theme tui.Theme
+	}{{"dark", tui.Dark()}, {"light", tui.Light()}} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := nonProdSession()
+			session.Theme = tc.theme
+			m := New(Config{Session: session, Namespace: "default", Name: "api-0", Containers: podContainers()})
+			m.accessState = accessDenied
+			m.accessResult = kube.AccessReviewResult{Denied: true, Reason: "denied by server"}
+			if got := m.Render(); !strings.Contains(got, "denied by server") {
+				t.Fatalf("render omitted denial: %q", got)
+			}
+		})
 	}
 }
 

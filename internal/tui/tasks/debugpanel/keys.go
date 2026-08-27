@@ -5,6 +5,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // Keybar composes the bottom band, in priority order: an open field edit,
@@ -72,6 +73,22 @@ func (m Model) launchPrompt() string {
 }
 
 func (m Model) readyKeybar() tui.Keybar {
+	if m.accessState == accessChecking {
+		return tui.Keybar{
+			Pill:       tui.ModeBrowse,
+			PillText:   "DEBUG",
+			RightNote:  m.accessFeedback(),
+			RightHints: []tui.KeyHint{{Key: "esc", Label: "cancel"}},
+		}
+	}
+	if m.accessState == accessDenied {
+		return tui.Keybar{
+			Pill:       tui.ModeBrowse,
+			PillText:   "DEBUG",
+			Groups:     [][]tui.KeyHint{{verbs.WhoCan.Hint()}},
+			RightHints: []tui.KeyHint{{Key: "esc", Label: "cancel"}},
+		}
+	}
 	group := []tui.KeyHint{{Key: "↵", Label: "start"}}
 	switch {
 	case m.tgt == targetNode:

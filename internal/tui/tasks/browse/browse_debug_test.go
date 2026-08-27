@@ -2,7 +2,6 @@ package browse
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,16 +39,17 @@ func TestFailedPodSkipsShellProbeAndOpensCopyDebug(t *testing.T) {
 	}
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {p}}}
 	detector := &countingShellDetector{}
-	rbac := &fakeRBACChecker{result: kube.WhoCanResult{CurrentUser: "dev@example.com", CurrentUserGranted: true}}
 	pickerCalled := false
+	debugCalls := 0
 	var gotPhase string
 	m := New(Config{
-		Session: newSession(), Lister: lister, Shells: detector, RBAC: rbac,
+		Session: newSession(), Lister: lister, Shells: detector,
 		OpenExec: func(string, string, []kube.ContainerInfo, int, int) (tea.Model, tea.Cmd) {
 			pickerCalled = true
 			return stubTask{}, nil
 		},
 		OpenDebug: func(_, _ string, _ []kube.ContainerInfo, podPhase string, waiting bool, _, _ int) (tea.Model, tea.Cmd) {
+			debugCalls++
 			gotPhase = podPhase
 			if waiting {
 				t.Error("terminal container unexpectedly reported Waiting")
@@ -76,8 +76,12 @@ func TestFailedPodSkipsShellProbeAndOpensCopyDebug(t *testing.T) {
 	if gotPhase != "Failed" {
 		t.Fatalf("pod phase = %q, want Failed", gotPhase)
 	}
-	if rbac.gotQuery.Resource != kube.DebugCopyResource {
-		t.Fatalf("WhoCan resource = %q, want %q", rbac.gotQuery.Resource, kube.DebugCopyResource)
+	updated, cmd = m.Update(tea.KeyPressMsg{Text: "x"})
+	if _, ok := updated.(stubTask); !ok || cmd != nil {
+		t.Fatalf("expected the restored Pods view to reopen copy-debug, got %T with cmd %v", updated, cmd)
+	}
+	if debugCalls != 2 {
+		t.Fatalf("OpenDebug calls = %d, want 2", debugCalls)
 	}
 }
 
@@ -311,171 +315,5 @@ func TestDebugCopyTagCoexistsWithEphemeralTag(t *testing.T) {
 	}
 	if got, want := m.rows[0].NameSuffix, " ⚑ · debug copy"; got != want {
 		t.Fatalf("NameSuffix = %q, want %q", got, want)
-	}
-}
-
-// fakeRBACChecker answers WhoCan with a fixed result and records the query
-// it was asked — no KindSynced/KindError methods, so tui.KindsSynced treats
-// it as never needing the sync gate (kindsync.go's own "true for any lister
-// implementing neither checker" default), keeping these tests focused on
-// the WhoCan verdict itself rather than cache-sync plumbing.
-type fakeRBACChecker struct {
-	result   kube.WhoCanResult
-	err      error
-	gotQuery kube.WhoCanQuery
-}
-
-func (f *fakeRBACChecker) WhoCan(_ context.Context, query kube.WhoCanQuery) (kube.WhoCanResult, error) {
-	f.gotQuery = query
-	return f.result, f.err
-}
-
-// TestDebugCapabilityDeniedBlocksPanel confirms §41a's RBAC pre-check:
-// "capability is checked before ↵, never after" — a denied create verb
-// stops the debug panel from opening at all, surfaces the verbatim reason
-// plus a 'w who-can' hint on the keybar, and queries the resource that
-// matches the mode the panel would have opened in (attach, since the pod is
-// running).
-func TestDebugCapabilityDeniedBlocksPanel(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {podWithContainers("default", "api-0", "app")},
-	}}
-	rbac := &fakeRBACChecker{result: kube.WhoCanResult{
-		CurrentUser:        "dev@example.com",
-		CurrentUserGranted: false,
-		CurrentUserVia:     "role/viewer grants get, list on pods — not create",
-	}}
-	debugCalled := false
-	m := New(Config{
-		Session: newSession(), Lister: lister,
-		Shells: fakeShellDetector{}, // every container answers "no shell"
-		RBAC:   rbac,
-		OpenDebug: func(string, string, []kube.ContainerInfo, string, bool, int, int) (tea.Model, tea.Cmd) {
-			debugCalled = true
-			return stubTask{}, nil
-		},
-	})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
-	updated, _ := m.Update(cmd())
-	mm, ok := updated.(*Model)
-	if !ok {
-		t.Fatalf("expected browse to stay active on a denied check, got %T", updated)
-	}
-	if debugCalled {
-		t.Fatal("expected OpenDebug not to be called once the capability check denies it")
-	}
-	if mm.pendingDebugDenial == nil {
-		t.Fatal("expected pendingDebugDenial to be set")
-	}
-	if !strings.Contains(mm.execFeedback, "not create") || !strings.Contains(mm.execFeedback, "w who-can") {
-		t.Fatalf("execFeedback = %q, want the verbatim reason plus a w who-can hint", mm.execFeedback)
-	}
-	if rbac.gotQuery.Resource != kube.DebugAttachResource {
-		t.Fatalf("WhoCan queried resource %q, want %q (pod is running)", rbac.gotQuery.Resource, kube.DebugAttachResource)
-	}
-}
-
-// TestDebugCapabilityGrantedOpensPanel confirms a granted check still opens
-// the panel exactly as it did before this pre-check existed.
-func TestDebugCapabilityGrantedOpensPanel(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {podWithContainers("default", "api-0", "app")},
-	}}
-	rbac := &fakeRBACChecker{result: kube.WhoCanResult{CurrentUser: "dev@example.com", CurrentUserGranted: true}}
-	debugCalled := false
-	m := New(Config{
-		Session: newSession(), Lister: lister,
-		Shells: fakeShellDetector{},
-		RBAC:   rbac,
-		OpenDebug: func(string, string, []kube.ContainerInfo, string, bool, int, int) (tea.Model, tea.Cmd) {
-			debugCalled = true
-			return stubTask{}, nil
-		},
-	})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
-	m.Update(cmd())
-	if !debugCalled {
-		t.Fatal("expected OpenDebug to be called once the capability check grants it")
-	}
-}
-
-// TestDebugCapabilityCheckSkippedWithoutRBAC confirms a nil RBAC (the
-// zero-value Config, same as every other test in this file) fails open —
-// the panel opens unconditionally, the pre-existing behavior.
-func TestDebugCapabilityCheckSkippedWithoutRBAC(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {podWithContainers("default", "api-0", "app")},
-	}}
-	debugCalled := false
-	m := New(Config{
-		Session: newSession(), Lister: lister,
-		Shells: fakeShellDetector{},
-		OpenDebug: func(string, string, []kube.ContainerInfo, string, bool, int, int) (tea.Model, tea.Cmd) {
-			debugCalled = true
-			return stubTask{}, nil
-		},
-	})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
-	m.Update(cmd())
-	if !debugCalled {
-		t.Fatal("expected OpenDebug to be called when RBAC isn't wired")
-	}
-}
-
-// TestDebugCapabilityDeniedWOpensWhoCan confirms the denial's 'w' handoff
-// opens tasks/whocan pre-filled with the exact create/resource/namespace
-// query that came back denied (docs/design v.0.11.0.dc.html §41a: "offers w
-// who-can").
-func TestDebugCapabilityDeniedWOpensWhoCan(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {podWithContainers("default", "api-0", "app")},
-	}}
-	rbac := &fakeRBACChecker{result: kube.WhoCanResult{
-		CurrentUser:        "dev@example.com",
-		CurrentUserGranted: false,
-		CurrentUserVia:     "no bindings grant dev@example.com access here",
-	}}
-	var gotVerb, gotResource, gotNamespace string
-	m := New(Config{
-		Session: newSession(), Lister: lister,
-		Shells: fakeShellDetector{},
-		RBAC:   rbac,
-		OpenDebug: func(string, string, []kube.ContainerInfo, string, bool, int, int) (tea.Model, tea.Cmd) {
-			t.Fatal("OpenDebug must not be called once the capability check denies it")
-			return nil, nil
-		},
-		OpenWhoCan: func(verb, resource, namespace string, _, _ int) (tea.Model, tea.Cmd) {
-			gotVerb, gotResource, gotNamespace = verb, resource, namespace
-			return stubTask{}, nil
-		},
-	})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
-
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "x"})
-	updated, _ := m.Update(cmd())
-	mm, ok := updated.(*Model)
-	if !ok {
-		t.Fatalf("expected browse to stay active on a denied check, got %T", updated)
-	}
-
-	next, _ := mm.Update(tea.KeyPressMsg{Text: "w"})
-	if _, ok := next.(stubTask); !ok {
-		t.Fatalf("expected 'w' to push tasks/whocan, got %T", next)
-	}
-	if gotVerb != "create" || gotResource != kube.DebugAttachResource || gotNamespace != "default" {
-		t.Fatalf("openWhoCan called with (%q, %q, %q), want (create, %q, default)", gotVerb, gotResource, gotNamespace, kube.DebugAttachResource)
-	}
-	if mm.pendingDebugDenial != nil {
-		t.Fatal("expected pendingDebugDenial to be cleared once 'w' consumes it")
 	}
 }

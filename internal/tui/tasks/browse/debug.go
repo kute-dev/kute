@@ -12,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
-	"github.com/kute-dev/kute/internal/tui"
 )
 
 // ShellDetector answers which shells a container actually has — declared
@@ -21,76 +20,6 @@ import (
 // implementation, kube/fake supplies the demo one.
 type ShellDetector interface {
 	DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error)
-}
-
-// RBACChecker answers §41a's "capability is checked before ↵" pre-check —
-// same shape as tasks/whocan's own WhoCanReader, duplicated per the repo's
-// consuming-interface convention (browse doesn't import tasks/whocan). A nil
-// value disables the check entirely, the same way a nil Shells disables the
-// shell pre-check.
-type RBACChecker interface {
-	WhoCan(ctx context.Context, query kube.WhoCanQuery) (kube.WhoCanResult, error)
-}
-
-// debugDenial carries §41a's RBAC pre-check verdict for a debug-panel open
-// that came back denied — enough for the 'w' key to open tasks/whocan
-// pre-filled with the exact query that was denied (docs/design
-// v.0.11.0.dc.html §41a: "offers w who-can").
-type debugDenial struct {
-	verb, resource, namespace, reason string
-}
-
-// feedback renders the panel's explain-block line: the verbatim reason
-// kube.WhoCanResult.CurrentUserVia already carries (the same "closest
-// miss" wording tasks/whocan pins to the current user's own row), plus the
-// 'w' handoff — "Same discipline as helm-missing-from-PATH (18a)".
-func (d debugDenial) feedback() string {
-	reason := d.reason
-	if reason == "" {
-		reason = d.verb + " " + d.resource + " is denied"
-	}
-	return reason + " — w who-can"
-}
-
-// debugCapabilityDenied is §41a's RBAC pre-check, run right before the
-// debug panel would open for a shell-less container: "capability is
-// checked before ↵, never after" — a permission denial otherwise only
-// surfaced as raw kubectl stderr after the tty suspend/handoff, a worse
-// failure mode than the exec-picker's own explain block. namespace/
-// podPhase/waiting are the same inputs debugpanel.New itself uses to pick
-// attach vs copy mode (kube.PodWontStayRunning) — the two modes exercise
-// different API resources, so the check has to agree with the mode the
-// panel is actually about to open in.
-//
-// Returns nil when rbac isn't wired, the check comes back granted, or the
-// RBAC caches needed to trust the answer aren't confirmed synced yet — a
-// cold cache must never make the security claim that a write is denied
-// (docs/lazy-informers.md §5.6, the same discipline tasks/whocan's own
-// load() applies before trusting a WhoCanResult). kute fails open in every
-// one of those cases and lets the real API server's own authorization stay
-// the backstop, same as before this check existed.
-func (m Model) debugCapabilityDenied(namespace, podPhase string, waiting bool) *debugDenial {
-	if m.rbac == nil {
-		return nil
-	}
-	resource := kube.DebugAttachResource
-	if kube.PodWontStayRunning(podPhase, waiting) {
-		resource = kube.DebugCopyResource
-	}
-	const verb = "create"
-	result, err := m.rbac.WhoCan(m.session.ClusterContext(), kube.WhoCanQuery{Verb: verb, Resource: resource, Namespace: namespace})
-	if err != nil || result.CurrentUser == "" || result.CurrentUserGranted {
-		return nil
-	}
-	if !tui.KindsSynced(m.rbac, namespace, kube.KindRole, kube.KindRoleBinding) ||
-		!tui.KindsSynced(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding) {
-		return nil
-	}
-	if tui.KindsError(m.rbac, namespace, kube.KindRole, kube.KindRoleBinding) != nil ||
-		tui.KindsError(m.rbac, "", kube.KindClusterRole, kube.KindClusterRoleBinding) != nil {
-		return nil
-	}
-	return &debugDenial{verb: verb, resource: resource, namespace: namespace, reason: result.CurrentUserVia}
 }
 
 // shellProbeTimeout bounds one container's probe — same bound execpicker's
@@ -180,20 +109,15 @@ func (m *Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	return nil, detectPodShellsCmd(m.session.ClusterContext(), pod.Namespace, pod.Name, pod.ContainerInfos, m.shells), true
 }
 
-// openPodDebug performs the mode-matched RBAC pre-check and pushes the
-// existing debug panel. Terminal pod routing calls this before any shell
-// probe; the running distroless path calls it after probing.
+// openPodDebug pushes the shared debug panel. The panel performs its own
+// authoritative, mode-matched access review; callers must not gate opening
+// on the partial cache-local RBAC graph. Terminal pod routing calls this
+// before any shell probe; the running distroless path calls it after probing.
 func (m *Model) openPodDebug(namespace, podName string, containers []kube.ContainerInfo, podPhase string, waiting bool) (tea.Model, tea.Cmd) {
 	if m.openDebug == nil {
 		m.execFeedback = podName + ": debug is unavailable"
 		return m, nil
 	}
-	if denial := m.debugCapabilityDenied(namespace, podPhase, waiting); denial != nil {
-		m.pendingDebugDenial = denial
-		m.execFeedback = denial.feedback()
-		return m, nil
-	}
-	m.pendingDebugDenial = nil
 	task, cmd := m.openDebug(namespace, podName, containers, podPhase, waiting, m.width, m.height)
 	if task != nil {
 		return task, cmd

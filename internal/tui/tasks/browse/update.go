@@ -797,17 +797,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return task, cmd
 			}
 		}
-		// §41a's RBAC pre-check offers the same handoff for a denied debug
-		// launch — pre-filled with the exact create/resource/namespace
-		// query that came back denied, not the current list's own "list"
-		// verb (docs/design v.0.11.0.dc.html §41a: "offers w who-can").
-		if m.pendingDebugDenial != nil {
-			d := m.pendingDebugDenial
-			if task, cmd, ok := m.pushWhoCan(d.verb, d.resource, d.namespace); ok {
-				m.pendingDebugDenial = nil
-				return task, cmd
-			}
-		}
 	case verbs.YAML.Key:
 		if m.state == tui.TaskStatePermissionDenied || m.state == tui.TaskStateError {
 			return m, tea.SetClipboard(m.feedback)

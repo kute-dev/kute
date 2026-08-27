@@ -1464,6 +1464,24 @@ func (c *Cluster) WhoCan(ctx context.Context, query kube.WhoCanQuery) (kube.WhoC
 	return kube.ResolveWhoCan(query, user, groups, clusterRoles, roles, clusterRoleBindings, roleBindings), nil
 }
 
+// CanI is the fake counterpart of kube.Cluster's live
+// SelfSubjectAccessReview. The fake has no API-server authorizer chain, so
+// its seeded RBAC graph is the authoritative answer for --demo and tests.
+func (c *Cluster) CanI(ctx context.Context, query kube.WhoCanQuery) (kube.AccessReviewResult, error) {
+	result, err := c.WhoCan(ctx, query)
+	if err != nil {
+		return kube.AccessReviewResult{}, err
+	}
+	if result.CurrentUser == "" {
+		return kube.AccessReviewResult{EvaluationError: "current user is unknown"}, nil
+	}
+	return kube.AccessReviewResult{
+		Allowed: result.CurrentUserGranted,
+		Denied:  !result.CurrentUserGranted,
+		Reason:  result.CurrentUserVia,
+	}, nil
+}
+
 // --- connection health / events ---
 
 func (c *Cluster) Events() <-chan kube.ResourceChangedMsg { return c.events }

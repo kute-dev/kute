@@ -19,6 +19,7 @@ behind each change and the trade-offs deliberately accepted, not a backlog.
 4. [Design decisions worth remembering](#4-design-decisions-worth-remembering)
 5. [Follow-ups](#5-follow-ups)
 6. [CronJobs: a second lazy dependency and a third one-shot read (v0.8.0)](#6-cronjobs-a-second-lazy-dependency-and-a-third-one-shot-read-v080)
+7. [Pod debug: an authoritative fourth one-shot read](#7-pod-debug-an-authoritative-fourth-one-shot-read)
 
 ---
 
@@ -655,6 +656,22 @@ this particular object's field works, regardless of what the version alone would
 cluster version; an already-populated value stays visible and editable-adjacent either way.
 Node kubelet versions are deliberately never consulted for this — a mixed-version node pool
 says nothing about the control plane's own API version.
+
+## 7. Pod debug: an authoritative fourth one-shot read
+
+Opening DEBUG for a Pod issues one live `SelfSubjectAccessReview`, scoped to the panel's
+current mode: `create pods/ephemeralcontainers` for attach or `create pods` for copy. Changing
+mode issues a replacement review and stale results are discarded. This is explicit user-driven
+work, starts no informer, and is never polled.
+
+The review deliberately does not reuse the cache-local who-can resolver. That resolver can
+explain Kubernetes RBAC bindings, but it cannot reproduce every API-server authorizer or know
+all groups embedded in an authentication token. Using its partial answer as a launch gate made
+behavior depend on whether the four lazy RBAC caches had settled: the first `x` could open and
+the second `x` after Escape could be rejected. The server's `SelfSubjectAccessReview` is the
+launch gate now; who-can remains an optional explanation after an explicit denial. Review
+errors and no-opinion answers fail open with a visible warning, leaving the actual debug request
+as the final server-side check.
 
 ## Running the measurement
 

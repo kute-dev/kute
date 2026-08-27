@@ -256,12 +256,7 @@ type Config struct {
 	// detectPodShellsCmd) — a nil value falls back to openSelectedExec's
 	// old synchronous single-vs-multi-container routing, so 'x' still
 	// works with this seam unwired, just without §41a's distroless fork.
-	Shells ShellDetector
-	// RBAC answers §41a's "capability is checked before ↵" pre-check for
-	// the debug fork — nil disables the check entirely (the panel opens
-	// unconditionally, the pre-existing behavior) rather than failing
-	// closed, matching Shells' own nil-disables convention.
-	RBAC                RBACChecker
+	Shells              ShellDetector
 	OpenLogs            OpenLogsFunc
 	OpenNodeDetail      OpenNodeDetailFunc
 	OpenPodDetail       OpenPodDetailFunc
@@ -321,7 +316,6 @@ type Model struct {
 	nodeMetricsSrc      NodeMetricsReader
 	mutator             kube.Mutator
 	shells              ShellDetector
-	rbac                RBACChecker
 	actions             actions.Controller
 	openLogs            OpenLogsFunc
 	openNodeDetail      OpenNodeDetailFunc
@@ -428,17 +422,9 @@ type Model struct {
 	// action has no single ResourceName for actions.Controller's own
 	// y/N/type-name shapes to key off.
 	pendingBulkDelete *bulkDeleteTarget
-	// pendingDebugDenial is non-nil after §41a's RBAC pre-check (debug.go)
-	// found the create verb kubectl debug's chosen mode needs denied —
-	// enough for 'w' to open tasks/whocan pre-filled with the exact query
-	// that was denied. Sticky like execFeedback (the reason it's paired
-	// with): left set until 'w' consumes it or a later 'x' overwrites it,
-	// same as row.NodeShellUnavailable's own reason.
-	pendingDebugDenial *debugDenial
-
-	kind      kube.ResourceKind
-	namespace string
-	desc      resources.Descriptor
+	kind              kube.ResourceKind
+	namespace         string
+	desc              resources.Descriptor
 
 	rows      []resources.Row
 	fetchedAt time.Time
@@ -821,7 +807,6 @@ func New(cfg Config) Model {
 		nodeMetricsSrc:      cfg.NodeMetrics,
 		mutator:             cfg.Mutator,
 		shells:              cfg.Shells,
-		rbac:                cfg.RBAC,
 		actions:             actions.New(cfg.Mutator),
 		openLogs:            cfg.OpenLogs,
 		openNodeDetail:      cfg.OpenNodeDetail,

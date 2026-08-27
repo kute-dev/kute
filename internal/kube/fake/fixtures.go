@@ -464,8 +464,8 @@ func demoRBACFixtures(c *Cluster, age func(time.Duration) metav1.Time) {
 		// pod-debugger: the one narrow write "view" doesn't carry — real
 		// teams commonly grant exactly this on top of a read-only role so an
 		// SRE can `kubectl debug` without also getting delete/edit access.
-		// Without it, §41a's RBAC pre-check (debugCapabilityDenied) correctly
-		// denies dev-readonly and the debug panel never opens in --demo.
+		// Without it, §41's live access review correctly denies dev-readonly
+		// inside the debug panel and --demo cannot exercise its launch flow.
 		demoClusterRole("pod-debugger", rbacAge,
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},

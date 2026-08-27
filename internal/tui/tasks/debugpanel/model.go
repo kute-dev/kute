@@ -5,8 +5,9 @@
 // gate, tea.ExecProcess launch) with a target (pod/node) and, for a pod, a
 // mode (attach/copy) discriminant. §41a's fork on tasks/execpicker's own
 // shell-less row, and browse/poddetail's own shell-precheck, decide when
-// this package opens instead of execpicker/execCmd — this package itself
-// only renders and launches whatever it was told to.
+// this package opens instead of execpicker/execCmd. Once open, the panel
+// performs the authoritative access review for its current pod mode before
+// it enables launch.
 package debugpanel
 
 import (
@@ -54,8 +55,10 @@ const (
 // per repo convention (package-local Config struct, New fills zero
 // values).
 type Config struct {
-	Session *tui.Session
-	Mutator kube.Mutator // §41c/§41d's cleanup delete only — the launch itself never calls it
+	Session    *tui.Session
+	Mutator    kube.Mutator // §41c/§41d's cleanup delete only — the launch itself never calls it
+	Access     AccessReviewer
+	OpenWhoCan OpenWhoCanFunc
 
 	// Lister backs §41d's post-exit node-debug pod discovery only (node.go):
 	// kubectl auto-generates the node-debugger pod's name and never reports
@@ -153,6 +156,12 @@ type Model struct {
 	launchPending bool
 	cleanup       *cleanupPrompt
 	actions       actions.Controller // cleanup delete only (verbs.Delete/kube.Mutator) — the debug launch itself is a bespoke gate (launchPending), never routed through this
+	access        AccessReviewer
+	openWhoCan    OpenWhoCanFunc
+	accessState   accessState
+	accessResult  kube.AccessReviewResult
+	accessErr     error
+	accessGen     int
 
 	feedback string
 	conn     kube.ConnState
@@ -161,13 +170,15 @@ type Model struct {
 
 func New(cfg Config) Model {
 	m := Model{
-		width:   tui.DefaultWidth,
-		height:  tui.DefaultHeight,
-		session: cfg.Session,
-		mutator: cfg.Mutator,
-		lister:  cfg.Lister,
-		actions: actions.New(cfg.Mutator),
-		demo:    cfg.Demo,
+		width:      tui.DefaultWidth,
+		height:     tui.DefaultHeight,
+		session:    cfg.Session,
+		mutator:    cfg.Mutator,
+		lister:     cfg.Lister,
+		actions:    actions.New(cfg.Mutator),
+		access:     cfg.Access,
+		openWhoCan: cfg.OpenWhoCan,
+		demo:       cfg.Demo,
 	}
 	if cfg.IsNode {
 		m.tgt = targetNode
@@ -200,6 +211,12 @@ func New(cfg Config) Model {
 		m.mode = modeCopy
 	} else {
 		m.mode = modeAttach
+	}
+	if m.access != nil {
+		m.accessState = accessChecking
+		m.accessGen = 1
+	} else {
+		m.accessState = accessAllowed
 	}
 	return m
 }
@@ -236,4 +253,9 @@ func (m *Model) SetSize(width, height int) {
 	m.width, m.height = size.Width, size.Height
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	if m.tgt != targetPod || m.access == nil {
+		return nil
+	}
+	return m.accessReviewCmd(m.accessGen, m.accessQuery())
+}

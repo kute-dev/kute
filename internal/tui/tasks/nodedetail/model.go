@@ -63,15 +63,6 @@ type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, 
 // is not running. podPhase is the API phase, not the display reason.
 type OpenDebugFunc func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)
 
-// RBACChecker answers §41a's mode-matched capability pre-check. It is
-// package-local by the consuming-interface convention.
-type RBACChecker interface {
-	WhoCan(ctx context.Context, query kube.WhoCanQuery) (kube.WhoCanResult, error)
-}
-
-// OpenWhoCanFunc pushes tasks/whocan with a denied debug query pre-filled.
-type OpenWhoCanFunc func(verb, resource, namespace string, width, height int) (tea.Model, tea.Cmd)
-
 // OpenYAMLFunc pushes tasks/yamlview (8a) for the named object — same shape
 // as browse.OpenYAMLFunc/poddetail.OpenYAMLFunc.
 type OpenYAMLFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
@@ -111,8 +102,6 @@ type Config struct {
 	OpenLogs      OpenLogsFunc
 	OpenExec      OpenExecFunc
 	OpenDebug     OpenDebugFunc
-	RBAC          RBACChecker
-	OpenWhoCan    OpenWhoCanFunc
 	OpenYAML      OpenYAMLFunc
 	OpenEvents    OpenEventsFunc
 	OpenTimeline  OpenTimelineFunc
@@ -153,18 +142,12 @@ type Model struct {
 	openLogs      OpenLogsFunc
 	openExec      OpenExecFunc
 	openDebug     OpenDebugFunc
-	rbac          RBACChecker
-	openWhoCan    OpenWhoCanFunc
 	openYAML      OpenYAMLFunc
 	openEvents    OpenEventsFunc
 	openTimeline  OpenTimelineFunc
 	openForward   OpenForwardFunc
 	openNodeDebug OpenNodeDebugFunc
 	timeout       time.Duration
-
-	// pendingDebugDenial keeps §41a's denied create-pods query available
-	// for the follow-up 'w who-can' handoff.
-	pendingDebugDenial *debugDenial
 
 	nodeName string
 
@@ -287,8 +270,6 @@ func New(cfg Config) Model {
 		openLogs:      cfg.OpenLogs,
 		openExec:      cfg.OpenExec,
 		openDebug:     cfg.OpenDebug,
-		rbac:          cfg.RBAC,
-		openWhoCan:    cfg.OpenWhoCan,
 		openYAML:      cfg.OpenYAML,
 		openEvents:    cfg.OpenEvents,
 		openTimeline:  cfg.OpenTimeline,

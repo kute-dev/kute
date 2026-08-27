@@ -68,6 +68,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.findNodeDebugPodCmd(msg.after, msg.attempt)
 	case actions.ResultMsg:
 		return m.handleActionResult(msg)
+	case accessReviewedMsg:
+		m.handleAccessReviewed(msg)
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 	}
@@ -90,10 +92,17 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		return m, func() tea.Msg { return tui.BackMsg{} }
 	case "enter":
+		if m.accessState == accessChecking || m.accessState == accessDenied {
+			return m, nil
+		}
 		return m, m.beginLaunch()
 	case "m":
 		if m.tgt == targetPod {
+			before := m.mode
 			m.cycleMode()
+			if m.mode != before {
+				return m, m.startAccessReview()
+			}
 		}
 	case "i":
 		m.beginImageOrCopyNameEdit()
@@ -112,6 +121,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+d":
 		if m.cleanup != nil {
 			return m, m.beginCleanupDelete()
+		}
+	case "w":
+		if m.accessState == accessDenied && m.openWhoCan != nil {
+			q := m.accessQuery()
+			task, cmd := m.openWhoCan(q.Verb, q.Resource, q.Namespace, m.width, m.height)
+			if task != nil {
+				return task, cmd
+			}
 		}
 	}
 	return m, nil

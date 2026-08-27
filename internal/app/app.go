@@ -417,6 +417,7 @@ var (
 	_ timeline.EventsReader        = (*kube.Cluster)(nil)
 	_ resources.InstanceCounter    = (*kube.Cluster)(nil)
 	_ whocan.WhoCanReader          = (*kube.Cluster)(nil)
+	_ debugpanel.AccessReviewer    = (*kube.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*kube.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*kube.Cluster)(nil)
@@ -466,6 +467,7 @@ var (
 	_ timeline.EventsReader        = (*fake.Cluster)(nil)
 	_ resources.InstanceCounter    = (*fake.Cluster)(nil)
 	_ whocan.WhoCanReader          = (*fake.Cluster)(nil)
+	_ debugpanel.AccessReviewer    = (*fake.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*fake.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*fake.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*fake.Cluster)(nil)
@@ -496,6 +498,7 @@ type seams interface {
 	objectdetail.EventsReader
 	timeline.EventsReader
 	whocan.WhoCanReader
+	debugpanel.AccessReviewer
 	certchain.EventsReader
 	cronjobschedule.CapabilityReader
 }
@@ -617,10 +620,10 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openYAML := openYAMLFunc(sess, cluster)
 	openDebug := openDebugFunc(sess, cluster, false)
 	openExecDebug := openExecDebugFunc(sess, cluster, false)
-	openNodeDebug := openNodeDebugFunc(sess, cluster, cluster, false)
+	openNodeDebug := openNodeDebugFunc(sess, cluster, false)
 	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug, false)
 	openForward := openForwardFunc(sess, lister, cluster)
-	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug, openWhoCanFunc(sess, cluster))
+	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug)
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openDebug, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, cluster, openYAML)
 	openTimeline := openTimelineFunc(sess, cluster, openEvents)
@@ -644,7 +647,6 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenDebug:           browse.OpenDebugFunc(openDebug),
 		OpenNodeDebug:       browse.OpenNodeDebugFunc(openNodeDebug),
 		Shells:              kubectlShellDetector{},
-		RBAC:                cluster,
 		OpenForward:         openForward,
 		OpenObjectDetail:    openObjectDetailFunc(sess, cluster, openYAML),
 		OpenFluxDetail:      openFluxDetailFunc(sess, cluster, openYAML),
@@ -709,10 +711,10 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 	openYAML := openYAMLFunc(sess, demoCluster)
 	openDebug := openDebugFunc(sess, demoCluster, true)
 	openExecDebug := openExecDebugFunc(sess, demoCluster, true)
-	openNodeDebug := openNodeDebugFunc(sess, demoCluster, demoCluster, true)
+	openNodeDebug := openNodeDebugFunc(sess, demoCluster, true)
 	openExec := openExecFunc(sess, demoCluster, openExecDebug, true)
 	openForward := openForwardFuncDemo(sess, lister, sess.Forwards, demoCluster)
-	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug, openWhoCanFunc(sess, demoCluster))
+	openPodDetail := openPodDetailFunc(sess, demoCluster, openLogs, openYAML, openExec, openForward, demoCluster, openDebug)
 	openNodeDetail := openNodeDetailFunc(sess, demoCluster, openPodDetail, openLogs, openYAML, openExec, openDebug, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, demoCluster, openYAML)
 	openTimeline := openTimelineFunc(sess, demoCluster, openEvents)
@@ -736,7 +738,6 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenDebug:           browse.OpenDebugFunc(openDebug),
 		OpenNodeDebug:       browse.OpenNodeDebugFunc(openNodeDebug),
 		Shells:              demoCluster,
-		RBAC:                demoCluster,
 		OpenForward:         openForward,
 		OpenObjectDetail:    openObjectDetailFunc(sess, demoCluster, openYAML),
 		OpenFluxDetail:      openFluxDetailFunc(sess, demoCluster, openYAML),
@@ -937,8 +938,6 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 			OpenLogs:      nodedetail.OpenLogsFunc(openLogs),
 			OpenExec:      nodedetail.OpenExecFunc(openExec),
 			OpenDebug:     nodedetail.OpenDebugFunc(openDebug),
-			RBAC:          active,
-			OpenWhoCan:    nodedetail.OpenWhoCanFunc(openWhoCanFunc(sess, active)),
 			OpenYAML:      nodedetail.OpenYAMLFunc(openYAML),
 			OpenEvents:    nodedetail.OpenEventsFunc(openObjectEvents),
 			OpenTimeline:  nodedetail.OpenTimelineFunc(openObjectTimeline),
@@ -953,12 +952,9 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 
 // openPodDetailFunc pushes tasks/poddetail (5a) for a pod, wiring it against
 // the same seams active already satisfies for browse/nodedetail. shells/
-// openDebug wire §41a/§41b/§41c's shell pre-check (debug.go); openWhoCan
-// backs the same pre-check's RBAC-denial 'w' handoff — active alone would
-// satisfy poddetail.RBACChecker directly, but the push still needs a
-// whocan.New closure, so it's threaded in like every other Open*Func rather
-// than reconstructed here.
-func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, shells poddetail.ShellDetector, openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd), openWhoCan browse.OpenWhoCanFunc) browse.OpenPodDetailFunc {
+// openDebug wire §41a/§41b/§41c's shell pre-check (debug.go). The pushed
+// debug panel owns the authoritative access review and who-can handoff.
+func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, shells poddetail.ShellDetector, openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)) browse.OpenPodDetailFunc {
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
 	return func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd) {
@@ -969,8 +965,6 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 			Events:       active,
 			Shells:       shells,
 			OpenDebug:    poddetail.OpenDebugFunc(openDebug),
-			RBAC:         active,
-			OpenWhoCan:   poddetail.OpenWhoCanFunc(openWhoCan),
 			Mutator:      active,
 			OpenLogs:     poddetail.OpenLogsFunc(openLogs),
 			OpenYAML:     poddetail.OpenYAMLFunc(openYAML),
@@ -1354,11 +1348,13 @@ func openExecFunc(sess *tui.Session, shells execpicker.ShellDetector, openDebug 
 // browse/poddetail-shaped seam (podPhase/waiting decide the panel's default
 // mode). mutator backs §41c's cleanup delete only; the debug launch itself
 // is a tea.ExecProcess handoff, never a Mutator call.
-func openDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
+func openDebugFunc(sess *tui.Session, active seams, demo bool) func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
 	return func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:    sess,
-			Mutator:    mutator,
+			Mutator:    active,
+			Access:     active,
+			OpenWhoCan: debugpanel.OpenWhoCanFunc(openWhoCanFunc(sess, active)),
 			Namespace:  namespace,
 			Name:       name,
 			Containers: containers,
@@ -1377,11 +1373,13 @@ func openDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) func(name
 // unset: the picker is only ever reached when at least one other container
 // in the pod does have a shell, so attach is always the right default here
 // (debugpanel.New's own mode gate needs neither field to pick it).
-func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) execpicker.OpenDebugFunc {
+func openExecDebugFunc(sess *tui.Session, active seams, demo bool) execpicker.OpenDebugFunc {
 	return func(namespace, podName string, containers []kube.ContainerInfo, target string, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:                sess,
-			Mutator:                mutator,
+			Mutator:                active,
+			Access:                 active,
+			OpenWhoCan:             debugpanel.OpenWhoCanFunc(openWhoCanFunc(sess, active)),
 			Namespace:              namespace,
 			Name:                   podName,
 			Containers:             containers,
@@ -1400,12 +1398,12 @@ func openExecDebugFunc(sess *tui.Session, mutator kube.Mutator, demo bool) execp
 // pod kubectl just created" cleanup lookup (debugpanel/node.go) — always
 // the same *kube.Cluster/*fake.Cluster already passed in as mutator, which
 // also implements resources.RawLister.
-func openNodeDebugFunc(sess *tui.Session, mutator kube.Mutator, lister resources.RawLister, demo bool) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
+func openNodeDebugFunc(sess *tui.Session, active seams, demo bool) func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 	return func(name string, podCount, width, height int) (tea.Model, tea.Cmd) {
 		dp := debugpanel.New(debugpanel.Config{
 			Session:        sess,
-			Mutator:        mutator,
-			Lister:         lister,
+			Mutator:        active,
+			Lister:         active,
 			IsNode:         true,
 			Name:           name,
 			NodePodCount:   podCount,

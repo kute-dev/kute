@@ -220,19 +220,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case verbs.WhoCan.Key:
-		// §41a's RBAC pre-check offers this handoff for a denied debug
-		// launch — pre-filled with the exact create/resource/namespace
-		// query that came back denied (docs/design v.0.11.0.dc.html §41a:
-		// "offers w who-can").
-		if m.pendingDebugDenial != nil && m.openWhoCan != nil {
-			d := m.pendingDebugDenial
-			task, cmd := m.openWhoCan(d.verb, d.resource, d.namespace, m.width, m.height)
-			if task != nil {
-				m.pendingDebugDenial = nil
-				return task, cmd
-			}
-		}
 	case verbs.Forward.Key:
 		if task, cmd, ok := m.openSelectedForward(); ok {
 			return task, cmd
