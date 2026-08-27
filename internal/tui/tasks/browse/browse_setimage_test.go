@@ -152,22 +152,61 @@ func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
 	}
 }
 
-func TestCtrlUTogglesFullRefEditing(t *testing.T) {
+func TestCtrlETogglesFullRefEditing(t *testing.T) {
 	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.1")},
 	}, false)
 	m = step(t, m, tea.KeyPressMsg{Text: "i"})
 
-	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
 	t2 := m.pendingSetImage
 	if !t2.fullRef || t2.input.Value() != "registry.nva.dev/nva-worker:3.4.1" {
-		t.Fatalf("after ctrl-u: fullRef=%v buffer=%q, want true/registry.nva.dev/nva-worker:3.4.1", t2.fullRef, t2.input.Value())
+		t.Fatalf("after ctrl-e: fullRef=%v buffer=%q, want true/registry.nva.dev/nva-worker:3.4.1", t2.fullRef, t2.input.Value())
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
 	t2 = m.pendingSetImage
 	if t2.fullRef || t2.input.Value() != "3.4.1" || t2.repo != "registry.nva.dev/nva-worker" {
-		t.Fatalf("after second ctrl-u: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.nva.dev/nva-worker", t2.fullRef, t2.input.Value(), t2.repo)
+		t.Fatalf("after second ctrl-e: fullRef=%v buffer=%q repo=%q, want false/3.4.1/registry.nva.dev/nva-worker", t2.fullRef, t2.input.Value(), t2.repo)
+	}
+}
+
+func TestDigestPinnedImageTagEditDropsOldDigest(t *testing.T) {
+	const digest = "sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028"
+	mut := &fakeMutator{}
+	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {twoContainerDeployment("default", "worker", "busybox:1.37@"+digest)},
+	}, false)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+
+	if got := m.pendingSetImage.repo; got != "busybox" {
+		t.Fatalf("repo = %q, want busybox", got)
+	}
+	if got := m.pendingSetImage.input.Value(); got != "1.37" {
+		t.Fatalf("tag buffer = %q, want 1.37", got)
+	}
+	if !m.pendingSetImage.unchanged() {
+		t.Fatal("an untouched tag+digest reference should remain unchanged")
+	}
+
+	m.pendingSetImage.setBuffer("1.36")
+	if got := m.pendingSetImage.composedImage(); got != "busybox:1.36" {
+		t.Fatalf("composed image = %q, want busybox:1.36 without the old digest", got)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.setImages) != 1 || mut.setImages[0] != "default/worker worker=busybox:1.36" {
+		t.Fatalf("setImages = %v, want digest-free tag update", mut.setImages)
+	}
+}
+
+func TestIIsTypeableInsideSetImageEditor(t *testing.T) {
+	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {twoContainerDeployment("default", "worker", "worker:1.0")},
+	}, false)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	if got := m.pendingSetImage.input.Value(); got != "1.0i" {
+		t.Fatalf("tag buffer = %q, want typed i appended", got)
 	}
 }
 

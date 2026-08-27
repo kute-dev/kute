@@ -86,8 +86,9 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 	RequireCluster(t)
 	const name = "phase3-cron"
 	const beforeSchedule, afterSchedule = "0 2 * * *", "15 3 * * *"
-	const beforeTag = "1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028"
-	const beforeImage, afterImage = "busybox:" + beforeTag, "busybox:1.36"
+	const beforeTag = "1.37"
+	const beforeImage = "busybox:" + beforeTag + "@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028"
+	const afterImage = "busybox:1.36"
 	client := mutationClient(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	before, err := client.BatchV1().CronJobs(Namespace).Get(ctx, name, metav1.GetOptions{})

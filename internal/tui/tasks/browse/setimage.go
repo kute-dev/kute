@@ -114,6 +114,12 @@ func (t setImageTarget) composedImage() string {
 	if t.fullRef {
 		return t.input.Value()
 	}
+	// A tag+digest reference is still the current image while its tag field
+	// is untouched. Once the tag changes, drop the old digest: retaining it
+	// would keep selecting the old content (or produce an invalid digest).
+	if t.input.Value() == tagOf(t.activeContainer().Image) {
+		return t.activeContainer().Image
+	}
 	return t.repo + ":" + t.input.Value()
 }
 
@@ -253,7 +259,7 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(t.containers) > 1 {
 			m.selectSetImageContainer((t.containerIdx + 1) % len(t.containers))
 		}
-	case "i":
+	case "ctrl+e":
 		if t.fullRef {
 			repo := imageRepo(t.input.Value())
 			tag := tagOf(t.input.Value())
@@ -261,7 +267,7 @@ func (m *Model) updateSetImageKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			t.setBuffer(tag)
 			t.fullRef = false
 		} else {
-			t.setBuffer(t.repo + ":" + t.input.Value())
+			t.setBuffer(t.composedImage())
 			t.fullRef = true
 		}
 		t.historyIdx = matchHistoryIndex(t)
@@ -769,26 +775,26 @@ func workloadArg(kind kube.ResourceKind) string {
 	}
 }
 
-// imageRepo splits image into its repo (everything before the tag
-// separator). A colon before the last "/" is a registry port
-// (registry:5000/repo), not a tag separator, so it's only treated as one
-// when nothing after it contains a "/".
+// imageRepo splits image into its repository name, excluding any tag or
+// digest. A colon before the last slash is a registry port, not a tag.
 func imageRepo(image string) string {
-	i := strings.LastIndex(image, ":")
-	if i < 0 || strings.Contains(image[i+1:], "/") {
-		return image
+	name, _, _ := strings.Cut(image, "@")
+	colon := strings.LastIndex(name, ":")
+	if colon <= strings.LastIndex(name, "/") {
+		return name
 	}
-	return image[:i]
+	return name[:colon]
 }
 
 // tagOf splits image into its tag, defaulting to "latest" — Docker's own
-// implicit default — when the ref carries no explicit tag.
+// implicit default — when the name before any digest carries no explicit tag.
 func tagOf(image string) string {
-	repo := imageRepo(image)
-	if len(repo) == len(image) {
+	name, _, _ := strings.Cut(image, "@")
+	repo := imageRepo(name)
+	if len(repo) == len(name) {
 		return "latest"
 	}
-	return image[len(repo)+1:]
+	return name[len(repo)+1:]
 }
 
 // shortAge renders a duration as a compact "12m"/"3h"/"5d" string — the same
