@@ -61,7 +61,7 @@ func TestNoMetricsServerRendersUnknown(t *testing.T) {
 		// The allocated/allocatable bars are computed from pod *requests*,
 		// which need no metrics server, so those stay real numbers — it is
 		// the per-pod usage columns that must read unknown.
-		a.WaitForAll(Settle, "ALLOCATED / ALLOCATABLE", noMetrics)
+		a.WaitForAll(Settle, "REQUESTED / ALLOCATABLE", noMetrics)
 		a.Esc()
 		a.WaitFor("Nodes", Settle)
 	})

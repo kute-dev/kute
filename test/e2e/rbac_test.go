@@ -156,7 +156,7 @@ func TestPartialGrantAcrossScreens(t *testing.T) {
 		a.WaitFor(NodeNamePrefix(t)+"-control-plane", Settle)
 		a.Enter()
 		a.WaitLoaded(Settle)
-		a.WaitFor("ALLOCATED / ALLOCATABLE", Settle)
+		a.WaitFor("REQUESTED / ALLOCATABLE", Settle)
 		a.Esc()
 		a.WaitFor("Nodes", Settle)
 	})
