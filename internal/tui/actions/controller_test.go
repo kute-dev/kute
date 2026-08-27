@@ -51,6 +51,8 @@ type cronJobScheduleCall struct {
 type fakeMutator struct {
 	deleted              []string
 	forceDeleted         []string
+	setImages            []string
+	setImageInit         []bool
 	metaPatches          []string
 	secretDataPatches    []string
 	configMapDataPatches []string
@@ -95,7 +97,9 @@ func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error  {
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return f.err
 }
-func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string, initContainer bool) error {
+	f.setImages = append(f.setImages, string(kind)+"/"+namespace+"/"+name+" "+container+"="+image)
+	f.setImageInit = append(f.setImageInit, initContainer)
 	return f.err
 }
 func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {
@@ -387,6 +391,32 @@ func TestExecuteDispatchesSetMetaToPatchMeta(t *testing.T) {
 	}
 	if len(mut.metaPatches) != 1 || mut.metaPatches[0] != "Deployment/default/nva-worker labels env=staging" {
 		t.Fatalf("metaPatches = %v, want one Deployment/default/nva-worker labels env=staging patch", mut.metaPatches)
+	}
+}
+
+func TestExecuteDispatchesInitContainerSetImage(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	cmd := c.Begin(TierNone, tui.TaskAction{
+		ID:    "set-image-default/api/prepare",
+		Label: "Set image for api?",
+		Scope: tui.TaskScope{
+			ResourceKind: string(kube.KindDeployment), ResourceName: "api", Namespace: "default",
+			Verb: "set-image", IsMutating: true,
+			Container: "prepare", Image: "prepare:2.0", InitContainer: true,
+		},
+	})
+	if cmd == nil {
+		t.Fatal("expected a TierNone set-image action to return an execution command")
+	}
+	if msg := cmd().(ResultMsg); msg.Err != nil {
+		t.Fatalf("unexpected error: %v", msg.Err)
+	}
+	if len(mut.setImages) != 1 || mut.setImages[0] != "Deployment/default/api prepare=prepare:2.0" {
+		t.Fatalf("setImages = %v, want the prepare init-container update", mut.setImages)
+	}
+	if len(mut.setImageInit) != 1 || !mut.setImageInit[0] {
+		t.Fatalf("setImageInit = %v, want [true]", mut.setImageInit)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -155,4 +156,67 @@ func TestWorkloadEditorsMutateAndRemain(t *testing.T) {
 	})
 	requireNewResourceVersion(t, resourcesRV, metaRV)
 	a.WaitForAll(Settle, "META", "phase3-e2e", "yes")
+}
+
+func TestSetImageUpdatesInitContainers(t *testing.T) {
+	RequireCluster(t)
+	const name = "set-image-init"
+	client := mutationClient(t)
+	dep := createDeployment(t, name, 0, "")
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	dep.Spec.Template.Spec.InitContainers = []corev1.Container{
+		{Name: "prepare", Image: "busybox:1.35", Command: []string{"true"}},
+		{Name: "mesh", Image: "busybox:1.35", Command: []string{"sleep", "infinity"}, RestartPolicy: &restartAlways},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	created, err := client.AppsV1().Deployments(Namespace).Update(ctx, dep, metav1.UpdateOptions{})
+	cancel()
+	if err != nil {
+		t.Fatalf("adding init containers to deployment %s: %v", name, err)
+	}
+
+	a := Launch(t)
+	a.WaitFor("api-", Connect)
+	a.gotoKind(t, "deployments", "Deployments")
+	a.WaitFor(name, Settle)
+	a.filterTo(t, name)
+	a.Press("i")
+	a.WaitForAll(Settle, "SET IMAGE", "prepare init", "mesh sidecar")
+
+	// The regular worker is first; tab once reaches the conventional init
+	// container and the apply must patch spec.initContainers.
+	a.Press("tab")
+	replaceTypedValue(a, "1.35", "1.36")
+	a.Enter()
+	a.WaitFor("set image: prepare=busybox:1.36", Settle)
+	var prepareRV string
+	waitForAPI(t, "conventional init-container image", func(ctx context.Context) (bool, error) {
+		current, err := client.AppsV1().Deployments(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		prepareRV = current.ResourceVersion
+		return current.Spec.Template.Spec.InitContainers[0].Image == "busybox:1.36" &&
+			current.Spec.Template.Spec.Containers[0].Image == "busybox:1.37", nil
+	})
+	requireNewResourceVersion(t, created.ResourceVersion, prepareRV)
+
+	// The next tab is a native sidecar. It is presented as a sidecar but is
+	// stored and patched in the same initContainers API list.
+	a.Press("tab")
+	replaceTypedValue(a, "1.35", "1.36")
+	a.Enter()
+	a.WaitFor("set image: mesh=busybox:1.36", Settle)
+	var meshRV string
+	waitForAPI(t, "native-sidecar image", func(ctx context.Context) (bool, error) {
+		current, err := client.AppsV1().Deployments(Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		meshRV = current.ResourceVersion
+		return current.Spec.Template.Spec.InitContainers[0].Image == "busybox:1.36" &&
+			current.Spec.Template.Spec.InitContainers[1].Image == "busybox:1.36" &&
+			current.Spec.Template.Spec.Containers[0].Image == "busybox:1.37", nil
+	})
+	requireNewResourceVersion(t, prepareRV, meshRV)
 }

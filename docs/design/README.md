@@ -306,7 +306,7 @@ The file in this bundle (`Kute Spec.dc.html`, plus its runtime `support.js`) is 
 
 ### 24a — Set image / set tag (`i` on a workload row)
 - Available on Deployment, StatefulSet, DaemonSet, and CronJob rows. CronJob edits update `spec.jobTemplate`: running Jobs are unaffected and only future Jobs use the new image.
-- Same inline tier as scale (17b) — no modal. Panel opens under the row (bg `#101018`, border `#3b3b58`); container tabs across the top (`↹` switches container, sidecars labeled dim).
+- Same inline tier as scale (17b) — no modal. Panel opens under the row (bg `#101018`, border `#3b3b58`); container tabs across the top (`↹` switches container). Conventional init containers are editable and labeled `init`; native sidecars are editable and labeled `sidecar` while still targeting their `initContainers` API entry.
 - **Tag-first editing:** the `image ›` field pre-fills the current ref with the cursor on the tag, repo prefix dim — the 95% case is "bump the tag." `ctrl-e` unlocks the full ref for the rename case. One verb, two depths, no separate "set tag" screen.
 - **History from the watch cache, never a registry call:** a TAG · SEEN · FROM table lists this workload's own ReplicaSet revision history (rollback targets, labeled by revision) plus the same image tag seen on other workloads/namespaces (`3.4.2 · seen 40m ago · nva-prod` — the "promote what prod runs" case).
 - Re-entering the current tag flips the strip to `same image — apply is a no-op` and `↵` does nothing; rollout-capable workloads additionally suggest rollout restart.

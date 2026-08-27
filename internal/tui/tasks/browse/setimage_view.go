@@ -129,6 +129,8 @@ func (m Model) setImageContainerTabLine(t *setImageTarget, theme tui.Theme, widt
 		name := c.Name
 		if c.IsSidecar {
 			name += " sidecar"
+		} else if c.initContainer {
+			name += " init"
 		}
 		if i == t.containerIdx {
 			parts = append(parts, pillStyle.Render(" "+name+" "))

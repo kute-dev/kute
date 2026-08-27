@@ -642,7 +642,7 @@ func (f *fakeRolloutMutator) RolloutUndo(_ context.Context, namespace, name stri
 func (f *fakeRolloutMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
-func (f *fakeRolloutMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+func (f *fakeRolloutMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string, bool) error {
 	return nil
 }
 func (f *fakeRolloutMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {

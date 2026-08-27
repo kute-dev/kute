@@ -653,6 +653,12 @@ func goldenMarksModel(t *testing.T, width, height int) Model {
 func goldenSetImageModel(t *testing.T, width, height int) Model {
 	t.Helper()
 	dep := twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.2")
+	dep.Spec.Template.Spec.Containers = dep.Spec.Template.Spec.Containers[:1]
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	dep.Spec.Template.Spec.InitContainers = []corev1.Container{
+		{Name: "prepare", Image: "registry.nva.dev/prepare:1.2.0"},
+		{Name: "mesh", Image: "registry.nva.dev/mesh:1.4.0", RestartPolicy: &restartAlways},
+	}
 	rsOldest := replicaSetRevision("default", "nva-worker-r41", "nva-worker", "registry.nva.dev/nva-worker:3.4.0", 41, 23*24*time.Hour)
 	rsOld := replicaSetRevision("default", "nva-worker-r42", "nva-worker", "registry.nva.dev/nva-worker:3.4.1", 42, 21*24*time.Hour)
 	rsCur := replicaSetRevision("default", "nva-worker-r43", "nva-worker", "registry.nva.dev/nva-worker:3.4.2", 43, 2*24*time.Hour)

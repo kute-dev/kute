@@ -547,7 +547,8 @@ func executeScope(mutator kube.Mutator, scope tui.TaskScope) error {
 			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Replicas)
 	case "set-image":
 		err = mutator.SetImage(context.Background(),
-			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Container, scope.Image)
+			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName,
+			scope.Container, scope.Image, scope.InitContainer)
 	case "set-resources":
 		err = mutator.SetResources(context.Background(),
 			kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName, scope.Container, *scope.Resources, false)

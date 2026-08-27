@@ -680,34 +680,38 @@ func (c *Cluster) Scale(_ context.Context, kind kube.ResourceKind, namespace, na
 // SetImage sets one named container's image on an apps workload or CronJob
 // pod template in place — 24a's tag-first inline editor against the fake
 // cluster.
-func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string) error {
+func (c *Cluster) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string, initContainer bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, obj := range c.objects[kind] {
-		var containers []corev1.Container
+		var spec *corev1.PodSpec
 		switch o := obj.(type) {
 		case *appsv1.Deployment:
 			if o.Name != name || o.Namespace != namespace {
 				continue
 			}
-			containers = o.Spec.Template.Spec.Containers
+			spec = &o.Spec.Template.Spec
 		case *appsv1.StatefulSet:
 			if o.Name != name || o.Namespace != namespace {
 				continue
 			}
-			containers = o.Spec.Template.Spec.Containers
+			spec = &o.Spec.Template.Spec
 		case *appsv1.DaemonSet:
 			if o.Name != name || o.Namespace != namespace {
 				continue
 			}
-			containers = o.Spec.Template.Spec.Containers
+			spec = &o.Spec.Template.Spec
 		case *batchv1.CronJob:
 			if o.Name != name || o.Namespace != namespace {
 				continue
 			}
-			containers = o.Spec.JobTemplate.Spec.Template.Spec.Containers
+			spec = &o.Spec.JobTemplate.Spec.Template.Spec
 		default:
 			continue
+		}
+		containers := spec.Containers
+		if initContainer {
+			containers = spec.InitContainers
 		}
 		for i := range containers {
 			if containers[i].Name == container {

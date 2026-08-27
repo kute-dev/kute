@@ -52,6 +52,7 @@ type fakeMutator struct {
 	restarted            []string
 	scaled               []int32
 	setImages            []string // "namespace/name container=image"
+	setImageInit         []bool
 	setResources         []string // "namespace/name container" of every SetResources call
 	fluxSuspends         []string // "namespace/name=true|false" of every SetFluxSuspend call
 	fluxReconciles       []string // "namespace/name" of every RequestFluxReconcile call
@@ -133,17 +134,18 @@ func (f *fakeMutator) Scale(_ context.Context, _ kube.ResourceKind, _, _ string,
 	f.scaled = append(f.scaled, replicas)
 	return nil
 }
-func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string) error {
+func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namespace, name, container, image string, initContainer bool) error {
 	if f.err != nil {
 		return f.err
 	}
 	f.setImages = append(f.setImages, namespace+"/"+name+" "+container+"="+image)
+	f.setImageInit = append(f.setImageInit, initContainer)
 	for _, obj := range f.setImageObjs[kind] {
 		acc, err := apimeta.Accessor(obj)
 		if err != nil || acc.GetNamespace() != namespace || acc.GetName() != name {
 			continue
 		}
-		setContainerImage(obj, container, image)
+		setContainerImage(obj, container, image, initContainer)
 		break
 	}
 	return nil
@@ -152,7 +154,7 @@ func (f *fakeMutator) SetImage(_ context.Context, kind kube.ResourceKind, namesp
 // setContainerImage mutates obj's pod-template container (regular or native
 // sidecar) named container to image in place — setImageObjs's own version of
 // PatchMeta's local-object mutation, covering every kind 24a supports.
-func setContainerImage(obj runtime.Object, container, image string) {
+func setContainerImage(obj runtime.Object, container, image string, initContainer bool) {
 	var containers, initContainers *[]corev1.Container
 	switch o := obj.(type) {
 	case *appsv1.Deployment:
@@ -166,15 +168,13 @@ func setContainerImage(obj runtime.Object, container, image string) {
 	default:
 		return
 	}
-	for i := range *containers {
-		if (*containers)[i].Name == container {
-			(*containers)[i].Image = image
-			return
-		}
+	target := containers
+	if initContainer {
+		target = initContainers
 	}
-	for i := range *initContainers {
-		if (*initContainers)[i].Name == container {
-			(*initContainers)[i].Image = image
+	for i := range *target {
+		if (*target)[i].Name == container {
+			(*target)[i].Image = image
 			return
 		}
 	}

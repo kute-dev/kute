@@ -128,6 +128,95 @@ func TestTabCyclesContainersAndRecomputesHistory(t *testing.T) {
 	}
 }
 
+func TestSetImageIncludesAndUpdatesInitContainers(t *testing.T) {
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	dep := twoContainerDeployment("default", "nva-worker", "worker:1.0")
+	dep.Spec.Template.Spec.Containers = dep.Spec.Template.Spec.Containers[:1]
+	dep.Spec.Template.Spec.InitContainers = []corev1.Container{
+		{Name: "prepare", Image: "prepare:1.0"},
+		{Name: "mesh", Image: "mesh:1.0", RestartPolicy: &restartAlways},
+	}
+	mut := &fakeMutator{}
+	m := newSetImageModel(t, mut, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {dep},
+	}, false)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+
+	if got := len(m.pendingSetImage.containers); got != 3 {
+		t.Fatalf("set-image targets = %d, want regular + init + native sidecar", got)
+	}
+	rendered := m.Render()
+	if !strings.Contains(rendered, "prepare init") || !strings.Contains(rendered, "mesh sidecar") {
+		t.Fatalf("init-container labels missing from set-image panel:\n%s", rendered)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
+	if c := m.pendingSetImage.activeContainer(); c.Name != "prepare" || !c.initContainer || c.IsSidecar {
+		t.Fatalf("first tab target = %+v, want conventional init container prepare", c)
+	}
+	m.pendingSetImage.setBuffer("2.0")
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.setImageInit) != 1 || !mut.setImageInit[0] {
+		t.Fatalf("setImageInit = %v, want [true]", mut.setImageInit)
+	}
+	if got := dep.Spec.Template.Spec.InitContainers[0].Image; got != "prepare:2.0" {
+		t.Fatalf("prepare image = %q, want prepare:2.0", got)
+	}
+	if c := m.pendingSetImage.activeContainer(); c.Name != "prepare" || !c.initContainer || c.Image != "prepare:2.0" {
+		t.Fatalf("refreshed active target = %+v, want updated prepare init container", c)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
+	if c := m.pendingSetImage.activeContainer(); c.Name != "mesh" || !c.initContainer || !c.IsSidecar {
+		t.Fatalf("second tab target = %+v, want native sidecar mesh", c)
+	}
+	m.pendingSetImage.setBuffer("2.0")
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.setImageInit) != 2 || !mut.setImageInit[1] {
+		t.Fatalf("setImageInit = %v, want [true true]", mut.setImageInit)
+	}
+	if got := dep.Spec.Template.Spec.InitContainers[1].Image; got != "mesh:2.0" {
+		t.Fatalf("mesh image = %q, want mesh:2.0", got)
+	}
+}
+
+func TestInitContainerHistoryReadsWorkloadRevisions(t *testing.T) {
+	dep := twoContainerDeployment("default", "nva-worker", "worker:1.0")
+	dep.Spec.Template.Spec.Containers = dep.Spec.Template.Spec.Containers[:1]
+	dep.Spec.Template.Spec.InitContainers = []corev1.Container{{Name: "prepare", Image: "prepare:2.0"}}
+	old := replicaSetRevision("default", "nva-worker-r1", "nva-worker", "worker:1.0", 1, 2*time.Hour)
+	old.Spec.Template.Spec.InitContainers = []corev1.Container{{Name: "prepare", Image: "prepare:1.0"}}
+	current := replicaSetRevision("default", "nva-worker-r2", "nva-worker", "worker:1.0", 2, time.Hour)
+	current.Spec.Template.Spec.InitContainers = []corev1.Container{{Name: "prepare", Image: "prepare:2.0"}}
+	m := newSetImageModel(t, &fakeMutator{}, map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {dep},
+		kube.KindReplicaSet: {old, current},
+	}, false)
+	m = step(t, m, tea.KeyPressMsg{Text: "i"})
+	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
+
+	history := m.pendingSetImage.history
+	if len(history) != 2 || history[0].tag != "2.0" || history[1].tag != "1.0" {
+		t.Fatalf("init-container history = %+v, want current 2.0 and rollback target 1.0", history)
+	}
+}
+
+func TestControllerRevisionImageReadsInitContainers(t *testing.T) {
+	data, err := json.Marshal(map[string]any{
+		"spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+			"containers":     []map[string]any{{"name": "app", "image": "app:1.0"}},
+			"initContainers": []map[string]any{{"name": "prepare", "image": "prepare:2.0"}},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("marshal ControllerRevision fixture: %v", err)
+	}
+	cr := &appsv1.ControllerRevision{Data: runtime.RawExtension{Raw: data}}
+	if got := controllerRevisionContainerImage(cr, "prepare", true); got != "prepare:2.0" {
+		t.Fatalf("init-container image = %q, want prepare:2.0", got)
+	}
+}
+
 func TestHistoryUpDownPicksTagIntoBuffer(t *testing.T) {
 	dep := twoContainerDeployment("default", "nva-worker", "registry.nva.dev/nva-worker:3.4.2")
 	rsCur := replicaSetRevision("default", "nva-worker-r43", "nva-worker", "registry.nva.dev/nva-worker:3.4.2", 43, 2*24*time.Hour)
@@ -539,7 +628,7 @@ func TestSetImageDoesNotRevertWhileInformerCacheCatchesUp(t *testing.T) {
 		t.Fatal("an unrelated CronJob event should leave the submitted image awaiting confirmation")
 	}
 
-	setContainerImage(cronJob, "job", "backup:1.0.01")
+	setContainerImage(cronJob, "job", "backup:1.0.01", false)
 	updated, _ = m.Update(kube.ResourceChangedMsg{Kind: kube.KindCronJob})
 	m = *updated.(*Model)
 	if m.pendingSetImage.awaitingRefresh != nil {

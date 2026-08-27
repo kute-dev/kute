@@ -402,7 +402,7 @@ func (f *fakeHelmMutator) Drain(_ context.Context, _ string) (int, error)   { re
 func (f *fakeHelmMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
-func (f *fakeHelmMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+func (f *fakeHelmMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string, bool) error {
 	return nil
 }
 func (f *fakeHelmMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {

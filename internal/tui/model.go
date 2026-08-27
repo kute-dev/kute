@@ -54,6 +54,9 @@ type TaskScope struct {
 	// Container is the target container name for a "set-image" verb (24a).
 	// Empty for every other verb.
 	Container string
+	// InitContainer selects spec.initContainers rather than spec.containers
+	// for a "set-image" verb. False for every other verb.
+	InitContainer bool
 	// Image is the target image ref for a "set-image" verb (24a). Empty for
 	// every other verb.
 	Image string

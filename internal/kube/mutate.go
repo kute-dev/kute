@@ -62,9 +62,10 @@ type Mutator interface {
 	// spec.replicas field browse exposes.
 	Scale(ctx context.Context, kind ResourceKind, namespace, name string, replicas int32) error
 	// SetImage patches container's image on kind's pod template — 24a's
-	// tag-first inline editor. Deployment, StatefulSet, and DaemonSet are the
-	// three kinds with a pod template browse exposes it on.
-	SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error
+	// tag-first inline editor. initContainer selects spec.initContainers
+	// instead of spec.containers. Deployment, StatefulSet, DaemonSet, and
+	// CronJob are the four kinds with a pod template browse exposes it on.
+	SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string, initContainer bool) error
 	// SetResources patches container's resources.requests/limits on kind's
 	// pod template — 25a's editor. edits' non-nil fields are the changed
 	// ones ("only changed fields go into the command"); a pointer to "" is
@@ -990,18 +991,22 @@ func ScaleCommandString(kind ResourceKind, namespace, name string, replicas int3
 // strategic-merge-patch idiom as Scale/Cordon — the container list patches
 // by its "name" merge key, so no per-kind container index lookup is needed.
 // CronJob nests the pod template one level deeper under spec.jobTemplate.
-func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string) error {
+func (c *Cluster) SetImage(ctx context.Context, kind ResourceKind, namespace, name, container, image string, initContainer bool) error {
 	if name == "" {
 		return fmt.Errorf("cannot set image on %s: empty name", kind)
 	}
+	containerField := "containers"
+	if initContainer {
+		containerField = "initContainers"
+	}
 	patch := fmt.Sprintf(
-		`{"spec":{"template":{"spec":{"containers":[{"name":%q,"image":%q}]}}}}`,
-		container, image,
+		`{"spec":{"template":{"spec":{"%s":[{"name":%q,"image":%q}]}}}}`,
+		containerField, container, image,
 	)
 	if kind == KindCronJob {
 		patch = fmt.Sprintf(
-			`{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"containers":[{"name":%q,"image":%q}]}}}}}}`,
-			container, image,
+			`{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"%s":[{"name":%q,"image":%q}]}}}}}}`,
+			containerField, container, image,
 		)
 	}
 	var err error

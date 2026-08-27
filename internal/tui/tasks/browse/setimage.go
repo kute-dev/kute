@@ -43,6 +43,14 @@ type imageHistoryEntry struct {
 	from      string    // the FROM column's rendered text
 }
 
+// setImageContainer identifies both a container and the PodSpec list that
+// owns it. Native sidecars are init containers at the API level even though
+// the UI presents them alongside long-running containers.
+type setImageContainer struct {
+	kube.ContainerInfo
+	initContainer bool
+}
+
 // setImageTarget is the state pendingSetImage gates on while 24a's panel is
 // showing.
 type setImageTarget struct {
@@ -54,7 +62,7 @@ type setImageTarget struct {
 	// layer to read a more precise one from.
 	created      time.Time
 	desiredCount int32 // "applying rolls out N pods" — apps workloads' own currentReplicas(row)
-	containers   []kube.ContainerInfo
+	containers   []setImageContainer
 	containerIdx int
 	// repo is the active container's image repo, the dim prefix in
 	// non-fullRef mode.
@@ -92,8 +100,9 @@ type setImageTarget struct {
 // right inline success message and know which container to re-select after a
 // refresh — mirrors metaPendingCommit.
 type setImagePendingCommit struct {
-	container string
-	image     string
+	container     string
+	image         string
+	initContainer bool
 }
 
 // setBuffer replaces t.input's value wholesale and parks the cursor at its
@@ -105,7 +114,7 @@ func (t *setImageTarget) setBuffer(s string) {
 }
 
 // activeContainer is the container the panel is currently editing.
-func (t setImageTarget) activeContainer() kube.ContainerInfo {
+func (t setImageTarget) activeContainer() setImageContainer {
 	return t.containers[t.containerIdx]
 }
 
@@ -174,7 +183,7 @@ func (m *Model) buildSetImageTarget(kind kube.ResourceKind, namespace, name stri
 	if !ok {
 		return nil, false
 	}
-	containers := workloadContainerInfos(obj)
+	containers := setImageContainerInfos(obj)
 	if len(containers) == 0 {
 		return nil, false
 	}
@@ -204,7 +213,8 @@ func (m *Model) selectSetImageContainer(idx int) {
 	t := m.pendingSetImage
 	t.containerIdx = idx
 	resetSetImageBuffer(t)
-	t.history = imageHistory(m.session.ClusterContext(), m.lister, t.kind, t.namespace, t.name, t.activeContainer().Name, t.activeContainer().Image, t.created)
+	c := t.activeContainer()
+	t.history = imageHistory(m.session.ClusterContext(), m.lister, t.kind, t.namespace, t.name, c.Name, c.Image, c.initContainer, t.created)
 	t.historyIdx = matchHistoryIndex(t)
 }
 
@@ -332,18 +342,19 @@ func matchHistoryIndex(t *setImageTarget) int {
 func (m *Model) commitSetImage(t setImageTarget) tea.Cmd {
 	c := t.activeContainer()
 	image := t.composedImage()
-	m.armSetImageCommit(&setImagePendingCommit{container: c.Name, image: image})
+	m.armSetImageCommit(&setImagePendingCommit{container: c.Name, image: image, initContainer: c.initContainer})
 	return m.actions.Begin(verbs.TierForSetImage(m.isProd()), tui.TaskAction{
 		ID:    "set-image-" + t.namespace + "/" + t.name,
 		Label: fmt.Sprintf("Set image for %s?", t.name),
 		Scope: tui.TaskScope{
-			ResourceKind: string(t.kind),
-			ResourceName: t.name,
-			Namespace:    t.namespace,
-			Verb:         "set-image",
-			IsMutating:   true,
-			Container:    c.Name,
-			Image:        image,
+			ResourceKind:  string(t.kind),
+			ResourceName:  t.name,
+			Namespace:     t.namespace,
+			Verb:          "set-image",
+			IsMutating:    true,
+			Container:     c.Name,
+			Image:         image,
+			InitContainer: c.initContainer,
 		},
 	})
 }
@@ -403,7 +414,7 @@ func (m *Model) handleSetImageResult(msg actions.ResultMsg) tea.Cmd {
 		m.pendingSetImage = nil
 		return nil
 	}
-	if pc != nil && !setImageTargetHasImage(fresh, pc.container, pc.image) {
+	if pc != nil && !setImageTargetHasImage(fresh, pc.container, pc.image, pc.initContainer) {
 		// The API write won the race with the informer. Keep the submitted
 		// value visible; the matching watch event will rebuild from cache.
 		t.awaitingRefresh = pc
@@ -415,7 +426,7 @@ func (m *Model) handleSetImageResult(msg actions.ResultMsg) tea.Cmd {
 	idx := 0
 	if pc != nil {
 		for i, c := range fresh.containers {
-			if c.Name == pc.container {
+			if c.Name == pc.container && c.initContainer == pc.initContainer {
 				idx = i
 				break
 			}
@@ -435,16 +446,16 @@ func (m *Model) refreshSetImageTarget() {
 	if pc == nil {
 		return
 	}
-	selected := t.activeContainer().Name
+	selected := t.activeContainer()
 	fresh, ok := m.buildSetImageTarget(t.kind, t.namespace, t.name, t.desiredCount)
-	if !ok || !setImageTargetHasImage(fresh, pc.container, pc.image) {
+	if !ok || !setImageTargetHasImage(fresh, pc.container, pc.image, pc.initContainer) {
 		return
 	}
 	message, lastError := t.message, t.lastError
 	m.pendingSetImage = fresh
 	idx := 0
 	for i, c := range fresh.containers {
-		if c.Name == selected {
+		if c.Name == selected.Name && c.initContainer == selected.initContainer {
 			idx = i
 			break
 		}
@@ -454,13 +465,45 @@ func (m *Model) refreshSetImageTarget() {
 	m.pendingSetImage.lastError = lastError
 }
 
-func setImageTargetHasImage(t *setImageTarget, container, image string) bool {
+func setImageTargetHasImage(t *setImageTarget, container, image string, initContainer bool) bool {
 	for _, c := range t.containers {
-		if c.Name == container {
+		if c.Name == container && c.initContainer == initContainer {
 			return c.Image == image
 		}
 	}
 	return false
+}
+
+// setImageContainerInfos extracts every image target from obj's pod template:
+// regular containers first, then conventional init containers and native
+// sidecars in declaration order. Set Resources deliberately keeps using
+// workloadContainerInfos, whose narrower target set is unchanged.
+func setImageContainerInfos(obj runtime.Object) []setImageContainer {
+	var spec corev1.PodSpec
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		spec = o.Spec.Template.Spec
+	case *appsv1.StatefulSet:
+		spec = o.Spec.Template.Spec
+	case *appsv1.DaemonSet:
+		spec = o.Spec.Template.Spec
+	case *batchv1.CronJob:
+		spec = o.Spec.JobTemplate.Spec.Template.Spec
+	default:
+		return nil
+	}
+	infos := make([]setImageContainer, 0, len(spec.Containers)+len(spec.InitContainers))
+	for _, c := range spec.Containers {
+		infos = append(infos, setImageContainer{ContainerInfo: kube.ContainerInfo{Name: c.Name, Image: c.Image}})
+	}
+	for _, c := range spec.InitContainers {
+		sidecar := c.RestartPolicy != nil && *c.RestartPolicy == corev1.ContainerRestartPolicyAlways
+		infos = append(infos, setImageContainer{
+			ContainerInfo: kube.ContainerInfo{Name: c.Name, Image: c.Image, IsSidecar: sidecar},
+			initContainer: true,
+		})
+	}
+	return infos
 }
 
 // setImageWillRunLine renders the exact "will run: kubectl set image ..."
@@ -531,11 +574,11 @@ func workloadContainerInfos(obj runtime.Object) []kube.ContainerInfo {
 // cross-workload sightings of the same image repo, newest-seen-first,
 // deduped by tag (the most recent sighting of a tag wins regardless of
 // source), capped to a reasonable panel-scrollable count.
-func imageHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
+func imageHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, initContainer bool, created time.Time) []imageHistoryEntry {
 	const maxEntries = 8
 	repo, currentTag := imageRepo(currentImage), tagOf(currentImage)
 
-	entries := ownRevisionHistory(ctx, lister, kind, namespace, name, container, currentImage, created)
+	entries := ownRevisionHistory(ctx, lister, kind, namespace, name, container, currentImage, initContainer, created)
 	entries = append(entries, crossWorkloadHistory(ctx, lister, kind, namespace, name, repo, currentTag)...)
 	slices.SortStableFunc(entries, func(a, b imageHistoryEntry) int { return b.seenAt.Compare(a.seenAt) })
 
@@ -573,7 +616,7 @@ type revisionCandidate struct {
 // single "current" row (built from the workload's own creation time) when
 // no revision object has been seen yet — a fresh object, or the informer
 // cache still catching up.
-func ownRevisionHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, created time.Time) []imageHistoryEntry {
+func ownRevisionHistory(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container, currentImage string, initContainer bool, created time.Time) []imageHistoryEntry {
 	fallback := []imageHistoryEntry{{
 		tag:       tagOf(currentImage),
 		seenAt:    created,
@@ -586,9 +629,9 @@ func ownRevisionHistory(ctx context.Context, lister resources.RawLister, kind ku
 	var revs []revisionCandidate
 	switch kind {
 	case kube.KindDeployment:
-		revs = deploymentRevisions(ctx, lister, namespace, name, container)
+		revs = deploymentRevisions(ctx, lister, namespace, name, container, initContainer)
 	case kube.KindStatefulSet, kube.KindDaemonSet:
-		revs = controllerRevisions(ctx, lister, kind, namespace, name, container)
+		revs = controllerRevisions(ctx, lister, kind, namespace, name, container, initContainer)
 	default:
 		return fallback
 	}
@@ -600,7 +643,7 @@ func ownRevisionHistory(ctx context.Context, lister resources.RawLister, kind ku
 
 // deploymentRevisions gathers revisionCandidates from a Deployment's owned
 // ReplicaSets — the source ownRevisionHistory's doc comment describes.
-func deploymentRevisions(ctx context.Context, lister resources.RawLister, namespace, name, container string) []revisionCandidate {
+func deploymentRevisions(ctx context.Context, lister resources.RawLister, namespace, name, container string, initContainer bool) []revisionCandidate {
 	objs, err := lister.ListRaw(ctx, kube.KindReplicaSet, namespace)
 	if err != nil {
 		return nil
@@ -619,7 +662,11 @@ func deploymentRevisions(ctx context.Context, lister resources.RawLister, namesp
 		if err != nil {
 			continue
 		}
-		image := containerImageByName(rs.Spec.Template.Spec.Containers, container)
+		containers := rs.Spec.Template.Spec.Containers
+		if initContainer {
+			containers = rs.Spec.Template.Spec.InitContainers
+		}
+		image := containerImageByName(containers, container)
 		if image == "" {
 			continue
 		}
@@ -633,7 +680,7 @@ func deploymentRevisions(ctx context.Context, lister resources.RawLister, namesp
 // {"spec":{"template":{"spec":{"containers":[...]}}}} — the patch shape the
 // StatefulSet/DaemonSet controllers themselves generate for each revision
 // and `kubectl rollout history` decodes the same way.
-func controllerRevisions(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container string) []revisionCandidate {
+func controllerRevisions(ctx context.Context, lister resources.RawLister, kind kube.ResourceKind, namespace, name, container string, initContainer bool) []revisionCandidate {
 	objs, err := lister.ListRaw(ctx, kube.KindControllerRevision, namespace)
 	if err != nil {
 		return nil
@@ -644,7 +691,7 @@ func controllerRevisions(ctx context.Context, lister resources.RawLister, kind k
 		if !ok || len(cr.OwnerReferences) == 0 || cr.OwnerReferences[0].Kind != string(kind) || cr.OwnerReferences[0].Name != name {
 			continue
 		}
-		image := controllerRevisionContainerImage(cr, container)
+		image := controllerRevisionContainerImage(cr, container, initContainer)
 		if image == "" {
 			continue
 		}
@@ -656,12 +703,13 @@ func controllerRevisions(ctx context.Context, lister resources.RawLister, kind k
 // controllerRevisionContainerImage decodes cr.Data.Raw's patch just enough
 // to pull out container's image — the fields ownRevisionHistory's doc
 // comment names, ignoring everything else the patch carries.
-func controllerRevisionContainerImage(cr *appsv1.ControllerRevision, container string) string {
+func controllerRevisionContainerImage(cr *appsv1.ControllerRevision, container string, initContainer bool) string {
 	var patch struct {
 		Spec struct {
 			Template struct {
 				Spec struct {
-					Containers []corev1.Container `json:"containers"`
+					Containers     []corev1.Container `json:"containers"`
+					InitContainers []corev1.Container `json:"initContainers"`
 				} `json:"spec"`
 			} `json:"template"`
 		} `json:"spec"`
@@ -669,7 +717,11 @@ func controllerRevisionContainerImage(cr *appsv1.ControllerRevision, container s
 	if err := json.Unmarshal(cr.Data.Raw, &patch); err != nil {
 		return ""
 	}
-	return containerImageByName(patch.Spec.Template.Spec.Containers, container)
+	containers := patch.Spec.Template.Spec.Containers
+	if initContainer {
+		containers = patch.Spec.Template.Spec.InitContainers
+	}
+	return containerImageByName(containers, container)
 }
 
 // labelRevisions sorts revs newest-revision-first and labels the top one
@@ -728,7 +780,7 @@ func crossWorkloadHistory(ctx context.Context, lister resources.RawLister, kind 
 				continue // the workload being edited itself
 			}
 			seenAt := acc.GetCreationTimestamp().Time
-			for _, c := range workloadContainerInfos(obj) {
+			for _, c := range setImageContainerInfos(obj) {
 				if imageRepo(c.Image) != repo {
 					continue
 				}

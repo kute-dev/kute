@@ -60,7 +60,7 @@ func (f *fakeMutator) Drain(context.Context, string) (int, error) { return 0, ni
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
 	return nil
 }
-func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string) error {
+func (f *fakeMutator) SetImage(context.Context, kube.ResourceKind, string, string, string, string, bool) error {
 	return nil
 }
 func (f *fakeMutator) SetResources(context.Context, kube.ResourceKind, string, string, string, kube.ResourceEdits, bool) error {

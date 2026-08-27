@@ -7,7 +7,7 @@
 ▎ ●  nva-worker                                           4/4    stable                registry.nva.dev/nva-wo…    30d  
                                                                                                                         
   ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮  
-  │ container   worker   metrics-sidecar                                                          ↹ switch container │  
+  │ container   worker   prepare init  mesh sidecar                                               ↹ switch container │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  
   │ image › registry.nva.dev/nva-worker:3.4.2                                     editing tag · ctrl-e edit full ref │  
   │──────────────────────────────────────────────────────────────────────────────────────────────────────────────────│  

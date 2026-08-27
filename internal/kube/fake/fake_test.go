@@ -30,7 +30,7 @@ func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
 		}}}},
 	})
 
-	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "app", "app:2.0", false); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
 	objs, _ := c.ListRaw(t.Context(), kube.KindDeployment, "default")
@@ -40,6 +40,43 @@ func TestSetImagePatchesNamedContainerOnly(t *testing.T) {
 	}
 	if deploy.Spec.Template.Spec.Containers[1].Image != "sidecar:1.0" {
 		t.Fatalf("sidecar image = %q, want unchanged sidecar:1.0", deploy.Spec.Template.Spec.Containers[1].Image)
+	}
+}
+
+func TestSetImagePatchesInitContainers(t *testing.T) {
+	t.Parallel()
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	c := New("default", "dev")
+	c.Seed(kube.KindDeployment, &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}},
+			InitContainers: []corev1.Container{
+				{Name: "prepare", Image: "prepare:1.0"},
+				{Name: "mesh", Image: "mesh:1.0", RestartPolicy: &restartAlways},
+			},
+		}}},
+	})
+
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "prepare", "prepare:2.0", true); err != nil {
+		t.Fatalf("SetImage conventional init container: %v", err)
+	}
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "mesh", "mesh:2.0", true); err != nil {
+		t.Fatalf("SetImage native sidecar: %v", err)
+	}
+	objs, _ := c.ListRaw(t.Context(), kube.KindDeployment, "default")
+	deploy := objs[0].(*appsv1.Deployment)
+	if deploy.Spec.Template.Spec.Containers[0].Image != "app:1.0" {
+		t.Fatalf("regular container image = %q, want unchanged app:1.0", deploy.Spec.Template.Spec.Containers[0].Image)
+	}
+	if deploy.Spec.Template.Spec.InitContainers[0].Image != "prepare:2.0" {
+		t.Fatalf("prepare image = %q, want prepare:2.0", deploy.Spec.Template.Spec.InitContainers[0].Image)
+	}
+	if deploy.Spec.Template.Spec.InitContainers[1].Image != "mesh:2.0" {
+		t.Fatalf("mesh image = %q, want mesh:2.0", deploy.Spec.Template.Spec.InitContainers[1].Image)
+	}
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "prepare", "prepare:3.0", false); err == nil {
+		t.Fatal("expected a misclassified init-container target to be rejected")
 	}
 }
 
@@ -56,7 +93,7 @@ func TestSetImagePatchesCronJobTemplate(t *testing.T) {
 		}}},
 	})
 
-	if err := c.SetImage(t.Context(), kube.KindCronJob, "default", "nightly", "job", "job:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), kube.KindCronJob, "default", "nightly", "job", "job:2.0", false); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
 	objs, _ := c.ListRaw(t.Context(), kube.KindCronJob, "default")
@@ -92,7 +129,7 @@ func TestDemoCronJobsSupportSetImage(t *testing.T) {
 	if len(containers) == 0 {
 		t.Fatalf("demo CronJob %q has no set-image target", cronJob.Name)
 	}
-	if err := c.SetImage(t.Context(), kube.KindCronJob, cronJob.Namespace, cronJob.Name, containers[0].Name, "busybox:1.37"); err != nil {
+	if err := c.SetImage(t.Context(), kube.KindCronJob, cronJob.Namespace, cronJob.Name, containers[0].Name, "busybox:1.37", false); err != nil {
 		t.Fatalf("SetImage on demo CronJob: %v", err)
 	}
 }
@@ -104,7 +141,7 @@ func TestSetImageRejectsUnknownContainer(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 		Spec:       appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}}}},
 	})
-	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "missing", "app:2.0"); err == nil {
+	if err := c.SetImage(t.Context(), kube.KindDeployment, "default", "api", "missing", "app:2.0", false); err == nil {
 		t.Fatalf("expected an error for an unknown container name")
 	}
 }

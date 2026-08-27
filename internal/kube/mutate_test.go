@@ -832,7 +832,7 @@ func TestSetImagePatchesNamedContainer(t *testing.T) {
 	}
 	c, cs := newTestCluster(deploy)
 
-	if err := c.SetImage(t.Context(), KindDeployment, "default", "api", "app", "app:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "api", "app", "app:2.0", false); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
 	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
@@ -844,6 +844,45 @@ func TestSetImagePatchesNamedContainer(t *testing.T) {
 	}
 	if got.Spec.Template.Spec.Containers[1].Image != "sidecar:1.0" {
 		t.Fatalf("sidecar image = %q, want unchanged sidecar:1.0", got.Spec.Template.Spec.Containers[1].Image)
+	}
+}
+
+func TestSetImagePatchesInitContainers(t *testing.T) {
+	t.Parallel()
+	restartAlways := corev1.ContainerRestartPolicyAlways
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}},
+			InitContainers: []corev1.Container{
+				{Name: "prepare", Image: "prepare:1.0"},
+				{Name: "mesh", Image: "mesh:1.0", RestartPolicy: &restartAlways},
+			},
+		}}},
+	}
+	c, cs := newTestCluster(deploy)
+
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "api", "prepare", "prepare:2.0", true); err != nil {
+		t.Fatalf("SetImage conventional init container: %v", err)
+	}
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "api", "mesh", "mesh:2.0", true); err != nil {
+		t.Fatalf("SetImage native sidecar: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.Template.Spec.Containers[0].Image != "app:1.0" {
+		t.Fatalf("regular container image = %q, want unchanged app:1.0", got.Spec.Template.Spec.Containers[0].Image)
+	}
+	if got.Spec.Template.Spec.InitContainers[0].Image != "prepare:2.0" {
+		t.Fatalf("prepare image = %q, want prepare:2.0", got.Spec.Template.Spec.InitContainers[0].Image)
+	}
+	if got.Spec.Template.Spec.InitContainers[1].Image != "mesh:2.0" {
+		t.Fatalf("mesh image = %q, want mesh:2.0", got.Spec.Template.Spec.InitContainers[1].Image)
+	}
+	if got.Spec.Template.Spec.InitContainers[1].RestartPolicy == nil || *got.Spec.Template.Spec.InitContainers[1].RestartPolicy != restartAlways {
+		t.Fatal("native sidecar restart policy was not preserved")
 	}
 }
 
@@ -860,7 +899,7 @@ func TestSetImagePatchesCronJobTemplate(t *testing.T) {
 	}
 	c, cs := newTestCluster(cronJob)
 
-	if err := c.SetImage(t.Context(), KindCronJob, "default", "nightly", "job", "job:2.0"); err != nil {
+	if err := c.SetImage(t.Context(), KindCronJob, "default", "nightly", "job", "job:2.0", false); err != nil {
 		t.Fatalf("SetImage: %v", err)
 	}
 	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
@@ -876,10 +915,38 @@ func TestSetImagePatchesCronJobTemplate(t *testing.T) {
 	}
 }
 
+func TestSetImagePatchesCronJobInitContainer(t *testing.T) {
+	t.Parallel()
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers:     []corev1.Container{{Name: "job", Image: "job:1.0"}},
+				InitContainers: []corev1.Container{{Name: "prepare", Image: "prepare:1.0"}},
+			}},
+		}}},
+	}
+	c, cs := newTestCluster(cronJob)
+
+	if err := c.SetImage(t.Context(), KindCronJob, "default", "nightly", "prepare", "prepare:2.0", true); err != nil {
+		t.Fatalf("SetImage: %v", err)
+	}
+	got, err := cs.BatchV1().CronJobs("default").Get(t.Context(), "nightly", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Spec.JobTemplate.Spec.Template.Spec.InitContainers[0].Image != "prepare:2.0" {
+		t.Fatalf("prepare image = %q, want prepare:2.0", got.Spec.JobTemplate.Spec.Template.Spec.InitContainers[0].Image)
+	}
+	if got.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image != "job:1.0" {
+		t.Fatalf("job image = %q, want unchanged job:1.0", got.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
 func TestSetImageRejectsEmptyName(t *testing.T) {
 	t.Parallel()
 	c, _ := newTestCluster()
-	if err := c.SetImage(t.Context(), KindDeployment, "default", "", "app", "app:2.0"); err == nil {
+	if err := c.SetImage(t.Context(), KindDeployment, "default", "", "app", "app:2.0", false); err == nil {
 		t.Fatalf("expected an error for an empty resource name")
 	}
 }
