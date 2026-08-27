@@ -107,13 +107,13 @@ func (m Model) accessFeedback() string {
 		if reason == "" {
 			reason = fmt.Sprintf("%s %s is denied", query.Verb, query.Resource)
 		}
-		return reason + " — w who-can"
+		return reason
 	case accessAllowed:
 		switch {
 		case m.accessErr != nil:
-			return "couldn't verify access: " + m.accessErr.Error() + " — the API server will decide at launch"
+			return "can't verify access: " + m.accessErr.Error()
 		case m.accessResult.EvaluationError != "":
-			return "couldn't verify access: " + m.accessResult.EvaluationError + " — the API server will decide at launch"
+			return "can't verify access: " + m.accessResult.EvaluationError
 		}
 	}
 	return ""

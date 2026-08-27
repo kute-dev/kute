@@ -122,29 +122,11 @@ func (m Model) panelContent(theme tui.Theme) string {
 	}
 	lines = append(lines, m.fieldLines(theme)...)
 	lines = append(lines, "", m.warningLine(theme), "")
-	if access := m.accessLine(theme); access != "" {
-		lines = append(lines, access, "")
-	}
 	lines = append(lines, m.willRunLine(theme))
 	if m.feedback != "" {
 		lines = append(lines, "", lipgloss.NewStyle().Foreground(theme.Bad).Render(ellipsize(m.feedback, panelWidth)))
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (m Model) accessLine(theme tui.Theme) string {
-	feedback := m.accessFeedback()
-	if feedback == "" {
-		return ""
-	}
-	color := theme.Warn
-	switch m.accessState {
-	case accessDenied:
-		color = theme.Bad
-	case accessChecking:
-		color = theme.TextDim
-	}
-	return lipgloss.NewStyle().Foreground(color).Render(ellipsize(feedback, panelWidth))
 }
 
 func (m Model) panelHeader(theme tui.Theme) string {

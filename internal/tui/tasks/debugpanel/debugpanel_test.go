@@ -100,8 +100,9 @@ func TestPodAccessReviewDenialStaysInsideDebugPanel(t *testing.T) {
 	if len(reviewer.queries) != 1 || reviewer.queries[0] != (kube.WhoCanQuery{Verb: "create", Resource: kube.DebugAttachResource, Namespace: "default"}) {
 		t.Fatalf("queries = %+v, want one attach review", reviewer.queries)
 	}
-	if body := mm.Body(120, 36); !strings.Contains(body, "admission authorizer denies ephemeral containers") {
-		t.Fatalf("denial is not visible inside the panel: %q", body)
+	mm.SetSize(120, 36)
+	if rendered := mm.Render(); !strings.Contains(rendered, "admission authorizer denies ephemeral containers") {
+		t.Fatalf("denial is not visible inside the panel: %q", rendered)
 	}
 	_, launch := mm.Update(tea.KeyPressMsg{Text: "enter"})
 	if launch != nil {
@@ -151,8 +152,9 @@ func TestAccessReviewFailureFailsOpenWithVisibleWarning(t *testing.T) {
 	if mm.accessState != accessAllowed {
 		t.Fatalf("access state = %v, want fail-open allowed", mm.accessState)
 	}
-	if body := mm.Body(120, 36); !strings.Contains(body, "review endpoint unavailable") || !strings.Contains(body, "couldn't verify access") {
-		t.Fatalf("review failure warning is not visible: %q", body)
+	mm.SetSize(120, 36)
+	if rendered := mm.Render(); !strings.Contains(rendered, "review endpoint unavailable") || !strings.Contains(rendered, "can't verify access") {
+		t.Fatalf("review failure warning is not visible: %q", rendered)
 	}
 	if cmd := mm.beginLaunch(); cmd == nil {
 		t.Fatal("review failure unexpectedly disabled launch")

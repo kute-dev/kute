@@ -86,6 +86,7 @@ func (m Model) readyKeybar() tui.Keybar {
 			Pill:       tui.ModeBrowse,
 			PillText:   "DEBUG",
 			Groups:     [][]tui.KeyHint{{verbs.WhoCan.Hint()}},
+			RightNote:  m.accessFeedback(),
 			RightHints: []tui.KeyHint{{Key: "esc", Label: "cancel"}},
 		}
 	}
@@ -114,6 +115,7 @@ func (m Model) readyKeybar() tui.Keybar {
 		Pill:       tui.ModeBrowse,
 		PillText:   "DEBUG",
 		Groups:     [][]tui.KeyHint{group},
+		RightNote:  m.accessFeedback(),
 		RightHints: []tui.KeyHint{{Key: "esc", Label: "cancel"}},
 	}
 }
