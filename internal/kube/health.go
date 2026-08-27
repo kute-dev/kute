@@ -350,6 +350,15 @@ func (c *Cluster) ping(probe healthProbeSnapshot) {
 	if err != nil && probe.gate != nil && probe.gate.isBlocked() && !IsAuthenticationError(err) {
 		return
 	}
+	if err == nil {
+		// /livez answered, so this cluster has demonstrably been reached —
+		// independent of whether any cache has filled yet.
+		c.reached = true
+	}
+	// Latch from cache state in the same critical section that produces the
+	// ConnState the 4c swap reads, so an outage reported here can never be
+	// mistaken for a cluster that was never reachable (see Reached).
+	c.noteReachedIfAnyCacheSyncedLocked()
 	c.health.recordPing(time.Since(start), err, c.allStartedKindsReadyLocked(), time.Now())
 }
 

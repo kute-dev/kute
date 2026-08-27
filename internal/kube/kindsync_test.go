@@ -55,6 +55,76 @@ func TestKindSyncedTrueAfterCacheFills(t *testing.T) {
 	}
 }
 
+// TestReachedLatchesOnACacheEventBeforeSynced pins the distinction the 4c swap
+// depends on: one object arriving from the apiserver is proof this cluster was
+// reached, and it lands well before Synced — which waits for the *whole* eager
+// set. An outage in between is a mid-session outage over useful cached state,
+// not an unreachable launch.
+func TestReachedLatchesOnACacheEventBeforeSynced(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+
+	if c.Reached() {
+		t.Fatal("Reached() = true before anything was read from the apiserver")
+	}
+
+	c.registerWatches(KindPod)
+	c.factory.Start(c.stopCh)
+	c.factory.WaitForCacheSync(c.stopCh)
+
+	// Deliberately not the AddFunc path: a shared informer delivers to its
+	// listeners on its own goroutine, so the callback can still be queued at
+	// the moment the cache is filled and readable. This is the synchronous
+	// source ping consults, and it must already answer yes here.
+	c.mu.Lock()
+	c.noteReachedIfAnyCacheSyncedLocked()
+	c.mu.Unlock()
+
+	if !c.Reached() {
+		t.Fatal("Reached() = false after the Pod cache completed its initial LIST")
+	}
+	// The whole point: this is true while Synced — the connect-completion
+	// latch Start sets only after every eager cache settles — is still false.
+	if c.Synced() {
+		t.Fatal("precondition broken: Synced() is already true, so this no longer tests the gap it exists for")
+	}
+}
+
+// TestReachedSurvivesADroppedEvent: notifyScope's channel send is lossy by
+// design (a full buffer drops and lets the next resync reconcile), so the
+// latch must not depend on the message being delivered. The root shell's other
+// proof-of-connection — ResourceChangedMsg — is exactly what this covers for.
+func TestReachedSurvivesADroppedEvent(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+	// A zero-capacity channel nothing reads: every send takes the default arm.
+	c.events = make(chan ResourceChangedMsg)
+
+	c.notify(c.generation, KindPod)
+
+	if !c.Reached() {
+		t.Fatal("Reached() = false after an event whose send was dropped; the latch must not ride the channel")
+	}
+}
+
+// TestReachedIgnoresAStaleGeneration: a callback from an informer a completed
+// SwitchContext has already torn down says nothing about the context now
+// active — the same guard notify already applies to the reload message.
+func TestReachedIgnoresAStaleGeneration(t *testing.T) {
+	t.Parallel()
+	c := newSyncTestCluster()
+	defer close(c.stopCh)
+	c.generation = 2
+
+	c.notify(1, KindPod)
+
+	if c.Reached() {
+		t.Fatal("Reached() latched from a previous generation's informer callback")
+	}
+}
+
 // TestKindSyncedTrueForSyntheticKinds: kinds with no informer at all have no
 // cache to wait on, so gating a loading state on them would hang forever.
 func TestKindSyncedTrueForSyntheticKinds(t *testing.T) {

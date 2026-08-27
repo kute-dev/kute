@@ -344,6 +344,11 @@ func (c *Cluster) notifyScope(gen int, kind ResourceKind, scope string) {
 	if !c.generationCurrent(gen) {
 		return
 	}
+	// Latch before the send, not after, and regardless of whether the send
+	// lands: an object came out of this apiserver, which is the fact Reached
+	// reports. The message below may be dropped here or arrive before the
+	// event loop is consuming; the latch survives both.
+	c.noteReached()
 	select {
 	case c.events <- ResourceChangedMsg{Kind: kind}:
 	default:

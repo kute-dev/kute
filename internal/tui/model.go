@@ -559,14 +559,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Also forwarded to the task below (unchanged msg), so browse can
 		// render its own stale strip (Phase 4).
 		m.conn = kube.ConnState(msg)
-		// The eager cache-sync latch is connection proof even if all of its
-		// Add events landed before Bubble Tea began consuming the event
-		// stream and the first periodic /livez result has not arrived yet.
-		// A WATCH can end in that narrow window (the logs lifecycle E2E closes
-		// every active request deliberately); that is a mid-session outage
-		// with useful cached state, not an unreachable launch that should
-		// discard the active task stack for setup.
-		if m.neverConnected && m.session != nil && m.session.Cluster != nil && m.session.Cluster.Synced() {
+		// The cluster's own reached-the-apiserver latch is connection proof
+		// even if all of its Add events landed before Bubble Tea began
+		// consuming the event stream and the first periodic /livez result has
+		// not arrived yet. A WATCH can end in that narrow window (the logs
+		// lifecycle E2E closes every active request deliberately); that is a
+		// mid-session outage with useful cached state, not an unreachable
+		// launch that should discard the active task stack for setup.
+		//
+		// Deliberately Reached and not Synced: Synced waits for the *whole*
+		// eager set, but rows reach the screen as soon as the Pod cache fills,
+		// so an outage between those two moments used to read as "never
+		// reachable" and replace a browse screen listing real pods with 4c's
+		// "unreachable · NO CLUSTER". Asking a connect-completion latch a
+		// question about cached state is the same mistake CLAUDE.md documents
+		// for loading states.
+		if m.neverConnected && m.session != nil && m.session.Cluster != nil && m.session.Cluster.Reached() {
 			m.neverConnected = false
 		}
 		switch {

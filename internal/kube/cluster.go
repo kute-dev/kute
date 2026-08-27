@@ -197,7 +197,15 @@ type Cluster struct {
 	cancelHealthProbe context.CancelFunc
 	started           bool
 	synced            bool
-	mu                sync.Mutex
+	// reached latches the first proof this generation ever got an answer out
+	// of the apiserver: any cache event, or the eager set finishing its sync.
+	// Distinct from synced, which only latches once *every* eager cache has
+	// settled — a session whose Pod cache filled and rendered real rows, but
+	// whose connection died before Namespace/Node settled, has reached the
+	// cluster without ever being synced. Cleared by SwitchContext alongside
+	// synced, so a switch into an unreachable context starts from no proof.
+	reached bool
+	mu      sync.Mutex
 
 	// tzCapability is capability.go's tri-state "does this server honor
 	// CronJob spec.timeZone" answer, refreshed by probeTimeZoneCapability
@@ -468,6 +476,7 @@ func (c *Cluster) Start(ctx context.Context) error {
 	}
 	c.mu.Lock()
 	c.synced = true
+	c.reached = true
 	c.mu.Unlock()
 
 	c.refreshDiscovery(ctx)
@@ -592,6 +601,36 @@ func (c *Cluster) Synced() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.synced
+}
+
+// Reached reports whether this cluster generation has ever got an answer out
+// of the apiserver — one cache event is enough, and so is the eager set
+// finishing its sync. Also a latch, cleared only by SwitchContext.
+//
+// It exists because Synced is the wrong question for "does this session hold
+// cached state worth keeping". Synced waits for *every* eager cache, so
+// between the Pod cache filling (which is what puts real rows on screen) and
+// the last of Namespace/Node settling, Synced is still false — and an outage
+// landing in that window looked indistinguishable from a cluster that was
+// never reachable at all. The 4c swap read it that way and replaced a browse
+// screen listing the cluster's pods with "unreachable · NO CLUSTER".
+//
+// Unlike ResourceChangedMsg — the root shell's other proof-of-connection,
+// which rides a lossy channel (notifyScope drops on a full buffer) and can be
+// sent before the Bubble Tea event loop is consuming — a latch on the cluster
+// itself cannot be missed by whoever asks later.
+func (c *Cluster) Reached() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.reached
+}
+
+// noteReached latches Reached. Called from the informer event callbacks, where
+// the generation check has already passed.
+func (c *Cluster) noteReached() {
+	c.mu.Lock()
+	c.reached = true
+	c.mu.Unlock()
 }
 
 // scopeKeyForLocked resolves kind/namespace to the exact cache key
@@ -900,6 +939,43 @@ func (c *Cluster) allStartedKindsSweepLocked() bool {
 	return true
 }
 
+// noteReachedIfAnyCacheSyncedLocked latches Reached when at least one started
+// informer has completed its initial LIST. c.mu must be held.
+//
+// This is the synchronous counterpart to notifyScope's latch, and it is what
+// makes Reached reliable rather than merely likely: a shared informer delivers
+// to its listeners on its own goroutine, so the AddFunc that latches can still
+// be queued when the cache is already filled and readable — which is the exact
+// instant the UI reads rows out of it. ping calls this immediately before
+// folding a probe result into ConnState, so the latch is already set for the
+// very probe that reports an outage.
+//
+// "Any", not "all": one filled cache is one screenful of real data worth
+// keeping, which is the whole question Reached is asked.
+func (c *Cluster) noteReachedIfAnyCacheSyncedLocked() {
+	if c.reached {
+		return
+	}
+	for _, inf := range c.kindInformers {
+		if inf.HasSynced() {
+			c.reached = true
+			return
+		}
+	}
+	for _, info := range c.dynKinds {
+		if info.informer != nil && info.informer.HasSynced() {
+			c.reached = true
+			return
+		}
+	}
+	for _, inf := range c.helmInformers {
+		if inf.HasSynced() {
+			c.reached = true
+			return
+		}
+	}
+}
+
 // markKindFailed records that (kind, namespace)'s watch reported an error the
 // cache will never recover from on its own — today only "you may not list
 // this", which is a permanent answer for the session, not a transient
@@ -1058,6 +1134,9 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 	c.health.reset()
 	c.started = false
 	c.synced = false
+	// The old context's proof says nothing about this one: switching into an
+	// unreachable context has to be able to reach 4c's setup screen again.
+	c.reached = false
 	c.mu.Unlock()
 
 	return c.Start(ctx)
