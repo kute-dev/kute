@@ -8,6 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/helmrepo"
@@ -325,8 +327,8 @@ func TestHelmReleaseFailedStatusCellCarriesReason(t *testing.T) {
 	}
 }
 
-// TestEnterOnHelmReleaseOpensFilteredPods confirms 18a's "↵ = objects in the
-// release (filtered tables, 9a's recipe)".
+// TestEnterOnHelmReleaseTracksItsOrigin confirms Enter preserves the
+// release-to-Pods breadcrumb/back-navigation relationship.
 func TestEnterOnHelmReleaseOpensFilteredPods(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindHelmRelease: {helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3)},
@@ -339,16 +341,53 @@ func TestEnterOnHelmReleaseOpensFilteredPods(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if m.kind != kube.KindPod || m.filterInput.Value() != "postgresql" {
-		t.Fatalf("expected Pods filtered by postgresql, got kind=%s filter=%q", m.kind, m.filterInput.Value())
+	if m.kind != kube.KindPod || m.filterInput.Value() != "" {
+		t.Fatalf("expected associated Pods with no user filter, got kind=%s filter=%q", m.kind, m.filterInput.Value())
 	}
 	if m.originName != "postgresql" || m.originKind != kube.KindHelmRelease {
 		t.Fatalf("expected origin set to the release, got kind=%s name=%q", m.originKind, m.originName)
+	}
+	if got := displayRowNames(m); len(got) != 0 {
+		t.Fatalf("release with no Pod-producing manifest objects showed Pods: %v", got)
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "esc"})
 	if m.kind != kube.KindHelmRelease {
 		t.Fatalf("expected esc to switch back to Helm Releases, got %s", m.kind)
+	}
+}
+
+func TestEnterOnHelmReleaseShowsOnlyManifestOwnedPods(t *testing.T) {
+	controller := true
+	release := helmRelease("default", "aim-bp-app", "app", "1.0.0", "1.0.0", "deployed", 1)
+	release.Release.Manifest = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aim-bp-app
+`
+	ownedRS := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "aim-bp-app-6bdbbbd5fd", Namespace: "default", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "aim-bp-app", Controller: &controller}}}}
+	unrelatedRS := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "aim-bp-preference-survey-app-5947cfcf64", Namespace: "default", OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "aim-bp-preference-survey-app", Controller: &controller}}}}
+	ownedPod := pod("default", "aim-bp-app-6bdbbbd5fd-sgrh5")
+	ownedPod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: ownedRS.Name, Controller: &controller}}
+	unrelatedPod := pod("default", "aim-bp-preference-survey-app-5947cfcf64-f72h9")
+	unrelatedPod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: unrelatedRS.Name, Controller: &controller}}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindHelmRelease: {release},
+		kube.KindReplicaSet:  {ownedRS, unrelatedRS},
+		kube.KindPod:         {ownedPod, unrelatedPod},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+
+	if m.filterInput.Value() != "" {
+		t.Fatalf("release association leaked into user filter: %q", m.filterInput.Value())
+	}
+	if got := displayRowNames(m); !equalStrings(got, []string{ownedPod.Name}) {
+		t.Fatalf("release Pods = %v, want [%s]", got, ownedPod.Name)
 	}
 }
 

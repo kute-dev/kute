@@ -347,6 +347,13 @@ func List(ctx context.Context, src RawLister, d Descriptor, namespace string) ([
 	if err != nil {
 		return nil, err
 	}
+	return Project(d, objs), nil
+}
+
+// Project converts an already-read object snapshot into the stable display
+// ordering List returns. Joins that need the raw objects can use it to avoid
+// reading the same informer cache twice.
+func Project(d Descriptor, objs []runtime.Object) []Row {
 	// The informer cache returns objects in unstable map-iteration order, which
 	// makes lists visibly jump on every watch event. Sort into a stable ascending
 	// order (namespace, then case-insensitive name) so refreshes don't reshuffle.
@@ -372,7 +379,7 @@ func List(ctx context.Context, src RawLister, d Descriptor, namespace string) ([
 	for i, s := range sorted {
 		rows[i] = s.row
 	}
-	return rows, nil
+	return rows
 }
 
 // Count returns how many objects of kind exist in namespace, for the Home tiles

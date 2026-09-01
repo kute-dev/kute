@@ -502,9 +502,9 @@ type Model struct {
 	// logs verb needs each pod's container names.
 	pods map[string]kube.Pod
 	// helmReleases is the fuller decoded kube.HelmRelease (HelmRelease kind
-	// only), keyed by release name — Row only carries display Cells, but
+	// only), keyed by namespace/name — Row only carries display Cells, but
 	// 'v'/'h'/'R' need the chart/values/revision fields it doesn't.
-	helmReleases map[string]kube.HelmRelease
+	helmReleases map[string]kube.HelmRelease // keyed by namespace/name
 	// chartCacheNote caveats the LATEST column's data source on the 18a
 	// strip ("repo cache 6d old" / "no helm repo cache"), resolved in load()
 	// because it depends on the clock and Render must not read one.
@@ -573,6 +573,11 @@ type Model struct {
 	// so esc can't misfire once the user has moved on to something else.
 	originKind kube.ResourceKind
 	originName string
+	// releasePodSources narrows the current Pods view to controller-owned Pods
+	// declared by the Helm release Enter was pressed on. It is deliberately
+	// separate from the user's fuzzy filter.
+	releasePodSources []kube.HelmReleasePodSource
+	releasePodView    bool
 
 	// reloadEpoch/metricsEpoch guard debounced/ticked reloads against a
 	// kind switch mid-flight (Phase 2): a scheduled tick only acts if the
@@ -1005,7 +1010,30 @@ func (m Model) load() tea.Cmd {
 			msg.epoch, msg.namespace = epoch, ns
 			return msg
 		}
-		rows, err := resources.List(ctx, lister, desc, ns)
+		var rows []resources.Row
+		var podObjs []runtime.Object
+		var err error
+		if kind == kube.KindPod && m.releasePodView {
+			podObjs, err = lister.ListRaw(ctx, kube.KindPod, ns)
+			if err == nil {
+				replicaSets, jobs, err := releasePodSupportObjects(ctx, lister, ns, m.releasePodSources)
+				if err == nil {
+					keys := kube.HelmReleasePodKeys(m.releasePodSources, podObjs, replicaSets, jobs)
+					matched := make([]runtime.Object, 0, len(podObjs))
+					for _, obj := range podObjs {
+						if p, ok := obj.(*corev1.Pod); ok {
+							if _, ok := keys[kube.PodKey(p.Namespace, p.Name)]; ok {
+								matched = append(matched, obj)
+							}
+						}
+					}
+					podObjs = matched
+					rows = resources.Project(desc, podObjs)
+				}
+			}
+		} else {
+			rows, err = resources.List(ctx, lister, desc, ns)
+		}
 		if err != nil {
 			return rowsLoadedMsg{epoch: epoch, namespace: ns, kind: kind, columns: len(desc.Columns), err: err}
 		}
@@ -1019,7 +1047,11 @@ func (m Model) load() tea.Cmd {
 		clusterPodTotal := 0
 		switch kind {
 		case kube.KindPod:
-			pods = podsByName(ctx, lister, ns)
+			if podObjs != nil {
+				pods = podsFromObjs(podObjs)
+			} else {
+				pods = podsByName(ctx, lister, ns)
+			}
 			// Best-effort node count for the health strip's "· 3 nodes"
 			// suffix — 0 on error just omits it.
 			if n, err := resources.Count(ctx, lister, kube.KindNode, ""); err == nil {
@@ -1222,6 +1254,9 @@ func (m Model) cachedRowsFor(kind kube.ResourceKind, namespace string) ([]resour
 // kind/namespace, called once a load succeeds (applyRowsLoaded) — a copy,
 // since m.rows is mutated in place by later sorts/marks.
 func (m *Model) cacheCurrentRows() {
+	if m.releasePodView {
+		return
+	}
 	if m.rowCache == nil {
 		m.rowCache = make(map[browseCacheKey]cachedRows)
 	}
@@ -1260,6 +1295,8 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.rows = nil
 	m.pods = nil
 	m.helmReleases = nil
+	m.releasePodSources = nil
+	m.releasePodView = false
 	m.chartCacheNote = chartCacheNote{}
 	m.visible = nil
 	m.expandedGroups = nil
@@ -1383,10 +1420,38 @@ func podsFromObjs(objs []runtime.Object) map[string]kube.Pod {
 	return out
 }
 
+// releasePodSupportObjects reads only the controller caches needed to resolve
+// this release's manifest sources. It deliberately does not sweep workload
+// kinds: opening one release pays only for the owner links it displays.
+func releasePodSupportObjects(ctx context.Context, lister resources.RawLister, namespace string, sources []kube.HelmReleasePodSource) (replicaSets, jobs []runtime.Object, err error) {
+	needReplicaSets, needJobs := false, false
+	for _, source := range sources {
+		switch source.Kind {
+		case kube.KindDeployment:
+			needReplicaSets = true
+		case kube.KindCronJob:
+			needJobs = true
+		}
+	}
+	if needReplicaSets {
+		if replicaSets, err = lister.ListRaw(ctx, kube.KindReplicaSet, namespace); err != nil {
+			return nil, nil, err
+		}
+	}
+	if needJobs {
+		if jobs, err = lister.ListRaw(ctx, kube.KindJob, namespace); err != nil {
+			return nil, nil, err
+		}
+	}
+	return replicaSets, jobs, nil
+}
+
 // helmReleasesByName re-fetches the full decoded kube.HelmRelease per row:
 // Row only carries the display Cells, not the chart/values/revision fields
 // 'v'/'h'/'R' need (helm.go's openReleaseValues/openReleaseHistory/
 // beginRollback).
+func helmReleaseKey(namespace, name string) string { return namespace + "\x00" + name }
+
 func helmReleasesByName(ctx context.Context, lister resources.RawLister, namespace string) map[string]kube.HelmRelease {
 	objs, err := lister.ListRaw(ctx, kube.KindHelmRelease, namespace)
 	if err != nil {
@@ -1395,7 +1460,7 @@ func helmReleasesByName(ctx context.Context, lister resources.RawLister, namespa
 	out := make(map[string]kube.HelmRelease, len(objs))
 	for _, obj := range objs {
 		if ho, ok := obj.(*kube.HelmReleaseObject); ok {
-			out[ho.Release.Name] = ho.Release
+			out[helmReleaseKey(ho.Release.Namespace, ho.Release.Name)] = ho.Release
 		}
 	}
 	return out

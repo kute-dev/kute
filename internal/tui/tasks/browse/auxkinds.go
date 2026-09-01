@@ -99,6 +99,39 @@ func (m Model) auxScope(kind kube.ResourceKind) string {
 	return m.namespace
 }
 
+// currentAuxKinds includes the owner caches needed by a Helm-release-scoped
+// Pods view. They are dynamic because only manifest sources actually shown
+// may start an informer.
+func (m Model) currentAuxKinds() []kube.ResourceKind {
+	kinds := append([]kube.ResourceKind(nil), auxKinds[m.kind]...)
+	if m.kind != kube.KindPod || !m.releasePodView {
+		return kinds
+	}
+	for _, needed := range m.releasePodSupportKinds() {
+		if needed != "" && !slices.Contains(kinds, needed) {
+			kinds = append(kinds, needed)
+		}
+	}
+	return kinds
+}
+
+func (m Model) releasePodSupportKinds() []kube.ResourceKind {
+	var kinds []kube.ResourceKind
+	for _, source := range m.releasePodSources {
+		var needed kube.ResourceKind
+		switch source.Kind {
+		case kube.KindDeployment:
+			needed = kube.KindReplicaSet
+		case kube.KindCronJob:
+			needed = kube.KindJob
+		}
+		if needed != "" && !slices.Contains(kinds, needed) {
+			kinds = append(kinds, needed)
+		}
+	}
+	return kinds
+}
+
 // auxKindsSynced reports whether every one of kinds' own caches — each
 // asked about at its own correct scope (auxScope) — is worth believing.
 func (m Model) auxKindsSynced(kinds []kube.ResourceKind) bool {
@@ -135,7 +168,7 @@ func auxKindOf(listed, changed kube.ResourceKind) bool {
 // That keeps it free of any new interface — it works through the same
 // RawLister every screen already holds, decorators included.
 func (m Model) prefetchAuxKinds() tea.Cmd {
-	kinds := auxKinds[m.kind]
+	kinds := m.currentAuxKinds()
 	if len(kinds) == 0 || m.lister == nil {
 		return nil
 	}

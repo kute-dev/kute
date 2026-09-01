@@ -111,17 +111,45 @@ func chartCacheAge(age time.Duration) string {
 	return shortAge(age)
 }
 
-// openReleaseObjects switches kind to Pods with row's release name
-// pre-applied as the filter query — the same "owner match via the existing
-// fuzzy filter" recipe openDeploymentPods (deployments.go) already
-// established for 9a, reused verbatim for 18a's "↵ = objects in the release
-// (filtered tables, 9a's recipe)": Helm-managed pod names conventionally
-// carry the release name too (`<release>-<chart>-...`).
+// openReleaseObjects switches to the Pods created by the selected release's
+// rendered-manifest workloads. A release name is not a Pod identity: fuzzy
+// matching it admits unrelated charts with overlapping names.
 func (m *Model) openReleaseObjects(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
+	release, ok := m.helmReleases[helmReleaseKey(row.Namespace, row.Name)]
+	if !ok {
+		return nil
+	}
+	sources := kube.HelmReleasePodSources(release)
+	// Helm normally applies into its release namespace, but a rendered
+	// manifest may name another one explicitly. Retain the familiar scoped
+	// view for the common case; widen only when that is needed to avoid
+	// silently omitting an owned Pod.
+	for _, source := range sources {
+		if source.Namespace != row.Namespace {
+			m.namespace = ""
+			m.session.Location.Namespace = ""
+			break
+		}
+	}
+	_ = m.switchKind(kube.KindPod)
+	m.releasePodSources = sources
+	m.releasePodView = true
+	// resetAndLoad may have restored an ordinary Pods cached view before the
+	// release association was installed. It is not a valid preview of this
+	// narrower semantic view.
+	m.rows, m.visible, m.display = nil, nil, nil
+	m.cachedView = false
 	m.originKind, m.originName = kube.KindHelmRelease, row.Name
-	return cmd
+	// switchKind created its load command before the semantic association was
+	// installed. Supersede it so the first Pods read cannot briefly use the
+	// ordinary unfiltered path.
+	m.reloadEpoch++
+	m.metricsEpoch++
+	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
+	if m.pollsMetrics() {
+		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+	}
+	return tea.Batch(cmds...)
 }
 
 // openSelectedHelmValues pushes 18a's 'v' — the selected release's decoded
@@ -136,7 +164,7 @@ func (m Model) openSelectedHelmValues() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	release, ok := m.helmReleases[row.Name]
+	release, ok := m.helmReleases[helmReleaseKey(row.Namespace, row.Name)]
 	if !ok {
 		return nil, nil, false
 	}
@@ -163,7 +191,7 @@ func (m Model) openSelectedHelmHistory() (tea.Model, tea.Cmd, bool) {
 // verbs.TierFor — "Rollback inherits 8b friction"). Executes through
 // kube.Mutator.HelmRollback like every other write verb.
 func (m *Model) beginRollback(row resources.Row) tea.Cmd {
-	release := m.helmReleases[row.Name]
+	release := m.helmReleases[helmReleaseKey(row.Namespace, row.Name)]
 	toRevision := release.Revision - 1 // 0 once Revision is 1, which HelmRollback/HelmRollbackCommandString both read as "Helm's own default: the previous revision"
 	tier := verbs.TierFor(verbs.Rollback, m.isProd())
 	return m.actions.Begin(tier, tui.TaskAction{

@@ -3,6 +3,7 @@ package browse
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -117,7 +118,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.scheduleReload(m.reloadEpoch)
 			}
 		}
-		if msg.Kind == m.kind || auxKindOf(m.kind, msg.Kind) {
+		if msg.Kind == m.kind || slices.Contains(m.currentAuxKinds(), msg.Kind) {
 			m.reloadEpoch++
 			return m, m.scheduleReload(m.reloadEpoch)
 		}
@@ -449,6 +450,21 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		m.reloadEpoch++
 		return m, m.scheduleReload(m.reloadEpoch)
 	}
+	if m.kind == kube.KindPod && m.releasePodView {
+		kinds := m.releasePodSupportKinds()
+		if !m.auxKindsSynced(kinds) {
+			m.reloadEpoch++
+			return m, m.scheduleReload(m.reloadEpoch)
+		}
+		if err := m.auxKindsError(kinds); err != nil {
+			m.state = tui.TaskStateError
+			if kube.IsPermissionError(err) {
+				m.state = tui.TaskStatePermissionDenied
+			}
+			m.feedback = fmt.Sprintf("couldn't resolve release Pods: %v", err)
+			return m, nil
+		}
+	}
 
 	m.rows = msg.rows
 	m.rowColumns = msg.columns
@@ -478,7 +494,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		// correct scope (auxScope), since not every aux kind shares the
 		// primary kind's own namespace (Node's Pod aux-kind reads
 		// cluster-wide regardless of m.namespace).
-		if msg.cacheUnreadyAtRead || !tui.KindsSynced(m.lister, m.namespace, m.kind) || !m.auxKindsSynced(auxKinds[m.kind]) {
+		if msg.cacheUnreadyAtRead || !tui.KindsSynced(m.lister, m.namespace, m.kind) || !m.auxKindsSynced(m.currentAuxKinds()) {
 			// The informer cache is still filling (just after launch or mid
 			// SwitchContext) — this empty result isn't trustworthy yet.
 			// Stay in the loading state and retry shortly rather than
@@ -488,7 +504,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 		err := tui.KindsError(m.lister, m.namespace, m.kind)
 		if err == nil {
-			err = m.auxKindsError(auxKinds[m.kind])
+			err = m.auxKindsError(m.currentAuxKinds())
 		}
 		if err != nil {
 			// Settled, but with nothing to show and a reason why. Saying so
@@ -535,7 +551,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	// wrong cell (docs/lazy-informers.md §5.6).
 	m.auxKindsDeniedNote = ""
 	var auxRetry tea.Cmd
-	if kinds := auxKinds[m.kind]; len(kinds) > 0 {
+	if kinds := m.currentAuxKinds(); len(kinds) > 0 {
 		switch {
 		case !m.auxKindsSynced(kinds):
 			// Not a permission problem — the aux cache just hasn't finished
