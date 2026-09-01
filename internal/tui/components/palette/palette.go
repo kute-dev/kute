@@ -7,7 +7,6 @@
 package palette
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 
@@ -101,12 +100,6 @@ type Item struct {
 	// kinds (the mockup draws StatefulSets/Jobs dimmer than the aliased rows).
 	Muted bool
 	Tag   string // "current", "PROD"
-	// Note, when non-empty, renders this entry as a plain, non-selectable
-	// informational line (styled dim, full width, no chip/right-count) in
-	// place of a result row — used for 12a's "+ N more kinds · type to
-	// narrow" trailer under the ranked list. Skipped by Move and never
-	// returned selectable from Selected().
-	Note string
 	// Data is an opaque payload the caller attaches when building Items and
 	// reads back off Selected() on Enter. Palette never interprets it — this
 	// keeps the package free of any kube/tui/domain dependency.
@@ -172,9 +165,9 @@ type ColumnHeader struct {
 	Align components.Align
 }
 
-// Model is the palette's state. Items holds whatever the caller wants
-// listed — already Filter-ed fuzzy results, or (in Browse mode) the goto
-// scope's 12a ranked list.
+// Model is the palette's state. Items holds the complete caller-provided
+// list — already Filter-ed fuzzy results, or (in Browse mode) the goto
+// scope's 12a ranked list. Render applies the height-bounded viewport.
 type Model struct {
 	Scope  Scope
 	Prompt string // e.g. "ns ›"
@@ -230,6 +223,11 @@ type Model struct {
 	// DeniedNote is the notice line shown when Denied is true, e.g. "cannot
 	// list namespaces".
 	DeniedNote string
+	// Offset is the first item in the scrollable result viewport. Items
+	// always keeps the complete ranked/filtered result set; Render clips only
+	// what does not fit between the palette's fixed chrome, and movement keeps
+	// Sel visible within this window.
+	Offset int
 }
 
 // Query returns the query box's current text.
@@ -340,27 +338,45 @@ func Filter(items []Item, query string) []Item {
 	return out
 }
 
-// Move shifts the selection by delta among selectable (non-Note) items,
-// clamped to the item list.
-func (m *Model) Move(delta int) {
-	sel := selectableIndexes(m.Items)
-	if len(sel) == 0 {
-		m.Sel = 0
+// Move shifts the selection by delta and scrolls the result viewport just
+// enough to keep it visible. maxHeight is the panel's full height budget,
+// including borders and fixed chrome.
+func (m *Model) Move(delta, maxHeight int) {
+	if len(m.Items) == 0 {
+		m.Sel, m.Offset = 0, 0
 		return
 	}
-	pos := max(slices.Index(sel, m.Sel), 0)
-	pos = clampInt(pos+delta, 0, len(sel)-1)
-	m.Sel = sel[pos]
+	m.ClampViewport(maxHeight)
+	m.Sel = clampInt(m.Sel+delta, 0, len(m.Items)-1)
+	m.ClampViewport(maxHeight)
 }
 
-func selectableIndexes(items []Item) []int {
-	out := make([]int, 0, len(items))
-	for i, it := range items {
-		if it.Note == "" {
-			out = append(out, i)
-		}
+// MoveHalfPage moves selection and viewport together by half of the number
+// of item rows currently visible. The shared helper provides the same
+// boundary behavior as list screens; ClampViewport then accounts for the
+// namespace palette's extra divider above its pinned all-namespaces row.
+func (m *Model) MoveHalfPage(direction, maxHeight int) {
+	if len(m.Items) == 0 {
+		m.Sel, m.Offset = 0, 0
+		return
 	}
-	return out
+	m.ClampViewport(maxHeight)
+	start, end := m.visibleItemRange(maxHeight)
+	position := components.MoveHalfPage(m.Sel, start, max(end-start, 1), len(m.Items), direction)
+	m.Sel, m.Offset = position.Selected, position.Offset
+	m.ClampViewport(maxHeight)
+}
+
+// ClampViewport repairs selection and offset after a resize or result-set
+// replacement, preserving the complete Items slice while ensuring Sel is in
+// the window Render will draw.
+func (m *Model) ClampViewport(maxHeight int) {
+	if len(m.Items) == 0 {
+		m.Sel, m.Offset = 0, 0
+		return
+	}
+	m.Sel = clampInt(m.Sel, 0, len(m.Items)-1)
+	m.Offset, _ = m.visibleItemRange(maxHeight)
 }
 
 func clampInt(v, lo, hi int) int {
@@ -396,7 +412,7 @@ func Width(screenWidth int) int {
 // Footer line, and an edge-to-edge key-row band under its own Border rule.
 // Text rows inset one cell per side (the mockup's panel padding); the bands
 // and rules run border to border.
-func (m Model) Render(styles Styles, screenWidth int) string {
+func (m Model) Render(styles Styles, screenWidth, maxHeight int) string {
 	width := Width(screenWidth)
 	// frameWidth is the space between the borders — every row below is
 	// wrapped/ruled to this column width, then the frame style's own
@@ -406,7 +422,7 @@ func (m Model) Render(styles Styles, screenWidth int) string {
 	rule := styles.Rule.Render(strings.Repeat("─", frameWidth))
 	lines := []string{m.renderInputRow(styles, frameWidth), rule}
 	lines = append(lines, m.renderColumnHeaderRow(styles, frameWidth)...)
-	lines = append(lines, m.renderResults(styles, frameWidth)...)
+	lines = append(lines, m.renderResults(styles, frameWidth, maxHeight)...)
 	if len(m.Recent) > 0 {
 		lines = append(lines, m.renderRecent(styles, frameWidth)...)
 	}
@@ -467,7 +483,7 @@ func (m Model) renderInputRow(styles Styles, width int) string {
 	return inset(row, width, styles.Input)
 }
 
-func (m Model) renderResults(styles Styles, width int) []string {
+func (m Model) renderResults(styles Styles, width, maxHeight int) []string {
 	if m.Denied {
 		note := styles.RightBad.Background(styles.Body.GetBackground()).Render(" ✕ " + m.DeniedNote)
 		return []string{inset(note, width, styles.Body)}
@@ -484,21 +500,97 @@ func (m Model) renderResults(styles Styles, width int) []string {
 		empty := styles.Placeholder.Background(styles.Body.GetBackground()).Render(" no matches")
 		return []string{inset(empty, width, styles.Body)}
 	}
-	lines := make([]string, 0, len(m.Items))
-	for i, item := range m.Items {
-		if item.TopRule && i > 0 {
+	start, end := m.visibleItemRange(maxHeight)
+	lines := make([]string, 0, end-start+1)
+	for i := start; i < end; i++ {
+		item := m.Items[i]
+		if item.TopRule && i > start {
 			lines = append(lines, styles.RecentRule.Render(strings.Repeat("─", width)))
-		}
-		if item.Note != "" {
-			note := styles.Dim.Render(item.Note)
-			lines = append(lines, inset(note, width, styles.Body))
-			continue
 		}
 		if len(m.ColumnHeaders) > 0 {
 			lines = append(lines, m.renderColumnsResultLine(item, i == m.Sel, styles, width))
 			continue
 		}
 		lines = append(lines, m.renderResultLine(item, i == m.Sel, styles, width))
+	}
+	return lines
+}
+
+// resultLineBudget returns how many terminal rows remain for results after
+// reserving the panel border and every currently-present chrome row. A
+// result state always gets at least one best-effort line; terminals smaller
+// than the fixed chrome are handled by Compose's existing screen clamp.
+func (m Model) resultLineBudget(maxHeight int) int {
+	// Border (2), input+rule (2), bottom rule+key row (2).
+	chrome := 6
+	if len(m.ColumnHeaders) > 0 {
+		chrome += 2
+	}
+	if len(m.Recent) > 0 {
+		chrome += 2
+	}
+	if len(m.Footer) > 0 {
+		chrome += 2
+	}
+	return max(maxHeight-chrome, 1)
+}
+
+// visibleItemRange computes the [start,end) window that fits the current
+// line budget and contains Sel. Result rows consume one line, except a
+// TopRule item consumes a second line when another visible item precedes it.
+// At the bottom, the window backfills so the dialog does not leave avoidable
+// blank result space after scrolling to the last item.
+func (m Model) visibleItemRange(maxHeight int) (start, end int) {
+	if len(m.Items) == 0 {
+		return 0, 0
+	}
+	selected := clampInt(m.Sel, 0, len(m.Items)-1)
+	start = clampInt(m.Offset, 0, len(m.Items)-1)
+	if selected < start {
+		start = selected
+	}
+	budget := m.resultLineBudget(maxHeight)
+
+	for {
+		end = m.windowEnd(start, budget)
+		if selected < end || start >= selected {
+			break
+		}
+		start++
+	}
+
+	if end == len(m.Items) {
+		for start > 0 && m.windowLines(start-1, end) <= budget {
+			start--
+		}
+	}
+	return start, m.windowEnd(start, budget)
+}
+
+func (m Model) windowEnd(start, budget int) int {
+	used := 0
+	for i := start; i < len(m.Items); i++ {
+		rowHeight := 1
+		if i > start && m.Items[i].TopRule {
+			rowHeight++
+		}
+		if used+rowHeight > budget && i > start {
+			return i
+		}
+		used += rowHeight
+		if used >= budget {
+			return i + 1
+		}
+	}
+	return len(m.Items)
+}
+
+func (m Model) windowLines(start, end int) int {
+	lines := end - start
+	for i := start + 1; i < end; i++ {
+		if m.Items[i].TopRule {
+			lines++
+		}
 	}
 	return lines
 }
@@ -859,7 +951,22 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 	if m.Scope == ScopeGoto || m.Scope == ScopeNamespace {
 		moveKey = "↑↓ ctrl+jk"
 	}
+	halfPage := keyHint{"ctrl-d/u", "half-page"}
+	narrow := "to narrow"
+	aliasNarrow := "to keep narrowing"
+	if width < 70 && (m.Scope == ScopeGoto || m.Scope == ScopeNamespace) {
+		// Keep every actionable hint, including esc, on compact palettes.
+		// The control-key line synonym remains active even when only arrows
+		// fit in the row; ctrl-d/u's compact ½ label is self-explanatory.
+		moveKey = "↑↓"
+		halfPage.label = "½"
+		narrow = "narrow"
+		aliasNarrow = "narrow"
+	}
 	hints := []keyHint{{"↵", "jump"}, {"tab", "complete"}, {moveKey, "move"}}
+	if m.Scope == ScopeGoto {
+		hints = append(hints, halfPage)
+	}
 	switch {
 	case m.Scope == ScopeNamespace && m.Denied:
 		// 6a's denied state: nothing to browse or move through, just a
@@ -869,11 +976,11 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 	case m.Browse:
 		// 12a: "type to narrow · ↑↓ move · ↵ jump · esc close" — no
 		// tab-complete hint in the empty-query ranked-chips state.
-		hints = []keyHint{{"type", "to narrow"}, {moveKey, "move"}, {"↵", "jump"}}
+		hints = []keyHint{{"type", narrow}, {moveKey, "move"}, halfPage, {"↵", "jump"}}
 	case len(m.Items) > 0 && m.Items[0].AliasMatch:
 		// 12b: an alias match is pinned — "↵ jump · ↑↓ move · type to keep
 		// narrowing · esc close".
-		hints = []keyHint{{"↵", "jump"}, {moveKey, "move"}, {"type", "to keep narrowing"}}
+		hints = []keyHint{{"↵", "jump"}, {moveKey, "move"}, halfPage, {"type", aliasNarrow}}
 	case m.Scope == ScopeNamespace:
 		// 6a: "↵ switch · ↑↓ move · 1-9 recent · esc close" — no tab-complete
 		// hint (there's no alias/kind text to complete here). No "a"
@@ -882,7 +989,7 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 		// shadowed by an all-namespaces jump — reach the pinned row via
 		// ↑↓/↵ instead. "1-9 recent" names the digit gutter on recent rows
 		// (palette.Item.RecentNum) — the row IS the legend.
-		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}}
+		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, halfPage, {"1-9", "recent"}}
 	case m.Scope == ScopeContext:
 		// 7a: "↵ switch · ↑↓ move · 1-9 recent · r re-probe · P mark
 		// prod · esc close" — same no-tab-complete/1-9-recent reasoning as

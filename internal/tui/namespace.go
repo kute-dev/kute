@@ -58,51 +58,6 @@ func namespaceCountDescriptor(sess *Session) resources.Descriptor {
 // 12a/7a, which explicitly have no gutter column.
 const namespaceGutterGlyph = "▸"
 
-// maxNamespaceVisible caps how many namespace rows the palette lists above
-// the pinned "all namespaces" row: the palette has no internal scrolling
-// (mirrors goto's maxGotoVisible), so an unbounded namespace list would
-// grow the panel past the screen and make its height thrash with every
-// keystroke. A cluster with more than this many namespaces gets a "+ N more
-// · type to narrow" trailer instead; the pinned "all namespaces" row always
-// stays visible below it. Applied in capNamespaceItems, not namespaceItems
-// itself, so the full list still backs fuzzy filtering as the query
-// narrows — capping the corpus itself would make typing unable to find a
-// namespace past the cap.
-const maxNamespaceVisible = 12
-
-// capNamespaceItems limits items to maxNamespaceVisible namespace rows —
-// see maxNamespaceVisible's doc comment — appending a "+ N more · type to
-// narrow" trailer for what doesn't fit. The pinned "all namespaces" row, if
-// present, always survives the cap: it's pulled out before truncating and
-// re-appended last, so 6a's "first-class last row" promise holds
-// regardless of namespace count.
-func capNamespaceItems(items []palette.Item) []palette.Item {
-	allIdx := -1
-	for i, it := range items {
-		if it.AllNS {
-			allIdx = i
-			break
-		}
-	}
-	rest := items
-	var all *palette.Item
-	if allIdx >= 0 {
-		a := items[allIdx]
-		all = &a
-		rest = append(append([]palette.Item(nil), items[:allIdx]...), items[allIdx+1:]...)
-	}
-	if len(rest) > maxNamespaceVisible {
-		hidden := len(rest) - maxNamespaceVisible
-		rest = append(rest[:maxNamespaceVisible:maxNamespaceVisible], palette.Item{
-			Note: fmt.Sprintf("+ %d more namespaces · type to narrow", hidden),
-		})
-	}
-	if all != nil {
-		rest = append(rest, *all)
-	}
-	return rest
-}
-
 // This file wires real data into the 'n' namespace palette (mvp-plan.md
 // Phase 3, docs/design README.md §6a): namespaces are listed with a live pod
 // count, the current one tagged, and "all namespaces" pinned as a first-class

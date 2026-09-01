@@ -107,6 +107,38 @@ func TestRootModelGBrowseRankedListHasChipsCountsAndFooter(t *testing.T) {
 	}
 }
 
+func TestRootModelGScrollsAllKindsWithinEqualMargins(t *testing.T) {
+	t.Parallel()
+	sess := gotoTestSession(gotoFakeLister{objs: map[kube.ResourceKind][]runtime.Object{}})
+	model := tui.NewWithSession(&screenTask{name: "browse"}, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	view := ansi.Strip(updated.(tui.Model).View().Content)
+
+	if strings.Contains(view, "more kinds") {
+		t.Fatalf("did not expect an overflow trailer in the scrollable goto list:\n%s", view)
+	}
+	lines := strings.Split(view, "\n")
+	bottom := -1
+	for i, line := range lines {
+		if strings.Contains(line, "╰") {
+			bottom = i
+			break
+		}
+	}
+	if bottom != 21 {
+		t.Fatalf("palette bottom row = %d, want 21 for two rows below a row-2 top in a 24-row terminal:\n%s", bottom, view)
+	}
+
+	for range 4 {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "ctrl+d"})
+	}
+	view = ansi.Strip(updated.(tui.Model).View().Content)
+	if !strings.Contains(view, "Helm Releases") {
+		t.Fatalf("expected half-page scrolling to reach the final registered kind:\n%s", view)
+	}
+}
+
 // TestRootModelGShowsGotoKeybarPill pins the cross-cutting fix (docs/design
 // README.md §39: "Main keybar while open: GOTO mode pill + one-line
 // explanation"): the underlying screen's own keybar pill must be replaced

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,11 +48,6 @@ type gotoTarget struct {
 // Phase 2: "cap results at ~50"). Reads back the informer cache, so this is
 // about corpus size, not request cost.
 const maxGotoResults = 50
-
-// maxGotoVisible caps how many ranked fuzzy results the palette lists: it
-// has no internal scrolling, so an unbounded list would grow the panel past
-// the screen and make its height thrash with every keystroke.
-const maxGotoVisible = 12
 
 func gotoNamespace(sess *Session) string {
 	if sess == nil {
@@ -201,9 +195,8 @@ func gotoRankedItem(sess *Session, desc resources.Descriptor, ns, alias string) 
 
 // gotoBrowseItems builds the 12a empty-query ranked list: the daily kinds
 // first, each with its first letter highlighted as the alias indicator,
-// then unaliased kinds in group order, capped at maxGotoVisible with a
-// "+ N more kinds" trailer for whatever doesn't fit (docs/design
-// README.md §12a).
+// then every unaliased kind in group order. The shared palette viewport
+// clips this complete list to the terminal and scrolls with selection.
 func gotoBrowseItems(sess *Session) []palette.Item {
 	if sess == nil {
 		return nil
@@ -234,19 +227,7 @@ func gotoBrowseItems(sess *Session) []palette.Item {
 		}
 	}
 
-	room := maxGotoVisible - len(items)
-	switch {
-	case room <= 0:
-		if len(rest) > 0 {
-			items = append(items, palette.Item{Note: fmt.Sprintf("+ %d more kinds · type to narrow", len(rest))})
-		}
-	case len(rest) <= room:
-		items = append(items, rest...)
-	default:
-		items = append(items, rest[:room]...)
-		items = append(items, palette.Item{Note: fmt.Sprintf("+ %d more kinds · type to narrow", len(rest)-room)})
-	}
-	return items
+	return append(items, rest...)
 }
 
 // gotoBrowseSelection picks the initial Sel for a freshly opened 12a list:
@@ -345,9 +326,6 @@ func gotoFuzzyItems(sess *Session, query string) []palette.Item {
 	}
 
 	items := append(pinned, palette.Filter(corpus, query)...)
-	if len(items) > maxGotoVisible {
-		items = items[:maxGotoVisible]
-	}
 	return items
 }
 

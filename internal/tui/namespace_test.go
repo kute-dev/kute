@@ -342,14 +342,11 @@ func TestRootModelNShowsLoadingWhileCacheSyncing(t *testing.T) {
 	}
 }
 
-// TestRootModelNCapsLongNamespaceListWithTrailer is the regression test for
-// a long namespace list overflowing the palette past the screen (the
-// palette has no internal scrolling — see maxNamespaceVisible's doc
-// comment): the list caps at maxNamespaceVisible rows with a "+ N more ·
-// type to narrow" trailer, and the pinned "all namespaces" row still shows
-// below it. Typing must still reach a namespace past the cap, proving the
-// cap only limits what's displayed, not the corpus fuzzy filtering search.
-func TestRootModelNCapsLongNamespaceListWithTrailer(t *testing.T) {
+// TestRootModelNScrollsLongNamespaceList keeps the complete namespace list
+// behind the height-bounded palette viewport: no synthetic overflow row,
+// half-page movement reaches the pinned all-namespaces item, and filtering
+// can still select a namespace that began below the fold.
+func TestRootModelNScrollsLongNamespaceList(t *testing.T) {
 	t.Parallel()
 	var nsObjs []runtime.Object
 	for i := range 20 {
@@ -362,21 +359,51 @@ func TestRootModelNCapsLongNamespaceListWithTrailer(t *testing.T) {
 
 	task := &screenTask{name: "browse"}
 	model := tui.NewWithSession(task, sess)
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "n"})
 	view := updated.(tui.Model).View().Content
-
-	if !strings.Contains(view, "+ 8 more namespaces · type to narrow") {
-		t.Fatalf("expected an overflow trailer capping the namespace list:\n%s", view)
+	plain := ansi.Strip(view)
+	bottom := -1
+	for i, line := range strings.Split(plain, "\n") {
+		if strings.Contains(line, "╰") {
+			bottom = i
+			break
+		}
 	}
+	if bottom != 21 {
+		t.Fatalf("namespace palette bottom row = %d, want 21 for equal two-row margins:\n%s", bottom, plain)
+	}
+
+	if strings.Contains(view, "more namespaces") {
+		t.Fatalf("did not expect an overflow trailer in the scrollable namespace list:\n%s", view)
+	}
+	if strings.Contains(view, "all namespaces") {
+		t.Fatalf("expected the pinned all-namespaces row to begin below the fold:\n%s", view)
+	}
+
+	for range 4 {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "ctrl+d"})
+	}
+	view = updated.(tui.Model).View().Content
 	if !strings.Contains(view, "all namespaces") {
-		t.Fatalf("expected the pinned all-namespaces row to survive the cap:\n%s", view)
+		t.Fatalf("expected half-page scrolling to reach the pinned all-namespaces row:\n%s", view)
+	}
+	plain = ansi.Strip(view)
+	bottom = -1
+	for i, line := range strings.Split(plain, "\n") {
+		if strings.Contains(line, "╰") {
+			bottom = i
+			break
+		}
+	}
+	if bottom != 21 {
+		t.Fatalf("scrolled namespace palette bottom row = %d, want 21 with the all-namespaces divider:\n%s", bottom, plain)
 	}
 
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "ns-19"})
 	view = updated.(tui.Model).View().Content
 	if !strings.Contains(view, "ns-19") {
-		t.Fatalf("expected filtering to reach a namespace past the visible cap:\n%s", view)
+		t.Fatalf("expected filtering to reach a namespace that began below the fold:\n%s", view)
 	}
 }
 

@@ -102,15 +102,15 @@ func TestFilterNoMatchesReturnsEmpty(t *testing.T) {
 func TestModelMoveClampsToBounds(t *testing.T) {
 	t.Parallel()
 	m := Model{Items: []Item{{Label: "a"}, {Label: "b"}, {Label: "c"}}}
-	m.Move(-1)
+	m.Move(-1, 100)
 	if m.Sel != 0 {
 		t.Fatalf("Sel = %d, want 0 after moving up from start", m.Sel)
 	}
-	m.Move(10)
+	m.Move(10, 100)
 	if m.Sel != 2 {
 		t.Fatalf("Sel = %d, want 2 (clamped to last item)", m.Sel)
 	}
-	m.Move(-1)
+	m.Move(-1, 100)
 	if m.Sel != 1 {
 		t.Fatalf("Sel = %d, want 1", m.Sel)
 	}
@@ -119,7 +119,7 @@ func TestModelMoveClampsToBounds(t *testing.T) {
 func TestModelMoveOnEmptyItems(t *testing.T) {
 	t.Parallel()
 	m := Model{}
-	m.Move(3)
+	m.Move(3, 100)
 	if m.Sel != 0 {
 		t.Fatalf("Sel = %d, want 0 for empty item list", m.Sel)
 	}
@@ -175,7 +175,7 @@ func TestRenderFuzzyShowsPromptQueryAndResults(t *testing.T) {
 		},
 		Sel: 1,
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "pod") {
 		t.Fatalf("expected query in output:\n%s", got)
 	}
@@ -206,7 +206,7 @@ func TestRenderBrowseHighlightsAliasFirstLetterAndNarrowKeyRow(t *testing.T) {
 			{Label: "Secrets", Right: "0", Dim: true},
 		},
 	}
-	got := ansi.Strip(m.Render(testStyles(), 120))
+	got := ansi.Strip(m.Render(testStyles(), 120, 100))
 	if !strings.Contains(got, "type") || !strings.Contains(got, "to narrow") {
 		t.Fatalf("expected the 12a key row, got:\n%s", got)
 	}
@@ -231,7 +231,7 @@ func TestRenderPinnedAliasKeyRow(t *testing.T) {
 			{Label: "DaemonSets", Right: "2"},
 		},
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "to keep narrowing") {
 		t.Fatalf("expected the 12b 'type to keep narrowing' key hint:\n%s", got)
 	}
@@ -253,7 +253,7 @@ func TestRenderShowsAliasMatchOnPinnedRow(t *testing.T) {
 		},
 		Sel: 0,
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "alias match") {
 		t.Fatalf("expected the 'alias match' label on the pinned row:\n%s", got)
 	}
@@ -262,41 +262,46 @@ func TestRenderShowsAliasMatchOnPinnedRow(t *testing.T) {
 	}
 }
 
-// TestRenderNoteLineIsPlainAndNotSelectable covers 12a's "+ N more kinds"
-// trailer: it renders as plain text and Move skips over it.
-func TestRenderNoteLineIsPlainAndNotSelectable(t *testing.T) {
+func TestRenderScrollsCompleteItemsWithinHeight(t *testing.T) {
 	t.Parallel()
-	m := Model{Items: []Item{
-		{Label: "Pods"},
-		{Label: "Deployments"},
-		{Note: "+ 4 more kinds · type to narrow"},
-	}}
-	got := m.Render(testStyles(), 120)
-	if !strings.Contains(got, "+ 4 more kinds · type to narrow") {
-		t.Fatalf("expected the Note trailer line in output:\n%s", got)
+	m := Model{Items: []Item{{Label: "item-0"}, {Label: "item-1"}, {Label: "item-2"}, {Label: "item-3"}, {Label: "item-4"}, {Label: "item-5"}}}
+	got := ansi.Strip(m.Render(testStyles(), 120, 10)) // six chrome rows + four result rows
+	if lines := strings.Split(got, "\n"); len(lines) != 10 {
+		t.Fatalf("panel height = %d, want 10:\n%s", len(lines), got)
 	}
-	m.Sel = 1 // Deployments
-	m.Move(1)
-	if got := m.Items[m.Sel].Label; got != "Deployments" {
-		t.Fatalf("Move(1) landed on %q, want to stay on Deployments (Note isn't selectable)", got)
+	if !strings.Contains(got, "item-0") || strings.Contains(got, "item-4") {
+		t.Fatalf("expected initial four-item window:\n%s", got)
+	}
+	m.Move(4, 10)
+	got = ansi.Strip(m.Render(testStyles(), 120, 10))
+	if strings.Contains(got, "item-0") || !strings.Contains(got, "item-4") {
+		t.Fatalf("expected viewport to follow selection to item-4:\n%s", got)
 	}
 }
 
-func TestMoveSkipsNoteLines(t *testing.T) {
+func TestMoveHalfPageMovesSelectionAndViewport(t *testing.T) {
 	t.Parallel()
-	m := Model{Items: []Item{
-		{Label: "Pods"},
-		{Note: "+ 4 more kinds · type to narrow"},
-		{Label: "Deployments"},
-	}}
-	m.Sel = 0 // Pods
-	m.Move(1)
-	if got := m.Items[m.Sel].Label; got != "Deployments" {
-		t.Fatalf("Move(1) landed on %q, want Deployments (Note skipped)", got)
+	m := Model{Items: []Item{{Label: "0"}, {Label: "1"}, {Label: "2"}, {Label: "3"}, {Label: "4"}, {Label: "5"}, {Label: "6"}, {Label: "7"}}}
+	m.MoveHalfPage(1, 10)
+	if m.Sel != 2 || m.Offset != 2 {
+		t.Fatalf("half-page down = sel %d offset %d, want 2/2", m.Sel, m.Offset)
 	}
-	m.Move(-1)
-	if got := m.Items[m.Sel].Label; got != "Pods" {
-		t.Fatalf("Move(-1) landed on %q, want Pods (Note skipped)", got)
+	m.MoveHalfPage(-1, 10)
+	if m.Sel != 0 || m.Offset != 0 {
+		t.Fatalf("half-page up = sel %d offset %d, want 0/0", m.Sel, m.Offset)
+	}
+}
+
+func TestClampViewportRepairsOffsetAfterResize(t *testing.T) {
+	t.Parallel()
+	m := Model{Items: []Item{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}, Sel: 9}
+	m.ClampViewport(10) // four result rows
+	if m.Offset != 6 {
+		t.Fatalf("compact offset = %d, want 6", m.Offset)
+	}
+	m.ClampViewport(12) // six result rows; backfill newly available space
+	if m.Offset != 4 {
+		t.Fatalf("expanded offset = %d, want 4", m.Offset)
 	}
 }
 
@@ -311,7 +316,7 @@ func TestRenderFooterShowsModelFooterLine(t *testing.T) {
 			{Text: " — typing an alias letter pins that kind to rank 1 · ↵ jumps"},
 		},
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "alias — typing an alias letter pins that kind to rank 1") {
 		t.Fatalf("expected Model.Footer text in output:\n%s", got)
 	}
@@ -323,7 +328,7 @@ func TestRenderFooterAbsentWhenEmpty(t *testing.T) {
 		Items: []Item{{Label: "Pods"}},
 		Sel:   0,
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if strings.Contains(got, "alias") {
 		t.Fatalf("did not expect a footer line when Model.Footer is empty:\n%s", got)
 	}
@@ -335,7 +340,7 @@ func TestRenderShowsRecentSection(t *testing.T) {
 		Items:  []Item{{Label: "Pods"}},
 		Recent: []string{"Deployments", "Services"},
 	}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "RECENT") {
 		t.Fatalf("expected RECENT section, got:\n%s", got)
 	}
@@ -363,7 +368,7 @@ func TestRenderRecentNumGutterOnUnselectedRowOnly(t *testing.T) {
 			},
 			Sel: 0,
 		}
-		got := m.Render(testStyles(), 80)
+		got := m.Render(testStyles(), 80, 100)
 		// The digit renders immediately in the gutter cell right before the
 		// label starts — assert loosely on adjacency since exact
 		// inter-cell spacing is an implementation detail.
@@ -387,7 +392,7 @@ func TestRenderRecentNumGutterOnUnselectedRowOnly(t *testing.T) {
 			NameColumnLabel: "NAMESPACE",
 			GutterGlyph:     "▸",
 		}
-		got := m.Render(testStyles(), 90)
+		got := m.Render(testStyles(), 90, 100)
 		if !regexp.MustCompile(`2\s*staging`).MatchString(got) {
 			t.Fatalf("expected digit '2' in staging's gutter cell, got:\n%s", got)
 		}
@@ -411,7 +416,7 @@ func TestRenderInputRowTruncatesHintInsteadOfDropping(t *testing.T) {
 		Hint:  "a very long right-hand hint that will not fit in a narrow panel at all",
 		Items: []Item{{Label: "Pods"}},
 	}
-	got := m.Render(testStyles(), 44) // narrow screen ⇒ narrow panel (Width floors at 40)
+	got := m.Render(testStyles(), 44, 100) // narrow screen ⇒ narrow panel (Width floors at 40)
 	if !strings.Contains(got, "…") {
 		t.Fatalf("expected the overlong hint to ellipsize rather than vanish:\n%s", got)
 	}
@@ -437,7 +442,7 @@ func TestRenderRecentReservesSpaceForHint(t *testing.T) {
 			{Text: " toggles last", Tone: FooterDim},
 		},
 	}
-	got := m.Render(testStyles(), 84) // Width(84) ⇒ frame ~58 cols, tight enough to force a drop
+	got := m.Render(testStyles(), 84, 100) // Width(84) ⇒ frame ~58 cols, tight enough to force a drop
 	if !strings.Contains(got, "toggles last") {
 		t.Fatalf("expected the RecentHint to survive a full 8-entry RECENT row:\n%s", got)
 	}
@@ -452,7 +457,7 @@ func TestRenderRecentReservesSpaceForHint(t *testing.T) {
 func TestRenderNoMatchesFuzzy(t *testing.T) {
 	t.Parallel()
 	m := Model{Input: testInput("zzz")}
-	got := m.Render(testStyles(), 120)
+	got := m.Render(testStyles(), 120, 100)
 	if !strings.Contains(got, "no matches") {
 		t.Fatalf("expected empty-state text, got:\n%s", got)
 	}
@@ -461,7 +466,7 @@ func TestRenderNoMatchesFuzzy(t *testing.T) {
 func TestRenderRespectsWidth(t *testing.T) {
 	t.Parallel()
 	m := Model{Items: []Item{{Label: "Pods"}}}
-	got := ansi.Strip(m.Render(testStyles(), 100))
+	got := ansi.Strip(m.Render(testStyles(), 100, 100))
 	lines := strings.Split(got, "\n")
 	want := Width(100)
 	for i, l := range lines {

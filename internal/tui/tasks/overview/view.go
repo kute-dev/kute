@@ -16,9 +16,8 @@ import (
 )
 
 // maxPanelRows caps how many rows NODES/TROUBLE/CHANGES ever render before
-// folding the remainder into a trailing "+N" note — the same "don't let one
-// screen's viewport thrash" reasoning tui/goto.go's maxGotoVisible already
-// documents for the jump palette.
+// folding the remainder into a trailing "+N" note so one overview section
+// cannot crowd the other panels out of the fixed screen viewport.
 const maxPanelRows = 6
 
 func (m Model) View() tea.View { return tea.NewView(m.Render()) }

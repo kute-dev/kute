@@ -550,9 +550,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.setAllSizes(msg.Width, msg.Height)
+		m.clampPaletteViewport()
 	case WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.setAllSizes(msg.Width, msg.Height)
+		m.clampPaletteViewport()
 	case BackMsg:
 		return m, m.popTask()
 	case kube.ConnStateMsg:
@@ -955,6 +957,10 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 		m.movePalette(-1)
 	case "down", "ctrl+j":
 		m.movePalette(1)
+	case "ctrl+d":
+		m.movePaletteHalfPage(1)
+	case "ctrl+u":
+		m.movePaletteHalfPage(-1)
 	case "tab":
 		// docs/design README.md §2b: "tab complete" fills the query in to the
 		// highlighted result's own label, so a fuzzy match can be completed
@@ -1051,9 +1057,9 @@ func recentNumbers(recents []string, current string) map[string]int {
 // tagged "previous", then the numbered 1-9 recents (in digit order) lead —
 // current/previous/recentNumbers must already be applied to each item's
 // Tag/RecentNum before calling this. Everything else keeps its existing
-// relative order (stable sort). Callers pass only the plain result rows —
-// never a pinned trailer (6a's "all namespaces" row, capNamespaceItems'
-// "+N more" note), which stay fixed at the bottom by construction.
+// relative order (stable sort). Callers pass only the ordinary namespace/
+// context rows; namespace's pinned "all namespaces" row is appended after
+// promotion and therefore stays at the bottom of the scrollable list.
 //
 // This only visibly affects the empty-query browse state: once a query is
 // typed, palette.Filter's fuzzy.Find re-sorts by match score regardless of
@@ -1190,7 +1196,11 @@ func (m *Model) openUpdatePanel() tea.Cmd {
 
 // movePalette routes an up/down press to the palette's linear list.
 func (m *Model) movePalette(delta int) {
-	m.palette.Move(delta)
+	m.palette.Move(delta, palettePanelMaxHeight(m.height))
+}
+
+func (m *Model) movePaletteHalfPage(direction int) {
+	m.palette.MoveHalfPage(direction, palettePanelMaxHeight(m.height))
 }
 
 // refreshPalette rebuilds the open palette's Items/Hint/Recent/Sel for its
@@ -1271,21 +1281,21 @@ func (m *Model) refreshNamespacePalette() {
 	// doc comment) — it IS the numberedRecents list, so it doubles as
 	// digitRecentTarget's lookup with no further filtering.
 	recents := namespaceRecentLabels(m.session)
-	capped := capNamespaceItems(m.namespaceItemsCache)
+	items := m.namespaceItemsCache
 	if target, ok := digitRecentTarget(m.palette.Query(), recents); ok {
-		if i, ok := namespaceItemIndex(capped, target); ok {
-			m.palette.Items = capped
+		if i, ok := namespaceItemIndex(items, target); ok {
+			m.palette.Items = items
 			m.palette.Recent = recents
 			m.palette.Sel = i
 			m.palette.Footer = namespaceRecentFooter(target)
 			return
 		}
 	}
-	items := m.namespaceItemsCache
+	items = m.namespaceItemsCache
 	if m.palette.Query() != "" {
 		items = palette.Filter(items, m.palette.Query())
 	}
-	m.palette.Items = capNamespaceItems(items)
+	m.palette.Items = items
 	m.palette.Recent = recents
 	m.palette.Sel = namespacePaletteSelection(m.session, m.palette.Items, m.palette.Query())
 	m.palette.Footer = nil
@@ -1398,7 +1408,7 @@ func (m Model) View() tea.View {
 		case m.quitConfirm:
 			panel = renderQuitConfirm(theme)
 		case m.palette != nil:
-			panel = m.palette.Render(paletteStyles(theme), width)
+			panel = m.palette.Render(paletteStyles(theme), width, palettePanelMaxHeight(height))
 		case m.helpOpen:
 			screen, ok := m.task.(Screen)
 			if !ok {
@@ -1502,3 +1512,16 @@ func replaceLastLine(content, line string) string {
 // than vertical centering) keeps the panel still while its height changes
 // with every keystroke's result count.
 const paletteTop = 2
+
+func palettePanelMaxHeight(screenHeight int) int {
+	if screenHeight <= 0 {
+		screenHeight = DefaultHeight
+	}
+	return max(screenHeight-2*paletteTop, 1)
+}
+
+func (m *Model) clampPaletteViewport() {
+	if m.palette != nil {
+		m.palette.ClampViewport(palettePanelMaxHeight(m.height))
+	}
+}

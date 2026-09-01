@@ -15,17 +15,17 @@ browse
                    │ ReplicaSets  kind · Workloads                                                0 │                   
                    │ Jobs  kind · Workloads                                                       0 │                   
                    │ CronJobs  kind · Workloads                                                   0 │                   
-                   │ + 6 more kinds · type to narrow                                                │                   
+                   │ Secrets  kind · Config                                                       0 │                   
+                   │ PersistentVolumeClaims  kind · Storage                                       0 │                   
+                   │ Namespaces  kind · Cluster                                                   0 │                   
+                   │ Forwards  kind · Cluster                                                     0 │                   
+                   │ CustomResourceDefinitions  kind · Cluster                                    0 │                   
+                   │ Helm Releases  kind · Cluster                                                0 │                   
                    │────────────────────────────────────────────────────────────────────────────────│                   
                    │ alias — colored first letter · typing it pins that kind to rank 1 · ↵ jumps    │                   
                    │────────────────────────────────────────────────────────────────────────────────│                   
-                   │ type to narrow  ↑↓ ctrl+jk move  ↵ jump                              esc close │                   
+                   │ type to narrow  ↑↓ ctrl+jk move  ctrl-d/u half-page  ↵ jump          esc close │                   
                    ╰────────────────────────────────────────────────────────────────────────────────╯                   
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
