@@ -323,6 +323,13 @@ func (m Model) cellLess(canonicalTitle string, idx int) func(a, b resources.Row)
 		return func(a, b resources.Row) bool {
 			return parseShortAge(cellAt(a, idx)) < parseShortAge(cellAt(b, idx))
 		}
+	case "Updated":
+		return func(a, b resources.Row) bool {
+			// A smaller elapsed duration is newer. Reverse the natural duration
+			// comparison so Updated's existing descending-first order puts the
+			// most recently updated release first.
+			return parseShortAge(cellAt(a, idx)) > parseShortAge(cellAt(b, idx))
+		}
 	case "CPU":
 		return func(a, b resources.Row) bool {
 			return m.metricValue(a.Namespace, a.Name, true) < m.metricValue(b.Namespace, b.Name, true)
@@ -381,11 +388,13 @@ func (m Model) metricValue(namespace, name string, cpu bool) int64 {
 }
 
 // parseShortAge inverts resources' shortAge display format ("12m"/"3h"/
-// "5d"/"45s") back into a comparable duration — kept browse-local since
-// sort ordering is a browse concern, not resources'. Unparseable input
-// (never expected — every kind's Age cell is always shortAge's own output)
-// sorts as zero.
+// "5d"/"45s") back into a comparable duration. Helm's UPDATED column adds
+// a presentational " ago" suffix, which belongs to the same duration sort.
+// It stays browse-local because sort ordering is a browse concern, not
+// resources'. Unparseable input (such as Helm's unknown "–" value) sorts as
+// zero.
 func parseShortAge(s string) time.Duration {
+	s = strings.TrimSuffix(strings.TrimSpace(s), " ago")
 	if s == "" {
 		return 0
 	}

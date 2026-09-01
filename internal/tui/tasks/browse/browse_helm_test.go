@@ -24,6 +24,43 @@ func helmRelease(namespace, name, chart, chartVersion, appVersion, status string
 	})
 }
 
+func TestHelmUpdatedSortsByElapsedTime(t *testing.T) {
+	now := time.Now()
+	newRelease := func(name string, updated time.Time) *kube.HelmReleaseObject {
+		release := helmRelease("default", name, name, "1.0.0", "1.0.0", "deployed", 1)
+		release.Release.Updated = updated
+		return release
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindHelmRelease: {
+			newRelease("ancient", now.Add(-1176*24*time.Hour)),
+			newRelease("recent", now.Add(-time.Hour)),
+			newRelease("middle", now.Add(-6*24*time.Hour)),
+		},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	// UPDATED is column seven and, as a recency column, defaults to newest
+	// first. Its rendered values (for this fixture: 1h ago, 6d ago, and
+	// 1176d ago) must be compared as durations rather than strings.
+	m = step(t, m, tea.KeyPressMsg{Text: "7"})
+	if m.sortColumn != 7 || m.sortAsc {
+		t.Fatalf("sortColumn=%d sortAsc=%v, want 7/false (newest first)", m.sortColumn, m.sortAsc)
+	}
+	if want := []string{"recent", "middle", "ancient"}; !equalStrings(displayRowNames(m), want) {
+		t.Fatalf("names = %v, want %v (newest first)", displayRowNames(m), want)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Text: "7"})
+	if want := []string{"ancient", "middle", "recent"}; !equalStrings(displayRowNames(m), want) {
+		t.Fatalf("names = %v, want %v (oldest first)", displayRowNames(m), want)
+	}
+}
+
 // TestHelmReleaseHealthStripCountsByStatus confirms 18a's health strip
 // buckets deployed/pending-*/failed into OK/Warn/Fail per the design's own
 // strip example ("3 deployed · 1 pending-upgrade · 1 failed").
