@@ -452,6 +452,13 @@ cache the Helm screens never read, flashing "no releases".
   state" seam to let one caller opt out of three of the cheapest kinds there are. Note this is
   the *opposite* trade from §5.2's Secret entry — there the extra cache was pure cost for
   a screen that read nothing from it; here the screen genuinely can't answer without it.
+- **Opening one Helm release's diagnostic detail starts Events and only the kinds named
+  by that release.** The screen compares Helm's saved hook/manifest inventory with live
+  cluster evidence, so those reads are the answer the user explicitly requested. It
+  deduplicates `(kind, namespace)` before calling `ListRaw`, gates every scope on
+  `KindSynced`/`KindError`, and reloads only on the resulting dynamic kind set. It must
+  never loop over the registry: a chart with Service+Deployment+Job may start those three
+  caches, not every kind kute knows.
 
 ### 5.4 Not done, deliberately
 

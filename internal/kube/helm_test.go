@@ -22,6 +22,11 @@ func TestEncodeDecodeHelmReleaseSecretRoundTrip(t *testing.T) {
 		Revision: 3, Status: "deployed",
 		Updated: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		Values:  "auth:\n  enablePostgresUser: true\n",
+		Hooks: []HelmHook{{
+			Name: "postgresql-migrate", Kind: "Job", Events: []string{"pre-install"},
+			DeletePolicies: []string{"hook-succeeded"}, Weight: -5,
+			LastRun: HelmHookRun{StartedAt: time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC), Phase: "Running"},
+		}},
 	}
 	secret := EncodeHelmReleaseSecret(want)
 	if secret.Type != HelmReleaseSecretType {
@@ -43,6 +48,9 @@ func TestEncodeDecodeHelmReleaseSecretRoundTrip(t *testing.T) {
 	if got.Values == "" {
 		t.Fatalf("Values not preserved across round trip")
 	}
+	if len(got.Hooks) != 1 || got.Hooks[0].Name != "postgresql-migrate" || got.Hooks[0].LastRun.Phase != "Running" || got.Hooks[0].Weight != -5 {
+		t.Fatalf("Hooks not preserved across round trip: %+v", got.Hooks)
+	}
 }
 
 func TestDecodeHelmReleaseSecretRejectsWrongType(t *testing.T) {
@@ -63,6 +71,38 @@ func TestStatusCellCarriesFailureReason(t *testing.T) {
 	deployed := HelmRelease{Status: "deployed"}
 	if got, want := deployed.StatusCell(), "deployed"; got != want {
 		t.Fatalf("StatusCell() = %q, want %q", got, want)
+	}
+	pending := HelmRelease{Status: "pending-install", StatusReason: "Initial install underway"}
+	if got, want := pending.StatusCell(), "pending-install · Initial install underway"; got != want {
+		t.Fatalf("StatusCell() = %q, want %q", got, want)
+	}
+}
+
+func TestHelmReleaseObjectsIncludesObjectsThatWereNeverCreated(t *testing.T) {
+	r := HelmRelease{Namespace: "timesheet", Manifest: `apiVersion: v1
+kind: Service
+metadata:
+  name: api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: elsewhere
+`}
+	refs := HelmReleaseObjects(r)
+	if len(refs) != 2 || refs[0].Namespace != "timesheet" || refs[1].Namespace != "elsewhere" || refs[1].Kind != "Deployment" {
+		t.Fatalf("HelmReleaseObjects() = %+v", refs)
+	}
+}
+
+func TestHelmReleaseObjectDeepCopiesHookSlices(t *testing.T) {
+	original := NewHelmReleaseObject(HelmRelease{Hooks: []HelmHook{{Events: []string{"pre-install"}, DeletePolicies: []string{"hook-succeeded"}}}})
+	copy := original.DeepCopyObject().(*HelmReleaseObject)
+	copy.Release.Hooks[0].Events[0] = "post-install"
+	copy.Release.Hooks[0].DeletePolicies[0] = "hook-failed"
+	if original.Release.Hooks[0].Events[0] != "pre-install" || original.Release.Hooks[0].DeletePolicies[0] != "hook-succeeded" {
+		t.Fatalf("DeepCopyObject aliased hook slices: %+v", original.Release.Hooks)
 	}
 }
 

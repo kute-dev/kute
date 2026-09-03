@@ -853,6 +853,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedHelmHistory(); ok {
 			return task, cmd
 		}
+	case verbs.HelmPods.Key:
+		if m.kind == kube.KindHelmRelease {
+			if row, ok := m.selectedRow(); ok {
+				return m, m.openReleaseObjects(row)
+			}
+		}
 	case verbs.Forward.Key:
 		if task, cmd, ok := m.openSelectedForward(); ok {
 			return task, cmd
@@ -999,8 +1005,8 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 		return task, cmd, true
 	}
 	if m.kind == kube.KindHelmRelease {
-		if row, ok := m.selectedRow(); ok {
-			return m, m.openReleaseObjects(row), true
+		if task, cmd, ok := m.openSelectedHelmDetail(); ok {
+			return task, cmd, true
 		}
 	}
 	if m.kind == kube.KindCustomResourceDefinition {

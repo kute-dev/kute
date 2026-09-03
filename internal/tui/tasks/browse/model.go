@@ -220,6 +220,9 @@ type OpenCronJobScheduleFunc func(namespace, name string, width, height int) (te
 // full revision rail.
 type OpenHelmHistoryFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenHelmDetailFunc pushes the release transaction/live-evidence detail.
+type OpenHelmDetailFunc func(release kube.HelmRelease, width, height int) (tea.Model, tea.Cmd)
+
 // OpenHelmValuesFunc pushes tasks/yamlview (18a's `v`) read-only on
 // release's decoded values.
 type OpenHelmValuesFunc func(release kube.HelmRelease, width, height int) (tea.Model, tea.Cmd)
@@ -277,6 +280,7 @@ type Config struct {
 	OpenCronJobSchedule OpenCronJobScheduleFunc
 	OpenJobAttempts     OpenJobAttemptsFunc
 	OpenHelmHistory     OpenHelmHistoryFunc
+	OpenHelmDetail      OpenHelmDetailFunc
 	OpenHelmValues      OpenHelmValuesFunc
 	OpenSecretData      OpenSecretDataFunc
 	OpenConfigMapData   OpenConfigMapDataFunc
@@ -337,6 +341,7 @@ type Model struct {
 	openCronJobSchedule OpenCronJobScheduleFunc
 	openJobAttempts     OpenJobAttemptsFunc
 	openHelmHistory     OpenHelmHistoryFunc
+	openHelmDetail      OpenHelmDetailFunc
 	openHelmValues      OpenHelmValuesFunc
 	openSecretData      OpenSecretDataFunc
 	openConfigMapData   OpenConfigMapDataFunc
@@ -833,6 +838,7 @@ func New(cfg Config) Model {
 		openCronJobSchedule: cfg.OpenCronJobSchedule,
 		openJobAttempts:     cfg.OpenJobAttempts,
 		openHelmHistory:     cfg.OpenHelmHistory,
+		openHelmDetail:      cfg.OpenHelmDetail,
 		openHelmValues:      cfg.OpenHelmValues,
 		openSecretData:      cfg.OpenSecretData,
 		openConfigMapData:   cfg.OpenConfigMapData,

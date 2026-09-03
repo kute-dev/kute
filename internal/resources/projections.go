@@ -796,8 +796,8 @@ func helmReleaseStatusClass(status string) StatusClass {
 }
 
 // projectHelmRelease renders 18a's list columns: RELEASE/CHART/APP VER/REV/
-// STATUS/UPDATED — STATUS carries the failure reason verbatim for a failed
-// release (kube.HelmRelease.StatusCell).
+// STATUS/UPDATED — STATUS carries Helm's description for pending and failed
+// transactions (kube.HelmRelease.StatusCell).
 func projectHelmRelease(obj runtime.Object) Row {
 	ho, ok := obj.(*kube.HelmReleaseObject)
 	if !ok {

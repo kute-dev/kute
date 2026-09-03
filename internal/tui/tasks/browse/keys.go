@@ -439,6 +439,12 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.kind == kube.KindHelmRelease {
 		helmGroup := []tui.KeyHint{}
+		if m.openHelmDetail != nil {
+			detailHint := verbs.Open.Hint()
+			detailHint.Label = "diagnose"
+			helmGroup = append(helmGroup, detailHint)
+		}
+		helmGroup = append(helmGroup, verbs.HelmPods.Hint())
 		if m.openHelmValues != nil {
 			helmGroup = append(helmGroup, verbs.HelmValues.Hint())
 		}

@@ -80,6 +80,10 @@ type HelmRelease struct {
 	Values   string
 	Manifest string
 	Notes    string
+	// Hooks is Helm's saved hook ledger for this revision. It is distinct
+	// from Manifest: Helm stores hook manifests separately, which is why a
+	// release blocked in pre-install can have no ordinary live objects yet.
+	Hooks []HelmHook
 
 	// RolloutPending is 18a's "helm is done, Kubernetes isn't" signal: a
 	// workload this release declares is still rolling out (or hasn't
@@ -147,13 +151,34 @@ func (r HelmRelease) LatestCell() string {
 	return r.LatestVersion
 }
 
-// StatusCell renders 18a's STATUS column text: the bare status word, or
-// "failed · <reason>" verbatim when a failure reason is known.
+// StatusCell renders 18a's STATUS column text: the bare status word, with
+// Helm's description appended for pending and failed transactions.
 func (r HelmRelease) StatusCell() string {
-	if r.Status == "failed" && r.StatusReason != "" {
-		return "failed · " + r.StatusReason
+	if (r.Status == "failed" || strings.HasPrefix(r.Status, "pending-")) && r.StatusReason != "" {
+		return r.Status + " · " + r.StatusReason
 	}
 	return r.Status
+}
+
+// HelmHook is one hook record embedded in a Helm release Secret.
+type HelmHook struct {
+	Name           string
+	Kind           string
+	Path           string
+	Manifest       string
+	Events         []string
+	Weight         int
+	DeletePolicies []string
+	LastRun        HelmHookRun
+}
+
+// HelmHookRun is Helm's persisted view of the most recent hook execution.
+// It may lag Kubernetes when the client disappears before committing the
+// next release state, so diagnostic UIs must label it as Helm state.
+type HelmHookRun struct {
+	StartedAt   time.Time
+	CompletedAt time.Time
+	Phase       string
 }
 
 // HelmReleaseObject adapts a HelmRelease to runtime.Object so it can flow
@@ -181,10 +206,16 @@ func NewHelmReleaseObject(r HelmRelease) *HelmReleaseObject {
 	}
 }
 
-// DeepCopyObject satisfies runtime.Object. HelmRelease has no pointer
-// fields, so a shallow copy is a full deep copy.
+// DeepCopyObject satisfies runtime.Object, including the hook ledger's
+// slice-backed fields.
 func (o *HelmReleaseObject) DeepCopyObject() runtime.Object {
 	cp := *o
+	cp.Release.Hooks = make([]HelmHook, len(o.Release.Hooks))
+	for i, hook := range o.Release.Hooks {
+		cp.Release.Hooks[i] = hook
+		cp.Release.Hooks[i].Events = append([]string(nil), hook.Events...)
+		cp.Release.Hooks[i].DeletePolicies = append([]string(nil), hook.DeletePolicies...)
+	}
 	return &cp
 }
 
@@ -211,6 +242,20 @@ type helmReleaseData struct {
 	Manifest  string         `json:"manifest"`
 	Version   int            `json:"version"`
 	Namespace string         `json:"namespace"`
+	Hooks     []struct {
+		Name           string   `json:"name"`
+		Kind           string   `json:"kind"`
+		Path           string   `json:"path"`
+		Manifest       string   `json:"manifest"`
+		Events         []string `json:"events"`
+		Weight         int      `json:"weight"`
+		DeletePolicies []string `json:"delete_policies"`
+		LastRun        struct {
+			StartedAt   time.Time `json:"started_at"`
+			CompletedAt time.Time `json:"completed_at"`
+			Phase       string    `json:"phase"`
+		} `json:"last_run"`
+	} `json:"hooks"`
 }
 
 // maxHelmReleasePayload caps how much a single release Secret is allowed to
@@ -284,7 +329,7 @@ func decodeHelmReleaseSecret(secret *corev1.Secret, maxPayload int64) (HelmRelea
 			valuesYAML = string(y)
 		}
 	}
-	return HelmRelease{
+	release := HelmRelease{
 		Name:         data.Name,
 		Namespace:    namespace,
 		Chart:        data.Chart.Metadata.Name,
@@ -297,7 +342,16 @@ func decodeHelmReleaseSecret(secret *corev1.Secret, maxPayload int64) (HelmRelea
 		Values:       valuesYAML,
 		Manifest:     data.Manifest,
 		Notes:        data.Info.Notes,
-	}, nil
+	}
+	for _, hook := range data.Hooks {
+		release.Hooks = append(release.Hooks, HelmHook{
+			Name: hook.Name, Kind: hook.Kind, Path: hook.Path, Manifest: hook.Manifest,
+			Events: append([]string(nil), hook.Events...), Weight: hook.Weight,
+			DeletePolicies: append([]string(nil), hook.DeletePolicies...),
+			LastRun:        HelmHookRun{StartedAt: hook.LastRun.StartedAt, CompletedAt: hook.LastRun.CompletedAt, Phase: hook.LastRun.Phase},
+		})
+	}
+	return release, nil
 }
 
 // DecodeHelmReleases decodes every helm.sh/release.v1 Secret in objs,
@@ -452,6 +506,26 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 	data.Chart.Metadata.Name = r.Chart
 	data.Chart.Metadata.Version = r.ChartVersion
 	data.Chart.Metadata.AppVersion = r.AppVersion
+	for _, hook := range r.Hooks {
+		var encoded struct {
+			Name           string   `json:"name"`
+			Kind           string   `json:"kind"`
+			Path           string   `json:"path"`
+			Manifest       string   `json:"manifest"`
+			Events         []string `json:"events"`
+			Weight         int      `json:"weight"`
+			DeletePolicies []string `json:"delete_policies"`
+			LastRun        struct {
+				StartedAt   time.Time `json:"started_at"`
+				CompletedAt time.Time `json:"completed_at"`
+				Phase       string    `json:"phase"`
+			} `json:"last_run"`
+		}
+		encoded.Name, encoded.Kind, encoded.Path, encoded.Manifest = hook.Name, hook.Kind, hook.Path, hook.Manifest
+		encoded.Events, encoded.Weight, encoded.DeletePolicies = append([]string(nil), hook.Events...), hook.Weight, append([]string(nil), hook.DeletePolicies...)
+		encoded.LastRun.StartedAt, encoded.LastRun.CompletedAt, encoded.LastRun.Phase = hook.LastRun.StartedAt, hook.LastRun.CompletedAt, hook.LastRun.Phase
+		data.Hooks = append(data.Hooks, encoded)
+	}
 	if r.Values != "" {
 		cfg := map[string]any{}
 		if err := sigsyaml.Unmarshal([]byte(r.Values), &cfg); err == nil {

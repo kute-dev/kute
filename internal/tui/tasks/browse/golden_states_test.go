@@ -340,7 +340,7 @@ func goldenHelmModel(t *testing.T, width, height int) Model {
 	sess := newSession()
 	sess.Location.Namespace = "nva-stage"
 	sess.Location.Kind = kube.KindHelmRelease
-	m := New(Config{Session: sess, Lister: lister})
+	m := New(Config{Session: sess, Lister: lister, OpenHelmDetail: func(kube.HelmRelease, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil }})
 	m.SetSize(width, height)
 	m = step(t, m, m.load()())
 	return m

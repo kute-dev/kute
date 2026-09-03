@@ -1,17 +1,17 @@
-  kute │ c microk8s-cluster › n nva-stage › g Helm Releases        ● connected  
+  kute │ dev › timesheet › Helm Releases › timesheet-backend                    
 ────────────────────────────────────────────────────────────────────────────────
-  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated  cache 6d old  
+  pending-install · revision 1 · updated 1h ago · Initial install underway      
+  ▲ Helm still records Job/timesheet-backend-migrate as Running, but            
+  Kubernetes reports it Completed and the object is gone · the Helm             
+  transaction was not finalized                                                 
 ────────────────────────────────────────────────────────────────────────────────
-     RELEASE    CHART                 LATEST    APP VER       REV  STATUS      …
+  SOURCE           RESOURCE              HELM STATE    LIVE EVIDENCE            
 ────────────────────────────────────────────────────────────────────────────────
-▎ ✕  broken-a…  mychart 1.0.0         –         2.1.0           2  failed · h...
-  ▲  nva-gate…  kube-prometheus-sta…  –         0.73.0          2  pending-up...
-  ▲  postgres…  postgresql 12.1.9     12.2.1    15.4.0          3  deployed  ...
-  ●  redis      redis 18.1.5          18.1.5    7.2.4           2  deployed  ...
-  1–4 of 4                                                              ██████  
-                                                                                
-                                                                                
-                                                                                
+▎ pre-install,     Job/timesheet-backe…  Running ·     Completed event ·        
+  pre-upgrade                            since 10:54   object no longer         
+                                                       present                  
+  object           Service/timesheet-b…  declared      not created              
+  object           Deployment/timeshee…  declared      not created              
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
 ────────────────────────────────────────────────────────────────────────────────
-   HELM  ↵ diagnose  p pods                                             ? help  
+   HELM  ↑↓ move        cleanup: before-hook-creation, hook-succeeded   ? help  

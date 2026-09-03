@@ -146,7 +146,7 @@ func TestOpenNamespacePodsSyncsSessionLocation(t *testing.T) {
 
 // TestOpenReleaseObjectsSyncsSessionLocationKind is
 // TestOpenDeploymentPodsSyncsSessionLocationKind's Helm-release counterpart
-// (18a's own "↵ = objects in the release", browse/helm.go).
+// (18a's p = release pods shortcut, browse/helm.go).
 func TestOpenReleaseObjectsSyncsSessionLocationKind(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindHelmRelease: {helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3)},
@@ -158,7 +158,7 @@ func TestOpenReleaseObjectsSyncsSessionLocationKind(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	m = step(t, m, tea.KeyPressMsg{Text: "p"})
 	if session.Location.Kind != kube.KindPod {
 		t.Fatalf("expected Session.Location.Kind synced to Pods, got %s", session.Location.Kind)
 	}

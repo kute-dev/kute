@@ -327,9 +327,9 @@ func TestHelmReleaseFailedStatusCellCarriesReason(t *testing.T) {
 	}
 }
 
-// TestEnterOnHelmReleaseTracksItsOrigin confirms Enter preserves the
-// release-to-Pods breadcrumb/back-navigation relationship.
-func TestEnterOnHelmReleaseOpensFilteredPods(t *testing.T) {
+// TestHelmPodsTracksItsOrigin confirms p preserves the release-to-Pods
+// breadcrumb/back-navigation relationship after Enter became diagnostics.
+func TestHelmPodsOpensFilteredPods(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindHelmRelease: {helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "deployed", 3)},
 		kube.KindPod:         {pod("default", "postgresql-0")},
@@ -340,7 +340,7 @@ func TestEnterOnHelmReleaseOpensFilteredPods(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	m = step(t, m, tea.KeyPressMsg{Text: "p"})
 	if m.kind != kube.KindPod || m.filterInput.Value() != "" {
 		t.Fatalf("expected associated Pods with no user filter, got kind=%s filter=%q", m.kind, m.filterInput.Value())
 	}
@@ -381,13 +381,33 @@ metadata:
 	m := New(Config{Session: session, Lister: lister})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	m = step(t, m, tea.KeyPressMsg{Text: "p"})
 
 	if m.filterInput.Value() != "" {
 		t.Fatalf("release association leaked into user filter: %q", m.filterInput.Value())
 	}
 	if got := displayRowNames(m); !equalStrings(got, []string{ownedPod.Name}) {
 		t.Fatalf("release Pods = %v, want [%s]", got, ownedPod.Name)
+	}
+}
+
+func TestEnterOnHelmReleaseOpensDiagnostics(t *testing.T) {
+	release := helmRelease("default", "postgresql", "postgresql", "12.1.9", "15.4.0", "pending-install", 1)
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindHelmRelease: {release}}}
+	var got kube.HelmRelease
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister, OpenHelmDetail: func(release kube.HelmRelease, _, _ int) (tea.Model, tea.Cmd) {
+		got = release
+		return stubTask{}, nil
+	}})
+	m = step(t, m, m.Init()())
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if _, ok := updated.(stubTask); !ok {
+		t.Fatalf("Enter returned %T, want diagnostic task", updated)
+	}
+	if got.Name != "postgresql" || got.Status != "pending-install" {
+		t.Fatalf("detail received %+v", got)
 	}
 }
 

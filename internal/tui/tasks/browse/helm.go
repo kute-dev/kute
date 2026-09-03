@@ -1,5 +1,5 @@
 // Helm-release-specific browse machinery for 18a (docs/design README.md):
-// the ↵ "open this release's objects" shortcut (9a's recipe), 'v' values
+// the p "open this release's pods" shortcut, ↵ diagnostic detail, 'v' values
 // (pushes the read-only YAML viewer) and 'h' history (pushes
 // tasks/helmhistory's revision rail), and the 'R' rollback verb (shells out
 // to the real helm binary, 8b-style friction). Kept in its own file,
@@ -183,6 +183,22 @@ func (m Model) openSelectedHelmHistory() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, false
 	}
 	task, cmd := m.openHelmHistory(row.Namespace, row.Name, m.width, m.height)
+	return task, cmd, task != nil
+}
+
+func (m Model) openSelectedHelmDetail() (tea.Model, tea.Cmd, bool) {
+	if m.openHelmDetail == nil || m.kind != kube.KindHelmRelease {
+		return nil, nil, false
+	}
+	row, ok := m.selectedRow()
+	if !ok {
+		return nil, nil, false
+	}
+	release, ok := m.helmReleases[helmReleaseKey(row.Namespace, row.Name)]
+	if !ok {
+		return nil, nil, false
+	}
+	task, cmd := m.openHelmDetail(release, m.width, m.height)
 	return task, cmd, task != nil
 }
 

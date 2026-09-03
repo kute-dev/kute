@@ -33,6 +33,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui/tasks/fluxdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/fluxtree"
 	"github.com/kute-dev/kute/internal/tui/tasks/forwardpicker"
+	"github.com/kute-dev/kute/internal/tui/tasks/helmdetail"
 	"github.com/kute-dev/kute/internal/tui/tasks/helmhistory"
 	"github.com/kute-dev/kute/internal/tui/tasks/jobattempts"
 	"github.com/kute-dev/kute/internal/tui/tasks/nodedetail"
@@ -655,6 +656,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenRouteTable:      openRouteTableFunc(sess, cluster, openYAML),
 		OpenWhoCan:          openWhoCanFunc(sess, cluster),
 		OpenHelmHistory:     openHelmHistoryFunc(sess, cluster),
+		OpenHelmDetail:      openHelmDetailFunc(sess, lister, cluster, openObjectEvents),
 		OpenHelmValues:      openHelmValuesFunc(sess),
 		OpenSecretData:      openSecretDataFunc(sess, cluster),
 		OpenConfigMapData:   openConfigMapDataFunc(sess, cluster),
@@ -746,6 +748,7 @@ func buildDemoBrowseTask(sess *tui.Session, demoCluster *fake.Cluster, clusterNa
 		OpenRouteTable:      openRouteTableFunc(sess, demoCluster, openYAML),
 		OpenWhoCan:          openWhoCanFunc(sess, demoCluster),
 		OpenHelmHistory:     openHelmHistoryFunc(sess, demoCluster),
+		OpenHelmDetail:      openHelmDetailFunc(sess, lister, demoCluster, openObjectEvents),
 		OpenHelmValues:      openHelmValuesFunc(sess),
 		OpenSecretData:      openSecretDataFunc(sess, demoCluster),
 		OpenConfigMapData:   openConfigMapDataFunc(sess, demoCluster),
@@ -1153,6 +1156,21 @@ func openHelmHistoryFunc(sess *tui.Session, active seams) browse.OpenHelmHistory
 	}
 }
 
+// openHelmDetailFunc pushes the Helm transaction/live-evidence screen. The
+// decorated lister is required so KindHelmRelease resolves from the narrow
+// release cache; events and object reads stay on the active cluster seams.
+func openHelmDetailFunc(sess *tui.Session, lister resources.RawLister, eventSource helmdetail.EventsReader, openEvents func(kube.ResourceKind, string, string, int, int) (tea.Model, tea.Cmd)) browse.OpenHelmDetailFunc {
+	return func(release kube.HelmRelease, width, height int) (tea.Model, tea.Cmd) {
+		hd := helmdetail.New(helmdetail.Config{
+			Session: sess, Lister: lister, Events: eventSource, Release: release,
+			OpenEvents:    helmdetail.OpenEventsFunc(openEvents),
+			OpenSavedYAML: openSavedHelmYAMLFunc(sess),
+		})
+		hd.SetSize(width, height)
+		return &hd, hd.Init()
+	}
+}
+
 // openSecretDataFunc pushes tasks/secretdata (27b) for a Secret row — active
 // alone satisfies the RawLister/Mutator seams it needs (ListRaw for the
 // Secret itself, kube.Mutator.PatchSecretData for add/remove).
@@ -1289,6 +1307,28 @@ func openJobAttemptsFunc(sess *tui.Session, active seams, openPodDetail browse.O
 // its own to show.
 type helmValuesReader struct {
 	release kube.HelmRelease
+}
+
+type savedHelmYAMLReader struct{ ref kube.HelmObjectRef }
+
+func (r savedHelmYAMLReader) ListRaw(context.Context, kube.ResourceKind, string) ([]runtime.Object, error) {
+	return []runtime.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: r.ref.Name, Namespace: r.ref.Namespace}}}, nil
+}
+
+func (r savedHelmYAMLReader) GetYAML(context.Context, kube.ResourceKind, string, string) (string, string, error) {
+	return r.ref.YAML, "saved release manifest", nil
+}
+
+func openSavedHelmYAMLFunc(sess *tui.Session) helmdetail.OpenSavedYAMLFunc {
+	return func(ref kube.HelmObjectRef, width, height int) (tea.Model, tea.Cmd) {
+		reader := savedHelmYAMLReader{ref: ref}
+		yv := yamlview.New(yamlview.Config{
+			Session: sess, Lister: reader, YAML: reader,
+			Kind: kube.ResourceKind(ref.Kind), Namespace: ref.Namespace, Name: ref.Name,
+		})
+		yv.SetSize(width, height)
+		return &yv, yv.Init()
+	}
 }
 
 func (r helmValuesReader) ListRaw(_ context.Context, _ kube.ResourceKind, _ string) ([]runtime.Object, error) {

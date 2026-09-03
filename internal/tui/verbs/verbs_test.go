@@ -278,7 +278,7 @@ func TestAllRegistersEveryDefinedVerb(t *testing.T) {
 	defined := []Verb{
 		Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 		Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, PageUp, PageDown, Help, Retry, WhoCan,
-		HelmValues, HelmHistory, Mark, MarkAll,
+		HelmValues, HelmHistory, HelmPods, Mark, MarkAll,
 		FluxReconcile, FluxSuspend, FluxSource,
 		ArgoRefresh, ArgoSync, ArgoURL,
 		CertRenew,

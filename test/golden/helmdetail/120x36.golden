@@ -1,15 +1,15 @@
-  kute │ c microk8s-cluster › n nva-stage › g Helm Releases                                                ● connected  
+  kute │ dev › timesheet › Helm Releases › timesheet-backend                                        ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ● 2 deployed   ◌ 1 pending-upgrade   ✕ 1 failed   ▲ 1 outdated              repo cache 6d old — run helm repo update  
+  pending-install · revision 1 · updated 1h ago · Initial install underway                                              
+  ▲ Helm still records Job/timesheet-backend-migrate as Running, but Kubernetes reports it Completed and the object is  
+  gone · the Helm transaction was not finalized                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-     RELEASE                           CHART                 LATEST    APP VER       REV  STATUS               UPDATED  
+  SOURCE           RESOURCE                                  HELM STATE    LIVE EVIDENCE                                
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▎ ✕  broken-app                        mychart 1.0.0         –         2.1.0           2  failed · hook t…           –  
-  ▲  nva-gateway                       kube-prometheus-sta…  –         0.73.0          2  pending-upgrade            –  
-  ▲  postgresql                        postgresql 12.1.9     12.2.1    15.4.0          3  deployed                   –  
-  ●  redis                             redis 18.1.5          18.1.5    7.2.4           2  deployed                   –  
-  1–4 of 4                                                                                                      ██████  
-                                                                                                                        
+▎ pre-install,     Job/timesheet-backend-migrate             Running ·     Completed event · object no longer present   
+  pre-upgrade                                                since 10:54                                                
+  object           Service/timesheet-backend                 declared      not created                                  
+  object           Deployment/timesheet-backend              declared      not created                                  
                                                                                                                         
                                                                                                                         
                                                                                                                         
@@ -33,4 +33,4 @@
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   HELM  ↵ diagnose  p pods                                                                                     ? help  
+   HELM  ↑↓ move                                                cleanup: before-hook-creation, hook-succeeded   ? help  

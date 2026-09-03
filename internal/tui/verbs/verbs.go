@@ -154,6 +154,9 @@ var (
 	// HelmHistory is 18a's 'h' — the selected release's full revision rail
 	// (16b's rail idiom).
 	HelmHistory = Verb{ID: "helm-history", Key: "h", Label: "history", Kinds: []kube.ResourceKind{kube.KindHelmRelease}}
+	// HelmPods preserves 18a's release-workload shortcut after Enter became
+	// the diagnostic detail destination.
+	HelmPods = Verb{ID: "helm-pods", Key: "p", Label: "pods", Kinds: []kube.ResourceKind{kube.KindHelmRelease}}
 	// Timeline is 't' — the incident timeline (16a namespace-scoped from
 	// lists, 16b object-scoped from detail views), docs/design README.md's
 	// system-wide interactions list: "t opens the incident timeline
@@ -609,7 +612,7 @@ var (
 var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, PageUp, PageDown, Help, Retry, WhoCan,
-	HelmValues, HelmHistory, Mark, MarkAll,
+	HelmValues, HelmHistory, HelmPods, Mark, MarkAll,
 	LogPause, LogFollow, LogNextWarning, LogNextError, LogToggleWrap, LogToggleTime,
 	LogCycleSince, LogCycleContainer, LogCopyView,
 	FluxReconcile, FluxSuspend, FluxSource,
