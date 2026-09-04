@@ -43,8 +43,8 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -77,7 +77,7 @@ type metaRow struct {
 	// text-field model resourceField's own buffer uses. Its Placeholder is
 	// "—" (metaInputStyles), so an emptied buffer shows the same dash
 	// displayOrDash renders for a non-editing empty value.
-	input textinput.Model
+	input textfield.Model
 
 	// readOnly rows (a controller-managed annotation, or a workload's own
 	// immutable spec.selector.matchLabels key) can be navigated to but never
@@ -109,11 +109,11 @@ func (r *metaRow) setBuffer(s string) {
 	r.input.CursorEnd()
 }
 
-// metaInputStyles builds the row-edit buffer's textinput.Styles: SelBg
+// metaInputStyles builds the row-edit buffer's textfield.Styles: SelBg
 // background baked in since metaValueCell (the only caller of r.input.View)
 // only ever renders the selected+editing row, and a "—" placeholder so an
 // emptied buffer shows the same dash displayOrDash renders elsewhere.
-func metaInputStyles(theme tui.Theme) textinput.Styles {
+func metaInputStyles(theme tui.Theme) textfield.Styles {
 	styles := tui.TextInputStyles(theme)
 	styles.Focused.Text = styles.Focused.Text.Background(theme.SelBg)
 	styles.Blurred.Text = styles.Blurred.Text.Background(theme.SelBg)
@@ -122,11 +122,11 @@ func metaInputStyles(theme tui.Theme) textinput.Styles {
 	return styles
 }
 
-// metaAddInputStyles builds the add-row's two buffers' textinput.Styles —
+// metaAddInputStyles builds the add-row's two buffers' textfield.Styles —
 // unlike metaInputStyles, no SelBg background (metaAddRowLine never draws
 // one) and bold text (metaAddBufferCell's old textStyle for both focused and
 // unfocused non-empty content).
-func metaAddInputStyles(theme tui.Theme) textinput.Styles {
+func metaAddInputStyles(theme tui.Theme) textfield.Styles {
 	styles := tui.TextInputStyles(theme)
 	styles.Focused.Text = styles.Focused.Text.Bold(true)
 	styles.Blurred.Text = styles.Blurred.Text.Bold(true)
@@ -180,8 +180,8 @@ type metaTarget struct {
 
 	// adding is metaAddNone unless 'a'/insert's insert row is showing.
 	adding        metaAddKind
-	addKeyInput   textinput.Model
-	addValueInput textinput.Model
+	addKeyInput   textfield.Model
+	addValueInput textfield.Model
 	addOnValue    bool // tab moves focus from key to value
 
 	// pendingCommit is set the instant a commit starts (TierNone's
@@ -308,7 +308,7 @@ func buildMetaRows(values map[string]string, isAnnotation bool, theme tui.Theme)
 	rows := make([]metaRow, 0, len(keys))
 	for _, k := range keys {
 		r := metaRow{isAnnotation: isAnnotation, key: k, current: values[k]}
-		r.input = textinput.New()
+		r.input = textfield.New()
 		r.input.SetStyles(styles)
 		r.input.Prompt = ""
 		r.input.Placeholder = "—"
@@ -515,11 +515,11 @@ func (m *Model) updateMetaKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			t.adding = metaAddAnnotation
 		}
 		addStyles := metaAddInputStyles(m.Theme())
-		t.addKeyInput = textinput.New()
+		t.addKeyInput = textfield.New()
 		t.addKeyInput.SetStyles(addStyles)
 		t.addKeyInput.Prompt = ""
 		t.addKeyInput.Focus()
-		t.addValueInput = textinput.New()
+		t.addValueInput = textfield.New()
 		t.addValueInput.SetStyles(addStyles)
 		t.addValueInput.Prompt = ""
 		t.addOnValue = false

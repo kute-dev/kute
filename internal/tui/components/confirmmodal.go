@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 )
 
 // ConfirmStyles are the pre-styled spans ConfirmCard composes from — built
@@ -61,30 +63,31 @@ func ConfirmBox(title, detail string, styles ConfirmStyles) string {
 // already uses for the same meaning). Kept Theme-agnostic like ConfirmCard.
 // Rule carries Theme.TextGhost, same as ConfirmStyles.Rule.
 type TypeModalStyles struct {
-	Border   lipgloss.Style
-	Title    lipgloss.Style
-	ProdTag  lipgloss.Style
-	Owner    lipgloss.Style
-	Detail   lipgloss.Style
-	Rule     lipgloss.Style
-	Input    lipgloss.Style
-	Progress lipgloss.Style
-	Key      lipgloss.Style
-	Label    lipgloss.Style
+	Border    lipgloss.Style
+	Title     lipgloss.Style
+	ProdTag   lipgloss.Style
+	Owner     lipgloss.Style
+	Detail    lipgloss.Style
+	Rule      lipgloss.Style
+	Input     lipgloss.Style
+	Selection lipgloss.Style
+	Progress  lipgloss.Style
+	Key       lipgloss.Style
+	Label     lipgloss.Style
 }
 
 // TypeNameModal renders 8b's type-the-name destructive confirm (docs/design
 // README.md §8b): title (+ a right-aligned PROD CONTEXT tag when prod), an
 // optional owner line ("Deployment/x — will be recreated"), a detail line
 // (grace period / force-delete hint), the type-ahead prompt with a block
-// cursor at the caret (see typedWithCursor) and "N/M" progress count, and
+// cursor at the caret and "N/M" progress count, and
 // the key row. ↵ only executes once
 // typed == target — screens gate that via actions.Controller.Confirm, this
 // component is purely presentational. actionVerb names the key row's verb
 // ("delete", "rollback", …) — 16b's rollout-undo reuses this same modal for
 // its own PROD confirm (docs/design README.md §16b) rather than "delete"
 // being hardcoded there.
-func TypeNameModal(title, ownerLine, detailLine, target, typed string, cursor int, actionVerb string, prod bool, styles TypeModalStyles, width, height int) string {
+func TypeNameModal(title, ownerLine, detailLine, target string, input textfield.Model, actionVerb string, prod bool, styles TypeModalStyles, width, height int) string {
 	titleLine := styles.Title.Render(title)
 
 	body := []string{}
@@ -95,8 +98,9 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed string, cursor in
 		body = append(body, styles.Detail.Render(detailLine))
 	}
 	body = append(body, "", styles.Detail.Render("type \""+target+"\" to confirm"))
-	body = append(body, typedWithCursor(typed, cursor, styles.Input)+"  "+
-		styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target))))
+	typed := input.Value()
+	progress := styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target)))
+	body = append(body, modalInputView(input, max(width-12-lipgloss.Width(progress), 1), styles)+"  "+progress)
 	keyLine := styles.Key.Render("↵") + styles.Label.Render(" "+actionVerb+" (when name matches)") + "   " +
 		styles.Key.Render("esc") + styles.Label.Render(" cancel")
 
@@ -122,7 +126,7 @@ func TypeNameModal(title, ownerLine, detailLine, target, typed string, cursor in
 // and the key row. ↵ only executes once typed == strconv of count — screens
 // gate that themselves (browse's updateBulkDeleteKey), this component is
 // purely presentational, same contract as TypeNameModal.
-func TypeCountModal(title, objectsLine, detailLine string, count int, typed string, cursor int, prod bool, styles TypeModalStyles, width, height int) string {
+func TypeCountModal(title, objectsLine, detailLine string, count int, input textfield.Model, prod bool, styles TypeModalStyles, width, height int) string {
 	target := strconv.Itoa(count)
 	titleLine := styles.Title.Render(title)
 
@@ -134,8 +138,9 @@ func TypeCountModal(title, objectsLine, detailLine string, count int, typed stri
 		body = append(body, styles.Detail.Render(detailLine))
 	}
 	body = append(body, "", styles.Detail.Render("type \""+target+"\" to confirm"))
-	body = append(body, typedWithCursor(typed, cursor, styles.Input)+"  "+
-		styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target))))
+	typed := input.Value()
+	progress := styles.Progress.Render(fmt.Sprintf("%d/%d", utf8.RuneCountInString(typed), utf8.RuneCountInString(target)))
+	body = append(body, modalInputView(input, max(width-12-lipgloss.Width(progress), 1), styles)+"  "+progress)
 	keyLine := styles.Key.Render("↵") + styles.Label.Render(" delete (when count matches)") + "   " +
 		styles.Key.Render("esc") + styles.Label.Render(" cancel")
 
@@ -152,23 +157,24 @@ func TypeCountModal(title, objectsLine, detailLine string, count int, typed stri
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
-// typedWithCursor renders the type-ahead buffer with a block cursor at
-// cursor (a rune index, from actions.Controller.TypedCursor). At the end of
-// the buffer the cursor is the appended "█" this modal has always drawn;
-// inside it, the character under the caret is drawn reverse-video instead —
-// a terminal block cursor — so left/right/Home/End/Ctrl-arrow motion and a
-// paste landing mid-buffer are visible rather than silent. Reverse is an SGR
-// attribute rather than a color, so this stays Theme-agnostic like the rest
-// of the component (and survives the 256-color degradation path, which only
-// remaps colors).
-func typedWithCursor(typed string, cursor int, input lipgloss.Style) string {
-	runes := []rune(typed)
-	if cursor < 0 || cursor >= len(runes) {
-		return input.Render(typed + "█")
+// modalInputView applies the confirmation modal's established solid-block
+// end cursor while retaining the shared field's navigation, viewport, and
+// selection behavior.
+func modalInputView(input textfield.Model, width int, styles TypeModalStyles) string {
+	// Preserve the modal's original single styled span in the common case;
+	// the shared renderer takes over as soon as selection or scrolling is
+	// needed.
+	if !input.HasSelection() && input.Position() == utf8.RuneCountInString(input.Value()) && lipgloss.Width(input.Value())+1 <= width {
+		return styles.Input.Render(input.Value() + "█")
 	}
-	return input.Render(string(runes[:cursor])) +
-		input.Reverse(true).Render(string(runes[cursor])) +
-		input.Render(string(runes[cursor+1:]))
+	input.EndOfBufferCharacter = '█'
+	input.SetStyles(textfield.Styles{
+		Focused:   textfield.StyleState{Text: styles.Input},
+		Blurred:   textfield.StyleState{Text: styles.Input},
+		Cursor:    styles.Input,
+		Selection: styles.Selection,
+	})
+	return input.ViewWidth(width)
 }
 
 // padBetween2 right-pads left so right lands at width — the title row's

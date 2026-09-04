@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -90,7 +90,7 @@ type Model struct {
 	offset int
 
 	searchActive bool
-	searchInput  textinput.Model
+	searchInput  textfield.Model
 
 	// conn is the last kube.ConnStateMsg forwarded by the root shell — the
 	// header badge's real connection state (never a hardcoded "live").

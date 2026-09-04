@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -103,8 +103,8 @@ type Model struct {
 	initialized bool // true once the first successful load has seeded the buffers
 	accepted    acceptedPair
 
-	scheduleInput textinput.Model
-	tzInput       textinput.Model
+	scheduleInput textfield.Model
+	tzInput       textfield.Model
 	tzFocused     bool
 
 	// Derived state, recomputed synchronously on every edit
@@ -199,8 +199,8 @@ func New(cfg Config) Model {
 // just keeps ticking), but it turns a test's synchronous cmd-draining
 // (cronjobschedule_test.go's step) into an infinite loop the same way
 // skipping this would for §36a's own recurring clock tick.
-func newScheduleInput(theme tui.Theme) textinput.Model {
-	ti := textinput.New()
+func newScheduleInput(theme tui.Theme) textfield.Model {
+	ti := textfield.New()
 	ti.Prompt = ""
 	ti.SetStyles(tui.TextInputStyles(theme))
 	return ti
@@ -216,8 +216,12 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)
 	m.width, m.height = size.Width, size.Height
-	m.scheduleInput.SetWidth(max(size.Width-40, 10))
-	m.tzInput.SetWidth(max(size.Width-40, 10))
+	// The previous Bubbles input rendered one cursor-reserved cell beyond
+	// SetWidth. Keep this screen's established field/note alignment while
+	// the shared text field itself uses strict viewport widths.
+	fieldWidth := max(size.Width-40, 10) + 1
+	m.scheduleInput.SetWidth(fieldWidth)
+	m.tzInput.SetWidth(fieldWidth)
 }
 
 // cronJobSnapshot is load()'s own minimal read of the fields this screen

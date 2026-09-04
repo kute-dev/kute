@@ -49,6 +49,25 @@ func TestPasteFillsPaletteQueryAndRefilters(t *testing.T) {
 	}
 }
 
+func TestPaletteSelectionIsReplacedByPaste(t *testing.T) {
+	t.Parallel()
+	model := tui.NewWithSession(&screenTask{name: "browse"}, gotoTestSession(gotoFakeLister{}))
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "g"})
+	for _, r := range "deployment" {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: string(r)})
+	}
+	for range 4 {
+		updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModShift})
+	}
+	updated, _ = updated.(tui.Model).Update(tea.PasteMsg{Content: "s"})
+
+	view := ansi.Strip(updated.(tui.Model).View().Content)
+	if !strings.Contains(view, "› deploys") {
+		t.Fatalf("paste did not replace the palette selection:\n%s", view)
+	}
+}
+
 // TestPasteWithPaletteOpenDoesNotReachTask is the negative that matters: the
 // root shell forwards anything it doesn't claim to the active task, so a
 // paste aimed at the palette would otherwise land in the filter box of the

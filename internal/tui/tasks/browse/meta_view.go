@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -117,10 +117,7 @@ func metaRowColumns(marker, key, value, note string, width int, fill lipgloss.St
 	// column can push the row wider than width, which the caller's own
 	// Pad(line, contentWidth) would then silently truncate from the right,
 	// clipping the note instead of the (already-truncated) value.
-	avail := max(width-markerWidth-colGap, 6)
-	keyWidth := min(36, avail*35/100)
-	noteWidth := min(30, avail*3/10)
-	valueWidth := max(avail-keyWidth-noteWidth, 1)
+	keyWidth, valueWidth, noteWidth := metaColumnWidths(width)
 
 	pad := func(s string, w int) string {
 		s = components.Truncate(s, w)
@@ -141,6 +138,15 @@ func metaRowColumns(marker, key, value, note string, width int, fill lipgloss.St
 	}
 	return pad(marker, markerWidth) + pad(key, keyWidth) + value +
 		fill.Render(strings.Repeat(" ", colGap)) + fill.Render(strings.Repeat(" ", notePad)) + note
+}
+
+func metaColumnWidths(width int) (keyWidth, valueWidth, noteWidth int) {
+	const markerWidth, colGap = 2, 2
+	avail := max(width-markerWidth-colGap, 6)
+	keyWidth = min(36, avail*35/100)
+	noteWidth = min(30, avail*3/10)
+	valueWidth = max(avail-keyWidth-noteWidth, 1)
+	return keyWidth, valueWidth, noteWidth
 }
 
 // metaRowLine renders one LABELS/ANNOTATIONS row (idx into t.labels or
@@ -184,7 +190,8 @@ func (m Model) metaRowLine(t *metaTarget, isAnnotation bool, idx int, theme tui.
 	var value string
 	switch {
 	case editing:
-		value = metaValueCell(r, theme, true)
+		_, valueWidth, _ := metaColumnWidths(width)
+		value = metaValueCell(r, theme, true, valueWidth)
 	case pendingConfirm && r.changed():
 		value = metaPendingValueCell(r, theme, selected)
 	case r.readOnly:
@@ -214,7 +221,7 @@ func displayOrDash(s string) string {
 // example ("was stage · staging▎"). selected is always true in practice
 // (metaRowLine only calls this for the selected+editing row) — kept as a
 // parameter so the withBg fallback below stays explicit rather than assumed.
-func metaValueCell(r metaRow, theme tui.Theme, selected bool) string {
+func metaValueCell(r metaRow, theme tui.Theme, selected bool, width int) string {
 	withBg := func(s lipgloss.Style) lipgloss.Style {
 		if selected {
 			return s.Background(theme.SelBg)
@@ -230,7 +237,11 @@ func metaValueCell(r metaRow, theme tui.Theme, selected bool) string {
 		styles.Blurred.Text = styles.Blurred.Text.Bold(true)
 		input.SetStyles(styles)
 	}
-	rendered := input.View()
+	prefixWidth := 0
+	if r.changed() {
+		prefixWidth = lipgloss.Width(was.Render("was " + displayOrDash(r.current) + " · "))
+	}
+	rendered := input.ViewWidth(max(width-prefixWidth, 1))
 	if r.changed() {
 		rendered = was.Render("was "+displayOrDash(r.current)+" · ") + rendered
 	}
@@ -286,28 +297,28 @@ func (m Model) metaAddRowLine(t *metaTarget, theme tui.Theme, width int) string 
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	keyCell := metaAddBufferCell(t.addKeyInput, dim)
-	valueCell := metaAddBufferCell(t.addValueInput, dim)
+	keyWidth, valueWidth, _ := metaColumnWidths(width)
+	keyCell := metaAddBufferCell(t.addKeyInput, dim, max(keyWidth-1, 1))
+	valueCell := metaAddBufferCell(t.addValueInput, dim, valueWidth)
 
 	marker := accent.Render("+ ")
 	kind := "label"
 	if t.adding == metaAddAnnotation {
 		kind = "annotation"
 	}
-	left := marker + keyCell + dim.Render("=") + valueCell
 	note := dim.Render("new " + kind)
-	return metaRowColumns("", left, "", note, width, lipgloss.NewStyle())
+	return metaRowColumns(marker, keyCell+dim.Render("="), valueCell, note, width, lipgloss.NewStyle())
 }
 
 // metaAddBufferCell renders one of the add-row's two buffers via its own
 // View (which embeds the cursor only while Focused) — the one case View()
 // doesn't already cover is an unfocused, empty buffer, which old code showed
 // as a dim "…" rather than nothing.
-func metaAddBufferCell(input textinput.Model, dim lipgloss.Style) string {
+func metaAddBufferCell(input textfield.Model, dim lipgloss.Style, width int) string {
 	if !input.Focused() && input.Value() == "" {
 		return dim.Render("…")
 	}
-	return input.View()
+	return input.ViewWidth(width)
 }
 
 // metaWillRunStrip is the panel's own "will run" line, styled like

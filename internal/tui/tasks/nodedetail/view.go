@@ -103,13 +103,13 @@ func (m Model) filterStripLine(theme tui.Theme, width int) string {
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + m.filterInput.View()
-
 	total, matched := len(m.allPods), len(m.pods)
 	right := dim.Render(fmt.Sprintf("%d/%d pods", matched, total))
 	if matched < total {
 		right = faint.Render(fmt.Sprintf("%d hidden by filter — esc to clear   ", total-matched)) + right
 	}
+	inputWidth := max(stripInnerWidth(width)-2-lipgloss.Width(right)-1, 1)
+	left := accent.Render("/ ") + m.filterInput.ViewWidth(inputWidth)
 	return insetStripLine(padBetween(left, right, stripInnerWidth(width)), width)
 }
 

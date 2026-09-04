@@ -604,7 +604,7 @@ func TestRootModelNamespaceSecondNTypesIntoQuery(t *testing.T) {
 	model := tui.NewWithSession(task, sess)
 	updated, _ := model.Update(tea.KeyPressMsg{Text: "n"})
 	// The typed keystroke now routes through the palette's embedded
-	// textinput.Model, whose Update legitimately returns a non-nil cursor-
+	// textfield.Model, whose Update legitimately returns a non-nil cursor-
 	// blink tea.Cmd on every keystroke — cmd != nil is no longer a valid
 	// proxy for "no toggle happened" (see inputstyles.go), so the assertion
 	// below checks the actual query text and that the palette stayed open

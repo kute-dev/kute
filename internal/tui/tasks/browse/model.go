@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -558,7 +558,7 @@ type Model struct {
 	sortAsc    bool
 
 	filterActive bool
-	filterInput  textinput.Model
+	filterInput  textfield.Model
 	// filterListFocused is true once a live filter has been committed
 	// (enter, unconditionally — see updateFilterKey) without clearing it:
 	// the query/chrome stay exactly as filterActive left them, but keys
@@ -794,7 +794,7 @@ func New(cfg Config) Model {
 	if cfg.Session != nil {
 		theme = cfg.Session.Theme
 	}
-	filterInput := textinput.New()
+	filterInput := textfield.New()
 	filterInput.SetStyles(tui.TextInputStyles(theme))
 	filterInput.Prompt = ""
 

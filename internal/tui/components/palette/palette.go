@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -175,7 +175,7 @@ type Model struct {
 	// its native Prompt stays empty since renderInputRow hand-renders the
 	// "›" prompt before it. Construct via NewInput(Scope), which also wires
 	// the scope-specific empty-query placeholder. Query() reads its value.
-	Input  textinput.Model
+	Input  textfield.Model
 	Items  []Item
 	Sel    int
 	Recent []string
@@ -235,15 +235,15 @@ func (m Model) Query() string {
 	return m.Input.Value()
 }
 
-// NewInput builds the textinput.Model for scope's query box: no native
+// NewInput builds the textfield.Model for scope's query box: no native
 // prompt (Render supplies its own "›" prompt ahead of it) and, when empty,
 // the scope-specific placeholder text that used to be a per-scope switch
 // inside renderInputRow — the goto scope keeps no placeholder ("a bare
 // cursor... the ranked list below is the affordance"). Callers must still
 // call SetStyles (built from Theme via tui.TextInputStyles, kept out of this
 // Theme-agnostic package) before Render.
-func NewInput(scope Scope) textinput.Model {
-	ti := textinput.New()
+func NewInput(scope Scope) textfield.Model {
+	ti := textfield.New()
 	ti.Prompt = ""
 	switch scope {
 	case ScopeNamespace:
@@ -276,7 +276,7 @@ type Styles struct {
 	Input  lipgloss.Style // bg-only BgInput: fill for the input band's pads/gaps
 	Prompt lipgloss.Style // "›" prompt, Accent bold
 	// Cursor/query text/placeholder for the input row itself render through
-	// Model.Input's own textinput.Styles (set via SetStyles), not through
+	// Model.Input's own textfield.Styles (set via SetStyles), not through
 	// this Styles struct — Placeholder below is only the "no matches"/
 	// loading-line style now.
 	Placeholder lipgloss.Style // TextFaint
@@ -464,21 +464,16 @@ func (m Model) renderInputRow(styles Styles, width int) string {
 	if prompt == "" {
 		prompt = "›"
 	}
-	// textinput.Model needs an explicit Width to render its placeholder past
-	// a single rune (Width defaults to 0, and its placeholderView allocates
-	// exactly Width()+1 runes of scratch space) — sized fresh every render
-	// to whatever's actually showing (value, else placeholder) rather than
-	// persisted, so a short typed query doesn't inherit a long placeholder's
-	// width and get padded with trailing blanks past the cursor.
 	input := m.Input
-	text := input.Value()
-	if text == "" {
-		text = input.Placeholder
-	}
-	input.SetWidth(max(lipgloss.Width(text), 1))
-	left := styles.Prompt.Render(prompt+" ") + input.View()
-
 	hint := styles.Hint.Render(m.Hint)
+	inputWidth := max(width-2-lipgloss.Width(prompt+" ")-lipgloss.Width(hint)-1, 1)
+	if input.Value() == "" {
+		inputWidth = max(inputWidth, lipgloss.Width(input.Placeholder))
+	}
+	left := styles.Prompt.Render(prompt+" ") + input.ViewWidth(inputWidth)
+	if input.Value() == "" {
+		left += styles.Input.Render(" ")
+	}
 	row := padBetweenStyled(left, hint, width-2, styles.Input)
 	return inset(row, width, styles.Input)
 }

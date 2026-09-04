@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -178,7 +178,8 @@ func (m Model) secretRowLine(theme tui.Theme, idx int, width int) string {
 	var value string
 	switch {
 	case isEditingNow:
-		value = m.editValueCell(theme)
+		_, valueWidth, _ := secretColumnWidths(width)
+		value = m.editValueCell(theme, valueWidth)
 	case isPendingEdit:
 		value = maskStyle.Render(secretDataMaskGlyph) + fill.Render("  ") + fill.Foreground(theme.Warn).Render("confirm to update · y/N")
 	case isPendingRemove:
@@ -196,7 +197,7 @@ func (m Model) secretRowLine(theme tui.Theme, idx int, width int) string {
 // row's own value entry, since editing a key needs to actually show what's
 // being changed (the user's own choice: "decode-then-edit", not a blind
 // rewrite).
-func (m Model) editValueCell(theme tui.Theme) string {
+func (m Model) editValueCell(theme tui.Theme, width int) string {
 	e := m.editing
 	accent := lipgloss.NewStyle().Foreground(theme.Accent).Background(theme.SelBg)
 	bold := lipgloss.NewStyle().Foreground(theme.Text).Bold(true).Background(theme.SelBg)
@@ -204,7 +205,7 @@ func (m Model) editValueCell(theme tui.Theme) string {
 	if e.masked {
 		return bold.Render(secretDataMaskGlyph) + accent.Render(tui.GlyphSelBar) + dim.Render(" · masked · M reveal")
 	}
-	return e.valueInput.View() + dim.Render(" · visible while editing · M re-mask")
+	return e.valueInput.ViewWidth(width) + dim.Render(" · visible while editing · M re-mask")
 }
 
 // pendingEditConfirm reports whether an existing key's PROD y/N is
@@ -233,7 +234,8 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 	good := lipgloss.NewStyle().Foreground(theme.Good).Background(theme.SelBg)
 
 	marker := good.Render("+") + fill.Render(" ")
-	key := secretBufferCell(a.keyInput, dim)
+	keyWidth, valueWidth, _ := secretColumnWidths(width)
+	key := secretBufferCell(a.keyInput, dim, keyWidth)
 
 	var valueCell string
 	var note string
@@ -245,7 +247,7 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 		}
 		note = dim.Render(" · masked · ctrl-x reveal")
 	default:
-		valueCell = secretBufferCell(a.valueInput, dim)
+		valueCell = secretBufferCell(a.valueInput, dim, valueWidth)
 		note = dim.Render(" · visible while typing · ctrl-x re-mask")
 	}
 	size := dim.Render("new")
@@ -257,11 +259,11 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 // metaAddBufferCell. The one case View() doesn't already cover is an
 // unfocused, empty buffer, which old code showed as a dim "…" rather than
 // nothing.
-func secretBufferCell(input textinput.Model, dim lipgloss.Style) string {
+func secretBufferCell(input textfield.Model, dim lipgloss.Style, width int) string {
 	if !input.Focused() && input.Value() == "" {
 		return dim.Render("…")
 	}
-	return input.View()
+	return input.ViewWidth(width)
 }
 
 // pendingAddRowLine renders the in-flight add row while its own PROD y/N
@@ -368,10 +370,7 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 // grid").
 func secretRowColumns(marker, key, value, size string, width int, fill lipgloss.Style) string {
 	const markerWidth, colGap = 2, 2
-	avail := max(width-markerWidth-colGap, 6)
-	keyWidth := min(28, avail*30/100)
-	sizeWidth := min(9, max(avail*8/100, 6))
-	valueWidth := max(avail-keyWidth-sizeWidth-colGap, 1)
+	keyWidth, valueWidth, sizeWidth := secretColumnWidths(width)
 
 	padLeft := func(s string, w int) string {
 		s = components.Truncate(s, w)
@@ -392,6 +391,15 @@ func secretRowColumns(marker, key, value, size string, width int, fill lipgloss.
 
 	return padLeft(marker, markerWidth) + padLeft(key, keyWidth) + padLeft(value, valueWidth) +
 		fill.Render(strings.Repeat(" ", colGap)) + padRight(size, sizeWidth)
+}
+
+func secretColumnWidths(width int) (keyWidth, valueWidth, sizeWidth int) {
+	const markerWidth, colGap = 2, 2
+	avail := max(width-markerWidth-colGap, 6)
+	keyWidth = min(28, avail*30/100)
+	sizeWidth = min(9, max(avail*8/100, 6))
+	valueWidth = max(avail-keyWidth-sizeWidth-colGap, 1)
+	return keyWidth, valueWidth, sizeWidth
 }
 
 // formatByteSize renders a decoded value's byte length the same "N B"/"N.N

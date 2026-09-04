@@ -5,19 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
-// testInput builds a focused textinput.Model with value pre-filled — the
+// testInput builds a focused textfield.Model with value pre-filled — the
 // test-only equivalent of what NewInput + SetStyles + typing would produce,
 // since Model.Input replaced the plain Query string field.
-func testInput(value string) textinput.Model {
-	ti := textinput.New()
+func testInput(value string) textfield.Model {
+	ti := textfield.New()
 	ti.SetValue(value)
 	ti.CursorEnd()
 	ti.Focus()

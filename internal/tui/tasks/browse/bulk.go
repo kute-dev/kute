@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -38,7 +38,7 @@ type bulkDeleteTarget struct {
 	// styled — this exists purely for HandleTypeKey-equivalent input
 	// handling (Home/End; paste arrives via pasteTarget), matching
 	// actions.Controller's own typedInput.
-	typedInput textinput.Model
+	typedInput textfield.Model
 }
 
 // bulkDeleteResultMsg carries a bulk delete's outcome — count is how many
@@ -145,7 +145,7 @@ func (m *Model) beginBulkDelete() tea.Cmd {
 	if m.kind == kube.KindCustomResourceDefinition {
 		tier = actions.TierModal
 	}
-	input := textinput.New()
+	input := textfield.New()
 	input.Prompt = ""
 	if tier == actions.TierModal {
 		input.Focus()
@@ -172,7 +172,7 @@ func (m *Model) updateBulkDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// Digits only, matching this field's count semantics — any
 			// keypress whose Text carries a non-digit rune is dropped,
 			// everything else (backspace, left/right, Home/End) reaches
-			// the textinput.
+			// the text field.
 			for _, r := range msg.Text {
 				if r < '0' || r > '9' {
 					return m, nil
@@ -302,16 +302,17 @@ func (m Model) bulkDeleteConfirmModal(width, height int) string {
 	objectsLine := wrapLabels(bulkObjectLabels(t.rows, uniform), 56)
 
 	styles := components.TypeModalStyles{
-		Border:   lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
-		Title:    lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
-		ProdTag:  lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
-		Owner:    lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
-		Detail:   lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
-		Rule:     lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
-		Input:    lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
-		Progress: lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
-		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
-		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
+		Border:    lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
+		Title:     lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
+		ProdTag:   lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
+		Owner:     lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
+		Detail:    lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
+		Rule:      lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
+		Input:     lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
+		Selection: lipgloss.NewStyle().Foreground(theme.Bg).Background(theme.Accent),
+		Progress:  lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
+		Key:       lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
+		Label:     lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedInput.Value(), t.typedInput.Position(), m.isProd(), styles, width, height)
+	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, t.typedInput, m.isProd(), styles, width, height)
 }

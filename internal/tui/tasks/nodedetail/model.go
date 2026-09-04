@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -170,7 +170,7 @@ type Model struct {
 	offset   int
 
 	filterActive bool
-	filterInput  textinput.Model
+	filterInput  textfield.Model
 
 	// reloadEpoch guards a debounced reload-on-still-syncing retry (see
 	// CacheSyncChecker/scheduleReload in load.go) against a stale reply

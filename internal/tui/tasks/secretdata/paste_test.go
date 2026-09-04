@@ -1,6 +1,7 @@
 package secretdata
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -32,6 +33,31 @@ func TestPasteIntoAddRowBuffers(t *testing.T) {
 
 	if _, cmd := m.Update(tea.KeyPressMsg{Mod: tea.ModCtrl, Code: 'v'}); cmd == nil {
 		t.Fatal("ctrl+v with the add row open returned no cmd, want the clipboard read")
+	}
+}
+
+func TestLongEditScrollsWithCursorAndSelectionReplaces(t *testing.T) {
+	value := strings.Repeat("prefix-", 8) + "visible-tail"
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"DATABASE_URL": []byte(value)})
+	m := newModel(t, newSession(), secret, &fakeMutator{secret: secret})
+
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if m.editing == nil {
+		t.Fatal("expected edit buffer")
+	}
+	if got := plain(m.editing.valueInput.ViewWidth(14)); !strings.Contains(got, "visible-tail") {
+		t.Fatalf("cursor-end viewport %q does not show the tail", got)
+	}
+
+	for range 4 {
+		m = step(t, m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModShift})
+	}
+	if got := m.editing.valueInput.SelectedText(); got != "tail" {
+		t.Fatalf("selected text = %q, want tail", got)
+	}
+	m = step(t, m, tea.PasteMsg{Content: "value"})
+	if got := m.editing.valueInput.Value(); got != strings.TrimSuffix(value, "tail")+"value" {
+		t.Fatalf("paste did not replace selection: %q", got)
 	}
 }
 

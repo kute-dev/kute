@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -32,7 +32,7 @@ type scaleTarget struct {
 	name      string
 	// input is the typed-ahead replica count, pre-filled to current±1 by
 	// beginScale.
-	input textinput.Model
+	input textfield.Model
 	// typed is true once a digit or backspace has touched input, so the
 	// next digit appends instead of replacing the prefill (docs/design
 	// README.md §17b: "typing a number replaces it").
@@ -115,7 +115,7 @@ func (m *Model) beginScale(delta int32) bool {
 		return false
 	}
 	value := max(currentReplicas(row)+delta, 0)
-	input := textinput.New()
+	input := textfield.New()
 	input.SetStyles(tui.TextInputStyles(m.Theme()))
 	input.Prompt = ""
 	input.SetValue(strconv.Itoa(int(value)))

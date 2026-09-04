@@ -435,18 +435,19 @@ func (m Model) replaceConfirmModal(width, height int) string {
 		detail = jobReplaceWillRunLine(pending.Scope)
 	}
 	styles := components.TypeModalStyles{
-		Border:   lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
-		Title:    lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
-		ProdTag:  lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
-		Owner:    lipgloss.NewStyle().Foreground(theme.Good).Background(theme.ConfirmHeaderBg),
-		Detail:   lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
-		Rule:     lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
-		Input:    lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
-		Progress: lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
-		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
-		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
+		Border:    lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
+		Title:     lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
+		ProdTag:   lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
+		Owner:     lipgloss.NewStyle().Foreground(theme.Good).Background(theme.ConfirmHeaderBg),
+		Detail:    lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
+		Rule:      lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
+		Input:     lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
+		Selection: lipgloss.NewStyle().Foreground(theme.Bg).Background(theme.Accent),
+		Progress:  lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
+		Key:       lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
+		Label:     lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", detail, target, m.actions.TypedName(), m.actions.TypedCursor(), "replace", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", detail, target, m.actions.TypedInput(), "replace", m.isProd(), styles, width, height)
 }
 
 // shortAge/shortDur mirror resources.shortAge's compact "12m"/"3h"/"5d"

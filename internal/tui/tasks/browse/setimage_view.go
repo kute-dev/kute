@@ -156,20 +156,34 @@ func (m Model) setImageFieldLine(t *setImageTarget, theme tui.Theme, width int) 
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
 
-	left := accent.Render("image ›") + " "
-	if !t.fullRef {
-		left += dim.Render(t.repo + ":")
-	}
-	left += t.input.View()
-
-	// §24a's "same image" message belongs to the will-run strip below (the
-	// surface that normally names the exact kubectl command) — this field
-	// row's own right note always names the editing mode.
+	prompt := accent.Render("image ›") + " "
 	note := "editing tag · ctrl-e edit full ref"
 	if t.fullRef {
 		note = "editing full ref"
 	}
-	return padBetween(left, faint.Render(note), width)
+	renderedNote := faint.Render(note)
+	available := max(width-lipgloss.Width(prompt), 1)
+
+	// Give the value first claim on the row. At narrow widths an editing
+	// hint is less useful than seeing the current value and caret; once the
+	// whole field fits, show the hint only when it also fits in full.
+	naturalInput := t.input.ViewWidth(lipgloss.Width(t.input.Value()) + 1)
+	naturalInputWidth := lipgloss.Width(naturalInput)
+	prefix := ""
+	if !t.fullRef {
+		prefixBudget := min(lipgloss.Width(t.repo+":"), max(available-min(naturalInputWidth, available), 1))
+		prefix = dim.Render(components.Truncate(t.repo+":", prefixBudget))
+	}
+	inputWidth := max(available-lipgloss.Width(prefix), 1)
+	left := prompt + prefix + t.input.ViewWidth(inputWidth)
+	if width-lipgloss.Width(left) <= lipgloss.Width(renderedNote) {
+		renderedNote = ""
+	}
+
+	// §24a's "same image" message belongs to the will-run strip below (the
+	// surface that normally names the exact kubectl command) — this field
+	// row's own right note always names the editing mode.
+	return padBetween(left, renderedNote, width)
 }
 
 // setImageHistoryHeaderLine is the TAG · SEEN · FROM column header — a

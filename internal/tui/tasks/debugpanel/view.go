@@ -96,18 +96,19 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 		target = pending.Scope.ResourceName
 	}
 	styles := components.TypeModalStyles{
-		Border:   lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
-		Title:    lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
-		ProdTag:  lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
-		Owner:    lipgloss.NewStyle().Foreground(theme.Good).Background(theme.ConfirmHeaderBg),
-		Detail:   lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
-		Rule:     lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
-		Input:    lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
-		Progress: lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
-		Key:      lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
-		Label:    lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
+		Border:    lipgloss.NewStyle().BorderForeground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
+		Title:     lipgloss.NewStyle().Foreground(theme.Bad).Bold(true).Background(theme.ConfirmHeaderBg),
+		ProdTag:   lipgloss.NewStyle().Foreground(theme.ProdText).Bold(true).Background(theme.ConfirmHeaderBg),
+		Owner:     lipgloss.NewStyle().Foreground(theme.Good).Background(theme.ConfirmHeaderBg),
+		Detail:    lipgloss.NewStyle().Foreground(theme.TextSecondary).Background(theme.ConfirmHeaderBg),
+		Rule:      lipgloss.NewStyle().Foreground(theme.TextGhost).Background(theme.ConfirmHeaderBg),
+		Input:     lipgloss.NewStyle().Foreground(theme.Text).Background(theme.ConfirmHeaderBg),
+		Selection: lipgloss.NewStyle().Foreground(theme.Bg).Background(theme.Accent),
+		Progress:  lipgloss.NewStyle().Foreground(theme.TextFaint).Background(theme.ConfirmHeaderBg),
+		Key:       lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
+		Label:     lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeNameModal(title, "", "", target, m.actions.TypedName(), m.actions.TypedCursor(), "delete", m.isProd(), styles, width, height)
+	return components.TypeNameModal(title, "", "", target, m.actions.TypedInput(), "delete", m.isProd(), styles, width, height)
 }
 
 // panelContent builds the panel body: header, mode selector (pod target
@@ -225,7 +226,8 @@ func (m Model) fieldRow(theme tui.Theme, label string, field fieldID, staticValu
 	left := "  " + labelStyle.Render(padRight(label, labelWidth))
 	var value string
 	if field != fieldNone && m.editingField == field {
-		value = valueStyle.Render(m.editInput.View())
+		inputWidth := max(m.width-lipgloss.Width(left)-lipgloss.Width(hint)-4, 1)
+		value = valueStyle.Render(m.editInput.ViewWidth(inputWidth))
 	} else {
 		value = valueStyle.Render(staticValue)
 	}

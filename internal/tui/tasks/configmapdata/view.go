@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -198,7 +198,8 @@ func (m Model) configMapRowLine(theme tui.Theme, idx int, width int) string {
 	var value string
 	switch {
 	case isEditingNow:
-		value = m.editValueCell(theme, fill)
+		_, valueWidth, _ := configMapColumnWidths(width)
+		value = m.editValueCell(theme, fill, valueWidth)
 	case isPendingEdit:
 		value = valueStyle.Render(components.Truncate(oneLine(r.value), 24)) + fill.Render("  ") + fill.Foreground(theme.Warn).Render("confirm to update · y/N")
 	case isPendingRemove:
@@ -216,11 +217,11 @@ func (m Model) configMapRowLine(theme tui.Theme, idx int, width int) string {
 // editValueCell renders '↵'s single-line in-place edit buffer — "was
 // <original> · <live buffer>" per docs/design README.md §27a ("prior value
 // stays visible as `was info ·` while typing").
-func (m Model) editValueCell(theme tui.Theme, fill lipgloss.Style) string {
+func (m Model) editValueCell(theme tui.Theme, fill lipgloss.Style, width int) string {
 	e := m.editing
 	dim := fill.Foreground(theme.TextDim)
 	was := dim.Render("was " + components.Truncate(oneLine(e.original), 20) + " · ")
-	return was + e.valueInput.View()
+	return was + e.valueInput.ViewWidth(max(width-lipgloss.Width(was), 1))
 }
 
 // pendingEditConfirm reports whether an existing key's PROD y/N is currently
@@ -259,8 +260,9 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 	good := fill.Foreground(theme.Good)
 
 	marker := good.Render("+") + fill.Render(" ")
-	key := addBufferCell(a.keyInput, dim)
-	value := addBufferCell(a.valueInput, dim)
+	keyWidth, valueWidth, _ := configMapColumnWidths(width)
+	key := addBufferCell(a.keyInput, dim, keyWidth)
+	value := addBufferCell(a.valueInput, dim, valueWidth)
 	size := dim.Render("new")
 	return configMapRowColumns(marker, key, value, size, width, fill)
 }
@@ -270,11 +272,11 @@ func (m Model) addRowLine(theme tui.Theme, width int) string {
 // secretBufferCell. The one case View() doesn't already cover is an
 // unfocused, empty buffer, which old code showed as a dim "…" rather than
 // nothing.
-func addBufferCell(input textinput.Model, dim lipgloss.Style) string {
+func addBufferCell(input textfield.Model, dim lipgloss.Style, width int) string {
 	if !input.Focused() && input.Value() == "" {
 		return dim.Render("…")
 	}
-	return input.View()
+	return input.ViewWidth(width)
 }
 
 // pendingAddRowLine renders the in-flight add row while its own PROD y/N
@@ -439,10 +441,7 @@ func oneLine(s string) string {
 // local per the repo's duplication-over-cross-package-coupling convention).
 func configMapRowColumns(marker, key, value, size string, width int, fill lipgloss.Style) string {
 	const markerWidth, colGap = 2, 2
-	avail := max(width-markerWidth-colGap, 6)
-	keyWidth := min(28, avail*30/100)
-	sizeWidth := min(9, max(avail*8/100, 6))
-	valueWidth := max(avail-keyWidth-sizeWidth-colGap, 1)
+	keyWidth, valueWidth, sizeWidth := configMapColumnWidths(width)
 
 	padLeft := func(s string, w int) string {
 		s = components.Truncate(s, w)
@@ -463,6 +462,15 @@ func configMapRowColumns(marker, key, value, size string, width int, fill lipglo
 
 	return padLeft(marker, markerWidth) + padLeft(key, keyWidth) + padLeft(value, valueWidth) +
 		fill.Render(strings.Repeat(" ", colGap)) + padRight(size, sizeWidth)
+}
+
+func configMapColumnWidths(width int) (keyWidth, valueWidth, sizeWidth int) {
+	const markerWidth, colGap = 2, 2
+	avail := max(width-markerWidth-colGap, 6)
+	keyWidth = min(28, avail*30/100)
+	sizeWidth = min(9, max(avail*8/100, 6))
+	valueWidth = max(avail-keyWidth-sizeWidth-colGap, 1)
+	return keyWidth, valueWidth, sizeWidth
 }
 
 // formatByteSize renders a value's byte length the same "N B"/"N.N KiB"

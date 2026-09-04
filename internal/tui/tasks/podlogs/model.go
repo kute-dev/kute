@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -150,7 +150,7 @@ type Model struct {
 	streamID     int
 
 	filterActive bool
-	filterInput  textinput.Model
+	filterInput  textfield.Model
 
 	// rowCounts is the layout index: how many physical rows each entry in
 	// buffer.Entries occupies, 0 for an entry the '/' filter hides. It exists

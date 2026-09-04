@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -62,7 +62,7 @@ type resourceField struct {
 	// wholesale buffer replacement (prefill, nudge, unset) parks the cursor
 	// at the end via setBuffer — the same convention setImageTarget.setBuffer
 	// uses.
-	input textinput.Model
+	input textfield.Model
 	// unset is true after 'u' — an explicit removal (buffer is "" in this
 	// state too, but unset renders "— none" in yellow rather than blocking
 	// as an empty/invalid quantity would).
@@ -266,7 +266,7 @@ func newResourceFields(res corev1.ResourceRequirements, theme tui.Theme) [4]reso
 			current = q.String()
 		}
 		f := resourceField{label: label, isCPU: isCPU, isLimit: isLimit, hasCurrent: has, current: current}
-		f.input = textinput.New()
+		f.input = textfield.New()
 		f.input.Prompt = ""
 		f.input.SetStyles(styles)
 		f.setBuffer(current)

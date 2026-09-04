@@ -1,8 +1,8 @@
 package forwardpicker
 
 import (
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -96,10 +96,10 @@ func (m Model) editing() bool {
 func (m *Model) beginEdit(firstDigit string) {
 	row := &m.rows[m.selected]
 	row.editing = true
-	row.editInput = textinput.New()
+	row.editInput = textfield.New()
 	// Editing only ever happens on the selected row, so the typed digits
 	// render on the same SelBg highlight as the rest of the row — the same
-	// textinput-on-SelBg treatment tasks/secretdata applies (secretdata
+	// text-field-on-SelBg treatment tasks/secretdata applies (secretdata
 	// model.go).
 	styles := tui.TextInputStyles(m.Theme())
 	styles.Focused.Text = styles.Focused.Text.Background(m.Theme().SelBg)
@@ -124,7 +124,7 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Digits only, matching this field's port-number semantics — any
 		// keypress whose Text carries a non-digit rune is dropped rather than
 		// forwarded, everything else (backspace, left/right, Home/End,
-		// Ctrl-arrow word-jump) reaches the textinput. A pasted value gets the
+		// Ctrl-arrow word-jump) reaches the text field. A pasted value gets the
 		// same rule from pasteTarget's tui.PasteDigits.
 		for _, r := range msg.Text {
 			if r < '0' || r > '9' {

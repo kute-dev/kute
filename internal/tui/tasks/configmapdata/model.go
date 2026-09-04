@@ -43,8 +43,8 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -81,11 +81,11 @@ type configMapKeyRow struct {
 // line keys show a folded summary ... e opens the buffer editor").
 func (r configMapKeyRow) multiline() bool { return strings.Contains(r.value, "\n") }
 
-// configMapInputStyles builds the add/edit buffers' textinput.Styles: bold
+// configMapInputStyles builds the add/edit buffers' textfield.Styles: bold
 // text on a SelBg background, matching this screen's own fill :=
 // ...SelBg used throughout view.go for both the add row and the in-place
 // edit row.
-func configMapInputStyles(theme tui.Theme) textinput.Styles {
+func configMapInputStyles(theme tui.Theme) textfield.Styles {
 	styles := tui.TextInputStyles(theme)
 	styles.Focused.Text = styles.Focused.Text.Bold(true).Background(theme.SelBg)
 	styles.Blurred.Text = styles.Blurred.Text.Bold(true).Background(theme.SelBg)
@@ -96,8 +96,8 @@ func configMapInputStyles(theme tui.Theme) textinput.Styles {
 // No masked field: unlike 27b's Secret add row, a ConfigMap value is never
 // sensitive, so there's nothing to hide while typing.
 type addKeyState struct {
-	keyInput   textinput.Model
-	valueInput textinput.Model
+	keyInput   textfield.Model
+	valueInput textfield.Model
 	onValue    bool
 }
 
@@ -107,7 +107,7 @@ type addKeyState struct {
 type editKeyState struct {
 	key        string
 	original   string
-	valueInput textinput.Model
+	valueInput textfield.Model
 }
 
 func (e editKeyState) changed() bool { return e.valueInput.Value() != e.original }

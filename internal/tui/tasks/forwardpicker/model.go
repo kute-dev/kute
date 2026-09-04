@@ -16,8 +16,8 @@ import (
 	"strconv"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -46,7 +46,7 @@ type portRow struct {
 	// README.md §13a: "8080 busy → 18080") — 0 when no bump was needed.
 	busyFrom  int
 	editing   bool
-	editInput textinput.Model
+	editInput textfield.Model
 }
 
 type Model struct {

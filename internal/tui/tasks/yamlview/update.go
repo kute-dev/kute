@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -139,7 +139,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case verbs.Filter.Key:
 		m.searchActive = true
-		m.searchInput = textinput.New()
+		m.searchInput = textfield.New()
 		m.searchInput.SetStyles(tui.TextInputStyles(m.Theme()))
 		m.searchInput.Prompt = ""
 		m.searchInput.Focus()

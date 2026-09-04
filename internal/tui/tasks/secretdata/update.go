@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -18,7 +18,7 @@ import (
 // focusedAddInput returns whichever of the add row's two buffers currently
 // has focus, per a.onValue — shared by pasteTarget and updateAddKey's own
 // default case.
-func (a *addKeyState) focusedInput() *textinput.Model {
+func (a *addKeyState) focusedInput() *textfield.Model {
 	if a.onValue {
 		return &a.valueInput
 	}

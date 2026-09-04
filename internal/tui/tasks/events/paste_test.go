@@ -44,7 +44,7 @@ func TestPasteOutsideFilterIsIgnored(t *testing.T) {
 }
 
 // TestPasteChordRequestsClipboard: ctrl+v with the filter open answers with
-// the clipboard read rather than being swallowed by the textinput.
+// the clipboard read rather than being swallowed by the text field.
 func TestPasteChordRequestsClipboard(t *testing.T) {
 	events := []kube.Event{
 		{Type: "Warning", Reason: "BackOff", Object: "Pod/worker-0", Message: "restarting", Count: 1, LastSeen: time.Now()},

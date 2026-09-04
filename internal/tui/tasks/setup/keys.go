@@ -3,8 +3,8 @@ package setup
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/verbs"
@@ -56,7 +56,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) startEdit() {
 	m.editing = true
-	m.pathInput = textinput.New()
+	m.pathInput = textfield.New()
 	m.pathInput.SetStyles(tui.TextInputStyles(m.Theme()))
 	m.pathInput.Prompt = ""
 	m.pathInput.SetValue(m.kubeconfigPath)

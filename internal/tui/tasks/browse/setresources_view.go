@@ -231,7 +231,7 @@ func (m Model) setResourcesNewCell(f resourceField, selected bool, theme tui.The
 	styles.Focused.Placeholder = style
 	input.SetStyles(styles)
 	input.Placeholder = "—" // an empty, untouched buffer still needs a placeholder before the cursor
-	return input.View()
+	return input.ViewWidth(14)
 }
 
 // usageCell renders the P95 USAGE column: a MiniBar + compact usage value

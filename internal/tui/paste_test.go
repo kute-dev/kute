@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 )
 
 // TestRoutePasteDeliveryPaths pins the three ways a paste reaches a screen,
@@ -75,7 +75,7 @@ func TestRoutePasteDeliveryPaths(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			in := textinput.New()
+			in := textfield.New()
 			in.Focus()
 			target := PasteInto(&in)
 			if tc.noTarget {
@@ -99,7 +99,7 @@ func TestRoutePasteDeliveryPaths(t *testing.T) {
 // than replacing the buffer, and that a single-line field flattens the
 // newline a pasted value usually carries.
 func TestPasteIntoInsertsAtCursor(t *testing.T) {
-	in := textinput.New()
+	in := textfield.New()
 	in.Focus()
 	in.SetValue("ab")
 	in.SetCursor(1)
@@ -133,7 +133,7 @@ func TestPasteDigits(t *testing.T) {
 		{paste: "   ", want: ""},
 	}
 	for _, tc := range tests {
-		in := textinput.New()
+		in := textfield.New()
 		in.Focus()
 		PasteDigits(PasteInto(&in))(tc.paste)
 		if got := in.Value(); got != tc.want {

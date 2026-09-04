@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -181,7 +181,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case verbs.Filter.Key:
 		if m.stream != StreamLoading {
 			m.filterActive = true
-			m.filterInput = textinput.New()
+			m.filterInput = textfield.New()
 			m.filterInput.SetStyles(tui.TextInputStyles(m.Theme()))
 			m.filterInput.Prompt = ""
 			m.filterInput.Focus()

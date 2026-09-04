@@ -436,7 +436,7 @@ func (m Model) Screen() string {
 
 // Theme returns the session's active theme, or Dark() before a session is
 // wired in (openPalette and friends need a Theme to style their embedded
-// textinput.Model even in that window).
+// textfield.Model even in that window).
 func (m Model) Theme() Theme {
 	if m.session == nil {
 		return Dark()
@@ -1124,7 +1124,7 @@ func recentPickHint() []palette.FooterSpan {
 }
 
 // typeKey routes a keypress that isn't one of the palette's own chords into
-// the query box's textinput.Model — this is where backspace, left/right,
+// the query box's textfield.Model — this is where backspace, left/right,
 // Home/End and Ctrl-arrow word-jump arrive for free (paste does not — see
 // pasteQuery, since a bracketed paste is never a keypress) — then
 // re-filters, common to every scope's default typing/editing path.

@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +72,7 @@ type setImageTarget struct {
 	// replacement (container switch, ctrl-e toggle, a history pick) parks
 	// the cursor at the end via setBuffer, same as scale.go's prompt always
 	// leaving the cursor ready to append/backspace.
-	input      textinput.Model
+	input      textfield.Model
 	fullRef    bool
 	history    []imageHistoryEntry
 	historyIdx int // -1 = nothing picked/matched
@@ -192,7 +192,7 @@ func (m *Model) buildSetImageTarget(kind kube.ResourceKind, namespace, name stri
 	if err == nil {
 		created = acc.GetCreationTimestamp().Time
 	}
-	input := textinput.New()
+	input := textfield.New()
 	input.Prompt = ""
 	styles := tui.TextInputStyles(m.Theme())
 	styles.Focused.Text = styles.Focused.Text.Bold(true)

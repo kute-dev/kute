@@ -643,6 +643,7 @@ Rules that hold in both themes:
 - Red borders (`ConfirmBorder`) remain reserved exclusively for destructive confirms.
 - Mode pills by hue: purple = normal modes · blue = ALL NS · red = OFFLINE/CONFIRM · gray = SETUP. Pill bg = the theme's tinted surface, pill text = the hue's text token.
 - Selection cue = 1-cell accent bar + `SelBg` row background — verify it in both themes; the bar is the primary cue.
+- Text fields horizontally scroll to keep the caret visible. `shift+←/→`, `ctrl/alt+shift+←/→`, and `shift+home/end` select text; typing or paste replaces it, backspace/delete removes it, and `ctrl+shift+c` copies it when the terminal forwards that chord. In-field selection uses `Accent` behind `Bg` text so it stays distinct even inside a `SelBg` row. A masked Secret field never reveals the selected span's length.
 - 4a desaturation: each theme defines its own muted ramp (dark: dim the colors; light: wash toward gray) — don't compute it, declare it in the struct.
 - Test on a real light terminal and on 256-color fallback; hex values degrade via termenv.
 

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -18,7 +18,7 @@ import (
 // focusedInput returns whichever of the add row's two buffers currently has
 // focus, per a.onValue — shared by pasteTarget and updateAddKey's own default
 // case.
-func (a *addKeyState) focusedInput() *textinput.Model {
+func (a *addKeyState) focusedInput() *textfield.Model {
 	if a.onValue {
 		return &a.valueInput
 	}
@@ -157,11 +157,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case verbs.AddConfigMapKey.Key, "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
-			keyInput := textinput.New()
+			keyInput := textfield.New()
 			keyInput.Prompt = ""
 			keyInput.SetStyles(configMapInputStyles(theme))
 			keyInput.Focus()
-			valueInput := textinput.New()
+			valueInput := textfield.New()
 			valueInput.Prompt = ""
 			valueInput.SetStyles(configMapInputStyles(theme))
 			m.adding = &addKeyState{keyInput: keyInput, valueInput: valueInput}
@@ -201,7 +201,7 @@ func (m *Model) beginEditRow(row configMapKeyRow) {
 		m.multiline = newMultilineEditState(row.key, row.value, m.Theme())
 		return
 	}
-	valueInput := textinput.New()
+	valueInput := textfield.New()
 	valueInput.Prompt = ""
 	valueInput.SetStyles(configMapInputStyles(m.Theme()))
 	valueInput.SetValue(row.value)
@@ -422,7 +422,7 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 			if strings.Contains(pc.value, "\n") || strings.Contains(pc.original, "\n") {
 				m.multiline = newMultilineEditState(pc.key, pc.value, m.Theme())
 			} else {
-				valueInput := textinput.New()
+				valueInput := textfield.New()
 				valueInput.Prompt = ""
 				valueInput.SetStyles(configMapInputStyles(m.Theme()))
 				valueInput.SetValue(pc.value)
@@ -432,12 +432,12 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 			}
 		default:
 			theme := m.Theme()
-			keyInput := textinput.New()
+			keyInput := textfield.New()
 			keyInput.Prompt = ""
 			keyInput.SetStyles(configMapInputStyles(theme))
 			keyInput.SetValue(pc.key)
 			keyInput.CursorEnd()
-			valueInput := textinput.New()
+			valueInput := textfield.New()
 			valueInput.Prompt = ""
 			valueInput.SetStyles(configMapInputStyles(theme))
 			valueInput.SetValue(pc.value)

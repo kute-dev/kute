@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/atotto/clipboard"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 )
 
 // PasteTarget receives pasted text. Screens build one with PasteInto (or
@@ -21,15 +21,15 @@ type PasteTarget func(string)
 //   - The returned closure holds the pointer, so a resolver that builds one
 //     must be on a pointer receiver — a value receiver's copy would take the
 //     insert away with it.
-//   - in must be the *focused* buffer: textinput.Update returns early when
+//   - in must be the *focused* buffer: textfield.Update returns early when
 //     blurred, so pointing this at an open-but-blurred field drops the paste
 //     with no error anywhere.
-func PasteInto(in *textinput.Model) PasteTarget {
+func PasteInto(in *textfield.Model) PasteTarget {
 	if in == nil {
 		return nil
 	}
 	return func(s string) {
-		// Delegated, never reimplemented: textinput's own tea.PasteMsg path
+		// Delegated, never reimplemented: textfield's own tea.PasteMsg path
 		// sanitizes the content for a single-line field (tabs and the newline
 		// a pasted value usually carries collapse to spaces) and handles
 		// CharLimit. The Cmd it returns is dropped because on this path it

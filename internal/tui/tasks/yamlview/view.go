@@ -107,8 +107,9 @@ func (m Model) searchStripLine(theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
-	left := accent.Render("/ ") + m.searchInput.View()
 	right := dim.Render(strconv.Itoa(searchMatchCount(m.rendered(), m.searchInput.Value())) + " matches")
+	inputWidth := max(width-2-lipgloss.Width(right)-1, 1)
+	left := accent.Render("/ ") + m.searchInput.ViewWidth(inputWidth)
 	return padBetween(left, right, width)
 }
 

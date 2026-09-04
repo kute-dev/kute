@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
@@ -89,7 +89,7 @@ type Controller struct {
 	// HandleTypeKey gets Home/End/Ctrl-arrow word-jump for free instead of
 	// hand-rolling a 10th implementation. Paste reaches it through
 	// PasteTarget, not from here: a bracketed paste is never a keypress.
-	typedInput textinput.Model
+	typedInput textfield.Model
 	// forceArmed stages a pending TierInline Pod "delete" for force-delete
 	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
 	// escalation: staged rather than immediate, so a second "y" is still
@@ -145,6 +145,11 @@ func (c Controller) TypedName() string { return c.typedInput.Value() }
 // landing mid-buffer are visible rather than silent.
 func (c Controller) TypedCursor() int { return c.typedInput.Position() }
 
+// TypedInput returns a value copy for the type-confirmation modal. The shared
+// field is value-backed, so the component can apply modal-specific styles and
+// a render width without mutating controller state.
+func (c Controller) TypedInput() textfield.Model { return c.typedInput }
+
 // NameMatches reports whether TypedName equals the pending action's target
 // resource name — the gate Confirm() checks for TierModal.
 func (c Controller) NameMatches() bool {
@@ -178,7 +183,7 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 	}
 	c.pending = &action
 	c.tier = tier
-	c.typedInput = textinput.New()
+	c.typedInput = textfield.New()
 	c.typedInput.Focus()
 	c.forceArmed = false
 	c.message = ""

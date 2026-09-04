@@ -5,13 +5,23 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 )
 
 // modalStyles is a colorless stand-in for the TypeModalStyles every screen
 // builds from its Theme — these tests care about where the caret lands, not
 // which token paints it.
 func modalStyles() TypeModalStyles {
-	return TypeModalStyles{Input: lipgloss.NewStyle()}
+	return TypeModalStyles{Input: lipgloss.NewStyle(), Selection: lipgloss.NewStyle().Reverse(true)}
+}
+
+func modalInput(value string, cursor int) textfield.Model {
+	in := textfield.New()
+	in.SetValue(value)
+	in.SetCursor(cursor)
+	in.Focus()
+	return in
 }
 
 // inputLine returns the modal's type-ahead row — the only line carrying both
@@ -27,15 +37,10 @@ func inputLine(t *testing.T, rendered string) string {
 	return ""
 }
 
-// TestTypedWithCursorAtEndKeepsTrailingBlock pins the look this modal has
-// always had when the caret sits past the last rune: a "█" appended to the
-// buffer. Every existing golden fixture renders this branch.
-func TestTypedWithCursorAtEndKeepsTrailingBlock(t *testing.T) {
-	plain := lipgloss.NewStyle()
-	for _, cursor := range []int{5, 6, -1} {
-		if got := typedWithCursor("api-0", cursor, plain); got != "api-0█" {
-			t.Errorf("typedWithCursor(cursor=%d) = %q, want %q", cursor, got, "api-0█")
-		}
+func TestModalInputAtEndKeepsTrailingBlock(t *testing.T) {
+	got := modalInputView(modalInput("api-0", 5), 20, modalStyles())
+	if !strings.Contains(got, "api-0█") {
+		t.Errorf("expected a trailing block cursor in %q", got)
 	}
 }
 
@@ -44,9 +49,8 @@ func TestTypedWithCursorAtEndKeepsTrailingBlock(t *testing.T) {
 // drawn reverse-video and no "█" is appended. Before, "█" was hardcoded to
 // the end of the string, so left/right/Home/End moved the real caret while
 // the rendered one never budged.
-func TestTypedWithCursorInsideReversesCaretRune(t *testing.T) {
-	plain := lipgloss.NewStyle()
-	got := typedWithCursor("api-0", 2, plain)
+func TestModalInputInsideReversesCaretRune(t *testing.T) {
+	got := modalInputView(modalInput("api-0", 2), 20, modalStyles())
 
 	if strings.Contains(got, "█") {
 		t.Errorf("caret inside the buffer should not also append a block: %q", got)
@@ -64,7 +68,7 @@ func TestTypedWithCursorInsideReversesCaretRune(t *testing.T) {
 	} else if !strings.HasSuffix(before, "ap") || !strings.HasPrefix(after, "i") {
 		t.Errorf("caret landed off the 3rd rune: before=%q after=%q", before, after)
 	}
-	if stripped := stripANSI(got); stripped != "api-0" {
+	if stripped := strings.TrimRight(stripANSI(got), " "); stripped != "api-0" {
 		t.Errorf("caret changed the text: %q, want %q", stripped, "api-0")
 	}
 }
@@ -72,8 +76,8 @@ func TestTypedWithCursorInsideReversesCaretRune(t *testing.T) {
 // TestTypedWithCursorIsRuneIndexed guards against a byte-offset caret: β is
 // two bytes, so a byte-indexed split would slice it in half and emit a
 // replacement character.
-func TestTypedWithCursorIsRuneIndexed(t *testing.T) {
-	got := stripANSI(typedWithCursor("aβc", 1, lipgloss.NewStyle()))
+func TestModalInputIsRuneIndexed(t *testing.T) {
+	got := strings.TrimRight(stripANSI(modalInputView(modalInput("aβc", 1), 20, modalStyles())), " ")
 	if got != "aβc" {
 		t.Errorf("typedWithCursor over a multi-byte rune = %q, want %q", got, "aβc")
 	}
@@ -82,7 +86,7 @@ func TestTypedWithCursorIsRuneIndexed(t *testing.T) {
 // TestTypeNameModalProgressCountsRunes pins the N/M counter against the same
 // rune indexing the caret uses, so the two can't disagree.
 func TestTypeNameModalProgressCountsRunes(t *testing.T) {
-	rendered := TypeNameModal("✕ Delete", "", "", "api-βeta", "api-β", 5, "delete", false, modalStyles(), 60, 20)
+	rendered := TypeNameModal("✕ Delete", "", "", "api-βeta", modalInput("api-β", 5), "delete", false, modalStyles(), 60, 20)
 	if line := inputLine(t, stripANSI(rendered)); !strings.Contains(line, "5/8") {
 		t.Errorf("progress = %q, want a rune-counted 5/8", strings.TrimSpace(line))
 	}
@@ -91,7 +95,7 @@ func TestTypeNameModalProgressCountsRunes(t *testing.T) {
 // TestTypeCountModalCarriesCaret confirms 20a's bulk sibling threads the
 // caret too — it has its own type-ahead buffer (browse's bulkDeleteTarget).
 func TestTypeCountModalCarriesCaret(t *testing.T) {
-	rendered := TypeCountModal("✕ Delete", "api-0, api-1", "", 12, "12", 0, false, modalStyles(), 60, 20)
+	rendered := TypeCountModal("✕ Delete", "api-0, api-1", "", 12, modalInput("12", 0), false, modalStyles(), 60, 20)
 	if !strings.Contains(rendered, "\x1b[7m") {
 		t.Errorf("expected a reverse-video caret at position 0:\n%s", rendered)
 	}

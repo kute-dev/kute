@@ -14,8 +14,8 @@ import (
 	"slices"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
@@ -151,7 +151,7 @@ type Model struct {
 	nodePodCount int
 
 	editingField fieldID
-	editInput    textinput.Model
+	editInput    textfield.Model
 
 	launchPending bool
 	cleanup       *cleanupPrompt

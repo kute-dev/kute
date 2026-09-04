@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -39,10 +39,10 @@ import (
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
-// secretInputStyles builds the add/edit buffers' textinput.Styles: bold text
+// secretInputStyles builds the add/edit buffers' textfield.Styles: bold text
 // on a SelBg background, matching this screen's own fill := ...SelBg used
 // throughout view.go for both the add row and the decode-then-edit row.
-func secretInputStyles(theme tui.Theme) textinput.Styles {
+func secretInputStyles(theme tui.Theme) textfield.Styles {
 	styles := tui.TextInputStyles(theme)
 	styles.Focused.Text = styles.Focused.Text.Bold(true).Background(theme.SelBg)
 	styles.Blurred.Text = styles.Blurred.Text.Bold(true).Background(theme.SelBg)
@@ -52,8 +52,8 @@ func secretInputStyles(theme tui.Theme) textinput.Styles {
 // newSecretInput builds one of this screen's add/edit buffers — styled,
 // prompt-less (this screen renders its own "+ "/key= prefixes), unfocused
 // until the caller calls Focus() on whichever buffer has it.
-func newSecretInput(theme tui.Theme) textinput.Model {
-	ti := textinput.New()
+func newSecretInput(theme tui.Theme) textfield.Model {
+	ti := textfield.New()
 	ti.Prompt = ""
 	ti.SetStyles(secretInputStyles(theme))
 	return ti
@@ -86,8 +86,8 @@ type secretKeyRow struct {
 // (the default, mockup's own "visible while typing · ctrl-x re-mask") and a
 // fixed mask glyph once ctrl-x hides it.
 type addKeyState struct {
-	keyInput   textinput.Model
-	valueInput textinput.Model
+	keyInput   textfield.Model
+	valueInput textfield.Model
 	onValue    bool
 	masked     bool
 }
@@ -102,7 +102,7 @@ type addKeyState struct {
 type editKeyState struct {
 	key        string
 	original   string
-	valueInput textinput.Model
+	valueInput textfield.Model
 	masked     bool
 }
 

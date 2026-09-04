@@ -2,52 +2,41 @@ package tui
 
 import (
 	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/kute-dev/kute/internal/tui/components/textfield"
 )
 
-// TextInputStyles builds a bubbles/v2 textinput.Styles from theme tokens only
-// — never call textinput.DefaultStyles/DefaultDarkStyles/DefaultLightStyles
-// anywhere user-visible, since those don't know about kute's Theme. Callers
-// keep the component's default virtual-cursor mode (never call
-// SetVirtualCursor(false)) so View() stays a pure string render, matching
-// every other render function's f(model, theme, size) contract.
-func TextInputStyles(theme Theme) textinput.Styles {
-	state := func(text lipgloss.Style) textinput.StyleState {
-		return textinput.StyleState{
+// TextInputStyles builds the shared single-line field styles from theme
+// tokens only. The field is value-backed, so View remains a pure render.
+func TextInputStyles(theme Theme) textfield.Styles {
+	state := func(text lipgloss.Style) textfield.StyleState {
+		return textfield.StyleState{
 			Text:        text,
 			Placeholder: lipgloss.NewStyle().Foreground(theme.TextFaint),
-			Suggestion:  lipgloss.NewStyle().Foreground(theme.TextFaint),
 			Prompt:      lipgloss.NewStyle().Foreground(theme.Accent),
 		}
 	}
-	return textinput.Styles{
+	return textfield.Styles{
 		Focused: state(lipgloss.NewStyle().Foreground(theme.Text)),
 		Blurred: state(lipgloss.NewStyle().Foreground(theme.TextDim)),
-		// Blink: false (CursorStatic) keeps the cursor solidly visible —
-		// matching every other hand-rolled cursor in the app, none of which
-		// blink — and sidesteps virtual-cursor blink timing (which needs a
-		// running tea.Program driving Blink() ticks; a static render, like a
-		// golden-test snapshot, would otherwise always land on the
-		// blinked-off half of the cycle and show nothing).
-		Cursor: textinput.CursorStyle{
-			Color: theme.Accent,
-			Shape: tea.CursorBlock,
-			Blink: false,
-		},
+		// Explicitly clear bold so a cursor inside a bold field retains the
+		// same stable block treatment as the previous text input component.
+		Cursor:    lipgloss.NewStyle().Foreground(theme.Accent).Bold(false),
+		Selection: lipgloss.NewStyle().Foreground(theme.Bg).Background(theme.Accent),
 	}
 }
 
-// NewTextInput builds a styled, prompt-less textinput.Model — every site in
+// NewTextInput builds a styled, prompt-less textfield.Model — every site in
 // this app renders its own literal prefix ("/ ", "ns › ", …) ahead of the
 // field rather than delegating to textinput's own Prompt, which defaults to
-// "> " if left unset. Use this instead of textinput.New() directly so that
+// "> " if left unset. Use this instead of textfield.New() directly so that
 // default never leaks through as a stray "> " (see git history: it did,
 // silently, at every one of this app's first ~10 sites migrated onto this
 // component, since only setting Styles doesn't touch Prompt at all).
-func NewTextInput(theme Theme) textinput.Model {
-	ti := textinput.New()
+func NewTextInput(theme Theme) textfield.Model {
+	ti := textfield.New()
 	ti.Prompt = ""
 	ti.SetStyles(TextInputStyles(theme))
 	return ti
@@ -62,6 +51,7 @@ func TextAreaStyles(theme Theme) textarea.Styles {
 	state := func(text lipgloss.Style) textarea.StyleState {
 		return textarea.StyleState{
 			Text:             text,
+			Selection:        lipgloss.NewStyle().Foreground(theme.Bg).Background(theme.Accent),
 			LineNumber:       lipgloss.NewStyle().Foreground(theme.TextGhost),
 			CursorLineNumber: lipgloss.NewStyle().Foreground(theme.TextDim),
 			CursorLine:       lipgloss.NewStyle(),
