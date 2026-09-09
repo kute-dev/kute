@@ -91,6 +91,12 @@ type Model struct {
 	// gone is set once a load() reports the object no longer exists (watch
 	// delete) — mirrors poddetail's own field/behavior.
 	gone bool
+	// redirected is set when applyLoaded hands this screen off to
+	// tasks/yamlview because the object has neither conditions nor events.
+	// It backs tui.Transient, so the root drops this instance instead of
+	// pushing it under the YAML view — otherwise Escape pops back here, the
+	// resumed load redirects again, and Escape can never leave.
+	redirected bool
 
 	row        resources.Row
 	conditions []condition

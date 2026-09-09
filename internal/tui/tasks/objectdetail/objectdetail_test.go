@@ -163,6 +163,28 @@ func TestApplyLoadedEmptyObjectRedirectsToYAML(t *testing.T) {
 	if !yamlCalled {
 		t.Fatalf("expected OpenYAML to be called for an object with no conditions and no events")
 	}
+	// The redirecting instance must report itself transient, or the root
+	// pushes it under the YAML view and esc pops back into a load that
+	// redirects again — an inescapable screen.
+	var tr tui.Transient = &m
+	if !tr.Transient() {
+		t.Fatal("a redirected objectdetail must report Transient() true so the root drops it from the stack")
+	}
+}
+
+func TestNonRedirectingModelIsNotTransient(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		certificateKind(): {certObj("ready", map[string]any{"type": "Ready", "status": "True"})},
+	}}
+	m := New(Config{
+		Session: testSession(), Lister: lister, Events: fakeEvents{},
+		Kind: certificateKind(), Namespace: "default", Name: "ready",
+	})
+	updated, _ := step(t, &m, m.load()())
+	got := updated.(*Model)
+	if got.Transient() {
+		t.Fatal("a detail screen that rendered normally must stay on the navigation stack")
+	}
 }
 
 func TestApplyLoadedEventsErrorDoesNotRedirect(t *testing.T) {
