@@ -249,6 +249,21 @@ type EscapeBacker interface {
 	BackOnEscape() bool
 }
 
+// Transient is implemented by a Task that hands its place in the navigation
+// stack to the task it swaps itself out for. tasks/objectdetail's 14d
+// redirect is the case that needs it: an object with neither conditions nor
+// events replaces itself with tasks/yamlview from inside its own load, so
+// pushing it underneath traps Escape — popping back to it runs the very load
+// that redirects to YAML again, and "esc walks back exactly one level"
+// becomes a no-op loop the user can't leave. A task reporting true is dropped
+// instead of pushed, so Escape from the replacement walks back to whatever
+// pushed the redirecting task. Report it only for a swap the task performs
+// itself, never for one the user asked for. Only pointer-receiver tasks can
+// implement it usefully: the root asks the task after its Update has run.
+type Transient interface {
+	Transient() bool
+}
+
 // BackMsg requests returning to the previous task without quitting the program.
 type BackMsg struct{}
 
@@ -797,7 +812,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	updated, cmd := m.task.Update(msg)
 	if task, ok := updated.(Task); ok {
-		if !sameTask(task, m.task) {
+		if !sameTask(task, m.task) && !transient(m.task) {
 			m.stack = append(m.stack, m.task)
 		}
 		m.task = task
@@ -1373,6 +1388,13 @@ func (m *Model) openPalette(scope palette.Scope, prompt, hint string) tea.Cmd {
 func taskCapturingInput(task Task) bool {
 	c, ok := task.(InputCapturer)
 	return ok && c.CapturingInput()
+}
+
+// transient reports whether the task being swapped out asked to be dropped
+// from the stack rather than pushed onto it (see Transient).
+func transient(t Task) bool {
+	tr, ok := t.(Transient)
+	return ok && tr.Transient()
 }
 
 func sameTask(a, b Task) bool {

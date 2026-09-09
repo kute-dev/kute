@@ -69,6 +69,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Transient implements tui.Transient: an instance that redirected to
+// tasks/yamlview (applyLoaded, below) must not sit in the navigation stack
+// under it — see the interface's doc comment.
+func (m *Model) Transient() bool { return m.redirected }
+
 // applyLoaded is load()'s result handler. When the object has neither
 // conditions nor events, it redirects straight to tasks/yamlview instead of
 // transitioning to ready (docs/design README.md §14d: "an empty detail
@@ -96,6 +101,7 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	if len(msg.conditions) == 0 && len(msg.events) == 0 && msg.eventsErr == nil && m.openYAML != nil {
 		task, cmd := m.openYAML(m.kind, m.namespace, m.name, m.width, m.height)
 		if task != nil {
+			m.redirected = true
 			return task, cmd
 		}
 	}

@@ -58,6 +58,50 @@ func TestRootModelBackMessageRestoresPreviousTask(t *testing.T) {
 	}
 }
 
+// redirectingTask stands in for tasks/objectdetail's 14d redirect: it swaps
+// itself out for another task from inside a plain (non-key) message and
+// reports tui.Transient, asking the root to drop it rather than push it.
+type redirectingTask struct {
+	staticTask
+	redirected bool
+}
+
+func (t *redirectingTask) Transient() bool { return t.redirected }
+
+func (t *redirectingTask) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(tui.BackMsg); !ok && t.next != nil && !t.redirected {
+		t.redirected = true
+		return t.next, nil
+	}
+	return t, nil
+}
+
+// TestRootModelDropsTransientTaskFromStack pins the fix for an inescapable
+// YAML view: a detail screen that redirects to tasks/yamlview during its own
+// load must not sit under it, or esc pops back into the load that redirects
+// again and Escape never walks back a level.
+func TestRootModelDropsTransientTaskFromStack(t *testing.T) {
+	t.Parallel()
+
+	yamlTask := &staticTask{name: "YAML: order"}
+	detail := &redirectingTask{staticTask: staticTask{name: "Order detail", next: yamlTask}}
+	browse := &staticTask{name: "Orders list", next: detail}
+	model := tui.New(browse)
+
+	// browse pushes the detail screen, which immediately redirects.
+	updated, _ := model.Update(tea.KeyPressMsg{Text: "open"})
+	updated, _ = updated.(tui.Model).Update(kube.ResourceChangedMsg{})
+	if view := updated.(tui.Model).View().Content; !strings.Contains(view, "YAML: order") {
+		t.Fatalf("expected the redirect to land on the YAML view:\n%s", view)
+	}
+
+	updated, _ = updated.(tui.Model).Update(tui.BackMsg{})
+	view := updated.(tui.Model).View().Content
+	if !strings.Contains(view, "Orders list") {
+		t.Fatalf("esc from a redirected YAML view must walk back to the list, got:\n%s", view)
+	}
+}
+
 // reloadingTask is a staticTask that also implements tui.Reloader, so it
 // exercises the root shell's BackMsg handling asking a just-restored task to
 // refresh itself.
