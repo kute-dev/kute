@@ -138,7 +138,12 @@ func (m Model) portLine(theme tui.Theme, i int, row portRow) string {
 	local := m.localPortText(row)
 	localText := localStyle.Render(local)
 	if row.editing {
-		localText = lipgloss.NewStyle().Foreground(theme.Text).Background(theme.SelBg).Render("localhost:") + row.editInput.ViewWidth(5)
+		// CharLimit digits plus one cell for the trailing block cursor: a
+		// width of exactly CharLimit makes the field scroll a full-length
+		// port one digit off its left edge to make room for the cursor, so
+		// a typed 45678 renders as "localhost:5678".
+		localText = lipgloss.NewStyle().Foreground(theme.Text).Background(theme.SelBg).Render("localhost:") +
+			row.editInput.ViewWidth(row.editInput.CharLimit+1)
 	}
 
 	left := marker + glyphStyle.Render("●") + fill(1) + name

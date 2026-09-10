@@ -1,9 +1,12 @@
 package forwardpicker
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/kute-dev/kute/internal/testutil/goldentest"
 )
 
 // TestPasteIntoLocalPortIsDigitGated pins the numeric field's paste rule:
@@ -60,5 +63,24 @@ func TestPasteWithNoEditOpenIsIgnored(t *testing.T) {
 	updated, _ := m.Update(tea.PasteMsg{Content: "8080"})
 	if updated.(*Model).rows[0].editing {
 		t.Fatal("paste must not begin a local-port edit")
+	}
+}
+
+// TestFullLengthLocalPortRendersWhole pins the edit field's render width: the
+// buffer holds the typed value either way, so only a rendered frame catches a
+// field one cell too narrow for its own trailing cursor.
+func TestFullLengthLocalPortRendersWhole(t *testing.T) {
+	t.Parallel()
+	m := newModel(podWithPort("default", "web-0", 80))
+	m = loadPorts(t, m)
+
+	updated, _ := m.Update(tea.KeyPressMsg{Text: "4"})
+	updated, _ = updated.(*Model).Update(tea.PasteMsg{Content: "5678"})
+	next := updated.(*Model)
+	if got := next.rows[0].editInput.Value(); got != "45678" {
+		t.Fatalf("buffer = %q, want %q", got, "45678")
+	}
+	if frame := goldentest.Plain(next.Render()); !strings.Contains(frame, "localhost:45678") {
+		t.Errorf("a full-length local port did not render whole:\n%s", frame)
 	}
 }
