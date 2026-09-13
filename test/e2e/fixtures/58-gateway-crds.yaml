@@ -13,6 +13,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: gateways.gateway.networking.k8s.io
+  annotations:
+    # gateway.networking.k8s.io is a protected group (any *.k8s.io suffix
+    # is), so the API server refuses a CRD in it without an approval
+    # annotation. The URL is upstream Gateway API's own — these are trimmed
+    # copies of CRDs that really were approved, not an invented group.
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api/pull/2997
 spec:
   group: gateway.networking.k8s.io
   scope: Namespaced
@@ -46,6 +52,8 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: httproutes.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: https://github.com/kubernetes-sigs/gateway-api/pull/2997
 spec:
   group: gateway.networking.k8s.io
   scope: Namespaced

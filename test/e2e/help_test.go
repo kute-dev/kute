@@ -27,7 +27,7 @@ func TestHelpOverlayRendersTheActiveScreensKeys(t *testing.T) {
 	// The title names the view it was opened over, and the fixed columns are
 	// the ones the composition root supplies.
 	a.WaitForAll(Settle,
-		"? help",
+		"globals below",
 		"keys for PODS view",
 		"PODS VIEW",
 		"SCOPE",
@@ -42,9 +42,12 @@ func TestHelpOverlayRendersTheActiveScreensKeys(t *testing.T) {
 	a.WaitFor("esc close", Settle)
 
 	// esc closes it and returns to the same screen, which is still live
-	// underneath rather than having been popped.
+	// underneath rather than having been popped. Closed is asserted on the
+	// overlay's own title line, never on "? help":
+	// that string is also the keybar's permanent right-hand hint, so it is on
+	// screen whether the overlay is open or not.
 	a.Esc()
-	a.WaitGone("? help", Settle)
+	a.WaitGone("globals below", Settle)
 	a.WaitFor("api-", Settle)
 
 	// The load-bearing half: the VIEW column follows the active screen, so
@@ -54,12 +57,12 @@ func TestHelpOverlayRendersTheActiveScreensKeys(t *testing.T) {
 	a.Enter()
 	a.WaitFor("CONTAINERS", Settle)
 	a.Press("?")
-	a.WaitForAll(Settle, "? help", "keys for POD view", "POD VIEW")
+	a.WaitForAll(Settle, "globals below", "keys for POD view", "POD VIEW")
 	// And the list's own view heading is gone — a stale overlay showing the
 	// screen underneath the stack is exactly the bug this pins.
 	a.Never("PODS VIEW", 2*time.Second)
 
 	a.Esc()
-	a.WaitGone("? help", Settle)
+	a.WaitGone("globals below", Settle)
 	a.WaitFor("CONTAINERS", Settle)
 }

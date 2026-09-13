@@ -28,14 +28,18 @@ func TestGatewayAPIScreens(t *testing.T) {
 		a.WaitLoaded(Settle)
 
 		// §23b's ATTACHED column, inserted ahead of the CRD's own declared
-		// printer columns — and both of the states it exists to tell apart.
-		// The accepted route names the Gateway it attached to; the refused
-		// one carries its condition's message verbatim, which is the only
-		// thing that turns "not attached" into something actionable.
+		// printer columns — and both of the states it exists to tell apart:
+		// the accepted route names the Gateway it attached to, the refused
+		// one says plainly that it attached to nothing.
+		//
+		// Matched on the prefix of each cell, not the whole phrase: the
+		// ATTACHED column is narrow and the table truncates it ("✓ gw/publ…"),
+		// so the assertion has to stop where the column does. The condition's
+		// verbatim message is asserted on the routing table below, which has
+		// the room for it.
 		a.WaitFor("ATTACHED", Settle)
-		waitForRowPair(t, a, "shop-route", "✓ gw/public")
-		waitForRowPair(t, a, "stale-route", "✕ not accepted")
-		a.WaitForWrapped("no listener hostname matches admin.kute-e2e.test", Settle)
+		waitForRowPair(t, a, "shop-route", "✓ gw/")
+		waitForRowPair(t, a, "stale-route", "✕ not acc")
 
 		// The CRD's own printer column is still there, after the inserted
 		// one rather than instead of it.
@@ -88,7 +92,8 @@ func TestGatewayAPIScreens(t *testing.T) {
 		a.WaitFor("Gateway/public", Settle)
 		a.WaitForAll(Settle, "PROTO:PORT", "HOSTNAME", "ATTACHED")
 		waitForRowPair(t, a, "http", "HTTP:80")
-		waitForRowPair(t, a, "https", "shop.kute-e2e.test")
+		// Truncated in the HOSTNAME column, same as the list above.
+		waitForRowPair(t, a, "https", "shop.kute-e2e")
 		// The class the Gateway declares, which the listener rows do not
 		// carry themselves.
 		a.WaitForWrapped("kute-e2e-class", Settle)

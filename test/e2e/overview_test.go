@@ -10,8 +10,8 @@ import (
 // metrics_test.go already owns.
 //
 // The overview is "a routing layer, not a dashboard", and everything on it
-// is a cluster-wide read the rest of the app never makes: NODES lists real
-// nodes, TROUBLE is a cluster-wide unhealthy-pod scan, and RECENT CHANGES is
+// is a cluster-wide read the rest of the app never makes: NODES reads every
+// node, TROUBLE is a cluster-wide unhealthy-pod scan, and RECENT CHANGES is
 // derived from ReplicaSets rather than from any list the user opened. A fake
 // can render all four panels; only a real cluster can put the crash-looping
 // worker in the one that is supposed to find it without being asked.
@@ -28,9 +28,12 @@ func TestOverviewPanelsAndRouting(t *testing.T) {
 	// All four panels, by their own section titles.
 	a.WaitForAll(Settle, "CAPACITY", "NODES", "TROUBLE", "RECENT CHANGES")
 
-	// NODES: the kind cluster's own nodes, read cluster-wide.
-	node := NodeNamePrefix(t) + "-control-plane"
-	a.WaitFor(node, Settle)
+	// NODES folds to a one-line all-clear when nothing is wrong with any
+	// node — the panel lists *troubled* nodes, not every node — so the
+	// healthy reading is that summary. Not pinned to a node count: the kind
+	// config's node total is not what this test is about, and hard-coding it
+	// would break the suite on a differently shaped cluster.
+	a.WaitFor("nodes ready", Settle)
 
 	// TROUBLE: the worker fixture crash-loops permanently, so a cluster-wide
 	// unhealthy scan has to find it. Asserted by pod-name prefix rather than
@@ -39,27 +42,15 @@ func TestOverviewPanelsAndRouting(t *testing.T) {
 	a.WaitFor("worker-", Settle)
 
 	// The routing claim: ↵ on the focused panel opens the object it names.
-	// NODES is focused on open, and node detail is a pushed screen with its
-	// own CONDITIONS section that the overview itself never renders — so it
-	// is an honest fence for the navigation having landed.
-	a.Enter()
-	a.WaitLoaded(Settle)
-	a.WaitForAll(Settle, node, "CONDITIONS")
-
-	// esc walks back exactly one level, to the overview rather than to the
-	// list the palette was opened from.
-	a.Esc()
-	a.WaitFor("Cluster Overview", Settle)
-
-	// ↹ moves to TROUBLE, and ↵ there jumps to the object through the same
-	// goto navigation the palette uses — landing on the Pods list with the
-	// unhealthy pod selected, not on a bespoke detail screen.
+	// ↹ moves focus, skipping any panel with nothing selectable — which on a
+	// healthy cluster is NODES — so one press lands on TROUBLE.
+	//
+	// The fence is the destination's keybar pill, not the word "Pods": the
+	// overview's own CAPACITY bar is labelled "pods" and its TROUBLE rows
+	// name the namespace, so only the pill ("PODS", where the overview's is
+	// "OVERVIEW") says the navigation actually landed.
 	a.Press("tab")
 	a.Enter()
-	// The keybar pill, not the word "Pods": the overview's own CAPACITY bar
-	// is labelled "pods" and its TROUBLE rows name the kind, so only the
-	// destination's pill ("PODS", where the overview's is "OVERVIEW") says
-	// the navigation actually landed.
 	a.WaitFor("PODS", Settle)
 	a.WaitFor("worker-", Settle)
 }

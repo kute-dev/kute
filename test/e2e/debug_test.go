@@ -133,9 +133,12 @@ func TestPodDebugPanelDoesNotInventADenial(t *testing.T) {
 	const name = "phase3-debug-restricted"
 	createPodWithImage(t, mutationClient(t), name, "kute-e2e.invalid/nothing-here:v1")
 
-	// kute-restricted may list/get pods in kute-e2e and nothing else — it
-	// certainly may not create one.
-	a := Launch(t, WithKubeconfig(RestrictedKubeconfigPath()))
+	// kute-partial, not kute-restricted: the panel can only be reached from
+	// a Pods list that renders, and kute-restricted's grant is namespaced,
+	// so a cluster-wide launch shows it §4b's 403 card instead of any rows.
+	// kute-partial can list pods cluster-wide and still cannot create one,
+	// which is exactly the pairing this test needs.
+	a := Launch(t, WithKubeconfig(PartialKubeconfigPath()))
 	a.WaitFor(name, Connect)
 	a.filterTo(t, name)
 	a.selectRow(t, name)
@@ -169,7 +172,7 @@ func TestPodDetailShowsEphemeralContainers(t *testing.T) {
 	client := mutationClient(t)
 	const name = "phase3-ephemeral-host"
 	const debugContainer = "kute-e2e-debugger"
-	createPodWithImage(t, client, name, busyboxImage)
+	createPodWithImage(t, client, name, busyboxImage, "/bin/sh", "-c", "sleep 900")
 	waitForAPI(t, "the ephemeral host pod to run", func(ctx context.Context) (bool, error) {
 		pod, err := client.CoreV1().Pods(Namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -206,7 +209,7 @@ const busyboxImage = "busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c8
 // Distinct from network_test.go's createDisposablePod, which pins busybox:
 // the image is the whole variable here — one that never pulls, one with no
 // shell in it, one that runs — and each selects a different branch of 'x'.
-func createPodWithImage(t *testing.T, client kubernetes.Interface, name, image string) *corev1.Pod {
+func createPodWithImage(t *testing.T, client kubernetes.Interface, name, image string, command ...string) *corev1.Pod {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -217,9 +220,11 @@ func createPodWithImage(t *testing.T, client kubernetes.Interface, name, image s
 			Containers: []corev1.Container{{
 				Name:  "pod",
 				Image: image,
-				// The command is ignored by an image that never pulls and by
-				// one with no shell; it only matters for the busybox case.
-				Command: []string{"/bin/sh", "-c", "sleep 900"},
+				// Optional, and deliberately so: a shell-less image cannot
+				// run a shell command, and overriding its entrypoint with
+				// one leaves the container Waiting forever — which routes
+				// 'x' to copy mode and silently tests the wrong branch.
+				Command: command,
 			}},
 		},
 	}, metav1.CreateOptions{})

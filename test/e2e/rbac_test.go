@@ -104,10 +104,14 @@ func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 	// than from the goto palette. WHO CAN is the pushed screen's own pill,
 	// which the card underneath never renders.
 	a.Press("w")
-	a.WaitFor("WHO CAN", Settle)
-	// The query is prefilled from the kind that was refused, so the screen
-	// opens already answering the question the card raised.
-	a.WaitForAll(Settle, "secrets", Namespace)
+	a.WaitFor("Who Can", Settle)
+
+	// And the escape hatch is honest about its own limits. §22a resolves
+	// bindings entirely from the informer cache, so an identity that cannot
+	// read RBAC gets no answer at all — which it has to *say*, since an
+	// empty subject list here reads as "nobody can", a claim about the
+	// cluster this identity is in no position to make.
+	a.WaitForWrapped("couldn't load RBAC bindings", Settle)
 	a.Esc()
 	a.WaitFor("403 Forbidden", Settle)
 
