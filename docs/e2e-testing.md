@@ -80,6 +80,10 @@ and state save — without exporting a headless-test seam in shipping builds.
 - **`scripts/e2e-scale-cluster.sh`** — 5k pods on kwok, for the scale row kind cannot reach.
   Reuses `kwok-prod-cluster.sh`'s existing `resolve_kwokctl`/`BIN_DIR` bootstrap; seeds
   Deployments with high replica counts onto fake nodes.
+  The fixture sweep applies every file, then waits for the states the assertions depend on:
+  the `api` rollout, the secondary namespace's pod, `worker` restarting, `attempts-fail`
+  reaching its terminal Failed condition, and `attempts-indexed` completing every index. Each
+  wait exists because the alternative is a test that cannot tell "not yet" from "wrong".
 - **`scripts/e2e-run.sh`** — one-shot wrapper: bring the cluster up, run the suite, tear it
   down even on failure. `KUTE_E2E_KEEP=1` leaves the cluster up for iterating on a failure;
   `KUTE_E2E_REUSE=1` skips `up` against an already-provisioned cluster and never tears down
@@ -101,13 +105,14 @@ ClusterRoles. Workload images are pinned by digest and fixture application is id
 | `01-secondary-namespace.yaml` — `kute-e2e-b`, a Pod and ConfigMap unique to it | real A→B→A namespace switching and distinct scoped-cache keys |
 | `10-workloads.yaml` — Deployments `api`, `worker` (`exit 1`) | list → detail → logs → exec; rollout-restart; CrashLoopBackOff status derivation, poddetail's termination banner, timeline restarts |
 | `20-config.yaml` — ConfigMap `app-config`, Secret `app-secret` | §27a in-place `↵` edit and the `e` buffer editor; §27b masked grid, `ctrl-x`, add/remove key |
-| `25-batch.yaml` — suspended Job `phase3-job`, suspended CronJob `phase3-cron` | dedicated reusable sources for Job rerun, CronJob run-now, and schedule editing without ambient scheduled work |
+| `25-batch.yaml` — suspended Job `phase3-job`, suspended CronJob `phase3-cron`, failing Job `attempts-fail`, Indexed Job `attempts-indexed`, suspended CronJob `detail-cron` | dedicated reusable sources for Job rerun, CronJob run-now, and schedule editing without ambient scheduled work; §37b's flat attempt ledger and §37d's index grid, which are one screen gated on `spec.completionMode` |
 | `30-helm-releases.yaml` — two `helm.sh/release.v1` Secrets, revisions 1 and 2 | §18a history rail reads directly from Secrets; the rollback scenario alone uses the pinned Helm CLI |
 | `40-routing.yaml` — Services `api`/`web`, Ingress `shop` | §23a routing table, live backend resolution |
 | `50-crd.yaml` + `51-widgets.yaml` — CRD `widgets.kute.dev`, two Widgets | discovery → kind registry → §14d, the "CRD support is data, not code" invariant |
 | `52-flux-crds.yaml` + `53-flux-objects.yaml` — Kustomization/HelmRelease/GitRepository CRDs, hand-written status, no controller | §30a/§31a, and the Flux-vs-Helm-3 `HelmRelease` name collision the substitution table exists for |
 | `54-argocd-crds.yaml` + `55-argocd-objects.yaml` — Application/AppProject CRDs, hand-written status, no controller | §33a's sync×health matrix |
 | `56-certmanager-crds.yaml` + `57-certmanager-objects.yaml` — Certificate/CertificateRequest/Order/Challenge/Issuer/ClusterIssuer CRDs across two API groups, hand-written status, no controller | §35a's issuance-chain walk and §35b's EXPIRES/RENEWAL/ISSUER columns; the ACME chain fails at its deepest hop, the CA chain is clean |
+| `58-gateway-crds.yaml` + `59-gateway-objects.yaml` — Gateway/HTTPRoute CRDs, one Gateway with two listeners, one accepted route and one refused, no controller | §23b's ATTACHED column and its two states, the routing table's weighted splits and live backend resolution, and the Gateway listener table |
 | `60-rbac.yaml` — ServiceAccounts `kute-restricted` (Pod list/get/watch only), `kute-partial` (connect kinds + ConfigMaps/Events, no Secrets/Deployments/Ingresses), `kute-team` (Pods/ConfigMaps/Events/pods-log, namespace-bound Roles only, no ClusterRole) | startup, per-kind, and scoped-mode 403 paths, plus real A→B access under `--namespace-scoped` |
 
 kind ships no metrics-server, so the "CPU/MEM render `–`, never a lie or a crash" row costs
@@ -129,8 +134,13 @@ the build-tagged `app.RunE2E` with pipe input, discarded renderer output,
 the renderer's cursor-relative diff stream is not parsed as if it were a screen.
 
 Launch options: `WithKubeconfig`, `WithNamespace`, `WithScopeNamespace` (drives
-`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`, `WithAPIProxy`, and
-`WithoutAPIProxy`. The last option is diagnostic for an ordinary launch and required when a
+`--namespace-scoped`), `WithContext`, `WithSize`, `WithProdContexts`, `WithAPIProxy`,
+`WithoutAPIProxy`, `WithHome` and `WithDemo`. `WithHome` pins the isolated HOME/XDG root to a
+caller-owned directory instead of a fresh `t.TempDir()`, which is the only way two launches can
+observe what kute persists *between* sessions; pair it with `WithNamespace("")`, which drops the
+`-n` flag, since an explicit namespace is the highest-precedence source and would beat the very
+per-context restore such a test exists to check. `WithDemo` launches `--demo` against `kube/fake`,
+reaching no cluster and reading no kubeconfig — the one launch here that needs no `RequireCluster`. The last option is diagnostic for an ordinary launch and required when a
 merged/authentication kubeconfig already points at explicitly managed proxies, avoiding an
 unobservable proxy-around-proxy layer.
 
@@ -209,6 +219,14 @@ those values explicitly; smaller positive values are useful for local iteration.
 | `mutation_helm_test.go` | real Helm rollback from the stored revision Secrets, new revision rendering, and fixture restoration |
 | `certchain_test.go` | §35a's Certificate → CertificateRequest → Order → Challenge walk across two API groups: deepest-failure promotion on the ACME chain, the short CA chain with no banner, and both refs-strip branches (missing Secret + ClusterIssuer, existing Secret + namespaced Issuer) |
 | `batch_screens_test.go` | §37b's attempt ledger (per-attempt pods joined by controller ownerRef, real exit codes, no index grid on a non-Indexed Job) and §36e's CronJob detail (facts grid, retention limits, settled with zero Jobs) |
+| `mutation_bulk_test.go` | §20a's marked set: filter-then-`*`, per-row `space`, the count in the health strip, one confirm naming every object, and an injected 403 on one object's DELETE — the partial failure that has to report itself and retain the marks |
+| `debug_test.go` | §41b/§41c's pod debug panel staged in both modes (a pod that will never run, a running pod with no shell in it), the live access review declining to invent a denial under a restricted identity, and §41e's EPHEMERAL group after a real ephemeral container is attached |
+| `secret_yaml_test.go` | §21a inside the 8a YAML view: masked by default, `x` revealing only the cursor's key, `X`'s inline y/N reveal-all, and no plaintext following `esc` back to the list |
+| `gateway_test.go` | §23b end to end from discovery: HTTPRoute's inserted ATTACHED column in both states, the routing table's matches/weights/backends, and a Gateway's listener table |
+| `overview_test.go` | §19a's four panels, the crash-looping pod found by a cluster-wide scan nobody asked for, and ↵ routing from NODES into 11b and from TROUBLE through the goto navigation |
+| `help_test.go` | §7b's overlay over two different screens — the VIEW column follows the active task, the fixed SCOPE/LIST/RESOURCE/MISC columns come from the verb registry |
+| `restart_test.go` | two launches over one state directory: save-on-exit, per-context restore on the next start, and a v2 state document migrating forward rather than being discarded |
+| `demo_test.go` | `--demo`, the composition root's other wiring: the fake's fixtures render, a detail screen pushes, and nothing reports an unreachable cluster |
 | `inspectors_test.go` | §22a who-can resolved from cache with no authorization round-trip, and §41d's node debug panel staging its command without handing off the terminal |
 | `scale_test.go` | build tag `e2e && e2e_scale`, kwok substrate: 5k-Pod connect/heap budget, warmed repeated-navigation heap/goroutine deltas, and a responsive 500-Pod burst with unrelated LIST/WATCH policing — excluded from the PR job |
 | `storm_test.go` | build tag `e2e && e2e_soak`: Widget, Pod-detail, Events, and Timeline bursts converge to stable final values with bounded input, request, and goroutine growth |
@@ -220,12 +238,59 @@ those values explicitly; smaller positive values are useful for local iteration.
 
 ### Coverage audit
 
-The lifecycle expansion and its six post-implementation cleanup items now have direct PR or
-nightly guards. The coverage audit has no remaining unguarded bullet: discovery is
-request-fenced, GitOps writes require fresh resource versions and restore their fixtures,
-watch health outranks a successful probe at the wire, YAML's live GET is cancelled across
-context switches, logs recover while still active, and the kwok row covers post-navigation
-runtime deltas plus breadth-safe event churn.
+Two different questions, kept apart on purpose.
+
+**Lifecycle invariants.** The lifecycle expansion and its six post-implementation cleanup items
+have direct PR or nightly guards, with no remaining unguarded bullet: discovery is
+request-fenced, GitOps writes require fresh resource versions and restore their fixtures, watch
+health outranks a successful probe at the wire, YAML's live GET is cancelled across context
+switches, logs recover while still active, and the kwok row covers post-navigation runtime
+deltas plus breadth-safe event churn.
+
+**Screens and verbs.** That checklist says nothing about whether a given screen is ever opened,
+which is how §20a (bulk operations), §21a (Secret decode in the YAML view), §41b/§41c/§41e
+(pod debug and its aftermath), §37d (the Indexed attempt grid), §23b (Gateway API), §19a's
+non-metrics panels, §7b (the help overlay), the Helm release detail, `--demo`, and the
+persisted-state round trip all reached implementation with no e2e path at all. Each now has
+one. The matrix below is the honest form of this section: a screen with no row here has no
+end-to-end coverage, and adding one is part of building it.
+
+| Screen / verb | Covered by |
+| --- | --- |
+| 2a browse, filters, empty and 403 states | `flow_test.go`, `rbac_test.go`, `churn_test.go` |
+| 5a pod detail · 5b logs · 9b events · 16a/16b timeline | `flow_test.go`, `log_lifecycle_test.go`, `storm_test.go` |
+| 6a/7a/12a palettes · context and namespace switching | `context_switch_test.go`, `scoped_test.go`, `restart_test.go` |
+| 7b help overlay | `help_test.go` |
+| 8a YAML · 21a Secret decode | `context_switch_test.go`, `secret_yaml_test.go` |
+| 8b delete tiers · 20a bulk delete | `mutation_delete_test.go`, `prod_test.go`, `mutation_bulk_test.go` |
+| 10a exec picker · 13a/13c forwards | `exec_test.go`, `forward_lifecycle_test.go`, `pty_test.go` (nightly) |
+| 11a/11b nodes · 19a overview | `metrics_test.go`, `overview_test.go` |
+| 14a/14b/14d discovered CRDs · 23a/23b routing | `kinds_test.go`, `gateway_test.go` |
+| 17b scale · 24a set image · 25a resources · 26a metadata · 27a/27b data editors | `mutation_workloads_test.go`, `editors_test.go`, `mutation_editors_test.go` |
+| 18a Helm history · Helm release detail · rollback | `kinds_test.go`, `mutation_helm_test.go` |
+| 22a who-can (palette and from a 403 card) | `inspectors_test.go`, `rbac_test.go` |
+| 30a/30b/31a Flux · 33a Argo · 35a/35b cert-manager | `flux_test.go`, `argo_test.go`, `certchain_test.go` |
+| 36a–36e CronJobs · 37a–37d Jobs | `mutation_batch_test.go`, `batch_screens_test.go` |
+| 41b/41c/41d/41e debug panels and ephemeral containers | `debug_test.go`, `inspectors_test.go` |
+| persisted state, schema migration, `--demo` | `restart_test.go`, `demo_test.go` |
+
+**Deliberately not covered here, and why.**
+
+- **The light theme.** Every launch pins dark. Theme-token-to-cell mapping is what the
+  forced-truecolor golden fixtures exist for (`internal/tui/tasks/browse`), at a fidelity no
+  substring assertion reaches.
+- **28a/28b's update chip and what's-new panel.** The release-feed check is disabled in every
+  launch (`isolateEnv`): it is the one thing kute does that leaves the cluster, and leaving it on
+  would make frame content depend on the network and on whatever the newest release happens to
+  be that day.
+- **A denied `SelfSubjectAccessReview`.** kind authorizes with RBAC, which answers an ungranted
+  verb with `allowed=false, denied=false` — it declines to allow rather than denying, so the
+  panel's `accessDenied` branch is unreachable without a webhook authorizer. `debug_test.go`
+  pins the half that *is* reachable: that an inconclusive answer is never read as a refusal.
+- **`internal/diag`'s crash reports.** Reaching them means panicking the real program, which the
+  harness deliberately turns into a failed test (`tea.WithoutCatchPanics`).
+- **The terminal-capability fallbacks** (256-colour mapping, ASCII glyph substitutes) and the
+  minimum-size guard screen, which is designed but not built.
 
 ## 4. Wire invariants — `internal/kube/e2e_lazy_test.go`, `e2e_scoped_test.go`, `e2e_resilience_test.go`
 

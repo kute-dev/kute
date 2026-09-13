@@ -111,3 +111,37 @@ spec:
             - name: job
               image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
               command: ["/bin/sh", "-c", "echo KUTE-E2E-DETAIL-CRON"]
+---
+# §37d's index grid needs a Job whose completionMode is Indexed and whose
+# indices have actually finished: BuildJobAttempts joins the Job to its own
+# pods, and ProjectJobIndexGrid reads each pod's completion index from
+# batch.kubernetes.io/job-completion-index. A suspended Job would render an
+# empty grid and prove nothing, and a *failing* one would keep retrying
+# while the assertions ran — so this one succeeds, once, and stays that way.
+#
+# Three completions at parallelism 3 so the grid has more than one row, and
+# ttlSecondsAfterFinished is deliberately unset for the same reason
+# attempts-fail leaves it unset: the TTL controller would delete the Job and
+# take the retained pods the ledger is built from with it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: attempts-indexed
+  namespace: kute-e2e
+  labels:
+    app: attempts-indexed
+spec:
+  completionMode: Indexed
+  completions: 3
+  parallelism: 3
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: attempts-indexed
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job
+          image: busybox:1.37@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+          command: ["/bin/sh", "-c", "echo KUTE-E2E-INDEX-$JOB_COMPLETION_INDEX"]

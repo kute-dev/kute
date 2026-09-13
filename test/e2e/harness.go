@@ -207,6 +207,8 @@ type options struct {
 	prodContexts      []string
 	proxy             *APIProxy
 	direct            bool
+	home              string
+	demo              bool
 }
 
 // WithKubeconfig launches against a kubeconfig other than the admin one —
@@ -245,6 +247,26 @@ func WithSize(width, height int) Option {
 // reach the type-the-name confirm modal.
 func WithProdContexts(contexts ...string) Option {
 	return func(o *options) { o.prodContexts = contexts }
+}
+
+// WithHome pins the isolated HOME/XDG root to a caller-owned directory
+// instead of a fresh t.TempDir() per launch. Two launches sharing one
+// directory are the only way to observe what kute persists *between*
+// sessions — the recents/per-context restore and its schema migration —
+// since everything it writes lives under that root.
+//
+// Pair it with WithNamespace(""), which drops the -n flag: the default
+// launch always pins a namespace, and -n is the highest-precedence source,
+// so it would beat the very per-context restore such a test exists to check.
+func WithHome(dir string) Option {
+	return func(o *options) { o.home = dir }
+}
+
+// WithDemo launches --demo: kube/fake behind the same seams, no cluster and
+// no kubeconfig. It is the other half of app.NewModel, and nothing else in
+// this suite exercises it.
+func WithDemo() Option {
+	return func(o *options) { o.demo = true }
 }
 
 // WithAPIProxy uses an already-created proxy. Launch creates one by default;
@@ -305,13 +327,31 @@ func Launch(t *testing.T, opts ...Option) *App {
 		t.Fatalf("e2e: WithNamespace and WithScopeNamespace are mutually exclusive, mirroring cmd/kute's own --namespace/--namespace-scoped conflict check")
 	}
 
+	// --demo reaches no cluster at all, so neither the kubeconfig check nor
+	// the API proxy below applies to it. Its kubeconfig path is pointed at
+	// the isolated home (which has no such file) rather than left as the
+	// real one: "the demo never reads a kubeconfig" is part of what this
+	// launch is for.
+	if o.demo {
+		o.kubeconfig = filepath.Join(t.TempDir(), "no-such-kubeconfig")
+		o.proxy = nil
+		o.direct = true
+		// The default launch pins the fixtures' namespace, which exists only
+		// on the kind cluster. Unless a test asks for one by name, let the
+		// fake choose its own — pinning a namespace it has never heard of
+		// lands on an empty list rather than on the demo fixtures.
+		if !o.namespaceExplicit {
+			o.namespace = ""
+		}
+	}
+
 	// Apply options before checking the cluster: tagged suites such as scale
 	// select a different kubeconfig and do not provision the ordinary kind
 	// cluster at all. Keep a missing default config as an actionable local
 	// skip, but fail for a missing explicitly-selected identity/config — its
 	// suite-specific requirement has already established that its cluster is
 	// meant to exist.
-	if _, err := os.Stat(o.kubeconfig); err != nil {
+	if _, err := os.Stat(o.kubeconfig); !o.demo && err != nil {
 		if o.kubeconfig == KubeconfigPath() {
 			t.Skipf("no e2e cluster: %v\nrun: scripts/e2e-cluster.sh up", err)
 		}
@@ -332,6 +372,7 @@ func Launch(t *testing.T, opts ...Option) *App {
 
 	cfg := app.DefaultConfig()
 	cfg.Kubeconfig = o.kubeconfig
+	cfg.Demo = o.demo
 	if o.scopeNamespace != "" {
 		cfg.ScopeNamespace = o.scopeNamespace
 	} else {
@@ -805,7 +846,10 @@ func encodeKey(key string) (string, bool) {
 // markings.
 func isolateEnv(t *testing.T, o options) {
 	t.Helper()
-	home := t.TempDir()
+	home := o.home
+	if home == "" {
+		home = t.TempDir()
+	}
 	testenv.SetHome(t, home)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

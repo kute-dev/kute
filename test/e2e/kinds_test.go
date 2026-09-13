@@ -119,6 +119,20 @@ func TestKindScreens(t *testing.T) {
 		a.WaitForAll(Settle, "shop", "1.3.0", "1.2.0", "superseded")
 		a.Esc()
 		a.WaitFor("Helm Releases", Settle)
+
+		// ↵ opens the release detail, which is a different screen from the
+		// history rail and had no e2e path until now. Its whole claim is the
+		// join between what Helm saved and what the cluster actually has:
+		// the fixture's manifest declares Deployment shop-web, and nothing
+		// ever created it, so a screen that merely re-rendered the saved
+		// manifest would call it present.
+		a.Enter()
+		a.WaitLoaded(Settle)
+		a.WaitForAll(Settle, "SOURCE", "RESOURCE", "HELM STATE", "LIVE EVIDENCE")
+		waitForRowPair(t, a, "shop-web", "declared")
+		waitForRowPair(t, a, "shop-web", "not created")
+		a.Esc()
+		a.WaitFor("Helm Releases", Settle)
 	})
 }
 

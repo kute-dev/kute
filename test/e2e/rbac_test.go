@@ -99,6 +99,18 @@ func TestForbiddenKindIsScopedToThatKind(t *testing.T) {
 	// keypress produced.
 	a.Never("unreachable", 8*time.Second)
 
+	// §4b's card offers 'w' as the way out — "why can't I see this?" —
+	// and it is the only route into §22a that starts from a denial rather
+	// than from the goto palette. WHO CAN is the pushed screen's own pill,
+	// which the card underneath never renders.
+	a.Press("w")
+	a.WaitFor("WHO CAN", Settle)
+	// The query is prefilled from the kind that was refused, so the screen
+	// opens already answering the question the card raised.
+	a.WaitForAll(Settle, "secrets", Namespace)
+	a.Esc()
+	a.WaitFor("403 Forbidden", Settle)
+
 	// And a readable kind still reads, after the denial rather than before
 	// it: the app is usable, minus the one kind this identity cannot see.
 	a.Esc()

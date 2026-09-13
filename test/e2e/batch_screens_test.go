@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +155,75 @@ func (a *App) waitForAttemptRows(t *testing.T, podPrefix, exitCode string, want 
 	if !ok {
 		t.Fatalf("wanted %d %q attempt rows with exit %s, saw %d; frame:\n%s",
 			want, podPrefix, exitCode, count(frame), frame)
+	}
+}
+
+// TestIndexedJobAttemptLedger covers §37d, the other half of the one screen
+// §37b gates on spec.completionMode.
+//
+// TestJobAttemptLedger already asserts the index grid is *absent* on an
+// ordinary Job; nothing asserted it appears on an Indexed one, so the branch
+// that renders it had no e2e path at all. The grid is built from a join no
+// fake performs: each pod carries its completion index in a label the
+// kubelet-side controller writes, and resources.ProjectJobIndexGrid groups
+// the Job's own pods by it.
+//
+// fixtures/25-batch.yaml's attempts-indexed completes all three indices and
+// the cluster script waits for its Complete condition, so "3 of 3 finished"
+// is settled before any test looks — "1 of 3, still going" and "3 of 3" are
+// different screens, and polling cannot tell them apart.
+func TestIndexedJobAttemptLedger(t *testing.T) {
+	RequireCluster(t)
+	a := Launch(t)
+	a.WaitFor("api-", Connect)
+
+	a.gotoKind(t, "jobs", "Jobs")
+	a.WaitLoaded(Settle)
+	a.selectRow(t, "attempts-indexed")
+	a.Enter()
+	a.WaitLoaded(Settle)
+
+	a.WaitForAll(Settle, "job/attempts-indexed", "Attempts")
+
+	// The Job succeeded, so the banner is the success reading and the
+	// failure card must not be drawn over it.
+	a.WaitFor("Succeeded", Settle)
+
+	// §37d's grid: its own IDX column — the header TestJobAttemptLedger
+	// asserts can never appear on a non-Indexed Job — and one row per
+	// completion index, each reporting the grid branch's own word for a
+	// finished index ("complete", where the flat table says "Error"/"OK").
+	a.WaitForAll(Settle, "IDX", "RESULT", "ATTEMPTS")
+	a.waitForIndexRows(t, 3, "complete")
+
+	// The spec strip states what the grid is measured against; completions
+	// is the Indexed-only half of it.
+	a.WaitForAll(Settle, "backoffLimit", "completions")
+}
+
+// waitForIndexRows waits until the index grid lists indices 0..want-1, each
+// carrying result.
+//
+// Row-shaped and index-addressed, for the same reason waitForAttemptRows is:
+// §37d's claim is per-index, and a screen that rendered one index three
+// times, or three indices with the wrong results, satisfies every substring
+// check a flat assertion could make.
+func (a *App) waitForIndexRows(t *testing.T, want int, result string) {
+	t.Helper()
+	seen := func(frame string) int {
+		n := 0
+		for idx := range want {
+			for _, line := range strings.Split(frame, "\n") {
+				if lineHasExactField(line, strconv.Itoa(idx)) && strings.Contains(line, result) {
+					n++
+					break
+				}
+			}
+		}
+		return n
+	}
+	frame, ok := a.poll(func(f string) bool { return seen(f) == want }, Settle)
+	if !ok {
+		t.Fatalf("wanted indices 0..%d each %q in the grid, saw %d; frame:\n%s", want-1, result, seen(frame), frame)
 	}
 }

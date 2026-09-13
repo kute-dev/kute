@@ -121,7 +121,7 @@ apply_fixtures() {
   # sweep.
   for f in "${FIXTURE_DIR}"/*.yaml; do
     case "$(basename "$f")" in
-      51-widgets.yaml|53-flux-objects.yaml|55-argocd-objects.yaml|57-certmanager-objects.yaml) continue ;;
+      51-widgets.yaml|53-flux-objects.yaml|55-argocd-objects.yaml|57-certmanager-objects.yaml|59-gateway-objects.yaml) continue ;;
     esac
     kc apply -f "$f" >/dev/null
   done
@@ -157,6 +157,15 @@ apply_fixtures() {
     kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
   done
   kc apply -f "${FIXTURE_DIR}/57-certmanager-objects.yaml" >/dev/null
+
+  # Gateway API's CRDs, same reasoning a third time: no Gateway controller
+  # runs here, so the hand-written status.parents in 59-gateway-objects.yaml
+  # (one accepted route, one refused) stays exactly as written. §23b's whole
+  # point is those two states visible at once.
+  for crd in gateways.gateway.networking.k8s.io httproutes.gateway.networking.k8s.io; do
+    kc wait --for=condition=Established --timeout=90s "crd/${crd}" >/dev/null
+  done
+  kc apply -f "${FIXTURE_DIR}/59-gateway-objects.yaml" >/dev/null
   # §35a walks the chain by ownerReference, but an ownerReference cannot be
   # written into a static fixture: the API server rejects an empty uid, and a
   # made-up one is worse — the garbage collector resolves owners by uid, finds
@@ -197,6 +206,13 @@ apply_fixtures() {
   # not distinguish "two attempts so far" from "two attempts, final".
   log "waiting for attempts-fail to exhaust its backoffLimit"
   kc -n "$NAMESPACE" wait --for=condition=Failed --timeout=300s job/attempts-fail >/dev/null
+
+  # attempts-indexed succeeds, but §37d's grid is only honest once every
+  # index has finished — "1 of 3 complete" and "3 of 3 complete" are
+  # different screens, and a test polling for the second cannot tell it from
+  # the first still in flight.
+  log "waiting for attempts-indexed to complete every index"
+  kc -n "$NAMESPACE" wait --for=condition=Complete --timeout=300s job/attempts-indexed >/dev/null
 }
 
 # mint_sa_kubeconfig <serviceaccount> <destination>
