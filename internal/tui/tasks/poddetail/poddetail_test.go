@@ -396,12 +396,17 @@ func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 		"node-a", "10.0.0.5", "Burstable", "ReplicaSet/worker-abc123",
 		"CONTAINERS", "worker", "example.com/worker:v1",
 		"EVENTS", "BackOff",
-		"LABELS", "app=worker",
+		"RELATED",
 		"TOLERATIONS", "dedicated (exists):NoSchedule",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
+	}
+	// LABELS left the resting view when the sidebar was removed — labels and
+	// annotations live in 26a's 'm' metapanel now.
+	if strings.Contains(view, "LABELS") {
+		t.Fatalf("view still shows LABELS, which moved to the metapanel:\n%s", view)
 	}
 }
 
@@ -903,7 +908,7 @@ func hasKeyHint(hints []tui.KeyHint, key string) bool {
 	return false
 }
 
-// TestOpenRelatedJumpsToOwner covers the RELATED sidebar's numbered jump
+// TestOpenRelatedJumpsToOwner covers the RELATED section's numbered jump
 // (docs/design README.md §5a): pressing '1' on a pod whose owner resolves to
 // a Deployment must fire tui.GotoResource for that Deployment — the digit
 // keys' replacement for the old 'o' shortcut. tui.GotoResource is the same

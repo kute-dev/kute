@@ -1,7 +1,7 @@
 // Package poddetail is 5a (docs/design/README.md §5a): a pod's full detail
 // view — title/status/restarts, last-termination banner (promoted first
 // when present), meta grid, CONTAINERS grid, CPU/MEM bars vs limits,
-// EVENTS, and a LABELS/RELATED/TOLERATIONS sidebar. Reached from
+// EVENTS, and a full-width RELATED │ TOLERATIONS two-column row. Reached from
 // tasks/browse's Pods list on 'enter', and from tasks/nodedetail's pod rows
 // (mvp-tasks.md Phase 9 exit notes: "swap it for a genuine poddetail push
 // once Phase 5 lands").
@@ -139,9 +139,9 @@ type Model struct {
 	// (verbs.TierForEdit) — mirrors browse.Model's own pendingEdit field.
 	pendingEdit *editTarget
 	// meta is non-nil while 26a's labels/annotations panel is open on this
-	// pod (the shared internal/tui/metapanel editor) — the recovery path for
-	// sidebar label values the ~25%-width column clips, and the only place
-	// annotations show at all. Mirrors browse's pendingMeta hosting.
+	// pod (the shared internal/tui/metapanel editor) — the only place labels
+	// and annotations show at all now that the resting view has no LABELS
+	// section. Mirrors browse's pendingMeta hosting.
 	meta *metapanel.Model
 
 	namespace    string
@@ -159,7 +159,7 @@ type Model struct {
 	// field doc comment explains the ReplicaSet→Deployment hop) — separate
 	// from pod.Owner, which is the pod's direct, unresolved owner.
 	controller string
-	// related is the RELATED sidebar's numbered jump targets, resolved once
+	// related is the RELATED section's numbered jump targets, resolved once
 	// in load() (loadedMsg's own field doc comment explains why) — pressing
 	// a digit key jumps to related[digit-1] the same way 'o'/'i' used to
 	// resolve on demand.
@@ -209,9 +209,9 @@ type loadedMsg struct {
 	// Deployment never appears as a pod's direct owner. Resolved here
 	// (load()'s tea.Cmd) rather than in metaGrid, which must stay pure.
 	controller string
-	// related is the RELATED sidebar's numbered jump targets (owning
+	// related is the RELATED section's numbered jump targets (owning
 	// Deployment/StatefulSet, fronting Ingress) — resolved here for the same
-	// reason controller is: metaGrid/sidebarBlock must stay pure, so a digit
+	// reason controller is: metaGrid/relatedTolerationsBlock must stay pure, so a digit
 	// press can jump without a synchronous lookup (CLAUDE.md: render
 	// functions are pure, no I/O).
 	related []relatedItem

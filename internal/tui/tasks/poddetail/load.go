@@ -67,11 +67,12 @@ func (m Model) load() tea.Cmd {
 	}
 }
 
-// relatedItem is one RELATED sidebar entry (docs/design README.md §5a) — a
+// relatedItem is one RELATED entry (docs/design README.md §5a) — a
 // numbered jump target resolved once here in load(), never in the render
 // path (CLAUDE.md: render functions are pure, no I/O), so pressing its
 // digit key (update.go's openRelated) can jump without a synchronous
-// lookup. Label is the pre-formatted "Kind/name" text sidebarBlock renders.
+// lookup. Label is the pre-formatted "Kind/name" text
+// relatedTolerationsBlock renders.
 type relatedItem struct {
 	Kind  kube.ResourceKind
 	Name  string

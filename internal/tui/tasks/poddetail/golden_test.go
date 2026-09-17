@@ -201,7 +201,7 @@ func TestGoldenFixtures(t *testing.T) {
 
 // truecolorGoldenFixtures renders 5a with a forced truecolor profile in both
 // themes, pinning the per-cell color mapping (termination banner, conn
-// badge, MEM-at-96% red, sidebar tokens) that the profile-less goldens above
+// badge, MEM-at-96% red, RELATED/TOLERATIONS tokens) that the profile-less goldens above
 // can't see. The profile swap is global, so these tests must not run
 // parallel with other renders in this package (none of them do).
 func truecolorGoldenFixtures(t *testing.T) map[string]string {

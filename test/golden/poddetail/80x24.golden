@@ -1,24 +1,24 @@
   kute │ test-cluster › nva-stage › Pods › nva-worker-9k2ss ● connected · 12ms  
 ────────────────────────────────────────────────────────────────────────────────
-nva-worker-9k2ss  ✕ CrashLoopBackOff  ↺ 6 restarts        │ LABELS              
-                                                          │ app=nva-worker      
-▌                                                         │ tier=backend        
-▌ Last termination  exit 137 · OOMKilled · 4m ago         │                     
-▌ Container worker exceeded memory limit 256Mi. Next      │ RELATED             
-▌ backoff ~5m.                                            │ 1 Deployment/nva-wo…
-▌                                                         │                     
-                                                          │ TOLERATIONS         
-NODE         IP            QOS          CONTROLLER     …  │ node.kubernetes.io/…
-worker-01    10.1.34.19    Burstable    Deployment/nva-…  │                     
-                                                          │                     
-CONTAINERS                                                │                     
-────────────────────────────────────────────────────────  │                     
-     NAME        IMAGE         STATE                 RE…  │                     
-────────────────────────────────────────────────────────  │                     
-▎ ▲  worker      …rker:1.42.0  Waiting · CrashLoop…    …  │                     
-  ●  metrics-s…  …decar:0.9.1  Running                 …  │                     
-────────────────────────────────────────────────────────  │                     
-CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 2…  │                     
-────────────────────────────────────────────────────────  │                     
+nva-worker-9k2ss  ✕ CrashLoopBackOff  ↺ 6 restarts               watching · live
+                                                                                
+▌                                                                               
+▌ Last termination  exit 137 · OOMKilled · 4m ago                               
+▌ Container worker exceeded memory limit 256Mi. Next backoff ~5m.               
+▌                                                                               
+                                                                                
+NODE         IP            QOS          CONTROLLER                 AGE          
+worker-01    10.1.34.19    Burstable    Deployment/nva-worker ↗    3h           
+                                                                                
+CONTAINERS                                                                      
+────────────────────────────────────────────────────────────────────────────────
+     NAME                 IMAGE                 STATE                 RESTARTS  
+────────────────────────────────────────────────────────────────────────────────
+▎ ▲  worker               nva/worker:1.42.0     Waiting · CrashLoop…       6 ↺  
+  ●  metrics-sidecar      nva/sidecar:0.9.1     Running                    0 ↺  
+────────────────────────────────────────────────────────────────────────────────
+CPU ▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ 4m / 500m   MEM ▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮ 246Mi / 256Mi             
+────────────────────────────────────────────────────────────────────────────────
+                                                                                
 ────────────────────────────────────────────────────────────────────────────────
    POD  l logs  x exec  1 related │ D delete          pgdown page down  ? help  

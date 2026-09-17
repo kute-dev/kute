@@ -80,7 +80,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// or failure — HandleResult refreshes the grid or restores the
 			// pre-commit state with the server's error; closed here only
 			// means the object vanished mid-edit. On success the screen's
-			// own body (the LABELS sidebar) reloads too.
+			// own body reloads too.
 			if m.meta.HandleResult(msg) {
 				m.meta = nil
 			}
@@ -494,7 +494,7 @@ func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
 	return task, cmd, task != nil
 }
 
-// openRelated jumps to the RELATED sidebar's (idx+1)-th entry — the digit
+// openRelated jumps to the RELATED section's (idx+1)-th entry — the digit
 // keys' replacement for the old 'o'/'i' shortcuts. tui.GotoResource fires
 // the same navigation the 'g' goto palette's own resource picks do,
 // pre-filled: model.go's routeGoto pushes a fresh browse view retargeted at

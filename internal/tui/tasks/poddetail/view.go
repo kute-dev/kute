@@ -3,8 +3,6 @@ package poddetail
 import (
 	"fmt"
 	"image/color"
-	"maps"
-	"slices"
 	"strings"
 	"time"
 
@@ -108,8 +106,9 @@ func (m Model) metaBody(width, height int) string {
 // readyBody stacks 5a's sections top to bottom: title row, an optional
 // last-termination banner (promoted first, per docs/design README.md §5a —
 // "answers why is it broken first, never bury it"), the meta grid, the
-// CONTAINERS grid + CPU/MEM bars, EVENTS, and a right sidebar composited
-// alongside the main column.
+// CONTAINERS grid + CPU/MEM bars, the RELATED │ TOLERATIONS two-column row,
+// then EVENTS — all full width (the old right sidebar is gone; labels and
+// annotations live in 26a's 'm' metapanel now).
 func (m Model) readyBody(width, height int) string {
 	content := m.readyContent(width)
 	lines := strings.Split(content, "\n")
@@ -125,57 +124,24 @@ func (m Model) readyBody(width, height int) string {
 
 func (m Model) readyContent(width int) string {
 	theme := m.Theme()
-	// +2 keeps the sidebar's content width at a quarter of the screen after
-	// its border gutter ("│ ") is drawn.
-	sidebarWidth := max(width/4, 20) + 2
-	mainWidth := width - sidebarWidth - 2
 
 	var main []string
-	main = append(main, m.titleLine(theme, mainWidth))
+	main = append(main, m.titleLine(theme, width))
 	if m.pod.LastTermination != nil {
-		main = append(main, "", m.terminationBanner(theme, mainWidth))
+		main = append(main, "", m.terminationBanner(theme, width))
 	}
 	main = append(main, "", m.metaGrid(theme))
-	main = append(main, "", m.containersBlock(theme, mainWidth))
+	main = append(main, "", m.containersBlock(theme, width))
 	if len(m.pod.InitContainerInfos) > 0 {
-		main = append(main, "", m.initContainersBlock(theme, mainWidth))
+		main = append(main, "", m.initContainersBlock(theme, width))
 	}
 	if len(m.pod.EphemeralContainerInfos) > 0 {
-		main = append(main, "", m.ephemeralBlock(theme, mainWidth))
+		main = append(main, "", m.ephemeralBlock(theme, width))
 	}
-	main = append(main, "", m.eventsBlock(theme, mainWidth))
+	main = append(main, "", m.relatedTolerationsBlock(theme, width))
+	main = append(main, "", m.eventsBlock(theme, width))
 
-	mainBlock := strings.Join(main, "\n")
-	sidebar := m.sidebarBlock(theme)
-	return joinColumns(theme, mainBlock, sidebar, mainWidth, sidebarWidth, 0)
-}
-
-// joinColumns lays main/sidebar out side by side, line by line — pre-styled
-// single-line strings only (components.Pad only pads a single line
-// correctly; joining multi-line blocks through lipgloss.JoinHorizontal
-// silently corrupts the taller column, per nodedetail.factsPanel's doc
-// comment on the same shortcut). The sidebar panel extends to the full
-// budgeted height (mock 5a: the bordered side panel spans the body), so rows
-// past its content get an empty gutter-only sidebar line.
-func joinColumns(theme tui.Theme, main, sidebar string, mainWidth, sidebarWidth, height int) string {
-	mainLines := strings.Split(main, "\n")
-	sideLines := strings.Split(sidebar, "\n")
-	n := max(len(mainLines), len(sideLines))
-	if height > 0 {
-		n = height
-	}
-	lines := make([]string, n)
-	for i := range n {
-		l, r := "", sidebarLine(theme, "")
-		if i < len(mainLines) {
-			l = mainLines[i]
-		}
-		if i < len(sideLines) {
-			r = sideLines[i]
-		}
-		lines[i] = components.Pad(l, mainWidth) + "  " + components.Pad(r, sidebarWidth)
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(main, "\n")
 }
 
 func (m Model) titleLine(theme tui.Theme, width int) string {
@@ -610,33 +576,22 @@ func (m Model) eventsBlock(theme tui.Theme, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// sidebarBlock renders the LABELS/RELATED/TOLERATIONS panel behind a left
-// border gutter (mock 5a's 1px #26263a rule); joinColumns pads/clips each
-// line to the panel width. The mock's #0a0a0f panel fill is deliberately NOT
-// painted: chrome renders transparent in this app (see chrome.go's
-// insetChromeLine — background fills show up as a solid slab on translucent/
-// non-matching terminals), so the gutter alone carries the panel boundary.
-func (m Model) sidebarBlock(theme tui.Theme) string {
+// relatedTolerationsBlock lays RELATED and TOLERATIONS out side by side —
+// the old right sidebar's surviving sections, now a full-width two-column
+// row under the container grids (nodedetail.factsPanel's shape: pre-styled
+// single-line strings joined per line through components.Pad, since
+// lipgloss.JoinHorizontal silently corrupts the taller column). LABELS is
+// gone from the resting view — 26a's 'm' metapanel is the labels/annotations
+// surface.
+func (m Model) relatedTolerationsBlock(theme tui.Theme, width int) string {
 	title := lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true)
-	keyStyle := lipgloss.NewStyle().Foreground(theme.TextDim)
-	valStyle := lipgloss.NewStyle().Foreground(theme.TextPrimary)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 
-	var lines []string
-	lines = append(lines, title.Render("LABELS"))
-	if len(m.pod.Labels) == 0 {
-		lines = append(lines, dim.Render("none"))
-	} else {
-		for _, k := range sortedKeys(m.pod.Labels) {
-			lines = append(lines, keyStyle.Render(k+"=")+valStyle.Render(m.pod.Labels[k]))
-		}
-	}
-
-	lines = append(lines, "", title.Render("RELATED"))
+	left := []string{title.Render("RELATED")}
 	if len(m.related) == 0 {
-		lines = append(lines, dim.Render("none"))
+		left = append(left, dim.Render("none"))
 	} else {
 		// Numbered so a digit key (update.go's openRelated) can jump
 		// straight to it — replaces the old 'o'/'i' shortcuts. The number
@@ -644,36 +599,34 @@ func (m Model) sidebarBlock(theme tui.Theme) string {
 		// accent, reading as a hint prefix rather than part of the link text.
 		num := lipgloss.NewStyle().Foreground(theme.TextFaint)
 		for i, item := range m.related {
-			lines = append(lines, num.Render(fmt.Sprintf("%d ", i+1))+accent.Render(item.Label+" ↗"))
+			left = append(left, num.Render(fmt.Sprintf("%d ", i+1))+accent.Render(item.Label+" ↗"))
 		}
 	}
 
-	lines = append(lines, "", title.Render("TOLERATIONS"))
+	right := []string{title.Render("TOLERATIONS")}
 	if len(m.pod.Tolerations) == 0 {
-		lines = append(lines, dim.Render("none"))
+		right = append(right, dim.Render("none"))
 	} else {
 		for _, t := range m.pod.Tolerations {
-			lines = append(lines, secondary.Render(t))
+			right = append(right, secondary.Render(t))
 		}
 	}
 
-	for i, l := range lines {
-		lines[i] = sidebarLine(theme, l)
+	leftWidth := width / 2
+	rightWidth := width - leftWidth - 2
+	n := max(len(left), len(right))
+	lines := make([]string, n)
+	for i := range n {
+		l, r := "", ""
+		if i < len(left) {
+			l = left[i]
+		}
+		if i < len(right) {
+			r = right[i]
+		}
+		lines[i] = components.Pad(l, leftWidth) + "  " + components.Pad(r, rightWidth)
 	}
 	return strings.Join(lines, "\n")
-}
-
-// sidebarLine wraps one pre-styled sidebar content line with the border
-// gutter; joinColumns' Pad pads/clips it to the panel width. Styled through
-// TextGhost2 rather than Border — chrome.go's own header/strip/keybar rules
-// deliberately use the text ramp's ghost tones instead of Border/
-// BorderSubtle, which "nearly disappear against a real terminal's own
-// background once rendered without an explicit bg fill" (chrome.go's own
-// rationale); a bare "│" on this panel's unfilled background is exactly
-// that case, so it follows the same convention as every other rule in the
-// app instead of the darker token meant for filled/bordered surfaces.
-func sidebarLine(theme tui.Theme, content string) string {
-	return lipgloss.NewStyle().Foreground(theme.TextGhost2).Render("│ ") + content
 }
 
 // deleteConfirmModal renders 8b's type-the-name modal for the pod's delete
@@ -712,10 +665,6 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		Label:     lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
 	return components.TypeNameModal(title, ownerLine, detail, target, m.actions.TypedInput(), "delete", m.isProd(), styles, width, height)
-}
-
-func sortedKeys(m map[string]string) []string {
-	return slices.Sorted(maps.Keys(m))
 }
 
 func padTo(s string, width int) string {
