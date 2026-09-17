@@ -51,6 +51,44 @@ func Truncate(value string, width int) string {
 	return ansi.Truncate(ansi.Strip(value), width, ellipsis)
 }
 
+// TruncateFront ellipsizes value from the left to width cells — the tail
+// survives (an image tag, the end of a long path). Same multi-line,
+// invalid-UTF-8 and malformed-escape handling as Truncate, and the same
+// width<=3 no-ellipsis rule.
+func TruncateFront(value string, width int) string {
+	if strings.Contains(value, "\n") {
+		lines := strings.Split(value, "\n")
+		for i, l := range lines {
+			lines[i] = TruncateFront(l, width)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if width <= 0 {
+		return ""
+	}
+	// Same boundary normalisation as Truncate — see its doc comment.
+	value = strings.ToValidUTF8(value, "�")
+	total := ansi.StringWidth(value)
+	if total <= width {
+		return value
+	}
+	ellipsis := "…"
+	if width <= 3 {
+		ellipsis = ""
+	}
+	cut := total - width + ansi.StringWidth(ellipsis)
+	out := ansi.TruncateLeft(value, cut, ellipsis)
+	if ansi.StringWidth(out) <= width {
+		return out
+	}
+	// The cut landed inside a malformed escape sequence — drop the styling,
+	// same trade Truncate makes: an over-wide cell pushes every column to
+	// its right off the row.
+	plain := ansi.Strip(value)
+	cut = ansi.StringWidth(plain) - width + ansi.StringWidth(ellipsis)
+	return ansi.TruncateLeft(plain, cut, ellipsis)
+}
+
 // Pad truncates/pads value to exactly width cells, per line — see
 // Truncate's doc comment on multi-line handling.
 func Pad(value string, width int) string {

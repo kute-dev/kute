@@ -1,0 +1,3 @@
+  NAME            IMAGE                           
+▎ prometheus-co…  …theus-config-reloader:v0.91.0  
+  worker          nva/worker:1.42.0               

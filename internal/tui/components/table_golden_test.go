@@ -47,9 +47,26 @@ func goldenTables() map[string]Table {
 		Rows: groupRows,
 	}
 
+	// truncatefront pins Column.TruncateFront: the IMAGE cell elides from
+	// the front so the tag at the end survives, while NAME keeps the
+	// default back-truncation.
+	truncateFront := Table{
+		Width:  50,
+		Height: 4,
+		Columns: []Column{
+			{Title: "Name", Min: 14},
+			{Title: "Image", Min: 10, Flex: true, TruncateFront: true},
+		},
+		Rows: []Row{
+			{Cells: []Cell{{Text: "prometheus-config-reloader"}, {Text: "quay.io/prometheus-operator/prometheus-config-reloader:v0.91.0"}}},
+			{Cells: []Cell{{Text: "worker"}, {Text: "nva/worker:1.42.0"}}},
+		},
+	}
+
 	return map[string]Table{
-		"basic.golden":  basic,
-		"groups.golden": groups,
+		"basic.golden":         basic,
+		"groups.golden":        groups,
+		"truncatefront.golden": truncateFront,
 	}
 }
 

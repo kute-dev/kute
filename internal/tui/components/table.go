@@ -28,6 +28,11 @@ type Column struct {
 	Flex  bool
 	Align Align
 	Sort  string
+	// TruncateFront ellipsizes this column's data cells from the front
+	// instead of the back, so the tail survives — image references, where
+	// the tag at the end is the version signal (§10a). Header titles keep
+	// back-truncation.
+	TruncateFront bool
 }
 
 // Cell is one pre-styled table cell.
@@ -282,7 +287,11 @@ func (t Table) renderRowV2(row Row, selected bool, widths []int, width int) stri
 		if i < len(widths) {
 			w = widths[i]
 		}
-		content := style.Render(Truncate(text, w))
+		truncate := Truncate
+		if col.TruncateFront {
+			truncate = TruncateFront
+		}
+		content := style.Render(truncate(text, w))
 		slack := max(w-ansi.StringWidth(content), 0)
 		if col.Align == AlignRight {
 			cells[i] = pad(slack) + content
