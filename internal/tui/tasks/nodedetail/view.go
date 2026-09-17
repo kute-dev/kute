@@ -136,6 +136,13 @@ func padBetween(left, right string, width int) string {
 }
 
 func (m Model) Body(width, height int) string {
+	// The open 26a panel wins over confirmBody: its own TierInline commits
+	// (a join-locked edit or a removal's y/N) render inside the still-open
+	// panel per the hosting contract, never as a card over it — cordon/
+	// drain's confirms can't arrive while the panel captures every key.
+	if m.meta != nil {
+		return m.metaBody(width, height)
+	}
 	if m.actions.Active() {
 		return m.confirmBody(width, height)
 	}
@@ -147,6 +154,32 @@ func (m Model) Body(width, height int) string {
 	default:
 		return components.CenterLines([]string{m.feedback}, width, height)
 	}
+}
+
+// metaBody renders 26a's panel in place of the detail body while it's open —
+// the node's own title line stays frozen above it, the detail-screen analogue
+// of browse's selected-row-above-the-panel framing (docs/design README.md
+// §26a); the grid and will-run strip come from the shared metapanel renderer.
+func (m Model) metaBody(width, height int) string {
+	theme := m.Theme()
+	lines := []string{m.titleLine(theme, width), ""}
+	lines = append(lines, m.meta.PanelLines(width, &m.actions)...)
+	lines = append(lines, "", m.meta.WillRunStrip(width, &m.actions))
+	return components.Pad(strings.Join(lines, "\n"), width)
+}
+
+// titleLine is the node's name (plus its cordoned state, the one status word
+// 11b's facts panel would otherwise carry) — the ready body has no title row
+// of its own (the breadcrumb header names the node), so metaBody renders this
+// minimal one to keep the object visible above the open panel, mirroring
+// poddetail's own titleLine framing.
+func (m Model) titleLine(theme tui.Theme, width int) string {
+	left := lipgloss.NewStyle().Foreground(theme.Text).Bold(true).Render(m.nodeName)
+	if m.node != nil && m.node.Spec.Unschedulable {
+		left += "  " + lipgloss.NewStyle().Foreground(theme.Warn).Render(tui.GlyphPending+" cordoned")
+	}
+	right := lipgloss.NewStyle().Foreground(theme.TextFaint).Render("watching · live")
+	return padBetween(left, right, width)
 }
 
 // readyBody splits the body into 11b's top facts panel (CONDITIONS │

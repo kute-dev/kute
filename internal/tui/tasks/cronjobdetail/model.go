@@ -41,6 +41,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 )
 
 // OpenLogsFunc pushes the log-stream screen for pod — same shape as
@@ -150,6 +151,11 @@ type Model struct {
 	pendingRun    *cronJobRunTarget
 	pendingResume *cronJobResumeTarget
 
+	// meta is non-nil while 26a's labels/annotations panel is open on this
+	// CronJob (the shared internal/tui/metapanel editor) — mirrors
+	// poddetail's own meta hosting.
+	meta *metapanel.Model
+
 	now time.Time // UI clock (tea.Tick); relative ETA/age text only, never a reload trigger
 
 	conn        kube.ConnState
@@ -228,13 +234,13 @@ func (m *Model) SetSize(width, height int) {
 }
 
 // CapturingInput reports whether the root shell should let this screen see
-// every keystroke instead of treating g/n/c/? as global shortcuts — only
-// while a confirmation is active, mirroring poddetail/nodedetail. The
-// run-now/resume preflights (pendingRun/pendingResume) are deliberately
-// excluded, matching browse's own CapturingInput: their own keys (enter/y/
-// esc) never collide with a global shortcut.
+// every keystroke instead of treating g/n/c/? as global shortcuts — while a
+// confirmation is active or 26a's panel is open, mirroring poddetail/
+// nodedetail. The run-now/resume preflights (pendingRun/pendingResume) are
+// deliberately excluded, matching browse's own CapturingInput: their own
+// keys (enter/y/esc) never collide with a global shortcut.
 func (m Model) CapturingInput() bool {
-	return m.actions.Active()
+	return m.actions.Active() || m.meta != nil
 }
 
 // Theme mirrors every other task package's own Config-independent Theme().

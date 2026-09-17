@@ -147,11 +147,22 @@ func goldenPodDetailModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// goldenPodDetailMetaModel is the same fixture with 26a's 'm' panel open —
+// pins the detail-screen hosting of the shared metapanel (title line frozen
+// above the grid, META keybar).
+func goldenPodDetailMetaModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	m := goldenPodDetailModel(t, width, height)
+	return step(t, m, tea.KeyPressMsg{Text: "m"})
+}
+
 func goldenPodDetailFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden": goldentest.Plain(goldenPodDetailModel(t, 120, 36).Render()),
-		"80x24.golden":  goldentest.Plain(goldenPodDetailModel(t, 80, 24).Render()),
+		"120x36.golden":      goldentest.Plain(goldenPodDetailModel(t, 120, 36).Render()),
+		"80x24.golden":       goldentest.Plain(goldenPodDetailModel(t, 80, 24).Render()),
+		"meta-120x36.golden": goldentest.Plain(goldenPodDetailMetaModel(t, 120, 36).Render()),
+		"meta-80x24.golden":  goldentest.Plain(goldenPodDetailMetaModel(t, 80, 24).Render()),
 	}
 }
 
@@ -198,9 +209,15 @@ func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	dark := goldenPodDetailModel(t, 120, 36)
 	light := goldenPodDetailModel(t, 120, 36)
 	light.session.Theme = tui.Light()
+	metaDark := goldenPodDetailMetaModel(t, 120, 36)
+	metaLight := goldenPodDetailModel(t, 120, 36)
+	metaLight.session.Theme = tui.Light()
+	metaLight = step(t, metaLight, tea.KeyPressMsg{Text: "m"})
 	return map[string]string{
-		"120x36-dark.golden":  goldentest.Truecolor(dark.Render()),
-		"120x36-light.golden": goldentest.Truecolor(light.Render()),
+		"120x36-dark.golden":       goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden":      goldentest.Truecolor(light.Render()),
+		"meta-120x36-dark.golden":  goldentest.Truecolor(metaDark.Render()),
+		"meta-120x36-light.golden": goldentest.Truecolor(metaLight.Render()),
 	}
 }
 

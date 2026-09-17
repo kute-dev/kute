@@ -73,6 +73,9 @@ func (m Model) Body(width, height int) string {
 	if m.actions.Active() && m.actions.Tier() == actions.TierModal {
 		return m.deleteConfirmModal(width, height)
 	}
+	if m.meta != nil {
+		return m.metaBody(width, height)
+	}
 	switch m.state {
 	case tui.TaskStateReady:
 		if m.gone {
@@ -88,6 +91,18 @@ func (m Model) Body(width, height int) string {
 	default:
 		return components.CenterLines([]string{m.feedback}, width, height)
 	}
+}
+
+// metaBody renders 26a's panel in place of the detail body while it's open —
+// the pod's own title line stays frozen above it, the detail-screen analogue
+// of browse's selected-row-above-the-panel framing (docs/design README.md
+// §26a); the grid and will-run strip come from the shared metapanel renderer.
+func (m Model) metaBody(width, height int) string {
+	theme := m.Theme()
+	lines := []string{m.titleLine(theme, width), ""}
+	lines = append(lines, m.meta.PanelLines(width, &m.actions)...)
+	lines = append(lines, "", m.meta.WillRunStrip(width, &m.actions))
+	return components.Pad(strings.Join(lines, "\n"), width)
 }
 
 // readyBody stacks 5a's sections top to bottom: title row, an optional

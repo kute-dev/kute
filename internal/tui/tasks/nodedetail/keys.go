@@ -1,7 +1,11 @@
 package nodedetail
 
 import (
+	"fmt"
+
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -17,7 +21,34 @@ func (m Model) Keybar() tui.Keybar {
 		}
 	}
 	if m.actions.Active() {
+		if m.actions.Tier() == actions.TierInline {
+			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
+			note := m.actions.Prompt()
+			if pending := m.actions.Pending(); pending != nil && pending.Scope.Verb == "set-meta" {
+				// 26a: the panel stays open under this confirm and already
+				// renders the full will-run line + join warning in its own
+				// strip, so this note keeps to the keybar-safe short form
+				// (browse's own set-meta case, same reasoning).
+				note = metapanel.WillRunLine(pending.Scope)
+				if pending.Scope.MetaJoinService != "" {
+					note = fmt.Sprintf("detaches %d pods from svc/%s",
+						pending.Scope.MetaJoinPodCount, pending.Scope.MetaJoinService)
+				}
+			}
+			return tui.Keybar{
+				Pill:      tui.ModeConfirm,
+				PillText:  "CONFIRM",
+				Groups:    [][]tui.KeyHint{hints},
+				RightNote: note,
+			}
+		}
 		return tui.Keybar{Pill: tui.ModeConfirm, PillText: "CONFIRM"}
+	}
+	if m.meta != nil {
+		// The open 26a panel's own keybar (per the Global-verb rule, 'm'
+		// itself is never listed while closed — the ? overlay's RESOURCE
+		// column teaches it once, app-wide).
+		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: m.meta.KeybarHints()}
 	}
 
 	if m.state == tui.TaskStateLoading {
@@ -81,5 +112,5 @@ func (m Model) Keybar() tui.Keybar {
 // lets y/n reach nodedetail's own key handling instead of treating them as
 // global shortcuts (mirrors browse.CapturingInput).
 func (m Model) CapturingInput() bool {
-	return m.actions.Active() || m.filterActive || m.pendingEdit != nil
+	return m.actions.Active() || m.filterActive || m.pendingEdit != nil || m.meta != nil
 }

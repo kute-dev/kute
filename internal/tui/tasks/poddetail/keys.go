@@ -6,6 +6,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -39,17 +40,37 @@ func (m Model) Keybar() tui.Keybar {
 				}
 			}
 			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
-			if pending := m.actions.Pending(); pending != nil && pending.Scope.Verb == "delete" && pending.Scope.ResourceKind == string(kube.KindPod) {
-				hints = append(hints, verbs.ForceDelete.Hint())
+			note := m.actions.Prompt()
+			if pending := m.actions.Pending(); pending != nil {
+				switch {
+				case pending.Scope.Verb == "delete" && pending.Scope.ResourceKind == string(kube.KindPod):
+					hints = append(hints, verbs.ForceDelete.Hint())
+				case pending.Scope.Verb == "set-meta":
+					// 26a: the panel stays open under this confirm and already
+					// renders the full will-run line + join warning in its own
+					// strip, so this note keeps to the keybar-safe short form
+					// (browse's own set-meta case, same reasoning).
+					note = metapanel.WillRunLine(pending.Scope)
+					if pending.Scope.MetaJoinService != "" {
+						note = fmt.Sprintf("detaches %d pods from svc/%s",
+							pending.Scope.MetaJoinPodCount, pending.Scope.MetaJoinService)
+					}
+				}
 			}
 			return tui.Keybar{
 				Pill:      tui.ModeConfirm,
 				PillText:  "CONFIRM",
 				Groups:    [][]tui.KeyHint{hints},
-				RightNote: m.actions.Prompt(),
+				RightNote: note,
 			}
 		}
 		return tui.Keybar{Pill: tui.ModeConfirm, PillText: "CONFIRM"}
+	}
+	if m.meta != nil {
+		// The open 26a panel's own keybar (per the Global-verb rule, 'm'
+		// itself is never listed while closed — the ? overlay's RESOURCE
+		// column teaches it once, app-wide).
+		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: m.meta.KeybarHints()}
 	}
 	if m.gone {
 		return tui.Keybar{
@@ -128,5 +149,5 @@ func (m Model) Keybar() tui.Keybar {
 // shell should let poddetail's own key handling see every keystroke instead
 // of treating them as global g/n/c/? shortcuts.
 func (m Model) CapturingInput() bool {
-	return m.actions.Active() || m.gone || m.pendingEdit != nil
+	return m.actions.Active() || m.gone || m.pendingEdit != nil || m.meta != nil
 }

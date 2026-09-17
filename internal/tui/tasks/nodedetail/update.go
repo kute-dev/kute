@@ -13,14 +13,20 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// pasteTarget is the '/' pods-filter buffer while it's open. Node
-// detail's other confirms (cordon/drain) are y/N cards with no text field, so
-// they have nothing to paste into. The filter re-applies inside the closure so
+// pasteTarget mirrors updateKey's own routing precedence: the open meta
+// panel's focused buffer first (its own resolver picks the right one of its
+// three), else the '/' pods-filter buffer while it's open. Node detail's
+// other confirms (cordon/drain) are y/N cards with no text field, so they
+// have nothing to paste into. The filter re-applies inside the closure so
 // a pasted query narrows the pods table as a typed one does.
 func (m *Model) pasteTarget() tui.PasteTarget {
+	if m.meta != nil && !m.actions.Active() {
+		return m.meta.PasteTarget()
+	}
 	if !m.filterActive {
 		return nil
 	}
@@ -99,6 +105,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
+		if metapanel.IsActionID(msg.ActionID) && m.meta != nil {
+			// 26a never closes the panel on a commit's own account, success
+			// or failure — HandleResult refreshes the grid or restores the
+			// pre-commit state with the server's error; closed here only
+			// means the object vanished mid-edit. On success the screen's
+			// own body reloads too.
+			if m.meta.HandleResult(msg) {
+				m.meta = nil
+			}
+			if msg.Err == nil {
+				return m, m.load()
+			}
+			return m, nil
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
@@ -259,6 +279,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.pendingEdit != nil {
 		return m.updateEditConfirmKey(msg)
 	}
+	if m.meta != nil {
+		// The open 26a panel captures every key (metapanel's package doc
+		// comment) — the closed-panel bindings below, 'y' YAML included,
+		// only apply once esc closes it.
+		closed, cmd := m.meta.Update(msg, &m.actions)
+		if closed {
+			m.meta = nil
+		}
+		return m, cmd
+	}
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
@@ -350,6 +380,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if task, cmd, ok := m.openSelectedTimeline(); ok {
 			return task, cmd
 		}
+	case verbs.Meta.Key:
+		// 26a on the loaded node — the same guard this screen's own
+		// cordon/drain use (mutator wired, node loaded, not offline);
+		// Editable(Node) is always true.
+		if m.node != nil && m.mutator != nil && !verbs.Meta.HiddenWhileOffline(m.conn.Offline()) {
+			if p, ok := metapanel.Open(metapanel.Config{Session: m.session, Lister: m.lister}, kube.KindNode, "", m.nodeName); ok {
+				m.meta = p
+			}
+		}
 	}
 	return m, nil
 }
@@ -359,9 +398,20 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		return m, m.actions.Confirm()
 	case "n", "esc":
-		m.actions.Cancel()
+		m.cancelInlineConfirm()
 	}
 	return m, nil
+}
+
+// cancelInlineConfirm is updateConfirmKey's shared "actually cancel" path —
+// when the cancelled confirm was a 26a commit (the panel stays open under
+// its TierInline y/N), the row's buffer must revert too, per the panel's
+// hosting contract (metapanel.CancelConfirm's doc comment).
+func (m *Model) cancelInlineConfirm() {
+	if m.meta != nil {
+		m.meta.CancelConfirm()
+	}
+	m.actions.Cancel()
 }
 
 // updateFilterKey drives the pods list's live "/" filter — same shape as

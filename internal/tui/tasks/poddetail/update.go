@@ -10,17 +10,21 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
-// pasteTarget is the type-the-name confirm buffer while a PROD-tier delete
-// modal is up — the same gate updateConfirmKey routes typed keys through. 5a
-// has no other text entry.
+// pasteTarget mirrors updateKey's own routing precedence: the type-the-name
+// confirm buffer while a PROD-tier delete modal is up, else the open meta
+// panel's focused buffer (its own resolver picks the right one of its three).
 func (m *Model) pasteTarget() tui.PasteTarget {
-	if m.actions.Tier() != actions.TierModal {
-		return nil
+	switch {
+	case m.actions.Tier() == actions.TierModal:
+		return m.actions.PasteTarget()
+	case m.meta != nil && !m.actions.Active():
+		return m.meta.PasteTarget()
 	}
-	return m.actions.PasteTarget()
+	return nil
 }
 
 // Reload implements tui.Reloader — see its doc comment: this screen misses
@@ -71,6 +75,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
+		if metapanel.IsActionID(msg.ActionID) && m.meta != nil {
+			// 26a never closes the panel on a commit's own account, success
+			// or failure — HandleResult refreshes the grid or restores the
+			// pre-commit state with the server's error; closed here only
+			// means the object vanished mid-edit. On success the screen's
+			// own body (the LABELS sidebar) reloads too.
+			if m.meta.HandleResult(msg) {
+				m.meta = nil
+			}
+			if msg.Err == nil {
+				return m, m.load()
+			}
+			return m, nil
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
@@ -140,6 +158,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.pendingEdit != nil {
 		return m.updateEditConfirmKey(msg)
+	}
+	if m.meta != nil {
+		// The open 26a panel captures every key (metapanel's package doc
+		// comment) — the closed-panel bindings below, 'y' YAML included,
+		// only apply once esc closes it.
+		closed, cmd := m.meta.Update(msg, &m.actions)
+		if closed {
+			m.meta = nil
+		}
+		return m, cmd
 	}
 	if m.gone {
 		// "pod gone ⇒ banner + auto-back after keypress" (docs/design
@@ -236,6 +264,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case verbs.Delete.Key:
 		return m, m.beginDelete()
+	case verbs.Meta.Key:
+		// 26a on the loaded pod — the same guard browse's own 'm' uses
+		// (mutator wired, object loaded); Editable(Pod) is always true.
+		if m.found && m.mutator != nil && !verbs.Meta.HiddenWhileOffline(m.conn.Offline()) {
+			if p, ok := metapanel.Open(metapanel.Config{Session: m.session, Lister: m.lister}, kube.KindPod, m.namespace, m.name); ok {
+				m.meta = p
+			}
+		}
 	}
 	return m, nil
 }
@@ -263,11 +299,22 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.actions.DisarmForceDelete()
 			return m, nil
 		}
-		m.actions.Cancel()
+		m.cancelInlineConfirm()
 	case "esc":
-		m.actions.Cancel()
+		m.cancelInlineConfirm()
 	}
 	return m, nil
+}
+
+// cancelInlineConfirm is updateConfirmKey's shared "actually cancel" path —
+// when the cancelled confirm was a 26a commit (the panel stays open under
+// its TierInline y/N), the row's buffer must revert too, per the panel's
+// hosting contract (metapanel.CancelConfirm's doc comment).
+func (m *Model) cancelInlineConfirm() {
+	if m.meta != nil {
+		m.meta.CancelConfirm()
+	}
+	m.actions.Cancel()
 }
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes

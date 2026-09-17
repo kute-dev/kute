@@ -23,6 +23,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 )
 
 // MetricsReader is the live pod-usage seam poddetail needs for the CPU/MEM
@@ -137,6 +138,11 @@ type Model struct {
 	// pendingEdit is non-nil while 'E' edit's PROD-only y/N line is showing
 	// (verbs.TierForEdit) — mirrors browse.Model's own pendingEdit field.
 	pendingEdit *editTarget
+	// meta is non-nil while 26a's labels/annotations panel is open on this
+	// pod (the shared internal/tui/metapanel editor) — the recovery path for
+	// sidebar label values the ~25%-width column clips, and the only place
+	// annotations show at all. Mirrors browse's pendingMeta hosting.
+	meta *metapanel.Model
 
 	namespace    string
 	name         string

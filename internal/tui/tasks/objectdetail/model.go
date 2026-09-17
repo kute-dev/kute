@@ -22,6 +22,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 )
 
 // EventsReader is the seam for the EVENTS grid — same shape as poddetail's/
@@ -91,6 +92,12 @@ type Model struct {
 	// gone is set once a load() reports the object no longer exists (watch
 	// delete) — mirrors poddetail's own field/behavior.
 	gone bool
+	// meta is non-nil while 26a's labels/annotations panel is open on this
+	// object (the shared internal/tui/metapanel editor) — 14d shows neither
+	// labels nor annotations anywhere else, so this is the only place a
+	// discovered object's metadata is readable at all. Mirrors poddetail's
+	// hosting.
+	meta *metapanel.Model
 	// redirected is set when applyLoaded hands this screen off to
 	// tasks/yamlview because the object has neither conditions nor events.
 	// It backs tui.Transient, so the root drops this instance instead of

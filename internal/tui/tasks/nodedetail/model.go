@@ -22,6 +22,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 )
 
 // MetricsReader is the live pod-usage seam nodedetail needs for the bottom
@@ -212,6 +213,12 @@ type Model struct {
 	// pendingEdit is non-nil while 'E' edit's PROD-only y/N line is showing
 	// (verbs.TierForEdit) — mirrors browse.Model's own pendingEdit field.
 	pendingEdit *editTarget
+	// meta is non-nil while 26a's labels/annotations panel is open on this
+	// node (the shared internal/tui/metapanel editor) — the only place a
+	// node's labels and annotations are visible and editable from 11b, since
+	// the facts panel shows conditions/allocation/taints but never metadata.
+	// Mirrors poddetail's hosting of the same panel.
+	meta *metapanel.Model
 }
 
 // loadedMsg carries one load()'s result: the node itself plus its pods

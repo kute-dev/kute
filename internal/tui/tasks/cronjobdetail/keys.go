@@ -1,8 +1,11 @@
 package cronjobdetail
 
 import (
+	"fmt"
+
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -20,15 +23,28 @@ func (m Model) Keybar() tui.Keybar {
 			return tui.Keybar{Pill: tui.ModeConfirm, PillText: "CONFIRM"}
 		}
 		note := m.actions.Prompt()
-		if pending := m.actions.Pending(); pending != nil && pending.Scope.Verb == "cronjob-suspend" {
-			// Only reached outside PROD — verbs.TierForCronJobSuspend
-			// escalates to TierModal in PROD instead (this screen's own
-			// suspendConfirmModal). cronjob-resume never appears here, fixed
-			// TierNone (staged, reversible, immediate) the same way
-			// cronjob-run-now is.
-			note = cronJobSuspendWillRunLine(pending.Scope)
-			if m.summary.Object != nil {
-				note += "   " + cronJobSuspendDangerNote(m.summary, m.now)
+		if pending := m.actions.Pending(); pending != nil {
+			switch pending.Scope.Verb {
+			case "cronjob-suspend":
+				// Only reached outside PROD — verbs.TierForCronJobSuspend
+				// escalates to TierModal in PROD instead (this screen's own
+				// suspendConfirmModal). cronjob-resume never appears here,
+				// fixed TierNone (staged, reversible, immediate) the same way
+				// cronjob-run-now is.
+				note = cronJobSuspendWillRunLine(pending.Scope)
+				if m.summary.Object != nil {
+					note += "   " + cronJobSuspendDangerNote(m.summary, m.now)
+				}
+			case "set-meta":
+				// 26a: the panel stays open under this confirm and already
+				// renders the full will-run line + join warning in its own
+				// strip, so this note keeps to the keybar-safe short form
+				// (browse's own set-meta case, same reasoning).
+				note = metapanel.WillRunLine(pending.Scope)
+				if pending.Scope.MetaJoinService != "" {
+					note = fmt.Sprintf("detaches %d pods from svc/%s",
+						pending.Scope.MetaJoinPodCount, pending.Scope.MetaJoinService)
+				}
 			}
 		}
 		return tui.Keybar{
@@ -37,6 +53,12 @@ func (m Model) Keybar() tui.Keybar {
 			Groups:    [][]tui.KeyHint{{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}},
 			RightNote: note,
 		}
+	}
+	if m.meta != nil {
+		// The open 26a panel's own keybar (per the Global-verb rule, 'm'
+		// itself is never listed while closed — the ? overlay's RESOURCE
+		// column teaches it once, app-wide).
+		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: m.meta.KeybarHints()}
 	}
 	if !m.found {
 		return tui.Keybar{
