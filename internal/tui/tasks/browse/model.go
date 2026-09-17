@@ -28,6 +28,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 )
 
 // pollInterval is the metrics/sync poll cadence (the header's "sync 2s"
@@ -386,10 +387,11 @@ type Model struct {
 	// round-trip) before there's an action to Begin.
 	pendingSetResources *setResourcesTarget
 	// pendingMeta is non-nil while 26a's inline labels/annotations panel is
-	// showing (meta.go) — a bespoke gate like pendingSetImage/
-	// pendingSetResources, since there's a per-row value buffer (or, while
-	// adding, a key+value pair) to gather before there's an action to Begin.
-	pendingMeta *metaTarget
+	// showing (the shared internal/tui/metapanel editor, hosted per meta.go)
+	// — a bespoke gate like pendingSetImage/pendingSetResources, since
+	// there's a per-row value buffer (or, while adding, a key+value pair) to
+	// gather before there's an action to Begin.
+	pendingMeta *metapanel.Model
 	// pendingCronJobRun is non-nil while §36b's ctrl-r run-now preflight is
 	// showing (cronjob_actions.go) — a bespoke gate like pendingScale, since
 	// run-now stages its own preview (overlap warning, generated name)

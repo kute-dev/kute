@@ -1,11 +1,10 @@
 // 26a's panel rendering (docs/design README.md §26a, sourced from
-// docs/design/v.0.2.0.dc.html's 26a mockup): the column header + the
-// selected row frozen above a bordered panel (a LABELS·N grid, then an
-// ANNOTATIONS·N grid, each key=/value/right-note column shape) and a "will
-// run" strip below it — the same shape setresources_view.go/setimage_view.go
-// already established (view.go stays the live-table renderer; this is the
-// one Body() branch that replaces it while pendingMeta is showing).
-package browse
+// docs/design/v.0.2.0.dc.html's 26a mockup): a LABELS·N grid, then an
+// ANNOTATIONS·N grid, each key=/value/right-note column shape, inside a
+// bordered box, and a "will run" strip below it — the same shape browse's
+// setresources_view.go/setimage_view.go established. The host's Body()
+// composes these lines under its own frozen title/selected-row line.
+package metapanel
 
 import (
 	"fmt"
@@ -16,31 +15,18 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
 )
 
-// setMetaBody renders 26a's panel in place of the live table — same
-// selected-row-alone simplification setImageBody/setResourcesBody already
-// make.
-func (m Model) setMetaBody(width, height int) string {
-	theme := m.Theme()
-	var lines []string
-	if row, ok := m.selectedRow(); ok {
-		lines = append(lines, m.setImageSelectedRowLine(row, theme, width))
-	} else {
-		lines = append(lines, m.columnHeaderLine(theme, width))
-	}
-	lines = append(lines, "")
-	lines = append(lines, m.metaPanelLines(theme, width)...)
-	lines = append(lines, "", m.metaWillRunStrip(theme, width))
-	return components.Pad(strings.Join(lines, "\n"), width)
-}
-
-// metaPanelLines builds the bordered panel (LABELS·N grid, ANNOTATIONS·N
-// grid, the add-row hint) as already-inset, already-bordered lines — mirrors
-// setResourcesPanelLines' shape exactly, same box style/inset.
-func (m Model) metaPanelLines(theme tui.Theme, width int) []string {
-	t := m.pendingMeta
+// PanelLines builds the bordered panel (LABELS·N grid, ANNOTATIONS·N grid,
+// the add-row hint) as already-inset, already-bordered lines — mirrors
+// browse setResourcesPanelLines' shape exactly, same box style/inset. ctrl
+// is read (Active) so a TierInline confirm renders the selected row's
+// about-to-apply state; rendering stays pure f(state, theme, width).
+func (p *Model) PanelLines(width int, ctrl *actions.Controller) []string {
+	theme := p.theme()
+	t := p.t
 	outerWidth := max(width-2*tui.FrameInset, 4)
 	innerWidth := max(outerWidth-2, 2)
 	contentWidth := max(innerWidth-2, 1)
@@ -59,39 +45,39 @@ func (m Model) metaPanelLines(theme tui.Theme, width int) []string {
 	}
 
 	// While a TierInline confirm is showing (a joined-label edit, or any
-	// removal), the panel stays open underneath it (meta.go's own doc
-	// comment) — the selected row renders its about-to-apply state (the new
-	// value for an edit, a "remove · y/N" note for a removal) instead of the
-	// live typing cursor, since input has already moved to the confirm.
-	confirming := m.actions.Active()
+	// removal), the panel stays open underneath it (the package doc comment)
+	// — the selected row renders its about-to-apply state (the new value for
+	// an edit, a "remove · y/N" note for a removal) instead of the live
+	// typing cursor, since input has already moved to the confirm.
+	confirming := ctrl.Active()
 
 	var content []string
-	content = append(content, setImageInset(labelsHeader.Render(fmt.Sprintf("LABELS · %d", len(t.labels))), contentWidth))
+	content = append(content, panelInset(labelsHeader.Render(fmt.Sprintf("LABELS · %d", len(t.labels))), contentWidth))
 	for i := range t.labels {
-		content = append(content, setImageInset(m.metaRowLine(t, false, i, theme, contentWidth, confirming), contentWidth))
+		content = append(content, panelInset(metaRowLine(t, false, i, theme, contentWidth, confirming), contentWidth))
 	}
 	if t.adding == metaAddLabel {
-		content = append(content, setImageInset(m.metaAddRowLine(t, theme, contentWidth), contentWidth))
+		content = append(content, panelInset(metaAddRowLine(t, theme, contentWidth), contentWidth))
 	}
 
 	content = append(content, rule)
-	content = append(content, setImageInset(annotationsHeader.Render(fmt.Sprintf("ANNOTATIONS · %d", len(t.annotations))), contentWidth))
+	content = append(content, panelInset(annotationsHeader.Render(fmt.Sprintf("ANNOTATIONS · %d", len(t.annotations))), contentWidth))
 	for i := range t.annotations {
-		content = append(content, setImageInset(m.metaRowLine(t, true, i, theme, contentWidth, confirming), contentWidth))
+		content = append(content, panelInset(metaRowLine(t, true, i, theme, contentWidth, confirming), contentWidth))
 	}
 	if t.adding == metaAddAnnotation {
-		content = append(content, setImageInset(m.metaAddRowLine(t, theme, contentWidth), contentWidth))
+		content = append(content, panelInset(metaAddRowLine(t, theme, contentWidth), contentWidth))
 	}
 	if t.adding == metaAddNone {
 		hint := lipgloss.NewStyle().Foreground(theme.TextGhost).Render("+ a add to focused grid · tab switch grid")
-		content = append(content, setImageInset(hint, contentWidth))
+		content = append(content, panelInset(hint, contentWidth))
 	}
 
 	// +2: lipgloss v2's Width counts the border itself (v1 added it on top),
 	// and innerWidth is the pre-border content width the lines above are
 	// already padded to — so the box needs innerWidth+2 to render at the
 	// same outerWidth total as before.
-	box := setImagePanelBorderStyle(theme).Border(lipgloss.RoundedBorder()).Width(innerWidth + 2).Render(strings.Join(content, "\n"))
+	box := panelBorderStyle(theme).Border(lipgloss.RoundedBorder()).Width(innerWidth + 2).Render(strings.Join(content, "\n"))
 	out := make([]string, 0)
 	for _, l := range strings.Split(box, "\n") {
 		out = append(out, strings.Repeat(" ", tui.FrameInset)+l)
@@ -102,7 +88,7 @@ func (m Model) metaPanelLines(theme tui.Theme, width int) []string {
 // metaRowColumns lays marker/key/value/note out (marker fixed 2ch, key fixed
 // 26ch, note fixed 30ch right-aligned, value takes the remainder) —
 // already-styled spans, measured via lipgloss.Width so ANSI never throws off
-// alignment, the same fill-aware-padding idiom resourcesRowColumns already
+// alignment, the same fill-aware-padding idiom browse's resourcesRowColumns
 // uses for 25a's own grid (widths sized for a terminal character grid, not a
 // literal copy of the mockup's 220px CSS columns — docs/design README.md's
 // Fidelity section: "exact pixel sizes are approximations of a character
@@ -154,13 +140,13 @@ func metaColumnWidths(width int) (keyWidth, valueWidth, noteWidth int) {
 // highlighted regardless of mode) and editing (selected AND the value is a
 // live free-typing buffer, entered via ↵) are deliberately distinct — a
 // merely-selected row shows its plain current value, exactly like the
-// mockup's non-editing rows. confirming (m.actions.Active(), read by the
+// mockup's non-editing rows. confirming (ctrl.Active(), read by the
 // caller) marks the selected row as the one a TierInline y/N is now deciding
-// — mutually exclusive with editing in practice (updateMetaEditKey/
-// updateMetaKey's ctrl+d both end editing/never start it before Begin), but
+// — mutually exclusive with editing in practice (updateEditKey/
+// Update's D both end editing/never start it before Begin), but
 // checked as its own case rather than folded into editing since a removal
 // reaches pendingConfirm with no live buffer at all.
-func (m Model) metaRowLine(t *metaTarget, isAnnotation bool, idx int, theme tui.Theme, width int, confirming bool) string {
+func metaRowLine(t *metaTarget, isAnnotation bool, idx int, theme tui.Theme, width int, confirming bool) string {
 	rows := t.labels
 	section, sectionIdx := metaSectionLabels, t.labelIdx
 	if isAnnotation {
@@ -293,7 +279,7 @@ func metaNoteText(r metaRow, editing, pendingConfirm bool, theme tui.Theme, with
 // metaAddRowLine renders a/A's insert row: a highlighted "+" marker, the
 // key buffer (cursor-anchored while unfocused-from-value), then "=" and the
 // value buffer (cursor-anchored once tab moves focus there).
-func (m Model) metaAddRowLine(t *metaTarget, theme tui.Theme, width int) string {
+func metaAddRowLine(t *metaTarget, theme tui.Theme, width int) string {
 	accent := lipgloss.NewStyle().Foreground(theme.Accent)
 	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
 
@@ -321,14 +307,17 @@ func metaAddBufferCell(input textfield.Model, dim lipgloss.Style, width int) str
 	return input.ViewWidth(width)
 }
 
-// metaWillRunStrip is the panel's own "will run" line, styled like
+// WillRunStrip is the panel's own "will run" line, styled like browse's
 // setResourcesWillRunStrip/setImageWillRunStrip: a BorderSubtle top rule,
 // then BgStrip-filled left "will run: kubectl label/annotate ..." (or the
 // add-row's live preview, or a neutral "no changes" note) and a static right
 // note ("metadata only — no rollout") whenever there's a command to show —
-// docs/design README.md §26a's own mockup right note, verbatim.
-func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
-	t := m.pendingMeta
+// docs/design README.md §26a's own mockup right note, verbatim. ctrl is read
+// (Active/Pending) so a pending removal renders its own command rather than
+// "no changes".
+func (p *Model) WillRunStrip(width int, ctrl *actions.Controller) string {
+	theme := p.theme()
+	t := p.t
 	fill := lipgloss.NewStyle().Background(theme.BgStrip)
 	label := fill.Foreground(theme.TextDim)
 	cmd := fill.Foreground(theme.TextSecondary)
@@ -338,7 +327,7 @@ func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
 	// joinPrefix renders the "detaches N pods from svc/X" warning ahead of
 	// the kubectl command — the panel's own will-run strip has the full
 	// width to say so plainly, unlike the keybar's own RightNote for this
-	// same confirm (keys.go's "set-meta" case), which keeps to the short
+	// same confirm (the host's "set-meta" case), which keeps to the short
 	// form alone since the combined line regularly overruns keybar width.
 	joinPrefix := func(r *metaRow) string {
 		if r.joinService == "" {
@@ -359,7 +348,7 @@ func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
 	case t.message != "":
 		// The just-applied result ("updated env=staging" / "removed
 		// kute.dev/owner") — cleared the moment the user moves on in
-		// navigation mode (updateMetaKey), so it only ever answers "what
+		// navigation mode (Update), so it only ever answers "what
 		// just happened."
 		left = fill.Foreground(theme.Good).Render(t.message)
 	case t.adding != metaAddNone:
@@ -379,8 +368,8 @@ func (m Model) metaWillRunStrip(theme tui.Theme, width int) string {
 		// generic "!r.changed()" — otherwise a removal awaiting the y/N
 		// would misleadingly read "no changes" while a delete is in flight.
 		removing := false
-		if p := m.actions.Pending(); m.actions.Active() && p != nil {
-			removing = p.Scope.MetaRemove
+		if pending := ctrl.Pending(); ctrl.Active() && pending != nil {
+			removing = pending.Scope.MetaRemove
 		}
 		switch {
 		case r == nil:
@@ -407,4 +396,39 @@ func addKindLabel(k metaAddKind) string {
 		return "annotation"
 	}
 	return "label"
+}
+
+// The four layout helpers below are private copies of browse's own
+// (setImageInset, setImagePanelBorderStyle, insetStripLineFill,
+// padBetweenFill, stripInnerWidth) — task packages can't import one another,
+// and these few pure lines are the accepted duplication cost (the jobattempts
+// precedent) that keeps browse's other panels untouched.
+
+func panelInset(line string, contentWidth int) string {
+	return " " + components.Pad(line, contentWidth) + " "
+}
+
+func panelBorderStyle(theme tui.Theme) lipgloss.Style {
+	return lipgloss.NewStyle().BorderForeground(theme.BorderPalette).Background(theme.BgPalette)
+}
+
+func stripInnerWidth(width int) int {
+	return max(width-2*tui.FrameInset, 0)
+}
+
+func insetStripLineFill(line string, width int, fill lipgloss.Style) string {
+	content := fill.Render(strings.Repeat(" ", tui.FrameInset)) + line
+	slack := width - lipgloss.Width(content)
+	if slack <= 0 {
+		return content
+	}
+	return content + fill.Render(strings.Repeat(" ", slack))
+}
+
+func padBetweenFill(left, right string, width int, fill lipgloss.Style) string {
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		return left
+	}
+	return left + fill.Render(strings.Repeat(" ", gap)) + right
 }

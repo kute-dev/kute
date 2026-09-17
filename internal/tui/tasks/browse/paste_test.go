@@ -114,8 +114,10 @@ func TestPasteIntoSetImageRematchesHistory(t *testing.T) {
 	}
 }
 
-// TestPasteIntoMetaBuffers walks 26a's three buffers: the add row's key and
-// value (paste follows tab focus) and a row's own edit buffer.
+// TestPasteIntoMetaBuffers verifies browse's pasteTarget resolver forwards
+// to the open panel's own PasteTarget (the buffer-level walk lives in
+// internal/tui/metapanel's TestPasteLandsInFocusedBuffer) — asserted through
+// the rendered body, since the panel's buffers are its own now.
 func TestPasteIntoMetaBuffers(t *testing.T) {
 	dep := metaDeployment("default", "nva-worker",
 		map[string]string{"team": "platform"}, nil, nil)
@@ -125,29 +127,14 @@ func TestPasteIntoMetaBuffers(t *testing.T) {
 	}
 
 	m = step(t, m, tea.KeyPressMsg{Text: "a"})
-	if m.pendingMeta.adding == metaAddNone {
-		t.Fatal("expected 'a' to open the add row")
-	}
-	m = step(t, m, tea.PasteMsg{Content: "env"})
-	if got := m.pendingMeta.addKeyInput.Value(); got != "env" {
-		t.Fatalf("add key buffer = %q, want %q", got, "env")
+	m = step(t, m, tea.PasteMsg{Content: "envkey"})
+	if body := m.Body(120, 36); !strings.Contains(body, "envkey") {
+		t.Fatalf("pasted add-row key missing from the panel body:\n%s", body)
 	}
 	m = step(t, m, tea.KeyPressMsg{Text: "tab"})
-	m = step(t, m, tea.PasteMsg{Content: "staging"})
-	if got := m.pendingMeta.addValueInput.Value(); got != "staging" {
-		t.Fatalf("add value buffer = %q, want %q", got, "staging")
-	}
-
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !m.pendingMeta.editing {
-		t.Fatal("expected '↵' on a row to enter editing mode")
-	}
-	row := m.pendingMeta.selectedRow()
-	row.setBuffer("")
-	m = step(t, m, tea.PasteMsg{Content: "infra"})
-	if got := m.pendingMeta.selectedRow().input.Value(); got != "infra" {
-		t.Fatalf("row edit buffer = %q, want %q", got, "infra")
+	m = step(t, m, tea.PasteMsg{Content: "stagingvalue"})
+	if body := m.Body(120, 36); !strings.Contains(body, "stagingvalue") {
+		t.Fatalf("pasted add-row value missing from the panel body:\n%s", body)
 	}
 }
 

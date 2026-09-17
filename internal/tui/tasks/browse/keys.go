@@ -7,6 +7,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -104,32 +105,9 @@ func (m Model) Keybar() tui.Keybar {
 		// removal), m.actions.Active() wins instead — the panel-local META
 		// keybar below only ever renders in navigation/editing/adding, never
 		// stacked under the confirm's own y/N (see the actions.Active()
-		// branch's "set-meta" case further down, and this file's doc comment
-		// on meta.go: the panel itself stays open underneath either way).
-		t := m.pendingMeta
-		var hints []tui.KeyHint
-		switch {
-		case t.adding != metaAddNone:
-			// Editing mode (add sub-flow): every printable character inserts
-			// literally, so these are the only reserved keys.
-			hints = []tui.KeyHint{
-				{Key: "↵", Label: "apply"}, {Key: tui.GlyphTab, Label: "key ↔ value"}, {Key: "esc", Label: "cancel"},
-			}
-		case t.editing:
-			// Editing mode: same reasoning — typing a value must never be
-			// shadowed by a shortcut.
-			hints = []tui.KeyHint{{Key: "↵", Label: "save"}, {Key: "esc", Label: "cancel"}}
-		default:
-			// Navigation mode never accepts typed text, so single-letter
-			// shortcuts here (a, y) can't shadow a value the way they could
-			// if typing edited the row directly.
-			hints = []tui.KeyHint{
-				{Key: "↑↓", Label: "row"}, {Key: tui.GlyphTab, Label: "switch grid"},
-				{Key: "↵", Label: "edit"}, {Key: "a/insert", Label: "add"},
-				{Key: "D", Label: "remove key · y/N"}, {Key: "y", Label: "copy key=value"},
-			}
-		}
-		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: [][]tui.KeyHint{hints}}
+		// branch's "set-meta" case further down, and metapanel's package doc
+		// comment: the panel itself stays open underneath either way).
+		return tui.Keybar{Pill: tui.ModeBrowse, PillText: "META", Groups: m.pendingMeta.KeybarHints()}
 	}
 	if m.pendingBulkDelete != nil {
 		if m.pendingBulkDelete.tier == actions.TierInline {
@@ -258,7 +236,7 @@ func (m Model) Keybar() tui.Keybar {
 					// note stays to the short, keybar-safe join warning alone
 					// (never shown for a plain removal, which carries no join
 					// text of its own).
-					note = metaWillRunLine(pending.Scope)
+					note = metapanel.WillRunLine(pending.Scope)
 					if pending.Scope.MetaJoinService != "" {
 						note = fmt.Sprintf("detaches %d pods from svc/%s",
 							pending.Scope.MetaJoinPodCount, pending.Scope.MetaJoinService)
