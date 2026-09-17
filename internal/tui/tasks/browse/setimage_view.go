@@ -172,7 +172,9 @@ func (m Model) setImageFieldLine(t *setImageTarget, theme tui.Theme, width int) 
 	prefix := ""
 	if !t.fullRef {
 		prefixBudget := min(lipgloss.Width(t.repo+":"), max(available-min(naturalInputWidth, available), 1))
-		prefix = dim.Render(components.Truncate(t.repo+":", prefixBudget))
+		// Front-elide like every truncated image ref (§10a): the repo tail
+		// next to the tag being edited beats the registry host.
+		prefix = dim.Render(components.TruncateFront(t.repo+":", prefixBudget))
 	}
 	inputWidth := max(available-lipgloss.Width(prefix), 1)
 	left := prompt + prefix + t.input.ViewWidth(inputWidth)

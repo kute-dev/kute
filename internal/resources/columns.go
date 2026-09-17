@@ -56,6 +56,11 @@ func Columns(d Descriptor) []components.Column {
 		if title == "Status" {
 			col.Sort = "status"
 		}
+		if title == "Image" {
+			// Image refs elide from the front — the tag at the end is the
+			// version signal (§10a's rule, applied to the 9a IMAGE cell).
+			col.TruncateFront = true
+		}
 		if i == flexIndex {
 			col.Flex = true
 		}
@@ -94,7 +99,7 @@ var fixedWidths = map[string]int{
 	"MEM":        MetricColumnWidth,
 	"Pods":       9,  // "62/110"
 	"Rollout":    20, // "12m 34s progressing ▸"
-	"Image":      24, // truncates long registry paths
+	"Image":      24, // front-ellipsizes long registry paths — the tag survives
 	"Class":      9,  // ingress class name, e.g. "nginx"
 	"Hosts":      30, // comma-joined rule hosts, e.g. "api.example.com"
 	"Address":    15, // LB IP/hostname, e.g. "203.0.113.10"

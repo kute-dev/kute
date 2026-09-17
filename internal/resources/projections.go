@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui/components"
 )
 
 // metaOf pulls the common ObjectMeta fields off any API object.
@@ -312,13 +313,18 @@ func deploymentImage(lister RawLister, d *appsv1.Deployment, rolloutStatus Statu
 	if len(containers) == 0 {
 		return "–"
 	}
-	img := containers[0].Image
+	img := components.ShortImageRef(containers[0].Image)
 	if len(containers) > 1 {
 		img += fmt.Sprintf(" +%d", len(containers)-1)
 	}
 	if rolloutStatus == StatusWarn {
 		if old := previousReplicaSetImage(lister, d, containers[0].Image); old != "" {
-			img += " ← " + old
+			// The cell front-elides as a whole (columns.go's Image rule):
+			// the leftmost text is the new ref's registry path — the
+			// redundant part — so elision consumes it first, and only under
+			// extreme overflow does the new tag go; the SetImage panel still
+			// shows the full ref.
+			img += " ← " + components.ShortImageRef(old)
 		}
 	}
 	return img

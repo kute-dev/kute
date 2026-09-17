@@ -325,7 +325,7 @@ func (m Model) containerTableBlock(theme tui.Theme, width int, titleText string,
 	cols := []components.Column{
 		{Title: "", Min: 1},
 		{Title: "Name", Min: 10, Flex: true},
-		{Title: "Image", Min: 12, Flex: true},
+		{Title: "Image", Min: 12, Flex: true, TruncateFront: true},
 		{Title: "State", Min: 20},
 		{Title: "Restarts", Min: 8, Align: components.AlignRight},
 	}
@@ -375,7 +375,7 @@ func (m Model) containerTableBlock(theme tui.Theme, width int, titleText string,
 		rows = append(rows, components.Row{Cells: []components.Cell{
 			{Text: glyph, Style: glyphStyle},
 			{Text: c.Name, Style: nameStyle},
-			{Text: c.Image, Style: imgStyle},
+			{Text: components.ShortImageRef(c.Image), Style: imgStyle},
 			{Text: stateText, Style: stateStyle},
 			{Text: fmt.Sprintf("%d %s", c.Restarts, tui.GlyphRestarts), Style: restartStyle},
 		}})
@@ -457,7 +457,7 @@ func (m Model) ephemeralBlock(theme tui.Theme, width int) string {
 		}
 		rows = append(rows, components.Row{Cells: []components.Cell{
 			{Text: glyph},
-			{Text: e.Name + " " + e.Image, Style: lipgloss.NewStyle().Foreground(theme.TextPrimary)},
+			{Text: e.Name + " " + components.ShortImageRef(e.Image), Style: lipgloss.NewStyle().Foreground(theme.TextPrimary)},
 			{Text: target, Style: lipgloss.NewStyle().Foreground(theme.TextDim)},
 			{Text: stateText, Style: stateStyle},
 			{Text: shortDur(e.Age), Style: lipgloss.NewStyle().Foreground(theme.TextDim)},

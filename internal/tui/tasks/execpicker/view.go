@@ -200,38 +200,10 @@ func (m Model) containerLines(theme tui.Theme, i int, c kube.ContainerInfo) []st
 		img += " sidecar"
 	}
 	imgAvail := panelWidth - imageIndent
-	img = truncateImageRef(img, imgAvail)
+	img = components.TruncateImageRef(img, imgAvail)
 	imgLine := fill(imageIndent) + imgStyle.Render(img) + fill(imgAvail-lipgloss.Width(img))
 
 	return []string{nameLine, imgLine}
-}
-
-// truncateImageRef fits an image reference into width cells for the picker's
-// dedicated image line. A digest suffix (`@sha256:<64 hex chars>`, 71
-// characters no one reads at this width) is dropped whenever the reference
-// also carries an explicit tag — the tag is the version signal a reader
-// actually wants, and keeping both just to truncate one of them away is
-// worse than dropping the redundant one outright. What's left is ellipsized
-// from the front rather than the back: a long registry/repo path is the part
-// worth eliding, since the tag (or, lacking one, the digest) at the end is
-// what answers "which version is this".
-func truncateImageRef(img string, width int) string {
-	if at := strings.Index(img, "@sha256:"); at >= 0 {
-		if repo := img[:at]; strings.Contains(repo[strings.LastIndex(repo, "/")+1:], ":") {
-			img = repo
-		}
-	}
-	if width <= 0 {
-		return ""
-	}
-	if lipgloss.Width(img) <= width {
-		return img
-	}
-	r := []rune(img)
-	if width <= 1 {
-		return "…"
-	}
-	return "…" + string(r[len(r)-(width-1):])
 }
 
 // shellsText renders one row's right-aligned shells cell (docs/design
