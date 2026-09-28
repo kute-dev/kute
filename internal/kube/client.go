@@ -212,7 +212,7 @@ func newClientForContext(contextName string) (Client, error) {
 	// both decisions for the rest of the session.
 	prepareExecProvider(restConfig)
 	credentialConfig := restConfig
-	authGate := &authenticationGate{}
+	authGate := &authenticationGate{staticCredentials: !usesCredentialPlugin(restConfig)}
 	watcher := newWatchObserver()
 
 	var clientset *kubernetes.Clientset

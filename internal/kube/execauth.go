@@ -63,6 +63,13 @@ func prepareExecProvider(cfg *rest.Config) {
 	cfg.ExecProvider.StdinUnavailableMessage = credentialStdinMessage
 }
 
+// usesCredentialPlugin reports whether cfg mints its credential through an
+// exec or auth-provider plugin — the only case where a 401 means "a human has
+// to re-authenticate" rather than something worth retrying on backoff.
+func usesCredentialPlugin(cfg *rest.Config) bool {
+	return cfg != nil && (cfg.ExecProvider != nil || cfg.AuthProvider != nil)
+}
+
 // maxCapturedStderr bounds the credential-plugin stderr kept in memory. A
 // plugin's failure message is a line or two; this is generous enough for a
 // stack-trace-happy one and small enough to keep unconditionally.

@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -150,5 +152,51 @@ func TestWatchObserverReportsEstablishedBodyEnd(t *testing.T) {
 	}
 	if endedCalls != 1 {
 		t.Fatalf("WATCH end callbacks after EOF and close = %d, want one", endedCalls)
+	}
+}
+
+// A cert/token context (microk8s, kind, kubeadm) must never latch on a 401:
+// over a flaky link one stray 401 used to freeze the whole app on "credentials
+// expired" until r, although nothing about the credential had changed.
+func TestAuthenticationGateNeverLatchesForStaticCredentials(t *testing.T) {
+	t.Parallel()
+	gate := &authenticationGate{staticCredentials: true}
+	blocked := false
+	gate.onBlocked = func(error) { blocked = true }
+	status := http.StatusUnauthorized
+	next := roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: status, Status: http.StatusText(status), Body: io.NopCloser(strings.NewReader(""))}, nil
+	})
+	rt := &observingRoundTripper{next: next, gate: gate, observer: newWatchObserver()}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://cluster/api/v1/pods", nil)
+	if _, err := rt.RoundTrip(req); err != nil {
+		t.Fatalf("401 round trip: %v", err)
+	}
+	if gate.isBlocked() || blocked {
+		t.Fatal("gate latched on a 401 for a static-credential context")
+	}
+	status = http.StatusOK
+	if _, err := rt.RoundTrip(req); err != nil {
+		t.Fatalf("request after a transient 401: %v", err)
+	}
+}
+
+func TestUsesCredentialPlugin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		cfg  *rest.Config
+		want bool
+	}{
+		{"nil", nil, false},
+		{"cert", &rest.Config{TLSClientConfig: rest.TLSClientConfig{CertData: []byte("x")}}, false},
+		{"token", &rest.Config{BearerToken: "t"}, false},
+		{"exec", &rest.Config{ExecProvider: &clientcmdapi.ExecConfig{Command: "aws"}}, true},
+		{"auth-provider", &rest.Config{AuthProvider: &clientcmdapi.AuthProviderConfig{Name: "oidc"}}, true},
+	} {
+		if got := usesCredentialPlugin(tc.cfg); got != tc.want {
+			t.Errorf("%s: usesCredentialPlugin = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

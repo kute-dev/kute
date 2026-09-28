@@ -713,3 +713,32 @@ func TestOnWatchErrorAuthenticationStillWins(t *testing.T) {
 		t.Fatalf("Phase = %v, want Unauthenticated — no credential means no connection at all", got.Phase)
 	}
 }
+
+// A 401 against a cert/token context is retried on backoff like any other
+// failure, and clears on the next successful ping without the user's r.
+func TestHealthRetries401ForStaticCredentials(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	h.setStaticCredentials(true)
+
+	h.onWatchError(unauthorized(), true, time.Now())
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("watch 401: Phase = %v, want Reconnecting", got.Phase)
+	}
+	if got.NeedsCredentials() || h.pausesPolling() {
+		t.Error("static-credential 401 paused polling / asked for re-authentication")
+	}
+	if got.NextRetryAt.IsZero() {
+		t.Error("NextRetryAt is zero, want a scheduled backoff retry")
+	}
+
+	h.recordPing(12*time.Millisecond, unauthorized(), true, time.Now())
+	if got := h.get(); got.Phase != ConnReconnecting || got.Attempt != 2 {
+		t.Fatalf("ping 401: Phase/Attempt = %v/%d, want Reconnecting/2", got.Phase, got.Attempt)
+	}
+	h.recordPing(12*time.Millisecond, nil, true, time.Now())
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Errorf("Phase = %v after a successful ping, want Connected", got.Phase)
+	}
+}

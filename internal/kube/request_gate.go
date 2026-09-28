@@ -22,10 +22,20 @@ type authenticationGate struct {
 	mu           sync.Mutex
 	blocked      bool
 	probeAllowed bool
-	onBlocked    func(error)
+	// staticCredentials is set for a context whose credential is a client
+	// certificate or bearer token rather than a plugin. There is nothing to
+	// protect from re-running, and a 401 against such a context is as often
+	// the link as the credential (a flaky connection through a proxy, an
+	// apiserver mid-restart), so the gate never latches: traffic keeps
+	// flowing and health's ordinary backoff decides when to retry.
+	staticCredentials bool
+	onBlocked         func(error)
 }
 
 func (g *authenticationGate) block(err error) {
+	if g.staticCredentials {
+		return
+	}
 	g.mu.Lock()
 	first := !g.blocked
 	g.blocked = true

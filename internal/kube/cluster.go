@@ -260,6 +260,7 @@ func NewClusterForContext(contextName string) (*Cluster, error) {
 		watcher:       client.watcher,
 	}
 	client.authGate.onBlocked = func(err error) { c.recordAuthenticationFailure(client.authGate, err) }
+	c.health.setStaticCredentials(client.authGate.staticCredentials)
 	return c, nil
 }
 
@@ -1100,6 +1101,7 @@ func (c *Cluster) SwitchContext(ctx context.Context, contextName, namespace stri
 	c.authGate = client.authGate
 	c.watcher = client.watcher
 	client.authGate.onBlocked = func(err error) { c.recordAuthenticationFailure(client.authGate, err) }
+	c.health.setStaticCredentials(client.authGate.staticCredentials)
 	c.metrics = metrics
 	c.restCfg = client.RESTConfig
 	c.credentialCfg = client.credentialConfig

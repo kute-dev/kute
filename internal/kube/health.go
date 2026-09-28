@@ -20,7 +20,9 @@ const (
 	ConnNoCluster    ConnPhase = "no-cluster"
 
 	// ConnUnauthenticated is "there is no usable credential for this
-	// cluster" — a 401 from the apiserver, or an exec credential plugin that
+	// cluster" — a 401 for a plugin-minted credential (a static cert/token
+	// context retries a 401 as Reconnecting instead, see needsReauth), or an
+	// exec credential plugin that
 	// couldn't mint a token at all (an expired `aws sso login` session, a
 	// `gcloud` re-auth the plugin can't prompt for because kute holds the
 	// terminal). It is deliberately not Reconnecting: on a cert-based
@@ -119,6 +121,10 @@ type health struct {
 	// SwitchContext into a slow cluster gets the same forgiveness a cold
 	// launch does), and by noteListBurst whenever an informer starts.
 	startedAt time.Time
+	// staticCredentials mirrors authenticationGate.staticCredentials for the
+	// active context: a 401 is then reported as Reconnecting with backoff,
+	// not latched as Unauthenticated. See needsReauth.
+	staticCredentials bool
 }
 
 func newHealth() *health {
@@ -152,6 +158,32 @@ func (h *health) reset() {
 	case h.wake <- struct{}{}:
 	default:
 	}
+}
+
+// setStaticCredentials records whether the active context authenticates with
+// a static client certificate/token. Set alongside every authGate swap.
+func (h *health) setStaticCredentials(v bool) {
+	h.mu.Lock()
+	h.staticCredentials = v
+	h.mu.Unlock()
+}
+
+// needsReauth reports whether err should latch ConnUnauthenticated. Only a
+// plugin-minted credential qualifies: re-running a plugin that just failed
+// can't help. A static cert/token context gets a 401 retried like any other
+// failure — on a flaky link (microk8s behind a lossy connection, a proxy that
+// answers 401 while its upstream is down) latching turned a transient blip
+// into a screen that stayed "credentials expired" until the user pressed r.
+// A credential that really is revoked still shows its 401 in the banner on
+// every backoff attempt.
+func (h *health) needsReauth(err error) bool {
+	if !IsAuthenticationError(err) {
+		return false
+	}
+	h.mu.Lock()
+	static := h.staticCredentials
+	h.mu.Unlock()
+	return !static
 }
 
 // noteListBurst re-arms the connect-grace window because an informer has
@@ -209,7 +241,7 @@ func (h *health) onWatchError(err error, synced bool, now time.Time) {
 		// getting out of this phase.
 		return
 	}
-	if IsAuthenticationError(err) {
+	if h.needsReauth(err) {
 		h.setUnauthenticated(err, 0, prev)
 		return
 	}
@@ -390,7 +422,7 @@ func (h *health) recordPing(latency time.Duration, err error, synced bool, now t
 		return
 	}
 
-	if IsAuthenticationError(err) {
+	if h.needsReauth(err) {
 		// Unconditionally re-emitted, unlike onWatchError's silent case:
 		// while unauthenticated the ticker stops pinging, so the only way to
 		// reach this line twice is the user pressing r — which has to
