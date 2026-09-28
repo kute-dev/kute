@@ -373,6 +373,32 @@ func TestCompletedJobPodHasNoTerminationBanner(t *testing.T) {
 	}
 }
 
+// TestUndatedTerminationOnRunningPodRendersNoAgeOrBackoff pins the
+// ContainerStatusUnknown banner: the record has no finishedAt, which used to
+// render "106751d ago", and the container has since restarted and is
+// Running, so "Next backoff ~10s" promised a restart that isn't coming.
+func TestUndatedTerminationOnRunningPodRendersNoAgeOrBackoff(t *testing.T) {
+	pod := runningPod("litellm-0", "default", "node-a")
+	pod.Status.ContainerStatuses[0].RestartCount = 1
+	pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{
+		Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, Reason: "ContainerStatusUnknown"},
+	}
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {pod}}}
+	m := New(Config{Session: newSession(), Lister: lister, Namespace: "default", Name: "litellm-0"})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	view := plain(m.Render())
+	if !strings.Contains(view, "exit 137 · ContainerStatusUnknown") {
+		t.Fatalf("expected the termination facts:\n%s", view)
+	}
+	for _, bad := range []string{"ContainerStatusUnknown ·", "d ago", "Next backoff"} {
+		if strings.Contains(view, bad) {
+			t.Fatalf("banner must not render %q for an undated termination on a Running container:\n%s", bad, view)
+		}
+	}
+}
+
 func TestLoadRendersTerminationBannerMetaContainersAndEvents(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {crashLoopPod("worker-0", "default", "node-a")},

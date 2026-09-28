@@ -200,9 +200,13 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 		return ""
 	}
 	title := lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ErrBannerBg).Bold(true).Render("Last termination")
-	facts := lipgloss.NewStyle().Foreground(theme.BadMuted).Background(theme.ErrBannerBg).Render(
-		fmt.Sprintf("exit %d · %s · %s ago", lt.ExitCode, lt.Reason, shortDur(lt.Age)),
-	)
+	// An undated termination (ContainerStatusUnknown carries no finishedAt)
+	// drops the age segment rather than inventing one.
+	factText := fmt.Sprintf("exit %d · %s", lt.ExitCode, lt.Reason)
+	if lt.AgeKnown {
+		factText += fmt.Sprintf(" · %s ago", shortDur(lt.Age))
+	}
+	facts := lipgloss.NewStyle().Foreground(theme.BadMuted).Background(theme.ErrBannerBg).Render(factText)
 
 	// mock 5a's body line names the container and says what happened —
 	// the OOMKilled wording only when the limit that was exceeded is known —
@@ -218,7 +222,9 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	if lt.Reason == "OOMKilled" && m.pod.MEMLimitBytes > 0 {
 		what = " exceeded memory limit " + formatBytes(m.pod.MEMLimitBytes) + "."
 	}
-	what += fmt.Sprintf(" Next backoff ~%s.", shortDur(lt.NextBackoff()))
+	if lt.BackingOff {
+		what += fmt.Sprintf(" Next backoff ~%s.", shortDur(lt.NextBackoff()))
+	}
 	body := bodyStyle.Render("Container ") + container + bodyStyle.Render(what)
 
 	gap := lipgloss.NewStyle().Background(theme.ErrBannerBg).Render("  ")

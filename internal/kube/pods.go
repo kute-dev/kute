@@ -108,14 +108,26 @@ type ContainerInfo struct {
 // populates this (see findLastTermination) — e.g. a Job's pod that ran to
 // completion was never "why is it broken."
 type LastTermination struct {
-	Container  string
-	ExitCode   int32
-	Reason     string
+	Container string
+	ExitCode  int32
+	Reason    string
+	// Age and FinishedAt are both zero when the record carries no
+	// finishedAt — kubelet's synthesized ContainerStatusUnknown termination
+	// (exit 137, container lost with its node or runtime) never sets one.
+	// Subtracting the zero time from now saturates to the maximum Duration,
+	// which rendered as "106751d ago"; AgeKnown is how a reader tells
+	// "unknown" apart from "just now".
 	Age        time.Duration
 	FinishedAt time.Time
+	AgeKnown   bool
 	// RestartCount is the container's current restart count, used by
 	// NextBackoff to estimate kubelet's CrashLoopBackOff delay.
 	RestartCount int32
+	// BackingOff reports whether the container is waiting in
+	// CrashLoopBackOff right now. A container that has already restarted
+	// and is Running has no pending backoff, so NextBackoff only means
+	// something while this is true.
+	BackingOff bool
 }
 
 // NextBackoff estimates kubelet's CrashLoopBackOff delay before the next
@@ -343,31 +355,37 @@ func applyContainerStatus(info *ContainerInfo, s corev1.ContainerStatus) {
 // broken."
 func findLastTermination(statuses []corev1.ContainerStatus) *LastTermination {
 	var best *corev1.ContainerStateTerminated
-	var bestName string
-	var bestRestarts int32
-	consider := func(name string, t *corev1.ContainerStateTerminated, restarts int32) {
+	var bestStatus corev1.ContainerStatus
+	consider := func(s corev1.ContainerStatus, t *corev1.ContainerStateTerminated) {
 		if t == nil || t.ExitCode == 0 {
 			return
 		}
+		// A zero FinishedAt never beats a real one, so an undated record
+		// only wins when it's the only abnormal termination there is.
 		if best == nil || t.FinishedAt.After(best.FinishedAt.Time) {
-			best, bestName, bestRestarts = t, name, restarts
+			best, bestStatus = t, s
 		}
 	}
 	for _, s := range statuses {
-		consider(s.Name, s.State.Terminated, s.RestartCount)
-		consider(s.Name, s.LastTerminationState.Terminated, s.RestartCount)
+		consider(s, s.State.Terminated)
+		consider(s, s.LastTerminationState.Terminated)
 	}
 	if best == nil {
 		return nil
 	}
-	return &LastTermination{
-		Container:    bestName,
+	lt := &LastTermination{
+		Container:    bestStatus.Name,
 		ExitCode:     best.ExitCode,
 		Reason:       best.Reason,
-		Age:          metav1.Now().Sub(best.FinishedAt.Time).Round(0),
-		FinishedAt:   best.FinishedAt.Time,
-		RestartCount: bestRestarts,
+		RestartCount: bestStatus.RestartCount,
+		BackingOff:   bestStatus.State.Waiting != nil && bestStatus.State.Waiting.Reason == "CrashLoopBackOff",
 	}
+	if !best.FinishedAt.IsZero() {
+		lt.FinishedAt = best.FinishedAt.Time
+		lt.Age = metav1.Now().Sub(lt.FinishedAt).Round(0)
+		lt.AgeKnown = true
+	}
+	return lt
 }
 
 func formatReady(ready, total int32) string {

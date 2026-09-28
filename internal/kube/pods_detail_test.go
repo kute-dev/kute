@@ -166,6 +166,75 @@ func TestPodFromObjectDetectsLastTermination(t *testing.T) {
 	}
 }
 
+// TestPodFromObjectUndatedTerminationHasUnknownAge pins the "106751d ago"
+// banner: kubelet's ContainerStatusUnknown record carries no finishedAt, and
+// now minus the zero time saturates to the maximum Duration. The container
+// has since restarted and is Running, so there is no backoff pending either.
+func TestPodFromObjectUndatedTerminationHasUnknownAge(t *testing.T) {
+	t.Parallel()
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "litellm"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "litellm"}}},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "litellm",
+				RestartCount: 1,
+				State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.Now()}},
+				LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, Reason: "ContainerStatusUnknown"},
+				},
+			}},
+		},
+	}
+
+	lt := PodFromObject(pod).LastTermination
+	if lt == nil {
+		t.Fatal("expected a LastTermination for exit 137")
+	}
+	if lt.AgeKnown || lt.Age != 0 || !lt.FinishedAt.IsZero() {
+		t.Errorf("LastTermination = %+v, want an unknown age (no finishedAt)", lt)
+	}
+	if lt.BackingOff {
+		t.Errorf("BackingOff = true for a Running container, want false")
+	}
+}
+
+// TestPodFromObjectDatedTerminationBeatsUndated guards the ordering: an
+// undated record must not shadow a real, dated crash in another container.
+func TestPodFromObjectDatedTerminationBeatsUndated(t *testing.T) {
+	t.Parallel()
+	finished := metav1.NewTime(time.Now().Add(-time.Hour))
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "mixed"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "lost"}, {Name: "app"}}},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: "lost", LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, Reason: "ContainerStatusUnknown"},
+				}},
+				{
+					Name:         "app",
+					RestartCount: 3,
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+					},
+					LastTerminationState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{ExitCode: 1, Reason: "Error", FinishedAt: finished},
+					},
+				},
+			},
+		},
+	}
+
+	lt := PodFromObject(pod).LastTermination
+	if lt == nil || lt.Container != "app" {
+		t.Fatalf("LastTermination = %+v, want the dated app crash", lt)
+	}
+	if !lt.AgeKnown || !lt.BackingOff {
+		t.Errorf("LastTermination = %+v, want AgeKnown and BackingOff", lt)
+	}
+}
+
 // TestPodFromObjectExitCodeZeroIsNotALastTermination pins the fix for a
 // completed Job pod rendering a false "Exit code 0" error banner: a clean
 // exit was never "why is it broken," so it must not populate
