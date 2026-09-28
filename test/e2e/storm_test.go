@@ -135,7 +135,15 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 		}
 		return writes, nil
 	})
-	a.WaitForAll(Settle, "storm-seq="+finalPodLabel, "Failed")
+	// The final status write lands after the final label write on the same
+	// object, so once pod detail shows Failed its cache already holds the
+	// final label. Labels live only in 26a's metapanel (5a has no LABELS
+	// section), which reads that cache when it opens.
+	a.WaitFor("Failed", Settle)
+	a.Press("m")
+	a.WaitFor("META", Settle)
+	a.waitForRowText(t, "storm-seq=", finalPodLabel)
+	a.backToPodDetail()
 
 	a.Press("e")
 	a.WaitLoaded(Settle)
@@ -185,7 +193,7 @@ func TestEventStormConvergesWithoutAmplification(t *testing.T) {
 	a.WaitFor(podName, Settle)
 	a.selectRow(t, podName)
 	a.Enter()
-	a.WaitForAll(Settle, "storm-seq="+finalPodLabel, "CONTAINERS")
+	a.WaitForAll(Settle, "Failed", "CONTAINERS")
 	a.WaitGone(timelineFinal, Settle)
 	gotRuntime := settledSnapshot(a)
 	gotRequests := a.Proxy().Counts()
