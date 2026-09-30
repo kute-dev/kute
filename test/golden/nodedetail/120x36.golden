@@ -9,6 +9,7 @@ CONDITIONS                                                    REQUESTED / ALLOCA
                                                               cpu  ▮▮▮▯▯▯▯▯▯▯▯▯ 940m / 4000m                            
                                                               mem  ▮▮▮▮▮▮▮▯▯▯▯▯ 5.4Gi / 10.0Gi                          
                                                               disk ▮▮▮▮▮▮▮▮▮▮▯▯ 81.0Gi / 100.0Gi                        
+                                                              img  ▮▮▮▮▯▯▯▯▯▯▯▯ 60.0Gi / 200.0Gi                        
                                                                                                                         
                                                               TAINTS                                                    
                                                               node.kubernetes.io/memory-pressure:NoSchedule             
@@ -22,7 +23,6 @@ CONDITIONS                                                    REQUESTED / ALLOCA
   ●  nva-worker-9k2ss                   1/1    Running           0     ▮▮▮▮▮▮ 410m   ▮▮▮▮▮▮ 3.6Gi  nva-stage        3h  
   ●  sidecar-envoy-x4b2q                1/1    Running           0     ▮▯▯▯▯▯ 35m    ▮▯▯▯▯▯ 512Mi  istio-system     6h  
   1–3 of 3                                                                                                      ██████  
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

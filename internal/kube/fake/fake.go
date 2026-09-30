@@ -1300,7 +1300,9 @@ func (c *Cluster) ContainerMetricsByNamespace(_ context.Context, namespace strin
 // NodeDiskUsage synthesizes a believable root-filesystem reading for demo
 // mode: the node's ephemeral-storage capacity (100Gi when it declares none)
 // at a stable per-node fraction, the same hash NodeMetrics uses so a node
-// that runs hot on memory doesn't look idle on disk by coincidence.
+// that runs hot on memory doesn't look idle on disk by coincidence. Every
+// demo node also carries its container runtime on a separate 200Gi disk, so
+// 11b's img row has something to show.
 func (c *Cluster) NodeDiskUsage(_ context.Context, nodeName string) (kube.NodeDisk, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1313,7 +1315,10 @@ func (c *Cluster) NodeDiskUsage(_ context.Context, nodeName string) (kube.NodeDi
 		if capacity == 0 {
 			capacity = 100 << 30
 		}
-		return kube.NodeDisk{UsedBytes: int64(float64(capacity) * demoUsageRatio(n.Name) * 0.8), CapacityBytes: capacity}, nil
+		used := int64(float64(capacity) * demoUsageRatio(n.Name) * 0.8)
+		const imageCapacity = 200 << 30
+		imageAvailable := int64(float64(imageCapacity) * (1 - demoUsageRatio(n.Name+"/imagefs")*0.9))
+		return kube.NewNodeDisk(used, capacity, capacity-used, imageCapacity, imageAvailable), nil
 	}
 	return kube.NodeDisk{}, fmt.Errorf("node %q not found", nodeName)
 }

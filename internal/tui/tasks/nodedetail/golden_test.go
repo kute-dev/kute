@@ -161,8 +161,9 @@ func goldenNodeDetailModel(t *testing.T, width, height int) Model {
 		pods:        goldenNodePods(),
 	})
 	// disk ~81% of a 100Gi root fs — hot, so the row's yellow treatment is
-	// pinned alongside mem's.
-	m = step(t, m, diskLoadedMsg{disk: kube.NodeDisk{UsedBytes: 81 * giByte, CapacityBytes: 100 * giByte}})
+	// pinned alongside mem's. The runtime sits on a separate, cool 200Gi
+	// disk, pinning the img row.
+	m = step(t, m, diskLoadedMsg{disk: kube.NewNodeDisk(81*giByte, 100*giByte, 19*giByte, 200*giByte, 140*giByte)})
 	// The header badge's "· 8ms" comes from the conn-state ping loop — a
 	// fixed latency keeps the golden deterministic (same reasoning as
 	// poddetail's own golden model).

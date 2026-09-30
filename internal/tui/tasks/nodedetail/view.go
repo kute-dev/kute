@@ -376,6 +376,13 @@ func (m Model) allocationBlock(theme tui.Theme, compact bool) []string {
 	if line, ok := m.diskLine(theme); ok {
 		lines = append(lines, line)
 	}
+	if m.diskState == diskOK && m.disk.SeparateImageFs() {
+		// imagefs on its own disk has its own eviction threshold and its own
+		// image GC, and fills independently of the root disk — DiskPressure
+		// alone doesn't say which one tripped. On a single-disk node the
+		// kubelet reports the same filesystem twice, and the row is omitted.
+		lines = append(lines, allocationBarLine("img", m.disk.ImageUsedBytes, m.disk.ImageCapacityBytes, theme, formatBytes))
+	}
 	if !compact {
 		lines = append(lines, "")
 	}

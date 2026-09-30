@@ -24,7 +24,7 @@ func (f fakeDisk) NodeDiskUsage(context.Context, string) (kube.NodeDisk, error) 
 
 func TestDiskLineStates(t *testing.T) {
 	forbidden := fmt.Errorf("%w: nope", kube.ErrNodeStatsForbidden)
-	ok := diskLoadedMsg{disk: kube.NodeDisk{UsedBytes: 20 * giByte, CapacityBytes: 100 * giByte}}
+	ok := diskLoadedMsg{disk: kube.NewNodeDisk(20*giByte, 100*giByte, 80*giByte, 0, 0)}
 	tests := []struct {
 		name string
 		msgs []diskLoadedMsg
@@ -91,4 +91,26 @@ type fakeNodeMetricsStub struct{}
 
 func (fakeNodeMetricsStub) NodeMetrics(context.Context) (map[string]kube.NodeMetric, error) {
 	return nil, nil
+}
+
+func TestImageRowOnlyForSeparateImageFs(t *testing.T) {
+	tests := []struct {
+		name string
+		disk kube.NodeDisk
+		want bool
+	}{
+		{name: "single disk", disk: kube.NewNodeDisk(20*giByte, 100*giByte, 80*giByte, 100*giByte, 80*giByte), want: false},
+		{name: "no imagefs", disk: kube.NewNodeDisk(20*giByte, 100*giByte, 80*giByte, 0, 0), want: false},
+		{name: "separate disk", disk: kube.NewNodeDisk(20*giByte, 100*giByte, 80*giByte, 200*giByte, 50*giByte), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := New(Config{Session: newSession(), Lister: fakeLister{}, NodeDisk: fakeDisk{}, NodeName: "n"})
+			m.applyDisk(diskLoadedMsg{disk: tt.disk})
+			got := strings.Contains(goldentest.Plain(strings.Join(m.allocationBlock(m.Theme(), false), "\n")), "img ")
+			if got != tt.want {
+				t.Fatalf("img row shown = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
