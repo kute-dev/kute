@@ -61,6 +61,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reloadEpoch++
 			return m, m.load()
 		}
+	case tui.CacheSyncRetryMsg:
+		if msg.Gen == m.reloadEpoch {
+			return m, m.load()
+		}
 	case kube.ConnStateMsg:
 		m.conn = kube.ConnState(msg)
 		m.actions.SetOffline(m.conn.Offline())
@@ -92,6 +96,23 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 			m.state = tui.TaskStatePermissionDenied
 		}
 		m.feedback = msg.err.Error()
+		return m, nil
+	}
+	// The first read of a kind starts its informer and returns whatever the
+	// cache holds so far — often nothing yet. Hold the spinner until the
+	// cache has filled (CLAUDE.md: an empty or not-found state is a claim
+	// about the cluster), and surface why a cache stopped filling rather than
+	// calling the object missing.
+	if !tui.KindsSynced(m.lister, m.namespace, kube.KindSecret) {
+		m.reloadEpoch++
+		return m, tui.ScheduleCacheSyncRetry(m.reloadEpoch)
+	}
+	if err := tui.KindsError(m.lister, m.namespace, kube.KindSecret); err != nil {
+		m.state = tui.TaskStateError
+		if kube.IsPermissionError(err) {
+			m.state = tui.TaskStatePermissionDenied
+		}
+		m.feedback = err.Error()
 		return m, nil
 	}
 	if !msg.found {
