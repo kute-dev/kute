@@ -56,7 +56,8 @@ type inventoryItem struct {
 type chain struct {
 	SourceKind      kube.ResourceKind
 	SourceName      string
-	SourceDisplay   string // "git/nebula-config"
+	SourceNamespace string // the ref's own namespace, else the object's
+	SourceDisplay   string // "git/nebula-config", "helm/gitlab in flux-system"
 	Path            string
 	Interval        string
 	SourceRevision  string // the source's own artifact revision, shortened

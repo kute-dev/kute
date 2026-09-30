@@ -36,7 +36,7 @@ func (m Model) load() tea.Cmd {
 		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
 
-		sourceKinds, reconcilerKinds := fluxKinds(registry)
+		sourceKinds, reconcilerKinds, chartKind := fluxKinds(registry)
 		read := append(append([]kube.ResourceKind{}, sourceKinds...), reconcilerKinds...)
 
 		sources := map[string]*group{}
@@ -61,6 +61,7 @@ func (m Model) load() tea.Cmd {
 		// A reconciler whose sourceRef resolves to nothing still has to
 		// appear — that is a real broken chain, and the failure this screen
 		// is for. It gets a synthetic head naming the reference itself.
+		var rows []treeRow
 		for _, kind := range reconcilerKinds {
 			desc, ok := registry.Descriptor(kind)
 			if !ok {
@@ -71,24 +72,56 @@ func (m Model) load() tea.Cmd {
 				return loadedMsg{err: err, kinds: read}
 			}
 			for _, obj := range objs {
-				row := reconcilerRowOf(desc, kind, obj)
-				key := joinKey(row.sourceKind, row.sourceNamespace, row.sourceName)
-				g, ok := sources[key]
-				if !ok {
-					g = &group{head: missingSourceRow(row)}
-					sources[key] = g
-					order = append(order, key)
-				}
-				// Drift is a boolean, never a count: "N commits ahead" needs
-				// git log, which kute never has (docs/flux-plan.md G1). And
-				// it is only computed where the two revisions are the same
-				// kind of thing — see kube.FluxTracksSourceRevision.
-				if kube.FluxTracksSourceRevision(kind.APIKind()) &&
-					g.head.revisionKey != "" && row.revisionKey != "" && g.head.revisionKey != row.revisionKey {
-					row.revision += " · source ahead"
-				}
-				g.children = append(g.children, row)
+				rows = append(rows, reconcilerRowOf(desc, kind, obj))
 			}
+		}
+
+		// A HelmRelease's spec.chartRef may name a HelmChart, which is not a
+		// source this screen draws — it is fetched *from* one. Follow it one
+		// hop to the repository behind it. HelmChart is read only when some
+		// release actually points at one, so the common tree never starts
+		// that informer.
+		if chartKind != "" && slices.ContainsFunc(rows, func(r treeRow) bool { return r.sourceKind.APIKind() == "HelmChart" }) {
+			read = append(read, chartKind)
+			objs, err := lister.ListRaw(ctx, chartKind, "")
+			if err != nil {
+				return loadedMsg{err: err, kinds: read}
+			}
+			charts := map[string]*unstructured.Unstructured{}
+			for _, obj := range objs {
+				if u, ok := obj.(*unstructured.Unstructured); ok {
+					charts[u.GetNamespace()+"/"+u.GetName()] = u
+				}
+			}
+			for i := range rows {
+				if rows[i].sourceKind.APIKind() != "HelmChart" {
+					continue
+				}
+				if hc, ok := charts[rows[i].sourceNamespace+"/"+rows[i].sourceName]; ok {
+					if k, n, ns := sourceRefOf(hc, hc.GetNamespace()); n != "" {
+						rows[i].sourceKind, rows[i].sourceName, rows[i].sourceNamespace = k, n, ns
+					}
+				}
+			}
+		}
+
+		for _, row := range rows {
+			key := joinKey(row.sourceKind, row.sourceNamespace, row.sourceName)
+			g, ok := sources[key]
+			if !ok {
+				g = &group{head: missingSourceRow(row)}
+				sources[key] = g
+				order = append(order, key)
+			}
+			// Drift is a boolean, never a count: "N commits ahead" needs
+			// git log, which kute never has (docs/flux-plan.md G1). And
+			// it is only computed where the two revisions are the same
+			// kind of thing — see kube.FluxTracksSourceRevision.
+			if kube.FluxTracksSourceRevision(row.kind.APIKind()) &&
+				g.head.revisionKey != "" && row.revisionKey != "" && g.head.revisionKey != row.revisionKey {
+				row.revision += " · source ahead"
+			}
+			g.children = append(g.children, row)
 		}
 
 		groups := make([]group, 0, len(order))
@@ -114,7 +147,11 @@ func (m Model) registry() resources.Registry {
 // the chain, by API group — never by kind name, per §30a's recognition rule.
 // Notification-controller kinds (Alert, Provider, Receiver) are in neither:
 // they are not part of the fetch→apply chain this screen draws.
-func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.ResourceKind) {
+//
+// chartKind is HelmChart's registry kind, when the cluster serves it: not a
+// source of its own, but the hop between a chartRef'd HelmRelease and the
+// repository it really comes from.
+func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.ResourceKind, chartKind kube.ResourceKind) {
 	for _, kind := range registry.Kinds() {
 		desc, ok := registry.Descriptor(kind)
 		if !ok || !desc.Flux {
@@ -126,6 +163,7 @@ func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.Resourc
 			// operator points anything at — it would double every Helm
 			// chain. The HelmRepository behind it is the real source.
 			if desc.Kind.APIKind() == "HelmChart" {
+				chartKind = kind
 				continue
 			}
 			sources = append(sources, kind)
@@ -135,7 +173,7 @@ func fluxKinds(registry resources.Registry) (sources, reconcilers []kube.Resourc
 	}
 	slices.Sort(sources)
 	slices.Sort(reconcilers)
-	return sources, reconcilers
+	return sources, reconcilers, chartKind
 }
 
 // sourceRowOf projects one source object. Everything but the revision cell
@@ -246,8 +284,10 @@ func sourceRevisionCell(apiKind, revision string, updated time.Time) string {
 }
 
 // sourceRefOf reads the reference that makes this object part of a chain: a
-// Kustomization's own spec.sourceRef, or a HelmRelease's
-// spec.chart.spec.sourceRef (its chart names the repository it comes from).
+// Kustomization's own spec.sourceRef, a HelmRelease's
+// spec.chart.spec.sourceRef (its chart names the repository it comes from),
+// or a HelmRelease's spec.chartRef (an OCIRepository or HelmChart it installs
+// from directly).
 // A ref with no namespace of its own defaults to the object's, which is
 // Flux's own rule.
 func sourceRefOf(u *unstructured.Unstructured, defaultNS string) (kube.ResourceKind, string, string) {
@@ -257,6 +297,7 @@ func sourceRefOf(u *unstructured.Unstructured, defaultNS string) (kube.ResourceK
 	for _, path := range [][]string{
 		{"spec", "sourceRef"},
 		{"spec", "chart", "spec", "sourceRef"},
+		{"spec", "chartRef"},
 	} {
 		ref, ok, _ := unstructured.NestedMap(u.Object, path...)
 		if !ok {

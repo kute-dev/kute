@@ -82,24 +82,35 @@ func buildChain(ctx context.Context, lister resources.RawLister, u *unstructured
 		DriftComparable: kube.FluxTracksSourceRevision(u.GetKind()),
 	}
 
+	// A ref with no namespace of its own defaults to the object's — Flux's
+	// own rule. A HelmRelease in an app namespace pointing at a
+	// HelmRepository in flux-system is the common layout, not the exception.
 	for _, base := range [][]string{
 		{"spec", "sourceRef"},
 		{"spec", "chart", "spec", "sourceRef"},
+		{"spec", "chartRef"}, // HelmRelease installing an OCIRepository/HelmChart directly
 	} {
 		k := nested(u, append(append([]string{}, base...), "kind")...)
 		n := nested(u, append(append([]string{}, base...), "name")...)
 		if n == "" {
 			continue
 		}
-		c.SourceKind, c.SourceName = kube.ResourceKind(k), n
+		ns := nested(u, append(append([]string{}, base...), "namespace")...)
+		if ns == "" {
+			ns = namespace
+		}
+		c.SourceKind, c.SourceName, c.SourceNamespace = kube.ResourceKind(k), n, ns
 		c.SourceDisplay = shortSourceKind(k) + "/" + n
+		if ns != namespace {
+			c.SourceDisplay += " in " + ns
+		}
 		break
 	}
 
 	// The source object's artifact revision — the "available" half of the
 	// drift comparison. Read only when there is a source to read.
 	if c.SourceKind != "" && c.SourceName != "" {
-		if srcObjs, err := lister.ListRaw(ctx, c.SourceKind, namespace); err == nil {
+		if srcObjs, err := lister.ListRaw(ctx, c.SourceKind, c.SourceNamespace); err == nil {
 			if src, ok := findObject(srcObjs, c.SourceName); ok {
 				c.SourceRevision = kube.ShortFluxRevision(nested(src, "status", "artifact", "revision"))
 			}

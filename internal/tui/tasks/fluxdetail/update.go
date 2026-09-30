@@ -133,9 +133,8 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case verbs.FluxSource.Key:
 		if m.chn.SourceKind != "" && m.chn.SourceName != "" {
 			src := m.chn
-			ns := m.namespace
 			return m, func() tea.Msg {
-				return tui.GotoResourceMsg{Kind: src.SourceKind, Namespace: ns, Name: src.SourceName}
+				return tui.GotoResourceMsg{Kind: src.SourceKind, Namespace: src.SourceNamespace, Name: src.SourceName}
 			}
 		}
 	}

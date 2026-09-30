@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -296,5 +297,43 @@ func TestHelmReleaseNeverClaimsDrift(t *testing.T) {
 	drifted := plain(demoModel(t, "nebula-infra").Render())
 	if !strings.Contains(drifted, "source ahead") {
 		t.Errorf("a Kustomization behind its GitRepository must still report drift:\n%s", drifted)
+	}
+}
+
+// TestCrossNamespaceSourceResolves: a HelmRelease in an app namespace
+// pointing at a HelmRepository in flux-system is Flux's common layout. The
+// source must be read — and `o` must go — where the ref says, not in the
+// release's own namespace.
+func TestCrossNamespaceSourceResolves(t *testing.T) {
+	c := fake.NewDemo()
+	c.Seed(kube.KindFluxHelmRelease, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": kube.FluxGroupHelm + "/v2", "kind": "HelmRelease",
+		"metadata": map[string]any{"name": "gitlab", "namespace": "gitlab"},
+		"spec": map[string]any{"chart": map[string]any{"spec": map[string]any{
+			"chart": "gitlab", "sourceRef": map[string]any{"kind": "HelmRepository", "name": "podinfo", "namespace": "flux-system"},
+		}}},
+	}})
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups,
+		Location: tui.Location{Context: "microk8s-cluster", Namespace: "gitlab"}}
+	m := New(Config{Session: sess, Lister: c, Mutator: c,
+		Kind: kube.KindFluxHelmRelease, Namespace: "gitlab", Name: "gitlab"})
+	m.SetSize(120, 30)
+	upd, _ := m.Update(m.load()())
+	got := upd.(*Model)
+
+	if got.chn.SourceRevision == "" {
+		t.Error("source in flux-system was not read: no source revision")
+	}
+	if want := "helm/podinfo in flux-system"; got.chn.SourceDisplay != want {
+		t.Errorf("SourceDisplay = %q, want %q", got.chn.SourceDisplay, want)
+	}
+	_, cmd := got.Update(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if cmd == nil {
+		t.Fatal("o produced no navigation")
+	}
+	msg, ok := cmd().(tui.GotoResourceMsg)
+	if !ok || msg.Namespace != "flux-system" {
+		t.Errorf("o navigated to %#v, want the source's own namespace", msg)
 	}
 }

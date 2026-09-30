@@ -1,10 +1,14 @@
 package fluxtree
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/kube/fake"
@@ -567,3 +571,94 @@ func (p *pushedTask) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 func (pushedTask) View() tea.View      { return tea.NewView("pushed screen") }
 func (p *pushedTask) SetSize(int, int) {}
+
+func fluxObj(apiVersion, kind, ns, name string, spec map[string]any) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": apiVersion, "kind": kind,
+		"metadata": map[string]any{"name": name, "namespace": ns},
+		"spec":     spec,
+		"status": map[string]any{"conditions": []any{map[string]any{
+			"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok",
+		}}},
+	}}
+}
+
+func seedSourceKind(c *fake.Cluster, kind, plural string) {
+	c.SeedDiscovered(kube.DiscoveredKind{
+		GVR:  schema.GroupVersionResource{Group: kube.FluxGroupSource, Version: "v1", Resource: plural},
+		Kind: kind, Plural: plural, Group: kube.FluxGroupSource,
+		Versions:    []kube.CRDVersion{{Name: "v1", Served: true, Storage: true}},
+		Established: true, CRDName: plural + "." + kube.FluxGroupSource,
+	})
+}
+
+// recordingLister notes every kind read, so a test can assert what the
+// screen did *not* start.
+type recordingLister struct {
+	resources.RawLister
+	read map[kube.ResourceKind]int
+}
+
+func (l *recordingLister) ListRaw(ctx context.Context, kind kube.ResourceKind, ns string) ([]runtime.Object, error) {
+	l.read[kind]++
+	return l.RawLister.ListRaw(ctx, kind, ns)
+}
+
+// TestChartRefReleasesJoinTheirSource: a HelmRelease that installs from
+// spec.chartRef (an OCI chart, or a HelmChart) must nest under the source it
+// really comes from — never under a "source not found" row that claims a
+// healthy chain is broken.
+func TestChartRefReleasesJoinTheirSource(t *testing.T) {
+	c := fake.NewDemo()
+	seedSourceKind(c, "OCIRepository", "ocirepositories")
+	seedSourceKind(c, "HelmChart", "helmcharts")
+	c.Seed(kube.ResourceKind("OCIRepository"),
+		fluxObj(kube.FluxGroupSource+"/v1", "OCIRepository", "flux-system", "gitlab-chart",
+			map[string]any{"url": "oci://registry.gitlab.com/gitlab-org/charts/gitlab"}))
+	c.Seed(kube.ResourceKind("HelmChart"),
+		fluxObj(kube.FluxGroupSource+"/v1", "HelmChart", "flux-system", "runner",
+			map[string]any{"chart": "gitlab-runner", "sourceRef": map[string]any{"kind": "HelmRepository", "name": "bitnami"}}))
+	c.Seed(kube.KindFluxHelmRelease,
+		fluxObj(kube.FluxGroupHelm+"/v2", "HelmRelease", "gitlab", "gitlab",
+			map[string]any{"chartRef": map[string]any{"kind": "OCIRepository", "name": "gitlab-chart", "namespace": "flux-system"}}),
+		fluxObj(kube.FluxGroupHelm+"/v2", "HelmRelease", "gitlab", "gitlab-runner",
+			map[string]any{"chartRef": map[string]any{"kind": "HelmChart", "name": "runner", "namespace": "flux-system"}}),
+	)
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups}
+	m := New(Config{Session: sess, Lister: c})
+	m.SetSize(120, 36)
+	upd, _ := m.Update(m.load()())
+	got := upd.(*Model)
+
+	parent := map[string]string{}
+	for _, g := range got.groups {
+		for _, ch := range g.children {
+			parent[ch.namespace+"/"+ch.name] = g.head.kindLabel + "/" + g.head.name
+			if g.head.missing && ch.namespace == "gitlab" {
+				t.Errorf("%s landed under a missing source: %s", ch.name, g.head.subLine)
+			}
+		}
+	}
+	if p := parent["gitlab/gitlab"]; p != "OCIRepo/gitlab-chart" {
+		t.Errorf("chartRef OCIRepository release nested under %q", p)
+	}
+	if p := parent["gitlab/gitlab-runner"]; p != "HelmRepo/bitnami" {
+		t.Errorf("chartRef HelmChart release nested under %q, want the HelmChart's own repository", p)
+	}
+}
+
+// TestHelmChartIsReadOnlyWhenAReleaseNamesOne: HelmChart is a hop, not a
+// source; the common tree must not start its informer.
+func TestHelmChartIsReadOnlyWhenAReleaseNamesOne(t *testing.T) {
+	c := fake.NewDemo()
+	seedSourceKind(c, "HelmChart", "helmcharts")
+	reg, groups := resources.BuildDiscoveredRegistry(c.DiscoveredKinds(), c)
+	sess := &tui.Session{Theme: tui.Dark(), Registry: reg, Groups: groups}
+	l := &recordingLister{RawLister: c, read: map[kube.ResourceKind]int{}}
+	m := New(Config{Session: sess, Lister: l})
+	m.Update(m.load()())
+	if n := l.read["HelmChart"]; n != 0 {
+		t.Errorf("HelmChart read %d times with no chartRef release in the cluster", n)
+	}
+}
