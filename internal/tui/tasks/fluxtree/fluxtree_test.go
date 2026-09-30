@@ -662,3 +662,28 @@ func TestHelmChartIsReadOnlyWhenAReleaseNamesOne(t *testing.T) {
 		t.Errorf("HelmChart read %d times with no chartRef release in the cluster", n)
 	}
 }
+
+func TestAppliesLineSummarisesTheInventoryByNamespace(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ids  []string
+		want string
+	}{
+		{"none", nil, ""},
+		{"one", []string{"gitlab_web_apps_Deployment"}, "applies 1 object · gitlab 1"},
+		{
+			"namespace object counts toward the namespace it creates",
+			[]string{"_gitlab__Namespace", "gitlab_web_apps_Deployment", "_view_rbac.authorization.k8s.io_ClusterRole"},
+			"applies 3 objects · gitlab 2",
+		},
+		{
+			"largest first, rest folded",
+			[]string{"a_x__ConfigMap", "b_x__ConfigMap", "b_y__ConfigMap", "c_x__ConfigMap", "c_y__ConfigMap", "c_z__ConfigMap", "d_x__ConfigMap", "e_x__ConfigMap"},
+			"applies 8 objects · c 3 · b 2 · a 1 · +2 namespaces",
+		},
+	} {
+		if got := appliesLine(tc.ids); got != tc.want {
+			t.Errorf("%s: appliesLine = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

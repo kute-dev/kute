@@ -10,13 +10,13 @@
   ●  flux-system                                  GitRepo      main@8f3c2a1 · 3m ago                        3m ago      
   ✕  └─ nebula-workers                            Kustomize    main@8f3c2a1                                 4m ago      
       health check failed after 2m0s: Deployment/nebula-stage/nebula-worker status: 'InProgress'                        
+      applies 3 objects · flux-system 3                                                                                 
   ‖  └─ nebula-infra                              Kustomize    main@2b91f04 · source ahead                  6d ago      
   ◌  └─ nebula-apps                               Kustomize    main@8f3c2a1                                 1m ago      
       building manifests                                                                                                
   ●  └─ flux-system                               Kustomize    main@8f3c2a1                                 1m ago      
   ●  └─ observability                             Kustomize    main@8f3c2a1                                 2m ago      
     + 1 source · 1 reconciler ready · ↹ expand                                                                          
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

@@ -195,7 +195,7 @@ func buildInventory(ctx context.Context, lister resources.RawLister, u *unstruct
 			continue
 		}
 		id, _, _ := unstructured.NestedString(em, "id")
-		ns, name, kind, ok := parseInventoryID(id)
+		ns, name, kind, ok := kube.ParseFluxInventoryID(id)
 		if !ok {
 			continue
 		}
@@ -233,15 +233,6 @@ func buildInventory(ctx context.Context, lister resources.RawLister, u *unstruct
 	}
 	sortInventory(out)
 	return out
-}
-
-// parseInventoryID splits a Flux inventory entry id.
-func parseInventoryID(id string) (namespace, name string, kind kube.ResourceKind, ok bool) {
-	parts := strings.Split(id, "_")
-	if len(parts) != 4 {
-		return "", "", "", false
-	}
-	return parts[0], parts[1], kube.ResourceKind(parts[3]), parts[1] != ""
 }
 
 // objectReadiness is the inventory's per-object health read. Workloads

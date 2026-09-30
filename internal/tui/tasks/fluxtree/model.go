@@ -75,7 +75,12 @@ type treeRow struct {
 	revisionKey string
 	reconciled  string // the RECONCILED cell ("4m ago")
 	subLine     string // the Ready condition message, verbatim; "" when there's nothing to say
-	suspended   bool
+	// applies summarises where a Kustomization's inventory landed —
+	// "applies 58 objects · gitlab 12 · monitoring 20 · +3 namespaces" — so
+	// a push that only added manifests to an existing Kustomization is
+	// still visible on the tree. "" for anything without an inventory.
+	applies   string
+	suspended bool
 
 	isSource bool
 	// sourceKind/sourceName/sourceNamespace name what a reconciler reconciles

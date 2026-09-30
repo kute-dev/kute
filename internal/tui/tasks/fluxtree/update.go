@@ -346,6 +346,9 @@ func (m *Model) appendRow(row treeRow, child bool) {
 	if row.subLine != "" {
 		m.lines = append(m.lines, line{kind: lineSub, row: -1, text: row.subLine, child: true})
 	}
+	if row.applies != "" {
+		m.lines = append(m.lines, line{kind: lineSub, row: -1, text: row.applies, child: true})
+	}
 }
 
 func (m Model) foldText() string {

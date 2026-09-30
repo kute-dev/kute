@@ -1,0 +1,61 @@
+package kube
+
+import "strings"
+
+// ParseFluxInventoryID splits one status.inventory entry id of a Flux
+// Kustomization: "<namespace>_<name>_<group>_<Kind>", with an empty first
+// segment for a cluster-scoped object. Kubernetes names can't contain an
+// underscore, so the split is unambiguous.
+func ParseFluxInventoryID(id string) (namespace, name string, kind ResourceKind, ok bool) {
+	parts := strings.Split(id, "_")
+	if len(parts) != 4 {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], ResourceKind(parts[3]), parts[1] != ""
+}
+
+// FluxInventoryIDs reads a reconciler's status.inventory entry ids — the
+// list a Kustomization publishes of every object it applied. A HelmRelease
+// publishes none (Helm owns its object list), so it yields nil.
+func FluxInventoryIDs(obj map[string]any) []string {
+	status, _ := obj["status"].(map[string]any)
+	inv, _ := status["inventory"].(map[string]any)
+	entries, _ := inv["entries"].([]any)
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		em, _ := e.(map[string]any)
+		if id, _ := em["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// The labels Flux's controllers stamp on every object they apply, naming the
+// reconciler that owns it. They are the only in-object record of "who put
+// this here" — a Deployment applied by a Kustomization has no ownerReference
+// back to it.
+const (
+	fluxKustomizeNameLabel      = FluxGroupKustomize + "/name"
+	fluxKustomizeNamespaceLabel = FluxGroupKustomize + "/namespace"
+	fluxHelmNameLabel           = FluxGroupHelm + "/name"
+	fluxHelmNamespaceLabel      = FluxGroupHelm + "/namespace"
+)
+
+// FluxManager reports which Flux reconciler applied an object, from its
+// labels. kind is the *registry* kind (KindFluxHelmRelease for a
+// HelmRelease, never the bare API Kind that names §18a's Helm list).
+//
+// A HelmRelease's labels win over a Kustomization's: a Kustomization that
+// applies a HelmRelease doesn't label the release's rendered objects, so an
+// object carrying both was relabelled by helm-controller, which is the
+// closer owner.
+func FluxManager(labels map[string]string) (kind ResourceKind, namespace, name string, ok bool) {
+	if n := labels[fluxHelmNameLabel]; n != "" {
+		return KindFluxHelmRelease, labels[fluxHelmNamespaceLabel], n, true
+	}
+	if n := labels[fluxKustomizeNameLabel]; n != "" {
+		return ResourceKind("Kustomization"), labels[fluxKustomizeNamespaceLabel], n, true
+	}
+	return "", "", "", false
+}

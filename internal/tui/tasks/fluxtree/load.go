@@ -199,7 +199,68 @@ func reconcilerRowOf(desc resources.Descriptor, kind kube.ResourceKind, obj runt
 		row.revision = chart + " " + row.revision
 	}
 	row.sourceKind, row.sourceName, row.sourceNamespace = sourceRefOf(u, row.namespace)
+	if u != nil {
+		row.applies = appliesLine(kube.FluxInventoryIDs(u.Object))
+	}
 	return row
+}
+
+// appliesTopNamespaces is how many namespaces the applies line names before
+// folding the rest into "+N namespaces".
+const appliesTopNamespaces = 3
+
+// appliesLine summarises a reconciler's inventory by namespace, largest
+// first. It reads only the ids already on the object — no per-kind list,
+// so it costs nothing however many kinds the inventory spans (a health read
+// here would start an informer per kind; 31a's inventory is where that
+// belongs). A Namespace object counts toward the namespace it creates,
+// which is how "the gitlab namespace appeared" shows up; any other
+// cluster-scoped object counts only toward the total.
+func appliesLine(ids []string) string {
+	perNS := map[string]int{}
+	total := 0
+	for _, id := range ids {
+		ns, name, kind, ok := kube.ParseFluxInventoryID(id)
+		if !ok {
+			continue
+		}
+		total++
+		switch {
+		case ns != "":
+			perNS[ns]++
+		case kind == kube.KindNamespace:
+			perNS[name]++
+		}
+	}
+	if total == 0 {
+		return ""
+	}
+	namespaces := make([]string, 0, len(perNS))
+	for ns := range perNS {
+		namespaces = append(namespaces, ns)
+	}
+	slices.SortFunc(namespaces, func(a, b string) int {
+		return cmp.Or(cmp.Compare(perNS[b], perNS[a]), cmp.Compare(a, b))
+	})
+
+	noun := "objects"
+	if total == 1 {
+		noun = "object"
+	}
+	parts := []string{"applies " + strconv.Itoa(total) + " " + noun}
+	for i, ns := range namespaces {
+		if i == appliesTopNamespaces {
+			rest := len(namespaces) - i
+			more := "+" + strconv.Itoa(rest) + " namespaces"
+			if rest == 1 {
+				more = "+1 namespace"
+			}
+			parts = append(parts, more)
+			break
+		}
+		parts = append(parts, ns+" "+strconv.Itoa(perNS[ns]))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // baseRow copies the descriptor's own projected row — the same
