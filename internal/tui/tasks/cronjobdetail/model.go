@@ -277,3 +277,11 @@ func (m Model) selectedJobSummary() (resources.JobSummary, bool) {
 	}
 	return m.summary.Runs[m.selectedJob], true
 }
+
+// ScreenObject implements tui.ObjectScreen: a namespace switch from here
+// follows this object into the new namespace.
+func (m *Model) ScreenObject() (kube.ResourceKind, string, string) {
+	return kube.KindCronJob, m.namespace, m.name
+}
+
+var _ tui.ObjectScreen = (*Model)(nil)

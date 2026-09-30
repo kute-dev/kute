@@ -256,3 +256,11 @@ func (m Model) attemptList() []resources.JobAttempt {
 	}
 	return out
 }
+
+// ScreenObject implements tui.ObjectScreen: a namespace switch from here
+// follows this object into the new namespace.
+func (m *Model) ScreenObject() (kube.ResourceKind, string, string) {
+	return kube.KindJob, m.namespace, m.name
+}
+
+var _ tui.ObjectScreen = (*Model)(nil)

@@ -191,6 +191,9 @@ func (m Model) Strips(width int) []string {
 		if m.auxKindsDeniedNote != "" {
 			lines = append(lines, m.auxKindsDeniedNoteLine(theme, width))
 		}
+		if m.followNote != "" {
+			lines = append(lines, insetStripLine(lipgloss.NewStyle().Foreground(theme.Warn).Render("⚠ "+m.followNote), width))
+		}
 		if m.filterActive {
 			lines = append(lines, m.filterStripLine(theme, width))
 		}

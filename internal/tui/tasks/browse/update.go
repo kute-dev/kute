@@ -208,6 +208,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.goToResource(msg)
 	case tui.SwitchNamespaceMsg:
 		return m, m.switchNamespace(msg.Namespace)
+	case tui.FollowObjectMsg:
+		return m, m.followObject(msg)
 	case tui.SwitchContextMsg:
 		if msg.Err == nil {
 			return m, m.switchContext(msg)
@@ -435,6 +437,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
+		m.pendingFollow = ""
 		m.state = tui.TaskStateError
 		if kube.IsPermissionError(msg.err) {
 			m.state = tui.TaskStatePermissionDenied
@@ -515,6 +518,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			// beats the two alternatives — a spinner that outlives the
 			// user's patience, or "no <kind>", which is a claim about the
 			// cluster this screen is in no position to make.
+			m.pendingFollow = ""
 			if kube.IsPermissionError(err) {
 				// A denial is permanent for the session, so this is 4b's
 				// card rather than the retrying line below: there is no
@@ -532,6 +536,9 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			m.feedback = fmt.Sprintf("couldn't load %s: %v — retrying", lowerDisplay(m.desc.Display), err)
 			return m, nil
 		}
+		// The empty state already says the namespace has none of this
+		// kind, the followed object included.
+		m.pendingFollow = ""
 		m.filterActive = false
 		m.setFilter("")
 		m.visible = nil
@@ -547,6 +554,9 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.state = tui.TaskStateReady
 	m.feedback = ""
 	m.cacheCurrentRows()
+	if task, cmd, ok := m.resolveFollow(); ok {
+		return task, cmd
+	}
 
 	// m.kind's own cache is already known-good (rows are non-empty), so only
 	// the aux kinds its columns/prompts read need asking. A problem here
@@ -578,6 +588,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.followNote = ""
 	if m.actions.Active() {
 		return m.updateConfirmKey(msg)
 	}

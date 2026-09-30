@@ -39,6 +39,16 @@ type SwitchNamespaceMsg struct {
 	Namespace string
 }
 
+// FollowObjectMsg asks a fresh browse to open Kind in Namespace and reopen
+// Name's own screen there if it exists — or stay on the list and say it
+// doesn't. The root sends it for a namespace switch fired from an
+// ObjectScreen (a Secret's Data view, pod detail).
+type FollowObjectMsg struct {
+	Kind      kube.ResourceKind
+	Namespace string
+	Name      string
+}
+
 // SetWhoCanVerbMsg asks the active task (tasks/whocan) to set its query's
 // verb slot — the 'v' palette edit's Enter (docs/design README.md §22a).
 // Forwarded straight to the active task, unlike GotoKindMsg/

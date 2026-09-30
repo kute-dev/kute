@@ -825,3 +825,171 @@ func gotoFuzzyLabels(t *testing.T, sess *tui.Session, query string) string {
 	}
 	return ansi.Strip(updated.(tui.Model).View().Content)
 }
+
+// inPlaceNamespaceTask is a pushed screen that owns its namespace (events,
+// whocan) and so must receive SwitchNamespaceMsg itself.
+type inPlaceNamespaceTask struct{ screenTask }
+
+func (t *inPlaceNamespaceTask) SwitchesNamespaceInPlace() bool { return true }
+
+// TestRootModelSwitchNamespaceFromObjectScreenPushesFreshBrowse pins the fix
+// for the namespace palette doing nothing on an object-bound pushed screen
+// (a Secret's Data view, pod detail): those screens ignore
+// SwitchNamespaceMsg, so the root now routes it like a goto — a fresh browse
+// pushed on top, the object screen one esc beneath it.
+func TestRootModelSwitchNamespaceFromObjectScreenPushesFreshBrowse(t *testing.T) {
+	t.Parallel()
+	sess := gotoTestSession(gotoFakeLister{})
+	detail := &screenTask{name: "secretdata"}
+	browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: detail}
+	var fresh *screenTask
+	buildBrowse := func() tui.Task {
+		fresh = &screenTask{name: "fresh-browse"}
+		return fresh
+	}
+
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
+	updated, _ = updated.(tui.Model).Update(tui.SwitchNamespaceMsg{Namespace: "other"})
+	m := updated.(tui.Model)
+
+	if fresh == nil || !strings.Contains(m.View().Content, "fresh-browse") {
+		t.Fatalf("expected a fresh browse pushed over the object screen:\n%s", m.View().Content)
+	}
+	if sess.Location.Namespace != "other" {
+		t.Fatalf("Session.Location.Namespace = %q, want other", sess.Location.Namespace)
+	}
+	updated, _ = m.Update(tui.BackMsg{})
+	if !strings.Contains(updated.(tui.Model).View().Content, "secretdata") {
+		t.Fatalf("expected esc to return to the object screen:\n%s", updated.(tui.Model).View().Content)
+	}
+}
+
+func TestRootModelSwitchNamespaceStaysInPlaceOnNamespaceSwitcher(t *testing.T) {
+	t.Parallel()
+	sess := gotoTestSession(gotoFakeLister{})
+	events := &inPlaceNamespaceTask{screenTask{name: "events"}}
+	browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: events}
+	built := 0
+	buildBrowse := func() tui.Task { built++; return &screenTask{name: "fresh-browse"} }
+
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
+	updated, _ = updated.(tui.Model).Update(tui.SwitchNamespaceMsg{Namespace: "other"})
+	m := updated.(tui.Model)
+
+	if built != 0 || !strings.Contains(m.View().Content, "events") {
+		t.Fatalf("expected events to keep the namespace switch in place (built=%d):\n%s", built, m.View().Content)
+	}
+}
+
+// objectScreenTask is a pushed object-bound screen (secretdata, poddetail).
+type objectScreenTask struct {
+	screenTask
+	namespace string
+}
+
+func (t *objectScreenTask) ScreenObject() (kube.ResourceKind, string, string) {
+	return kube.KindSecret, t.namespace, "db"
+}
+
+// followingBrowseStub records the navigation message routeGoto hands it and,
+// on "open", swaps itself for the followed object the way browse's
+// resolveFollow does once rows land — reporting Transient from then on.
+type followingBrowseStub struct {
+	screenTask
+	got      tea.Msg
+	followed tui.Task
+	away     bool
+}
+
+func (t *followingBrowseStub) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tui.FollowObjectMsg, tui.SwitchNamespaceMsg:
+		t.got = msg
+	case tea.KeyPressMsg:
+		if msg.String() == "open" && t.followed != nil {
+			t.away = true
+			return t.followed, nil
+		}
+	}
+	return t, nil
+}
+
+func (t *followingBrowseStub) Transient() bool { return t.away }
+
+// TestRootModelSwitchNamespaceFromObjectScreenFollowsObject pins the
+// follow-the-object contract: the fresh browse gets a FollowObjectMsg for the
+// same name in the new namespace, and once it hands off to the followed
+// object's screen, esc goes straight back to the original object rather than
+// through the intermediate list.
+func TestRootModelSwitchNamespaceFromObjectScreenFollowsObject(t *testing.T) {
+	t.Parallel()
+	sess := gotoTestSession(gotoFakeLister{})
+	original := &objectScreenTask{screenTask: screenTask{name: "secretdata-qa"}, namespace: "qa"}
+	browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: original}
+	fresh := &followingBrowseStub{screenTask: screenTask{name: "fresh-browse"}, followed: &screenTask{name: "secretdata-stage"}}
+	buildBrowse := func() tui.Task { return fresh }
+
+	model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
+	updated, _ = updated.(tui.Model).Update(tui.SwitchNamespaceMsg{Namespace: "stage"})
+	m := updated.(tui.Model)
+
+	want := tui.FollowObjectMsg{Kind: kube.KindSecret, Namespace: "stage", Name: "db"}
+	if fresh.got != want {
+		t.Fatalf("fresh browse got %#v, want %#v", fresh.got, want)
+	}
+	if sess.Location.Namespace != "stage" || sess.Location.Kind != kube.KindSecret || sess.Location.Resource != "db" {
+		t.Fatalf("Session.Location = %+v, want Secret db in stage", sess.Location)
+	}
+
+	updated, _ = m.Update(tea.KeyPressMsg{Text: "open"})
+	m = updated.(tui.Model)
+	if !strings.Contains(m.View().Content, "secretdata-stage") {
+		t.Fatalf("expected the followed object active:\n%s", m.View().Content)
+	}
+	updated, _ = m.Update(tui.BackMsg{})
+	if !strings.Contains(updated.(tui.Model).View().Content, "secretdata-qa") {
+		t.Fatalf("expected esc to skip the transient list and land on the original object:\n%s", updated.(tui.Model).View().Content)
+	}
+}
+
+func TestRootModelSwitchNamespaceFromObjectScreenEdgeCases(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, target string
+		wantBuilt    bool
+		wantMsg      tea.Msg
+	}{
+		{"same namespace stays put", "qa", false, nil},
+		{"all namespaces lands on the list", "", true, tui.SwitchNamespaceMsg{Namespace: ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := gotoTestSession(gotoFakeLister{})
+			original := &objectScreenTask{screenTask: screenTask{name: "secretdata-qa"}, namespace: "qa"}
+			browseTask := &pushableScreenTask{screenTask: screenTask{name: "browse"}, next: original}
+			var fresh *followingBrowseStub
+			buildBrowse := func() tui.Task {
+				fresh = &followingBrowseStub{screenTask: screenTask{name: "fresh-browse"}}
+				return fresh
+			}
+			model := tui.NewWithSession(browseTask, sess).WithRootFactories(nil, buildBrowse)
+			updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+			updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "open"})
+			updated, _ = updated.(tui.Model).Update(tui.SwitchNamespaceMsg{Namespace: tc.target})
+			if (fresh != nil) != tc.wantBuilt {
+				t.Fatalf("fresh browse built = %v, want %v", fresh != nil, tc.wantBuilt)
+			}
+			if fresh != nil && fresh.got != tc.wantMsg {
+				t.Fatalf("fresh browse got %#v, want %#v", fresh.got, tc.wantMsg)
+			}
+			if !tc.wantBuilt && !strings.Contains(updated.(tui.Model).View().Content, "secretdata-qa") {
+				t.Fatalf("expected to stay on the object:\n%s", updated.(tui.Model).View().Content)
+			}
+		})
+	}
+}

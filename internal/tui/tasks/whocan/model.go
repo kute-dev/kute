@@ -154,3 +154,9 @@ func (m Model) selectedRow() (whoCanRow, bool) {
 	}
 	return m.rows[m.selected], true
 }
+
+// SwitchesNamespaceInPlace reports that this screen handles
+// tui.SwitchNamespaceMsg itself (see tui.NamespaceSwitcher).
+func (m Model) SwitchesNamespaceInPlace() bool { return true }
+
+var _ tui.NamespaceSwitcher = (*Model)(nil)

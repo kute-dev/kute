@@ -182,3 +182,11 @@ func (m *Model) SetSize(width, height int) {
 	size := tui.NormalizeSize(width, height)
 	m.width, m.height = size.Width, size.Height
 }
+
+// ScreenObject implements tui.ObjectScreen: a namespace switch from here
+// follows this object into the new namespace.
+func (m *Model) ScreenObject() (kube.ResourceKind, string, string) {
+	return m.kind, m.namespace, m.name
+}
+
+var _ tui.ObjectScreen = (*Model)(nil)

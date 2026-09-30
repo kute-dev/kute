@@ -549,6 +549,13 @@ type Model struct {
 	// — set by a jump-palette resource Enter (tui.GotoResourceMsg) that
 	// switched kind, consumed by recomputeVisible.
 	pendingSelect string
+	// pendingFollow names the object a tui.FollowObjectMsg asked to reopen
+	// once the new namespace's rows land (follow.go); followNote says it
+	// wasn't there, and followedAway marks this instance as having handed
+	// its stack slot to the reopened screen (tui.Transient).
+	pendingFollow string
+	followNote    string
+	followedAway  bool
 
 	// sortColumn is the 1-based index into m.desc.Columns the user picked
 	// with a 1-9 key (sort.go's handleSortKey) — 0 means no manual override,
@@ -1324,6 +1331,8 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.cronJobSummaries = nil
 	m.cronJobJobsErr = nil
 	m.auxKindsDeniedNote = ""
+	m.pendingFollow = ""
+	m.followNote = ""
 	m.pendingCronJobRun = nil
 	m.pendingCronJobResume = nil
 	m.jobListSummaries = nil
@@ -1583,3 +1592,9 @@ func markCronJobHistoryUnavailable(row *resources.Row) {
 	}
 	row.Active = false
 }
+
+// SwitchesNamespaceInPlace reports that this screen handles
+// tui.SwitchNamespaceMsg itself (see tui.NamespaceSwitcher).
+func (m Model) SwitchesNamespaceInPlace() bool { return true }
+
+var _ tui.NamespaceSwitcher = (*Model)(nil)

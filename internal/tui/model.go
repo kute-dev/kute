@@ -264,6 +264,47 @@ type Transient interface {
 	Transient() bool
 }
 
+// NamespaceSwitcher is implemented by a Task that retargets itself in place
+// on SwitchNamespaceMsg (browse, events, whocan). For any other pushed
+// screen the root answers the namespace palette the way it answers a goto,
+// with a fresh browse pushed on top so esc walks back to the screen the user
+// left — following the object when the screen is an ObjectScreen, else at
+// the same kind (see namespaceRoute).
+type NamespaceSwitcher interface {
+	SwitchesNamespaceInPlace() bool
+}
+
+// ObjectScreen is implemented by a pushed Task bound to one namespaced
+// object — the one browse's ↵ opens for that row. A namespace switch from it
+// follows the object: the root routes a FollowObjectMsg to a fresh browse,
+// which reopens the same-named object's screen in the new namespace when it
+// exists there and otherwise stays on the list saying it isn't.
+type ObjectScreen interface {
+	ScreenObject() (kind kube.ResourceKind, namespace, name string)
+}
+
+// namespaceRoute decides what a namespace switch means for the active task:
+// nil when the task handles it in place (NamespaceSwitcher) or already shows
+// an object in that namespace, a FollowObjectMsg for an ObjectScreen, and the
+// plain SwitchNamespaceMsg — a fresh browse at the same kind — otherwise.
+// Switching to all namespaces ("") never follows: the object is still right
+// where it was, and a name alone can't pick one row out of every namespace.
+func namespaceRoute(task Task, msg SwitchNamespaceMsg) tea.Msg {
+	if ns, ok := task.(NamespaceSwitcher); ok && ns.SwitchesNamespaceInPlace() {
+		return nil
+	}
+	if obj, ok := task.(ObjectScreen); ok {
+		kind, namespace, name := obj.ScreenObject()
+		switch {
+		case namespace == msg.Namespace:
+			return nil
+		case namespace != "" && msg.Namespace != "" && name != "":
+			return FollowObjectMsg{Kind: kind, Namespace: msg.Namespace, Name: name}
+		}
+	}
+	return msg
+}
+
 // BackMsg requests returning to the previous task without quitting the program.
 type BackMsg struct{}
 
@@ -652,8 +693,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case SwitchNamespaceMsg:
+		// routeGoto before the Location write, for the same reason as
+		// GotoKindMsg: the fresh browse seeds its namespace from
+		// Session.Location, and seeding it with the destination would make
+		// its own switchNamespace a no-op that never loads.
+		var cmd tea.Cmd
+		pushed := false
+		route := namespaceRoute(m.task, msg)
+		if route != nil {
+			cmd, pushed = m.routeGoto(route)
+		}
 		if m.session != nil {
 			m.session.Location.Namespace = msg.Namespace
+			if f, ok := route.(FollowObjectMsg); ok && pushed {
+				m.session.Location.Kind = f.Kind
+				m.session.Location.Resource = f.Name
+			}
+		}
+		if pushed {
+			return m, cmd
 		}
 	case SwitchContextMsg:
 		// Also forwarded to the task below (unchanged msg), so browse can
