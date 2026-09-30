@@ -56,7 +56,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// goes stale (CLAUDE.md: a screen reading a kind it doesn't display
 		// must still reload on it).
 		switch msg.Kind {
-		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet, kube.KindService, kube.KindIngress, kube.KindPersistentVolumeClaim:
+		// The controller's own kind is read too, for the Flux labels that
+		// resolve RELATED's reconciler entry (resolveFluxItem).
+		case kube.KindPod, kube.KindEvent, kube.KindReplicaSet, kube.KindService, kube.KindIngress, kube.KindPersistentVolumeClaim,
+			kube.KindDeployment, kube.KindStatefulSet, kube.KindDaemonSet, kube.KindJob:
 			if m.lister != nil {
 				return m, m.load()
 			}
@@ -542,8 +545,18 @@ func (m Model) openRelated(idx int) (tea.Model, tea.Cmd, bool) {
 		if task, cmd := m.openConfig(m.namespace, item.Name, m.width, m.height); task != nil {
 			return task, cmd, true
 		}
+	case item.Namespace != "" && m.openFlux != nil:
+		// A Flux reconciler lands on 31a, whose inventory is the answer
+		// to "what else did this apply" — the question the link is for.
+		if task, cmd := m.openFlux(item.Kind, item.Namespace, item.Name, m.width, m.height); task != nil {
+			return task, cmd, true
+		}
 	}
-	return nil, tui.GotoResource(m.session, item.Kind, m.namespace, item.Name), true
+	ns := m.namespace
+	if item.Namespace != "" {
+		ns = item.Namespace
+	}
+	return nil, tui.GotoResource(m.session, item.Kind, ns, item.Name), true
 }
 
 // openSelectedForward resolves 'f' for the loaded pod (docs/design

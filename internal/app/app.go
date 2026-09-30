@@ -982,10 +982,12 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 			// RELATED's Secret/ConfigMap entries land on their Data views.
 			OpenSecretData:    poddetail.OpenSecretDataFunc(openSecretDataFunc(sess, active)),
 			OpenConfigMapData: poddetail.OpenConfigMapDataFunc(openConfigMapDataFunc(sess, active)),
-			Namespace:         pod.Namespace,
-			Name:              pod.Name,
-			Siblings:          siblings,
-			SiblingIndex:      index,
+			// RELATED's Flux reconciler entry lands on its 31a inventory.
+			OpenFluxDetail: poddetail.OpenFluxDetailFunc(openFluxDetailFunc(sess, active, openYAML)),
+			Namespace:      pod.Namespace,
+			Name:           pod.Name,
+			Siblings:       siblings,
+			SiblingIndex:   index,
 		})
 		pd.SetSize(width, height)
 		return &pd, pd.Init()

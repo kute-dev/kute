@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +31,7 @@ func (m Model) load() tea.Cmd {
 	namespace := m.namespace
 	name := m.name
 	timeout := m.timeout
+	registry := m.registry()
 	parent := m.session.ClusterContext()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, timeout)
@@ -62,6 +64,18 @@ func (m Model) load() tea.Cmd {
 
 		controller := resolveControllerDisplay(ctx, lister, namespace, pod.Owner)
 		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, obj.Spec, controller)
+		if flux, ok := resolveFluxItem(ctx, lister, registry, namespace, obj.Labels, controller); ok {
+			// Right after the controller: the owner chain reads pod →
+			// workload → whoever applied the workload.
+			at := min(1, len(related))
+			if _, _, hasController := splitOwner(controller); !hasController {
+				at = 0
+			}
+			related = slices.Insert(related, at, flux)
+			if len(related) > maxRelatedItems {
+				related = related[:maxRelatedItems]
+			}
+		}
 
 		return loadedMsg{
 			pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller, related: related,
@@ -77,9 +91,12 @@ func (m Model) load() tea.Cmd {
 // lookup. Label is the pre-formatted "Kind/name" text
 // relatedTolerationsBlock renders.
 type relatedItem struct {
-	Kind  kube.ResourceKind
-	Name  string
-	Label string
+	Kind kube.ResourceKind
+	// Namespace is set only when the target lives outside the pod's own
+	// namespace (a Flux reconciler in flux-system); "" means the pod's.
+	Namespace string
+	Name      string
+	Label     string
 }
 
 // maxRelatedItems caps resolveRelatedItems' output. update.go's openRelated
@@ -276,6 +293,42 @@ func resolveControllerDisplay(ctx context.Context, lister resources.RawLister, n
 	return owner
 }
 
+// resolveFluxItem finds the Flux reconciler that applied this pod — from the
+// pod's own labels, else from its resolved controller's. Flux labels the
+// objects it applies, not the pods a workload's controller creates later,
+// so the controller is where the label usually is. Only the controller's
+// own kind is read, and only on a cluster that serves the reconciler's kind:
+// kute never links to a kind it can't open.
+func resolveFluxItem(ctx context.Context, lister resources.RawLister, registry resources.Registry, namespace string, podLabels map[string]string, controller string) (relatedItem, bool) {
+	kind, ns, name, ok := kube.FluxManager(podLabels)
+	if !ok && lister != nil {
+		if ck, cn, isOwner := splitOwner(controller); isOwner {
+			if objs, err := lister.ListRaw(ctx, ck, namespace); err == nil {
+				for _, o := range objs {
+					if acc, err := meta.Accessor(o); err == nil && acc.GetName() == cn {
+						kind, ns, name, ok = kube.FluxManager(acc.GetLabels())
+						break
+					}
+				}
+			}
+		}
+	}
+	if !ok {
+		return relatedItem{}, false
+	}
+	if desc, served := registry.Descriptor(kind); !served || !desc.Flux {
+		return relatedItem{}, false
+	}
+	if ns == "" {
+		ns = namespace
+	}
+	label := kind.APIKind() + "/" + name
+	if ns != namespace {
+		label += " in " + ns
+	}
+	return relatedItem{Kind: kind, Namespace: ns, Name: name, Label: label}, true
+}
+
 func findPod(objs []runtime.Object, name string) *corev1.Pod {
 	for _, obj := range objs {
 		if p, ok := obj.(*corev1.Pod); ok && p.Name == name {
@@ -312,4 +365,13 @@ func usageText(v string) string {
 		return "–"
 	}
 	return v
+}
+
+// registry is the kind catalog RELATED's Flux entry checks the reconciler
+// kind against.
+func (m Model) registry() resources.Registry {
+	if m.session == nil {
+		return resources.DefaultRegistry()
+	}
+	return m.session.Registry
 }

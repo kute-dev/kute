@@ -74,6 +74,10 @@ type OpenSecretDataFunc func(namespace, name string, width, height int) (tea.Mod
 // RELATED entry — same shape as browse.OpenConfigMapDataFunc.
 type OpenConfigMapDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
 
+// OpenFluxDetailFunc pushes tasks/fluxdetail (31a) for a Flux reconciler
+// RELATED entry — same shape as browse.OpenFluxDetailFunc.
+type OpenFluxDetailFunc func(kind kube.ResourceKind, namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenForwardFunc pushes tasks/forwardpicker (13a) for the loaded pod — same
 // shape as browse.OpenForwardFunc. The spec lists 'f' alongside 'x'/'y' as
 // available "on any object row" (docs/design README.md §304, §308); browse
@@ -119,11 +123,14 @@ type Config struct {
 	// RELATED entry uses.
 	OpenSecretData    OpenSecretDataFunc
 	OpenConfigMapData OpenConfigMapDataFunc
-	Namespace         string
-	Name              string
-	Siblings          []string
-	SiblingIndex      int
-	LoadTimeout       time.Duration
+	// OpenFluxDetail opens a Flux reconciler RELATED entry on its 31a
+	// inventory; nil falls back to the goto jump.
+	OpenFluxDetail OpenFluxDetailFunc
+	Namespace      string
+	Name           string
+	Siblings       []string
+	SiblingIndex   int
+	LoadTimeout    time.Duration
 }
 
 type Model struct {
@@ -145,6 +152,7 @@ type Model struct {
 	openForward  OpenForwardFunc
 	openSecret   OpenSecretDataFunc
 	openConfig   OpenConfigMapDataFunc
+	openFlux     OpenFluxDetailFunc
 	timeout      time.Duration
 	// execFeedback carries a non-zero directly-run kubectl-exec exit's
 	// message (single-container pods exec straight from poddetail without
@@ -277,6 +285,7 @@ func New(cfg Config) Model {
 		openForward:  cfg.OpenForward,
 		openSecret:   cfg.OpenSecretData,
 		openConfig:   cfg.OpenConfigMapData,
+		openFlux:     cfg.OpenFluxDetail,
 		timeout:      cfg.LoadTimeout,
 		namespace:    cfg.Namespace,
 		name:         cfg.Name,
