@@ -156,13 +156,55 @@ func goldenPodDetailMetaModel(t *testing.T, width, height int) Model {
 	return step(t, m, tea.KeyPressMsg{Text: "m"})
 }
 
+// goldenConfigErrorPod is a pod that can't start because a referenced
+// Secret key is missing: pins the CreateContainerConfigError banner and,
+// with 'v' pressed, the ENV & MOUNTS section.
+func goldenConfigErrorPod() *corev1.Pod {
+	pod := goldenCrashLoopPod()
+	pod.Name = "timesheet-api-6c9f7"
+	worker := &pod.Spec.Containers[0]
+	worker.Env = []corev1.EnvVar{
+		secretKeyEnv("ConnectionStrings__TimeSheetDb", "timesheet-backend-db", "connectionString"),
+		secretKeyEnv("Email__ResendApiKey", "resend", "apiKey"),
+	}
+	worker.EnvFrom = []corev1.EnvFromSource{{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "timesheet-config"}},
+	}}
+	worker.VolumeMounts = []corev1.VolumeMount{{Name: "tls", MountPath: "/etc/tls", ReadOnly: true}}
+	pod.Spec.Volumes = []corev1.Volume{{
+		Name: "tls", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "timesheet-tls"}},
+	}}
+	pod.Status.Phase = corev1.PodPending
+	pod.Status.ContainerStatuses[0].RestartCount = 0
+	pod.Status.ContainerStatuses[0].LastTerminationState = corev1.ContainerState{}
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{
+		Reason:  "CreateContainerConfigError",
+		Message: `couldn't find key connectionString in Secret nva-stage/timesheet-backend-db`,
+	}}
+	return pod
+}
+
+func goldenPodDetailSourcesModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindPod: {goldenConfigErrorPod()}}}
+	sess := newSession()
+	sess.Location.Namespace = "nva-stage"
+	m := New(Config{Session: sess, Lister: lister, Namespace: "nva-stage", Name: "timesheet-api-6c9f7"})
+	m.SetSize(width, height)
+	m = step(t, m, m.Init()())
+	m = step(t, m, kube.ConnStateMsg{Phase: kube.ConnConnected, Latency: 12 * time.Millisecond})
+	return step(t, m, tea.KeyPressMsg{Code: 'v', Text: "v"})
+}
+
 func goldenPodDetailFixtures(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"120x36.golden":      goldentest.Plain(goldenPodDetailModel(t, 120, 36).Render()),
-		"80x24.golden":       goldentest.Plain(goldenPodDetailModel(t, 80, 24).Render()),
-		"meta-120x36.golden": goldentest.Plain(goldenPodDetailMetaModel(t, 120, 36).Render()),
-		"meta-80x24.golden":  goldentest.Plain(goldenPodDetailMetaModel(t, 80, 24).Render()),
+		"120x36.golden":         goldentest.Plain(goldenPodDetailModel(t, 120, 36).Render()),
+		"80x24.golden":          goldentest.Plain(goldenPodDetailModel(t, 80, 24).Render()),
+		"meta-120x36.golden":    goldentest.Plain(goldenPodDetailMetaModel(t, 120, 36).Render()),
+		"meta-80x24.golden":     goldentest.Plain(goldenPodDetailMetaModel(t, 80, 24).Render()),
+		"sources-120x44.golden": goldentest.Plain(goldenPodDetailSourcesModel(t, 120, 44).Render()),
+		"sources-80x24.golden":  goldentest.Plain(goldenPodDetailSourcesModel(t, 80, 24).Render()),
 	}
 }
 
@@ -213,11 +255,16 @@ func truecolorGoldenFixtures(t *testing.T) map[string]string {
 	metaLight := goldenPodDetailModel(t, 120, 36)
 	metaLight.session.Theme = tui.Light()
 	metaLight = step(t, metaLight, tea.KeyPressMsg{Text: "m"})
+	sourcesDark := goldenPodDetailSourcesModel(t, 120, 44)
+	sourcesLight := goldenPodDetailSourcesModel(t, 120, 44)
+	sourcesLight.session.Theme = tui.Light()
 	return map[string]string{
-		"120x36-dark.golden":       goldentest.Truecolor(dark.Render()),
-		"120x36-light.golden":      goldentest.Truecolor(light.Render()),
-		"meta-120x36-dark.golden":  goldentest.Truecolor(metaDark.Render()),
-		"meta-120x36-light.golden": goldentest.Truecolor(metaLight.Render()),
+		"sources-120x44-dark.golden":  goldentest.Truecolor(sourcesDark.Render()),
+		"sources-120x44-light.golden": goldentest.Truecolor(sourcesLight.Render()),
+		"120x36-dark.golden":          goldentest.Truecolor(dark.Render()),
+		"120x36-light.golden":         goldentest.Truecolor(light.Render()),
+		"meta-120x36-dark.golden":     goldentest.Truecolor(metaDark.Render()),
+		"meta-120x36-light.golden":    goldentest.Truecolor(metaLight.Render()),
 	}
 }
 

@@ -1126,10 +1126,10 @@ func TestRelatedCapsAtMaxItems(t *testing.T) {
 	}
 	// The digit-key mapping (update.go's openRelated) must stay in range for
 	// every entry the cap actually kept.
-	if _, ok := m.openRelated(maxRelatedItems - 1); !ok {
+	if _, _, ok := m.openRelated(maxRelatedItems - 1); !ok {
 		t.Fatalf("openRelated(%d) should still resolve at the cap", maxRelatedItems-1)
 	}
-	if _, ok := m.openRelated(maxRelatedItems); ok {
+	if _, _, ok := m.openRelated(maxRelatedItems); ok {
 		t.Fatalf("openRelated(%d) should be out of range past the cap", maxRelatedItems)
 	}
 }

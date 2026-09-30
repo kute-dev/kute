@@ -61,9 +61,12 @@ func (m Model) load() tea.Cmd {
 		}
 
 		controller := resolveControllerDisplay(ctx, lister, namespace, pod.Owner)
-		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, obj.Spec.Volumes, controller)
+		related := resolveRelatedItems(ctx, lister, namespace, pod.Labels, obj.Spec, controller)
 
-		return loadedMsg{pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller, related: related}
+		return loadedMsg{
+			pod: pod, found: true, events: eventRows, eventsErr: eventsErr, controller: controller, related: related,
+			sources: podContainerSources(obj.Spec), configErrors: podConfigErrors(obj.Status),
+		}
 	}
 }
 
@@ -92,18 +95,24 @@ const maxRelatedItems = 9
 // hop; matches the CONTROLLER field in the meta grid, so if that field
 // shows something, RELATED links to it too), the PersistentVolumeClaims
 // this pod mounts that still exist, the Services whose selector matches
-// this pod, and every Ingress that references one of those Services.
-// Capped at maxRelatedItems.
-func resolveRelatedItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string, volumes []corev1.Volume, controller string) []relatedItem {
+// this pod, every Ingress that references one of those Services, and then
+// the Secrets and ConfigMaps the spec references (podConfigRefs — named from
+// the spec, never checked against a cache; they come last so a pod with many
+// of them can't push its workload/network links past the cap). Capped at
+// maxRelatedItems.
+func resolveRelatedItems(ctx context.Context, lister resources.RawLister, namespace string, podLabels map[string]string, spec corev1.PodSpec, controller string) []relatedItem {
 	var items []relatedItem
 	if kind, name, ok := splitOwner(controller); ok {
 		items = append(items, relatedItem{Kind: kind, Name: name, Label: controller})
 	}
 	if lister != nil {
-		items = append(items, resolvePVCItems(ctx, lister, namespace, volumes)...)
+		items = append(items, resolvePVCItems(ctx, lister, namespace, spec.Volumes)...)
 		services, ingresses := resolveServiceAndIngressItems(ctx, lister, namespace, podLabels)
 		items = append(items, services...)
 		items = append(items, ingresses...)
+	}
+	for _, ref := range podConfigRefs(spec) {
+		items = append(items, relatedItem{Kind: ref.Kind, Name: ref.Name, Label: string(ref.Kind) + "/" + ref.Name})
 	}
 	if len(items) > maxRelatedItems {
 		items = items[:maxRelatedItems]

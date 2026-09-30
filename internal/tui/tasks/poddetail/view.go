@@ -127,6 +127,9 @@ func (m Model) readyContent(width int) string {
 
 	var main []string
 	main = append(main, m.titleLine(theme, width))
+	if len(m.configErrors) > 0 {
+		main = append(main, "", m.configErrorBanner(theme, width))
+	}
 	if m.pod.LastTermination != nil {
 		main = append(main, "", m.terminationBanner(theme, width))
 	}
@@ -137,6 +140,9 @@ func (m Model) readyContent(width int) string {
 	}
 	if len(m.pod.EphemeralContainerInfos) > 0 {
 		main = append(main, "", m.ephemeralBlock(theme, width))
+	}
+	if m.showSources {
+		main = append(main, "", m.sourcesBlock(theme, width))
 	}
 	main = append(main, "", m.relatedTolerationsBlock(theme, width))
 	main = append(main, "", m.eventsBlock(theme, width))
@@ -228,7 +234,41 @@ func (m Model) terminationBanner(theme tui.Theme, width int) string {
 	body := bodyStyle.Render("Container ") + container + bodyStyle.Render(what)
 
 	gap := lipgloss.NewStyle().Background(theme.ErrBannerBg).Render("  ")
-	content := title + gap + facts + "\n" + body
+	return errBanner(theme, width, title+gap+facts+"\n"+body)
+}
+
+// configErrorBanner is the "why won't it start" banner for containers stuck
+// in CreateContainerConfigError: the kubelet's own message (which names the
+// missing Secret/ConfigMap and key) per container. It shares the termination
+// banner's shape and sits above it, since it's the current reason and the
+// termination is history.
+func (m Model) configErrorBanner(theme tui.Theme, width int) string {
+	title := lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ErrBannerBg).Bold(true).Render("Can't start container")
+	facts := lipgloss.NewStyle().Foreground(theme.BadMuted).Background(theme.ErrBannerBg).Render("CreateContainerConfigError")
+	gap := lipgloss.NewStyle().Background(theme.ErrBannerBg).Render("  ")
+	bodyStyle := lipgloss.NewStyle().Foreground(theme.BadText).Background(theme.ErrBannerBg)
+	nameStyle := lipgloss.NewStyle().Foreground(theme.Warn).Background(theme.ErrBannerBg)
+	lines := []string{title + gap + facts}
+	// Padding(1,1) plus the one-cell accent bar leave width-3 for text; a
+	// long kubelet message wraps rather than being clipped.
+	textWidth := max(width-3, 10)
+	for _, e := range m.configErrors {
+		msg := e.Message
+		if msg == "" {
+			msg = "a referenced Secret or ConfigMap is missing"
+		}
+		prefix := "Container " + e.Container + ": "
+		wrapped := strings.Split(lipgloss.NewStyle().Width(max(textWidth-lipgloss.Width(prefix), 10)).Render(msg), "\n")
+		lines = append(lines, bodyStyle.Render("Container ")+nameStyle.Render(e.Container)+bodyStyle.Render(": "+wrapped[0]))
+		for _, cont := range wrapped[1:] {
+			lines = append(lines, bodyStyle.Render(strings.Repeat(" ", lipgloss.Width(prefix))+cont))
+		}
+	}
+	return errBanner(theme, width, strings.Join(lines, "\n"))
+}
+
+// errBanner draws 5a's solid tinted banner block around pre-styled content.
+func errBanner(theme tui.Theme, width int, content string) string {
 	// The banner is a solid tinted block, not a bordered box. A box-drawing
 	// glyph inks the middle of a full cell and the two halves aren't separately
 	// addressable, so a boxed banner can only pick which artifact to show:
@@ -580,6 +620,89 @@ func (m Model) eventsBlock(theme tui.Theme, width int) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// sourcesBlock renders the 'v' ENV & MOUNTS section for the selected
+// container: env vars drawn from a Secret/ConfigMap key or imported whole via
+// envFrom, then every volumeMount with what backs it. Names and keys only —
+// no value is ever read or shown, so this needs nothing beyond the pod spec.
+// It follows the container selection, so ↑↓ re-targets it.
+func (m Model) sourcesBlock(theme tui.Theme, width int) string {
+	faint := lipgloss.NewStyle().Foreground(theme.TextFaint)
+	ghost := lipgloss.NewStyle().Foreground(theme.TextGhost)
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	primary := lipgloss.NewStyle().Foreground(theme.TextPrimary)
+	secondary := lipgloss.NewStyle().Foreground(theme.TextSecondary)
+
+	container := m.selectedContainerName()
+	title := faint.Bold(true).Render("ENV & MOUNTS")
+	if container != "" {
+		title += lipgloss.NewStyle().Foreground(theme.TextGhost2).Render(" · " + container)
+	}
+	src := m.sources[container]
+	if len(src.Env) == 0 && len(src.Mounts) == 0 {
+		return title + "\n" + dim.Render("no env from secrets or configmaps · no mounts")
+	}
+
+	// Left column (var name / mount path) is sized to its widest entry but
+	// capped at half the width, so a long source never loses its name.
+	const indent = "  "
+	leftWidth := 0
+	for _, e := range src.Env {
+		leftWidth = max(leftWidth, lipgloss.Width(envVarText(e)))
+	}
+	for _, mt := range src.Mounts {
+		leftWidth = max(leftWidth, lipgloss.Width(mountPathText(mt)))
+	}
+	leftWidth = min(leftWidth, max(width/2-len(indent), 8))
+	rightWidth := max(width-len(indent)-leftWidth-len("  ← "), 8)
+
+	row := func(left string, leftStyle lipgloss.Style, right string, rightStyle lipgloss.Style, suffix string) string {
+		right = components.Truncate(right, rightWidth)
+		suffix = components.Truncate(suffix, max(rightWidth-lipgloss.Width(right), 0))
+		return indent + leftStyle.Render(components.Pad(left, leftWidth)) + ghost.Render("  ← ") +
+			rightStyle.Render(right) + dim.Render(suffix)
+	}
+
+	lines := []string{title}
+	if len(src.Env) > 0 {
+		lines = append(lines, faint.Render("ENV"))
+		for _, e := range src.Env {
+			suffix := " · " + e.Key
+			if e.All {
+				suffix = " · all keys"
+			}
+			lines = append(lines, row(envVarText(e), primary, string(e.Kind)+"/"+e.Name, secondary, suffix))
+		}
+	}
+	if len(src.Mounts) > 0 {
+		lines = append(lines, faint.Render("MOUNTS"))
+		for _, mt := range src.Mounts {
+			suffix := ""
+			if mt.SubPath != "" {
+				suffix = " · subPath " + mt.SubPath
+			}
+			lines = append(lines, row(mountPathText(mt), primary, mt.Source, secondary, suffix))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// envVarText is an env row's left cell: the variable name, or for envFrom
+// the prefix (if any) followed by "*", since it imports every key.
+func envVarText(e envSource) string {
+	if e.All {
+		return e.Var + "*"
+	}
+	return e.Var
+}
+
+// mountPathText is a mount row's left cell, "(ro)" marking a read-only mount.
+func mountPathText(mt mountSource) string {
+	if mt.ReadOnly {
+		return mt.Path + " (ro)"
+	}
+	return mt.Path
 }
 
 // relatedTolerationsBlock lays RELATED and TOLERATIONS out side by side —

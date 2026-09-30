@@ -975,10 +975,13 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 			OpenTimeline: poddetail.OpenTimelineFunc(openObjectTimeline),
 			OpenExec:     poddetail.OpenExecFunc(openExec),
 			OpenForward:  poddetail.OpenForwardFunc(openForward),
-			Namespace:    pod.Namespace,
-			Name:         pod.Name,
-			Siblings:     siblings,
-			SiblingIndex: index,
+			// RELATED's Secret/ConfigMap entries land on their Data views.
+			OpenSecretData:    poddetail.OpenSecretDataFunc(openSecretDataFunc(sess, active)),
+			OpenConfigMapData: poddetail.OpenConfigMapDataFunc(openConfigMapDataFunc(sess, active)),
+			Namespace:         pod.Namespace,
+			Name:              pod.Name,
+			Siblings:          siblings,
+			SiblingIndex:      index,
 		})
 		pd.SetSize(width, height)
 		return &pd, pd.Init()

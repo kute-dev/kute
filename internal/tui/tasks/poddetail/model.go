@@ -64,6 +64,16 @@ type OpenTimelineFunc func(kind kube.ResourceKind, namespace, name string, width
 // per the repo's package-local-seam convention.
 type OpenExecFunc func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd)
 
+// OpenSecretDataFunc pushes tasks/secretdata (27b) for a Secret RELATED
+// entry — same shape as browse.OpenSecretDataFunc. A Secret link lands on
+// its Data view rather than the Secrets list, since that's what a pod's
+// reference is about.
+type OpenSecretDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
+// OpenConfigMapDataFunc pushes tasks/configmapdata (27a) for a ConfigMap
+// RELATED entry — same shape as browse.OpenConfigMapDataFunc.
+type OpenConfigMapDataFunc func(namespace, name string, width, height int) (tea.Model, tea.Cmd)
+
 // OpenForwardFunc pushes tasks/forwardpicker (13a) for the loaded pod — same
 // shape as browse.OpenForwardFunc. The spec lists 'f' alongside 'x'/'y' as
 // available "on any object row" (docs/design README.md §304, §308); browse
@@ -104,11 +114,16 @@ type Config struct {
 	OpenDebug    OpenDebugFunc
 	Shells       ShellDetector
 	OpenForward  OpenForwardFunc
-	Namespace    string
-	Name         string
-	Siblings     []string
-	SiblingIndex int
-	LoadTimeout  time.Duration
+	// OpenSecretData/OpenConfigMapData open a Secret/ConfigMap RELATED
+	// entry on its Data view; nil falls back to the goto jump every other
+	// RELATED entry uses.
+	OpenSecretData    OpenSecretDataFunc
+	OpenConfigMapData OpenConfigMapDataFunc
+	Namespace         string
+	Name              string
+	Siblings          []string
+	SiblingIndex      int
+	LoadTimeout       time.Duration
 }
 
 type Model struct {
@@ -128,6 +143,8 @@ type Model struct {
 	openDebug    OpenDebugFunc
 	shells       ShellDetector
 	openForward  OpenForwardFunc
+	openSecret   OpenSecretDataFunc
+	openConfig   OpenConfigMapDataFunc
 	timeout      time.Duration
 	// execFeedback carries a non-zero directly-run kubectl-exec exit's
 	// message (single-container pods exec straight from poddetail without
@@ -164,6 +181,15 @@ type Model struct {
 	// a digit key jumps to related[digit-1] the same way 'o'/'i' used to
 	// resolve on demand.
 	related []relatedItem
+	// sources is each container's ENV & MOUNTS rows, keyed by container name
+	// (podContainerSources); showSources is the 'v' toggle that shows the
+	// section for the selected container. The toggle survives [/] sibling
+	// moves: it's a viewing preference, not per-pod state.
+	sources     map[string]containerSources
+	showSources bool
+	// configErrors drives the "can't start" banner: containers the kubelet
+	// refused to create over a missing Secret/ConfigMap or key.
+	configErrors []configError
 
 	eventRows []kube.Event
 	// eventsErr is the last events fetch's failure — the EVENTS grid shows
@@ -215,6 +241,11 @@ type loadedMsg struct {
 	// press can jump without a synchronous lookup (CLAUDE.md: render
 	// functions are pure, no I/O).
 	related []relatedItem
+	// sources and configErrors come from the raw pod spec/status, which
+	// only load() has (kube.Pod doesn't project env, mounts or waiting
+	// messages).
+	sources      map[string]containerSources
+	configErrors []configError
 }
 
 func New(cfg Config) Model {
@@ -244,6 +275,8 @@ func New(cfg Config) Model {
 		openDebug:    cfg.OpenDebug,
 		shells:       cfg.Shells,
 		openForward:  cfg.OpenForward,
+		openSecret:   cfg.OpenSecretData,
+		openConfig:   cfg.OpenConfigMapData,
 		timeout:      cfg.LoadTimeout,
 		namespace:    cfg.Namespace,
 		name:         cfg.Name,

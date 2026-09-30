@@ -151,6 +151,11 @@ var (
 	// HelmValues is 18a's 'v' — the selected release's decoded values in the
 	// read-only YAML viewer.
 	HelmValues = Verb{ID: "helm-values", Key: "v", Label: "values", Kinds: []kube.ResourceKind{kube.KindHelmRelease}}
+	// EnvMounts is 5a's 'v' — toggles the ENV & MOUNTS section for the
+	// selected container: which env vars come from which Secret/ConfigMap
+	// key, and what each volumeMount is backed by. Names and keys only,
+	// never values. Same key as HelmValues; the two never share a screen.
+	EnvMounts = Verb{ID: "env-mounts", Key: "v", Label: "env/mounts", Kinds: []kube.ResourceKind{kube.KindPod}}
 	// HelmHistory is 18a's 'h' — the selected release's full revision rail
 	// (16b's rail idiom).
 	HelmHistory = Verb{ID: "helm-history", Key: "h", Label: "history", Kinds: []kube.ResourceKind{kube.KindHelmRelease}}
@@ -612,7 +617,7 @@ var (
 var All = []Verb{
 	Goto, Filter, Open, Logs, YAML, Exec, NodeDebug, NodeDebugDetail, Edit, Events,
 	Namespace, Context, AllNamespaces, JumpNamespace, ToggleGroup, PageUp, PageDown, Help, Retry, WhoCan,
-	HelmValues, HelmHistory, HelmPods, Mark, MarkAll,
+	HelmValues, EnvMounts, HelmHistory, HelmPods, Mark, MarkAll,
 	LogPause, LogFollow, LogNextWarning, LogNextError, LogToggleWrap, LogToggleTime,
 	LogCycleSince, LogCycleContainer, LogCopyView,
 	FluxReconcile, FluxSuspend, FluxSource,

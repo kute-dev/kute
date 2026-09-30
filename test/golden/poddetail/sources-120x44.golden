@@ -1,0 +1,44 @@
+  kute │ test-cluster › nva-stage › Pods › timesheet-api-6c9f7                                      ● connected · 12ms  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+timesheet-api-6c9f7  ▲ CreateContainerConfigError                                                        watching · live
+                                                                                                                        
+▌                                                                                                                       
+▌ Can't start container  CreateContainerConfigError                                                                     
+▌ Container worker: couldn't find key connectionString in Secret nva-stage/timesheet-backend-db                         
+▌                                                                                                                       
+                                                                                                                        
+NODE         IP            QOS          CONTROLLER                       AGE                                            
+worker-01    10.1.34.19    Burstable    ReplicaSet/nva-worker-7f9d2 ↗    3h                                             
+                                                                                                                        
+CONTAINERS                                                                                                              
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                     IMAGE                                     STATE                 RESTARTS  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▎ ▲  worker                                   nva/worker:1.42.0                         Waiting · CreateCon…       0 ↺  
+  ●  metrics-sidecar                          nva/sidecar:0.9.1                         Running                    0 ↺  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+CPU ▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ – / 500m   MEM ▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯ – / 256Mi                                                          
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+INIT CONTAINERS                                                                                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     NAME                                     IMAGE                                     STATE                 RESTARTS  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ○  prepare-config                           nva/config-init:1.2.0                     Terminated · Comple…       0 ↺  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                                        
+ENV & MOUNTS · worker                                                                                                   
+ENV                                                                                                                     
+  ConnectionStrings__TimeSheetDb  ← Secret/timesheet-backend-db · connectionString                                      
+  Email__ResendApiKey             ← Secret/resend · apiKey                                                              
+  *                               ← ConfigMap/timesheet-config · all keys                                               
+MOUNTS                                                                                                                  
+  /etc/tls (ro)                   ← Secret/timesheet-tls                                                                
+                                                                                                                        
+RELATED                                                       TOLERATIONS                                               
+1 ReplicaSet/nva-worker-7f9d2 ↗                               node.kubernetes.io/not-ready (exists):NoExecute           
+2 Secret/resend ↗                                                                                                       
+3 Secret/timesheet-backend-db ↗                                                                                         
+4 Secret/timesheet-tls ↗                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   POD  x exec  v env/mounts  1-5 related                                                     pgdown page down  ? help  

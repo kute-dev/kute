@@ -94,6 +94,23 @@ func NewDemo() *Cluster {
 	// StatefulSet too.
 	workerPod.Spec.Containers[0].Name = "worker"
 	workerPod.Status.ContainerStatuses[0].Name = "worker"
+	// 5a's RELATED Secret/ConfigMap links and 'v' ENV & MOUNTS need a pod
+	// that actually references config: a connection string from a Secret
+	// key, a whole ConfigMap via envFrom, and a Secret volume.
+	workerPod.Spec.Containers[0].Env = []corev1.EnvVar{{
+		Name: "ConnectionStrings__WorkerDb",
+		ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "worker-db"}, Key: "connectionString",
+		}},
+	}}
+	workerPod.Spec.Containers[0].EnvFrom = []corev1.EnvFromSource{{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "worker-config"}},
+	}}
+	workerPod.Spec.Volumes = []corev1.Volume{{
+		Name:         "tls",
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "api-tls-secret"}},
+	}}
+	workerPod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "tls", MountPath: "/etc/tls", ReadOnly: true}}
 
 	// gatewayPod/gatewayCanaryPod are §41b/§41c's one demo exercise of the
 	// kubectl-debug fork (docs/design v.0.11.0.dc.html §41a-§41c): 'x' only
@@ -325,6 +342,12 @@ func NewDemo() *Cluster {
 		demoConfigMap("feature-flags", "staging", age(2*24*time.Hour)),
 	)
 	c.Seed(kube.KindSecret, demoSecret("app-secret", "staging", age(10*24*time.Hour)))
+	// worker-0's env references (5a RELATED / 'v' ENV & MOUNTS) resolve to
+	// real objects, so their Data views open on something.
+	workerDB := demoSecret("worker-db", "default", age(14*24*time.Hour))
+	workerDB.Data = map[string][]byte{"connectionString": []byte("Server=db;Database=worker;User Id=worker;Password=demo")}
+	c.Seed(kube.KindSecret, workerDB)
+	c.Seed(kube.KindConfigMap, demoConfigMap("worker-config", "default", age(14*24*time.Hour)))
 
 	c.Seed(kube.KindNode,
 		demoNode("node-a", true, false, false),

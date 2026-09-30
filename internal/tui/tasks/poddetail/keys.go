@@ -97,6 +97,12 @@ func (m Model) Keybar() tui.Keybar {
 	if m.found && m.openForward != nil {
 		verbGroup = append(verbGroup, verbs.Forward.Hint())
 	}
+	// 'v' only when there's something to show — every real pod has at least
+	// the injected service-account mount, so this is nearly always present
+	// against a cluster.
+	if m.found && len(m.sources) > 0 && (!narrowOverflow || m.bodyOffset == 0) {
+		verbGroup = append(verbGroup, verbs.EnvMounts.Hint())
+	}
 	// RELATED's numbered entries (owner workload, fronting Ingress) share
 	// one hint slot keyed to however many are actually resolved — spelling
 	// each one out doesn't fit this band's width budget alongside everything

@@ -144,6 +144,8 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	m.eventsErr = msg.eventsErr
 	m.controller = msg.controller
 	m.related = msg.related
+	m.sources = msg.sources
+	m.configErrors = msg.configErrors
 	if total := m.totalContainerRows(); m.selectedContainer >= total {
 		m.selectedContainer = max(total-1, 0)
 	}
@@ -232,8 +234,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return task, cmd
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		if cmd, ok := m.openRelated(int(msg.String()[0] - '1')); ok {
+		if task, cmd, ok := m.openRelated(int(msg.String()[0] - '1')); ok {
+			if task != nil {
+				return task, cmd
+			}
 			return m, cmd
+		}
+	case verbs.EnvMounts.Key:
+		if m.found {
+			m.showSources = !m.showSources
+			m.bodyOffset = min(m.bodyOffset, m.bodyMaxOffset())
 		}
 	case verbs.Exec.Key:
 		// Exec is Mutating: refused while offline (docs/design README.md
@@ -366,6 +376,8 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 	m.eventRows = nil
 	m.eventsErr = nil
 	m.related = nil
+	m.sources = nil
+	m.configErrors = nil
 	m.selectedContainer = 0
 	m.bodyOffset = 0
 	m.state = tui.TaskStateLoading
@@ -454,16 +466,23 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	if m.openLogs == nil || !m.found {
 		return nil, nil, false
 	}
-	container := ""
-	if m.selectedContainer < len(m.pod.ContainerInfos) {
-		container = m.pod.ContainerInfos[m.selectedContainer].Name
-	} else if init, ok := m.selectedInitContainer(); ok {
-		container = init.Name
-	} else if eph, ok := m.selectedEphemeralContainer(); ok {
-		container = eph.Name
-	}
-	task, cmd := m.openLogs(m.pod, container, m.width, m.height)
+	task, cmd := m.openLogs(m.pod, m.selectedContainerName(), m.width, m.height)
 	return task, cmd, task != nil
+}
+
+// selectedContainerName is the name behind the combined CONTAINERS/INIT/
+// EPHEMERAL selection, "" when nothing is loaded.
+func (m Model) selectedContainerName() string {
+	if m.selectedContainer < len(m.pod.ContainerInfos) {
+		return m.pod.ContainerInfos[m.selectedContainer].Name
+	}
+	if init, ok := m.selectedInitContainer(); ok {
+		return init.Name
+	}
+	if eph, ok := m.selectedEphemeralContainer(); ok {
+		return eph.Name
+	}
+	return ""
 }
 
 // openSelectedYAML pushes 8a for the loaded pod.
@@ -504,12 +523,27 @@ func (m Model) openSelectedTimeline() (tea.Model, tea.Cmd, bool) {
 // in load() (load.go's resolveRelatedItems), not here — render/key-handling
 // code stays free of the synchronous lookups that used to live in this
 // file's own resolveOwnerWorkload/resolveIngress.
-func (m Model) openRelated(idx int) (tea.Cmd, bool) {
+//
+// Secret and ConfigMap entries push their Data view (27b/27a) on top of
+// poddetail instead, when wired: the reference is about the object's keys,
+// so that's where the jump should land. task is nil for a goto jump, which
+// keeps poddetail active until the navigation message arrives.
+func (m Model) openRelated(idx int) (tea.Model, tea.Cmd, bool) {
 	if idx < 0 || idx >= len(m.related) {
-		return nil, false
+		return nil, nil, false
 	}
 	item := m.related[idx]
-	return tui.GotoResource(m.session, item.Kind, m.namespace, item.Name), true
+	switch {
+	case item.Kind == kube.KindSecret && m.openSecret != nil:
+		if task, cmd := m.openSecret(m.namespace, item.Name, m.width, m.height); task != nil {
+			return task, cmd, true
+		}
+	case item.Kind == kube.KindConfigMap && m.openConfig != nil:
+		if task, cmd := m.openConfig(m.namespace, item.Name, m.width, m.height); task != nil {
+			return task, cmd, true
+		}
+	}
+	return nil, tui.GotoResource(m.session, item.Kind, m.namespace, item.Name), true
 }
 
 // openSelectedForward resolves 'f' for the loaded pod (docs/design
