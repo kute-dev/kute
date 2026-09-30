@@ -222,7 +222,7 @@ func (m *Model) armMetricsTick() tea.Cmd {
 // cluster we know is offline just burns a timeout per tick, the same gate
 // browse.pollsMetrics applies.
 func (m Model) pollsMetrics() bool {
-	if m.metrics == nil && m.nodeMetrics == nil {
+	if m.metrics == nil && m.nodeMetrics == nil && m.nodeDisk == nil {
 		return false
 	}
 	return !m.conn.Offline()
@@ -250,5 +250,50 @@ func (m Model) loadMetrics() tea.Cmd {
 			msg.podMetrics, _ = metrics.PodMetricsByNamespace(ctx, "")
 		}
 		return msg
+	}
+}
+
+// diskPollEvery is how many usage-poll ticks pass between disk reads — 30s
+// at pollInterval. The kubelet's own filesystem stats refresh on roughly a
+// minute's housekeeping cycle, and each read returns every pod's stats
+// alongside the node's, so polling it at the cpu/mem rate would pay for a
+// number that hasn't moved.
+const diskPollEvery = 15
+
+// diskDue reports whether this tick should also read the disk. A Forbidden
+// answer ends the reads for this screen: RBAC isn't going to change under a
+// 30s retry, and each attempt is still a round trip.
+func (m Model) diskDue() bool {
+	return m.nodeDisk != nil && m.diskState != diskForbidden && m.diskTicks >= diskPollEvery
+}
+
+// loadDisk reads this node's root filesystem usage once.
+func (m Model) loadDisk() tea.Cmd {
+	reader := m.nodeDisk
+	if reader == nil {
+		return nil
+	}
+	nodeName := m.nodeName
+	timeout := m.timeout
+	parent := m.session.ClusterContext()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, timeout)
+		defer cancel()
+		disk, err := reader.NodeDiskUsage(ctx, nodeName)
+		return diskLoadedMsg{disk: disk, err: err}
+	}
+}
+
+// applyDisk folds one disk read into the model. A failed read after a good
+// one keeps the last good figure rather than flapping the row to an error
+// on one dropped proxy call; Forbidden always wins, since it is permanent.
+func (m *Model) applyDisk(msg diskLoadedMsg) {
+	switch {
+	case msg.err == nil:
+		m.disk, m.diskState = msg.disk, diskOK
+	case errors.Is(msg.err, kube.ErrNodeStatsForbidden):
+		m.diskState = diskForbidden
+	case m.diskState != diskOK:
+		m.diskState = diskUnavailable
 	}
 }

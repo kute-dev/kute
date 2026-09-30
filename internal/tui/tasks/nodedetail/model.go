@@ -43,6 +43,27 @@ type NodeMetricsReader interface {
 	NodeMetrics(ctx context.Context) (map[string]kube.NodeMetric, error)
 }
 
+// NodeDiskReader is the seam behind USED / CAPACITY's disk row: the node's
+// root filesystem as the kubelet reports it. metrics-server has no disk
+// figure, so this is a separate read with its own slower cadence
+// (diskPollEvery) — kept off NodeMetricsReader so a screen that only wants
+// cpu/mem never pays for it.
+type NodeDiskReader interface {
+	NodeDiskUsage(ctx context.Context, nodeName string) (kube.NodeDisk, error)
+}
+
+// diskState is where the disk row stands. It is its own tri-state rather
+// than a usedOK-style flag because "not read yet", "you may not read it" and
+// "the kubelet didn't answer" each say something different on screen.
+type diskState int
+
+const (
+	diskPending diskState = iota
+	diskOK
+	diskForbidden
+	diskUnavailable
+)
+
 // OpenPodFunc pushes a view for the named pod — nodedetail hands it the same
 // kube.Pod/width/height shape browse.OpenLogsFunc does, so app.go can wire
 // both from the same closure.
@@ -98,6 +119,7 @@ type Config struct {
 	Lister        resources.RawLister
 	Metrics       MetricsReader
 	NodeMetrics   NodeMetricsReader
+	NodeDisk      NodeDiskReader
 	Mutator       kube.Mutator
 	OpenPod       OpenPodFunc
 	OpenLogs      OpenLogsFunc
@@ -137,6 +159,7 @@ type Model struct {
 	lister        resources.RawLister
 	metrics       MetricsReader
 	nodeMetrics   NodeMetricsReader
+	nodeDisk      NodeDiskReader
 	mutator       kube.Mutator
 	actions       actions.Controller
 	openPod       OpenPodFunc
@@ -165,10 +188,16 @@ type Model struct {
 	used     allocation
 	capacity allocation
 	usedOK   bool
-	allPods  []nodePodRow // every pod load() found on this node, before the filter
-	pods     []nodePodRow // allPods after filterQuery — what's selectable/rendered
-	selected int
-	offset   int
+	// disk/diskState back USED / CAPACITY's disk row (NodeDiskReader).
+	// diskTicks counts usage-poll ticks since the last disk read, so the
+	// disk read rides the existing poll chain at a fraction of its rate.
+	disk      kube.NodeDisk
+	diskState diskState
+	diskTicks int
+	allPods   []nodePodRow // every pod load() found on this node, before the filter
+	pods      []nodePodRow // allPods after filterQuery — what's selectable/rendered
+	selected  int
+	offset    int
 
 	filterActive bool
 	filterInput  textfield.Model
@@ -254,6 +283,12 @@ type metricsLoadedMsg struct {
 	podMetrics map[string]kube.PodMetrics
 }
 
+// diskLoadedMsg carries one NodeDiskReader read.
+type diskLoadedMsg struct {
+	disk kube.NodeDisk
+	err  error
+}
+
 func New(cfg Config) Model {
 	if cfg.LoadTimeout == 0 {
 		cfg.LoadTimeout = 10 * time.Second
@@ -271,6 +306,7 @@ func New(cfg Config) Model {
 		lister:        cfg.Lister,
 		metrics:       cfg.Metrics,
 		nodeMetrics:   cfg.NodeMetrics,
+		nodeDisk:      cfg.NodeDisk,
 		mutator:       cfg.Mutator,
 		actions:       actions.New(cfg.Mutator),
 		openPod:       cfg.OpenPod,
@@ -299,7 +335,7 @@ func (m Model) Init() tea.Cmd {
 	}
 	// Init runs on a value copy, so arm the first chain at epoch 1 directly
 	// rather than through armMetricsTick's pointer receiver.
-	return tea.Batch(m.load(), m.spinner.Tick, m.scheduleMetricsTick(1))
+	return tea.Batch(m.load(), m.spinner.Tick, m.scheduleMetricsTick(1), m.loadDisk())
 }
 
 func (m *Model) SetSize(width, height int) {

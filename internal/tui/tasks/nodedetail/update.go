@@ -88,9 +88,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.epoch != m.metricsEpoch {
 			return m, nil
 		}
+		m.diskTicks++
+		if m.diskDue() {
+			m.diskTicks = 0
+			return m, tea.Batch(m.loadMetrics(), m.loadDisk())
+		}
 		return m, m.loadMetrics()
 	case metricsLoadedMsg:
 		return m.applyMetrics(msg)
+	case diskLoadedMsg:
+		m.applyDisk(msg)
 	case reloadDueMsg:
 		if msg.epoch == m.reloadEpoch {
 			return m, m.load()

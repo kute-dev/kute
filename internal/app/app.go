@@ -420,6 +420,7 @@ var (
 	_ whocan.WhoCanReader          = (*kube.Cluster)(nil)
 	_ debugpanel.AccessReviewer    = (*kube.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*kube.Cluster)(nil)
+	_ nodedetail.NodeDiskReader    = (*kube.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*kube.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*kube.Cluster)(nil)
 	_ tui.KindForbiddenReporter    = (*kube.Cluster)(nil)
@@ -470,6 +471,7 @@ var (
 	_ whocan.WhoCanReader          = (*fake.Cluster)(nil)
 	_ debugpanel.AccessReviewer    = (*fake.Cluster)(nil)
 	_ overview.NodeMetricsReader   = (*fake.Cluster)(nil)
+	_ nodedetail.NodeDiskReader    = (*fake.Cluster)(nil)
 	_ browse.KindSyncChecker       = (*fake.Cluster)(nil)
 	_ tui.KindErrorReporter        = (*fake.Cluster)(nil)
 	_ tui.KindForbiddenReporter    = (*fake.Cluster)(nil)
@@ -492,6 +494,7 @@ type seams interface {
 	resources.RawLister
 	browse.MetricsReader
 	browse.NodeMetricsReader
+	nodedetail.NodeDiskReader
 	kube.Mutator
 	poddetail.EventsReader
 	yamlview.YAMLReader
@@ -936,6 +939,7 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 			Lister:        active,
 			Metrics:       active,
 			NodeMetrics:   active,
+			NodeDisk:      active,
 			Mutator:       active,
 			OpenPod:       nodedetail.OpenPodFunc(openPod),
 			OpenLogs:      nodedetail.OpenLogsFunc(openLogs),

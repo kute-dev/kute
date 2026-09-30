@@ -1297,6 +1297,27 @@ func (c *Cluster) ContainerMetricsByNamespace(_ context.Context, namespace strin
 	return out, nil
 }
 
+// NodeDiskUsage synthesizes a believable root-filesystem reading for demo
+// mode: the node's ephemeral-storage capacity (100Gi when it declares none)
+// at a stable per-node fraction, the same hash NodeMetrics uses so a node
+// that runs hot on memory doesn't look idle on disk by coincidence.
+func (c *Cluster) NodeDiskUsage(_ context.Context, nodeName string) (kube.NodeDisk, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, obj := range c.objects[kube.KindNode] {
+		n, ok := obj.(*corev1.Node)
+		if !ok || n.Name != nodeName {
+			continue
+		}
+		capacity := n.Status.Capacity.StorageEphemeral().Value()
+		if capacity == 0 {
+			capacity = 100 << 30
+		}
+		return kube.NodeDisk{UsedBytes: int64(float64(capacity) * demoUsageRatio(n.Name) * 0.8), CapacityBytes: capacity}, nil
+	}
+	return kube.NodeDisk{}, fmt.Errorf("node %q not found", nodeName)
+}
+
 func (c *Cluster) NodeMetrics(_ context.Context) (map[string]kube.NodeMetric, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -202,12 +202,25 @@ func (m Model) readyBody(width, height int) string {
 // and the bottom pods table — factored out of readyBody so tableDataRows
 // (selection.go's scroll-offset clamp) can compute the same split before a
 // render happens, without duplicating the formula.
+//
+// The right column is never clipped while the pods panel can still show a
+// row: when even the compact allocation block outgrows the budget (a short
+// terminal, with USED / CAPACITY's disk row), the panel takes the extra
+// lines from the table rather than cutting TAINTS off the bottom.
 func panelHeights(bodyHeight, leftLines, rightLines int) (top, bottom int) {
 	_, capped := panelBudget(bodyHeight)
 	top = min(max(leftLines, rightLines)+1, capped)
+	if rightLines > top {
+		top = max(top, min(rightLines, bodyHeight-1-minPodsPanel))
+	}
 	bottom = max(bodyHeight-top-1, 3)
 	return top, bottom
 }
+
+// minPodsPanel is the smallest bottom pane that still shows a pod row:
+// podsPanel's strip + rule, the table's header + header rule, one row, and
+// the footer line (tableDataRows' -5, plus the row itself).
+const minPodsPanel = 6
 
 // panelBudget is the most lines the top facts panel may take, and how many
 // of those a single column's content may fill (the panel adds one line of
@@ -360,12 +373,37 @@ func (m Model) allocationBlock(theme tui.Theme, compact bool) []string {
 		// and browse's nodeSummaryText already apply.
 		lines = append(lines, lipgloss.NewStyle().Foreground(theme.TextDim).Render("cpu / mem — no metrics-server installed"))
 	}
+	if line, ok := m.diskLine(theme); ok {
+		lines = append(lines, line)
+	}
 	if !compact {
 		lines = append(lines, "")
 	}
 	lines = append(lines, title("TAINTS"))
 	lines = append(lines, m.taintLines()...)
 	return lines
+}
+
+// diskLine is USED / CAPACITY's disk row: the node's root filesystem used
+// over its size, from the kubelet rather than metrics-server — so it renders
+// (or explains itself) independently of the cpu/mem rows above. ok is false
+// when no disk seam is wired, which drops the row rather than printing a
+// reason for a read nobody asked for.
+func (m Model) diskLine(theme tui.Theme) (string, bool) {
+	if m.nodeDisk == nil {
+		return "", false
+	}
+	dim := lipgloss.NewStyle().Foreground(theme.TextDim)
+	switch m.diskState {
+	case diskOK:
+		return allocationBarLine("disk", m.disk.UsedBytes, m.disk.CapacityBytes, theme, formatBytes), true
+	case diskForbidden:
+		return dim.Render("disk — no access (needs get nodes/proxy)"), true
+	case diskUnavailable:
+		return dim.Render("disk — kubelet stats unavailable"), true
+	default:
+		return dim.Render("disk — reading kubelet stats…"), true
+	}
 }
 
 // factsBlocks builds the two facts-panel columns for a given body height,
