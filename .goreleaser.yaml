@@ -113,13 +113,21 @@ homebrew_casks:
     homepage: "https://github.com/kute-dev/kute"
     description: "A TUI Kubernetes console, built with Bubble Tea and Lip Gloss."
     license: "Apache-2.0"
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr",
-              args: ["-dr", "com.apple.quarantine", "#{staged_path}/kute"]
-          end
+    # Not `hooks.post.install`: goreleaser renders that as a `postflight`
+    # block, which Homebrew 7 deprecates in favour of the declarative
+    # `postflight_steps` and warns about on every `brew` run. Steps run
+    # sandboxed, so the binary must be listed as writable or xattr can't
+    # touch it. `chdir` rather than a `{{staged_path}}` arg because
+    # goreleaser templates the whole rendered cask a second time.
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr",
+              args:           ["-dr", "com.apple.quarantine", "kute"],
+              chdir:          ".",
+              writable_paths: ["kute"]
+        end
+      end
     caveats: |
       kute is open-source software and is not currently signed with an
       Apple Developer ID. The Homebrew installation removes the macOS
