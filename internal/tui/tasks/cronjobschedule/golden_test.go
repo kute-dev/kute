@@ -56,11 +56,8 @@ func goldenScheduleValidModel(t *testing.T, width, height int) Model {
 
 // goldenScheduleInvalidModel drives the same loaded CronJob into an invalid
 // schedule buffer — a dropped-field typo ("* * *", three fields instead of
-// five) rather than free-form text, both because it's the realistic mistake
-// and because updateKey's own bare 'y'/'u' shortcuts (safe "only while the
-// schedule buffer has focus [since] a valid schedule token never contains
-// either letter") would otherwise eat a stray letter out of anything typed
-// here instead of inserting it. Pins the "invalid state" golden:
+// five) rather than free-form text, because it's the realistic mistake.
+// Pins the "invalid state" golden:
 // breakdownLines' own Bad-colored "invalid schedule: …" line, NEXT 5 RUNS'
 // "—" fallback, and no WHAT CHANGES panel at all (whatChangesLines bails out
 // whenever parseErr is non-nil).

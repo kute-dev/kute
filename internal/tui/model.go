@@ -963,8 +963,8 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 
 // handlePaletteKey drives the open palette: linear navigation, typing/
 // backspace re-filtering, Enter's navigation dispatch (per-scope:
-// gotoDispatch/namespaceDispatch/contextDispatch), "r" re-probing and
-// "ctrl+p" mark/unmark-prod on the context palette. Every scope shares one
+// gotoDispatch/namespaceDispatch/contextDispatch), ctrl+r re-probing and
+// ctrl+p mark/unmark-prod on the context palette. Every scope shares one
 // alt-tab grammar (docs/design
 // README.md §2b/§6a/§7a): opening the palette pre-selects the most recent
 // *other* entry (mostRecentOther), so a bare open+Enter with no typing toggles
@@ -1044,12 +1044,14 @@ func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 			m.palette.Browse = false
 			m.refreshPalette()
 		}
-	case "r":
+	case palette.KeyContextReprobe:
+		// Ctrl-chorded rather than a bare 'r', which "prod", "staging" and
+		// every "arn:…" context contain — typing "prod" filtered on "pod"
+		// and re-probed every context instead.
 		if m.palette.Scope == palette.ScopeContext {
 			return true, m, m.startContextProbe()
 		}
-		return true, m, m.typeKey(msg)
-	case "ctrl+p":
+	case palette.KeyContextMarkProd:
 		// Ctrl-chorded rather than a bare letter: "P"/"p" can lead a
 		// context name ("Prod-EKS") and must keep reaching the fuzzy query
 		// instead of rewriting config.yaml's prodContexts mid-word.
@@ -1235,7 +1237,7 @@ func (m *Model) pasteQuery(msg tea.Msg) (tea.Cmd, bool) {
 // startContextProbe (re)opens the 7a context palette's data: reset probe
 // results, populate items immediately (every row starts "probing…"), and
 // kick off a fresh kube.ProbeContexts run — used both by openPalette and by
-// the palette's own "r" re-probe key.
+// the palette's own ctrl+r re-probe key.
 func (m *Model) startContextProbe() tea.Cmd {
 	m.palette.Hint = contextHint()
 	m.probes = map[string]kube.ProbeResult{}

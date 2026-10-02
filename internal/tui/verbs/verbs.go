@@ -351,13 +351,20 @@ var (
 		ID: "cronjob-set-schedule", Key: "S", Label: "edit schedule",
 		Kinds: []kube.ResourceKind{kube.KindCronJob},
 	}
-	// CronJobCopyCommand is the schedule editor's and the run-now/resume
-	// preflights' shared 'y' — a screen-local override of the global YAML
-	// key, the same reuse CopyForwardURL/CopyRouteURL already make (0.8.0
-	// plan §36b: "y copies the will-run command"; §36d: "y copy"). Read-only
-	// clipboard copy, so no Tier and not Mutating, same shape as
-	// CopyForwardURL.
+	// CronJobCopyCommand is the run-now/resume preflights' 'y' — a
+	// screen-local override of the global YAML key, the same reuse
+	// CopyForwardURL/CopyRouteURL already make (0.8.0 plan §36b: "y copies
+	// the will-run command"). Read-only clipboard copy, so no Tier and not
+	// Mutating, same shape as CopyForwardURL. Those preflights have no text
+	// buffer, so a bare letter is safe there; the schedule editor, which
+	// always has one focused, uses CronJobScheduleCopy instead.
 	CronJobCopyCommand = Verb{ID: "cronjob-copy-command", Key: "y", Label: "copy"}
+	// CronJobScheduleCopy is 36d's copy of the will-run command. A chord
+	// rather than CronJobCopyCommand's bare 'y': a schedule or timezone
+	// buffer always has focus on that screen, and a bare 'y' turned a typed
+	// "@daily" into "@dail" (and copied the will-run line) instead. ctrl+t
+	// is bound by neither textfield nor the root shell.
+	CronJobScheduleCopy = Verb{ID: "cronjob-schedule-copy", Key: "ctrl+t", Label: "copy"}
 	// CronJobFocusTimezone is 36d's schedule editor 'tab' — moves focus onto
 	// the timezone field, gated there by the capability read (§3.8) rather
 	// than always-editable. Same screen-local-tab-focus shape as
@@ -367,8 +374,10 @@ var (
 	// itself "an ordinary reversible mutation through the same registry"
 	// (§36d), so Mutating: true, TierNone: applying the previous accepted
 	// schedule/timezone pair is exactly as reversible as the apply it
-	// undoes.
-	CronJobScheduleUndo = Verb{ID: "cronjob-schedule-undo", Key: "u", Label: "undo", Mutating: true}
+	// undoes. A chord for CronJobScheduleCopy's reason: as a bare 'u' it
+	// ate the letter out of "@hourly", "sun" and "UTC" (and fired an undo).
+	// ctrl+z rather than ctrl+u, which textfield binds to delete-to-start.
+	CronJobScheduleUndo = Verb{ID: "cronjob-schedule-undo", Key: "ctrl+z", Label: "undo", Mutating: true}
 	// CronJobScheduleFullEdit is 36d's 'ctrl-y' escape hatch to the full
 	// kubectl-edit subprocess (17a's existing tty-handoff machinery) for
 	// anything the schedule editor doesn't cover — concurrency, deadlines,
@@ -632,7 +641,7 @@ var All = []Verb{
 	CertRenew,
 	Delete, ForceDelete, RolloutRestart, JobRetry, JobReplace, JobSuspend,
 	CronJobRunNow, CronJobSuspend, CronJobSetSchedule,
-	CronJobCopyCommand, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
+	CronJobCopyCommand, CronJobScheduleCopy, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
 	Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 	AddSecretKey, RemoveSecretKey,
 	AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,

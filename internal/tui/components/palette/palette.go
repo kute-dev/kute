@@ -35,6 +35,19 @@ const (
 	ScopeResource Scope = "resource"
 )
 
+// KeyContextReprobe and KeyContextMarkProd are 7a's context-palette keys,
+// declared here once so the root shell's key routing (tui.handlePaletteKey)
+// and this package's own key row can't drift apart — the verbs registry
+// imports tui, so neither side can reference a verbs.Verb. Both are control
+// chords because the context palette is a fuzzy text input: as bare 'r'
+// and 'P' they swallowed letters out of "prod", "staging-eu-north" and
+// every "arn:…" context name. Neither chord is bound by textfield, the
+// palette's own navigation, or tui.RoutePaste (ctrl+v).
+const (
+	KeyContextReprobe  = "ctrl+r"
+	KeyContextMarkProd = "ctrl+p"
+)
+
 // cursor is the input row's block cursor glyph and the selected row's
 // 1-cell accent bar — mirrors tui.GlyphSelBar, duplicated locally rather
 // than imported: palette (like every components/* package) stays
@@ -986,15 +999,14 @@ func (m Model) renderKeyRow(styles Styles, width int) string {
 		// (palette.Item.RecentNum) — the row IS the legend.
 		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, halfPage, {"1-9", "recent"}}
 	case m.Scope == ScopeContext:
-		// 7a: "↵ switch · ↑↓ move · 1-9 recent · r re-probe · ctrl+p mark
-		// prod · esc close" — same no-tab-complete/1-9-recent reasoning as
-		// ScopeNamespace, plus the real re-probe key (docs/design
-		// README.md §7a: "Key r re-probes") and the PROD-tag toggle (ctrl+p,
-		// not a bare letter — "p"/"P" are common leading characters for prod
-		// context names and must keep reaching the fuzzy query) in place of
+		// 7a: "↵ switch · ↑↓ move · 1-9 recent · ctrl+r re-probe · ctrl+p
+		// mark prod · esc close" — same no-tab-complete/1-9-recent
+		// reasoning as ScopeNamespace, plus the re-probe and PROD-tag
+		// chords (KeyContextReprobe/KeyContextMarkProd — never bare
+		// letters, which must keep reaching the fuzzy query) in place of
 		// the generic default's phantom "tab complete" (nothing in this
 		// package implements tab-completion for any scope today).
-		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}, {"r", "re-probe"}, {"ctrl+p", "mark prod"}}
+		hints = []keyHint{{"↵", "switch"}, {moveKey, "move"}, {"1-9", "recent"}, {KeyContextReprobe, "re-probe"}, {KeyContextMarkProd, "mark prod"}}
 	case m.Scope == ScopeVerb || m.Scope == ScopeResource:
 		// 22a's v/k slot edits: "↵ set · ↑↓ move · esc close" — no
 		// tab-complete hint, same reasoning as ScopeNamespace above.

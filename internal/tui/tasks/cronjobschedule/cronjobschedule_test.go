@@ -307,7 +307,7 @@ func TestCommitUndoRestoresScheduleAndTimeZone(t *testing.T) {
 		t.Fatalf("expected an undo target after the first apply")
 	}
 
-	m = step(t, m, tea.KeyPressMsg{Text: "u"})
+	m = step(t, m, ctrlKey('z'))
 	if m.state != tui.TaskStateReady {
 		t.Fatalf("state = %v, want Ready after undo", m.state)
 	}
@@ -365,6 +365,135 @@ func TestPasteIntoTimeZoneWhenFocused(t *testing.T) {
 	}
 	if m.tzErr != nil {
 		t.Fatalf("tzErr = %v, want nil for a valid pasted time zone", m.tzErr)
+	}
+}
+
+// ctrlKey is the KeyPressMsg a terminal delivers for ctrl+<r>: no Text,
+// so it can never reach a buffer as typed input.
+func ctrlKey(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl}
+}
+
+// isClipboardWrite reports whether msg (or any message of a batch) is
+// tea.SetClipboard's write request — the only observable trace of a copy.
+func isClipboardWrite(msg tea.Msg) bool {
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil && isClipboardWrite(c()) {
+				return true
+			}
+		}
+		return false
+	}
+	return fmt.Sprintf("%T", msg) == fmt.Sprintf("%T", tea.SetClipboard("")())
+}
+
+// typeTextNoCopy is typeText that also fails on any keystroke answering
+// with a clipboard write instead of inserting its rune.
+func typeTextNoCopy(t *testing.T, m Model, s string) Model {
+	t.Helper()
+	for _, r := range s {
+		updated, cmd := m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		m = *updated.(*Model)
+		if cmd != nil {
+			msg := cmd()
+			if isClipboardWrite(msg) {
+				t.Fatalf("typing %q into %q copied to the clipboard instead of inserting it", r, s)
+			}
+			m = step(t, m, msg)
+		}
+	}
+	return m
+}
+
+// appliedOnce applies one schedule edit so a one-step undo is armed — the
+// state in which the old bare 'u' fired an undo mid-word.
+func appliedOnce(t *testing.T, c *fake.Cluster) Model {
+	t.Helper()
+	m := newModel(t, c, "default", "nightly")
+	m = clearInput(t, m)
+	m = typeText(t, m, "*/15 * * * *")
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if m.previous == nil {
+		t.Fatalf("expected an undo target after the first apply")
+	}
+	return m
+}
+
+// TestScheduleBufferTypesMacrosAndNames is the regression for copy/undo
+// being bare 'y'/'u': with undo armed, "@daily" lost its y to a clipboard
+// copy, and "@hourly" or "0 2 * * sun" lost their u to an undo.
+func TestScheduleBufferTypesMacrosAndNames(t *testing.T) {
+	t.Parallel()
+	for _, want := range []string{"@daily", "@hourly", "@yearly", "@monthly", "0 2 * * sun", "0 0 1 jul *"} {
+		c := newFakeCronJob("default", "nightly", "0 2 * * *", "")
+		m := appliedOnce(t, c)
+
+		m = clearInput(t, m)
+		m = typeTextNoCopy(t, m, want)
+		if got := m.scheduleInput.Value(); got != want {
+			t.Errorf("scheduleInput = %q, want %q typed literally", got, want)
+		}
+		if m.parseErr != nil {
+			t.Errorf("%q: parseErr = %v, want a valid schedule", want, m.parseErr)
+		}
+		if m.previous == nil || m.accepted.schedule != "*/15 * * * *" {
+			t.Errorf("%q: typing fired an undo (previous=%v, accepted=%q)", want, m.previous, m.accepted.schedule)
+		}
+	}
+}
+
+// TestTimeZoneBufferTypesUAndY pins the same fix for the timezone buffer:
+// "UTC" and "Asia/Yerevan" type literally with undo armed.
+func TestTimeZoneBufferTypesUAndY(t *testing.T) {
+	t.Parallel()
+	for _, want := range []string{"UTC", "Europe/Dublin", "Asia/Yerevan"} {
+		c := newFakeCronJob("default", "nightly", "0 2 * * *", "")
+		c.SetTimeZoneCapability(kube.TimeZoneCapabilitySupported)
+		m := appliedOnce(t, c)
+		m.capabilities = c
+
+		m = step(t, m, tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
+		if !m.tzFocused {
+			t.Fatalf("expected tab to focus the timezone buffer")
+		}
+		m = typeTextNoCopy(t, m, want)
+		if got := m.tzInput.Value(); got != want {
+			t.Errorf("tzInput = %q, want %q typed literally", got, want)
+		}
+		if m.previous == nil || m.accepted.schedule != "*/15 * * * *" {
+			t.Errorf("%q: typing fired an undo", want)
+		}
+	}
+}
+
+// TestCtrlTCopiesWillRunCommand pins copy's new chord, from either buffer.
+func TestCtrlTCopiesWillRunCommand(t *testing.T) {
+	t.Parallel()
+	c := newFakeCronJob("default", "nightly", "0 2 * * *", "")
+	c.SetTimeZoneCapability(kube.TimeZoneCapabilitySupported)
+	m := newModel(t, c, "default", "nightly")
+	m.capabilities = c
+	m = clearInput(t, m)
+	m = typeText(t, m, "@daily")
+
+	for _, focusTZ := range []bool{false, true} {
+		if focusTZ {
+			m = step(t, m, tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
+		}
+		before := m.scheduleInput.Value() + "|" + m.tzInput.Value()
+		updated, cmd := m.Update(ctrlKey('t'))
+		m = *updated.(*Model)
+		if cmd == nil {
+			t.Fatalf("ctrl+t (tz focused=%v) returned no command, want a clipboard write", focusTZ)
+		}
+		msg := cmd()
+		if !isClipboardWrite(msg) || fmt.Sprint(msg) != m.willRunCommand() {
+			t.Fatalf("ctrl+t (tz focused=%v) = %T %v, want clipboard write of %q", focusTZ, msg, msg, m.willRunCommand())
+		}
+		if after := m.scheduleInput.Value() + "|" + m.tzInput.Value(); after != before {
+			t.Fatalf("ctrl+t edited a buffer: %q -> %q", before, after)
+		}
 	}
 }
 

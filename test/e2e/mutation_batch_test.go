@@ -173,5 +173,5 @@ func TestCronJobRunNowAndScheduleEdit(t *testing.T) {
 		return cj.Spec.Schedule == afterSchedule, nil
 	})
 	requireNewResourceVersion(t, imageRV, scheduleRV)
-	a.WaitForAll(Settle, "SCHEDULE", afterSchedule, "u undo")
+	a.WaitForAll(Settle, "SCHEDULE", afterSchedule, "ctrl+z undo")
 }

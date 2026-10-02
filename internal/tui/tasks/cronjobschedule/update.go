@@ -211,24 +211,19 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.commitApply()
 		}
 		return m, nil
-	}
-	// 'y' (copy) and 'u' (undo) are bare-letter shortcuts — safe only while
-	// the schedule buffer has focus (a valid schedule token never contains
-	// either letter), never while the timezone buffer does: IANA zone
-	// names routinely contain both ("America/New_York", "Europe/Dublin"),
-	// so intercepting them there would eat real input. tzFocused gates
-	// both below rather than each stopping to check it individually.
-	if !m.tzFocused {
-		switch msg.String() {
-		case verbs.CronJobCopyCommand.Key:
-			return m, tea.SetClipboard(m.willRunCommand())
-		case verbs.CronJobScheduleUndo.Key:
-			if m.previous != nil && m.mutator != nil && !m.conn.Offline() && m.pendingCommit == nil {
-				return m, m.commitUndo()
-			}
-			return m, nil
+	case verbs.CronJobScheduleCopy.Key:
+		return m, tea.SetClipboard(m.willRunCommand())
+	case verbs.CronJobScheduleUndo.Key:
+		if m.previous != nil && m.mutator != nil && !m.conn.Offline() && m.pendingCommit == nil {
+			return m, m.commitUndo()
 		}
+		return m, nil
 	}
+	// Copy and undo are control chords (verbs.CronJobScheduleCopy/
+	// CronJobScheduleUndo) precisely so every printable key reaches the
+	// focused buffer: as bare 'y'/'u' they ate the letters out of "@daily",
+	// "@hourly", "0 2 * * sun" and "UTC". A chord never carries Text, so
+	// they now work from either buffer.
 	var cmd tea.Cmd
 	if m.tzFocused && m.tzEditable() {
 		m.tzInput, cmd = m.tzInput.Update(msg)
@@ -486,7 +481,7 @@ func runComparison(gen int, accepted acceptedPair, newSchedule, newTZ string, no
 	}
 }
 
-// willRunCommand renders the exact kubectl-equivalent command 'y' copies
+// willRunCommand renders the exact kubectl-equivalent command ctrl+t copies
 // and the will-run band shows — CronJobSetScheduleCommandString's own
 // three-state timezone contract (nil/&""/&name) built from whichever
 // pending-commit values are current: an in-flight commit's own values,

@@ -284,7 +284,7 @@ func TestAllRegistersEveryDefinedVerb(t *testing.T) {
 		CertRenew,
 		Delete, ForceDelete, RolloutRestart, JobRetry, JobSuspend,
 		CronJobRunNow, CronJobSuspend, CronJobSetSchedule,
-		CronJobCopyCommand, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
+		CronJobCopyCommand, CronJobScheduleCopy, CronJobFocusTimezone, CronJobScheduleUndo, CronJobScheduleFullEdit,
 		Cordon, Drain, Rollback, RolloutUndo, Scale, SetImage, SetResources, Meta,
 		AddSecretKey, RemoveSecretKey,
 		AddConfigMapKey, RemoveConfigMapKey, RestartConfigMapConsumers,
@@ -367,8 +367,9 @@ func TestCronJobScheduleModeVerbsRegistered(t *testing.T) {
 		label string
 	}{
 		{CronJobCopyCommand, "y", "copy"},
+		{CronJobScheduleCopy, "ctrl+t", "copy"},
 		{CronJobFocusTimezone, "tab", "timezone"},
-		{CronJobScheduleUndo, "u", "undo"},
+		{CronJobScheduleUndo, "ctrl+z", "undo"},
 		{CronJobScheduleFullEdit, "ctrl+y", "full yaml edit"},
 	}
 	for _, tt := range tests {
@@ -382,7 +383,7 @@ func TestCronJobScheduleModeVerbsRegistered(t *testing.T) {
 	if !CronJobScheduleFullEdit.Mutating {
 		t.Error("CronJobScheduleFullEdit should be Mutating — same tty-handoff shape as Edit")
 	}
-	if CronJobCopyCommand.Mutating || CronJobFocusTimezone.Mutating {
+	if CronJobCopyCommand.Mutating || CronJobScheduleCopy.Mutating || CronJobFocusTimezone.Mutating {
 		t.Error("copy/focus-timezone are read-only UI actions, not mutations")
 	}
 }
