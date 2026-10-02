@@ -273,7 +273,7 @@ func (m Model) confirmBody(width, height int) string {
 	title, detail := "Confirm", ""
 	if pending := m.actions.Pending(); pending != nil {
 		title = pending.Label
-		detail = "will run: " + rollbackCommand(pending.Scope.Namespace, pending.Scope.ResourceName, pending.Scope.Revision)
+		detail = "will run: " + kube.HelmRollbackCommandString(m.session.CommandTarget(), pending.Scope.Namespace, pending.Scope.ResourceName, pending.Scope.Revision)
 	}
 	styles := components.ConfirmStyles{
 		Border: lipgloss.NewStyle().Foreground(theme.ConfirmBorder).Background(theme.ConfirmHeaderBg),
@@ -407,15 +407,4 @@ func shortAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
-}
-
-// rollbackCommand mirrors kube.HelmRollbackCommandString without importing
-// kube's exec-shelling helm.go for just the string (this view stays
-// side-effect-free) — duplicated per the repo's small-pure-helper
-// convention.
-func rollbackCommand(namespace, name string, toRevision int) string {
-	if toRevision > 0 {
-		return fmt.Sprintf("helm rollback %s %d -n %s", name, toRevision, namespace)
-	}
-	return fmt.Sprintf("helm rollback %s -n %s", name, namespace)
 }

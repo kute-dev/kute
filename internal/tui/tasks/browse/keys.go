@@ -148,7 +148,7 @@ func (m Model) Keybar() tui.Keybar {
 					// 18a: "shell out to helm with a will run line" — the exact
 					// command, not just the generic verb/target prompt every
 					// other TierInline confirm uses.
-					note = rollbackPrompt(pending.Scope)
+					note = rollbackPrompt(m.session.CommandTarget(), pending.Scope)
 				case "delete":
 					// 8b/20a: the same "will run: kubectl delete ..."
 					// documentation idiom every other mutating verb's inline

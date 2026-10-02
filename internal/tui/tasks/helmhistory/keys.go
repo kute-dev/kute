@@ -1,6 +1,7 @@
 package helmhistory
 
 import (
+	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/verbs"
@@ -18,7 +19,7 @@ func (m Model) Keybar() tui.Keybar {
 				// deliberately, same reasoning as browse's own rollbackPrompt
 				// (insetChromeLine drops the whole RightNote rather than
 				// truncating it on overflow).
-				note = rollbackCommand(pending.Scope.Namespace, pending.Scope.ResourceName, pending.Scope.Revision)
+				note = kube.HelmRollbackCommandString(m.session.CommandTarget(), pending.Scope.Namespace, pending.Scope.ResourceName, pending.Scope.Revision)
 			}
 			return tui.Keybar{
 				Pill:      tui.ModeConfirm,

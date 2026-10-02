@@ -625,9 +625,9 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 	openDebug := openDebugFunc(sess, cluster, false)
 	openExecDebug := openExecDebugFunc(sess, cluster, false)
 	openNodeDebug := openNodeDebugFunc(sess, cluster, false)
-	openExec := openExecFunc(sess, kubectlShellDetector{}, openExecDebug, false)
+	openExec := openExecFunc(sess, kubectlShellDetector{cluster: cluster}, openExecDebug, false)
 	openForward := openForwardFunc(sess, lister, cluster)
-	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{}, openDebug)
+	openPodDetail := openPodDetailFunc(sess, cluster, openLogs, openYAML, openExec, openForward, kubectlShellDetector{cluster: cluster}, openDebug)
 	openNodeDetail := openNodeDetailFunc(sess, cluster, openPodDetail, openLogs, openYAML, openExec, openDebug, openForward, openNodeDebug)
 	openEvents := openEventsFunc(sess, cluster, openYAML)
 	openTimeline := openTimelineFunc(sess, cluster, openEvents)
@@ -650,7 +650,7 @@ func buildBrowseTask(cfg Config, sess *tui.Session, cluster *kube.Cluster) *brow
 		OpenExec:            browse.OpenExecFunc(openExec),
 		OpenDebug:           browse.OpenDebugFunc(openDebug),
 		OpenNodeDebug:       browse.OpenNodeDebugFunc(openNodeDebug),
-		Shells:              kubectlShellDetector{},
+		Shells:              kubectlShellDetector{cluster: cluster},
 		OpenForward:         openForward,
 		OpenObjectDetail:    openObjectDetailFunc(sess, cluster, openYAML),
 		OpenFluxDetail:      openFluxDetailFunc(sess, cluster, openYAML),
@@ -1465,13 +1465,13 @@ func openNodeDebugFunc(sess *tui.Session, active seams, demo bool) func(name str
 }
 
 // kubectlShellDetector adapts kube.DetectShells to execpicker's own
-// ShellDetector seam — a free function needs no cluster handle (it shells out
-// to kubectl exactly like kube.ExecSpec does), so this is a zero-value type
-// rather than something built from *kube.Cluster.
-type kubectlShellDetector struct{}
+// ShellDetector seam. It carries the cluster only to pin the probe's kubectl
+// to that cluster's context (kube.CommandTarget) — read when the probe runs,
+// under the cluster's own lock, since probes run off the Update loop.
+type kubectlShellDetector struct{ cluster *kube.Cluster }
 
-func (kubectlShellDetector) DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error) {
-	return kube.DetectShells(ctx, namespace, pod, container)
+func (d kubectlShellDetector) DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error) {
+	return kube.DetectShells(ctx, d.cluster.CommandTarget(), namespace, pod, container)
 }
 
 // openForwardFunc pushes tasks/forwardpicker (13a) against a real cluster.

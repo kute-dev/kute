@@ -711,9 +711,10 @@ func (c *Cluster) Drain(ctx context.Context, node string) (int, error) {
 
 // HelmRollback shells out to the real `helm` binary (kube/helm.go's
 // HelmRollback) — the live clientset has no equivalent API call to make;
-// Helm's own storage/rollback logic isn't reproduced here.
+// Helm's own storage/rollback logic isn't reproduced here. Pinned to this
+// Cluster's own context (CommandTarget), never helm's current-context.
 func (c *Cluster) HelmRollback(ctx context.Context, namespace, name string, toRevision int) error {
-	return HelmRollback(ctx, namespace, name, toRevision)
+	return HelmRollback(ctx, c.CommandTarget(), namespace, name, toRevision)
 }
 
 // SetFluxSuspend implements Mutator: a one-field merge patch on spec.suspend.

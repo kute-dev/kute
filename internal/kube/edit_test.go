@@ -7,7 +7,7 @@ import (
 
 func TestEditSpecNamespacedKind(t *testing.T) {
 	t.Parallel()
-	cmd := EditSpec(KindPod, "default", "api-1")
+	cmd := EditSpec(CommandTarget{}, KindPod, "default", "api-1")
 	got := strings.Join(cmd.Args, " ")
 	want := "kubectl edit pod/api-1 -n default"
 	if got != want {
@@ -17,7 +17,7 @@ func TestEditSpecNamespacedKind(t *testing.T) {
 
 func TestEditSpecClusterScopedKindOmitsNamespace(t *testing.T) {
 	t.Parallel()
-	cmd := EditSpec(KindNode, "", "node-a")
+	cmd := EditSpec(CommandTarget{}, KindNode, "", "node-a")
 	got := strings.Join(cmd.Args, " ")
 	want := "kubectl edit node/node-a"
 	if got != want {

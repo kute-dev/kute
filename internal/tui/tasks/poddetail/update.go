@@ -222,7 +222,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if verbs.Exec.HiddenWhileOffline(m.conn.Offline()) {
 				return m, nil
 			}
-			return m, execCmd(m.namespace, m.name, eph.Name)
+			return m, execCmd(m.session.CommandTarget(), m.namespace, m.name, eph.Name)
 		}
 	case verbs.YAML.Key:
 		if task, cmd, ok := m.openSelectedYAML(); ok {
@@ -582,7 +582,7 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 		return nil, nil, false
 	}
 	if len(m.pod.ContainerInfos) == 1 {
-		return nil, execCmd(m.namespace, m.name, m.pod.ContainerInfos[0].Name), true
+		return nil, execCmd(m.session.CommandTarget(), m.namespace, m.name, m.pod.ContainerInfos[0].Name), true
 	}
 	if m.openExec == nil {
 		return nil, nil, false
@@ -595,8 +595,8 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 // (tea.ExecProcess over kube.ExecSpec) — shared shape with browse's own
 // execCmd and tasks/execpicker's execSelected, duplicated per the repo's
 // package-local-seam convention.
-func execCmd(namespace, pod, container string) tea.Cmd {
-	spec := kube.ExecSpec(namespace, pod, container, "")
+func execCmd(target kube.CommandTarget, namespace, pod, container string) tea.Cmd {
+	spec := kube.ExecSpec(target, namespace, pod, container, "")
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return execResultMsg{err: err}
 	})

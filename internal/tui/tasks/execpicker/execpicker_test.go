@@ -387,7 +387,7 @@ func TestWillRunCommandNamesDetectedShell(t *testing.T) {
 	m := newModel()
 	m.shells = stubShellDetector{}
 	m.detected = map[string]shellResult{"gateway": {shells: []string{"bash", "sh"}}}
-	got := kube.ExecCommandString(m.namespace, m.podName, "gateway", m.preferredShell(0))
+	got := kube.ExecCommandString(kube.CommandTarget{}, m.namespace, m.podName, "gateway", m.preferredShell(0))
 	if !strings.HasSuffix(got, "-- bash") {
 		t.Errorf("will-run command = %q, want it to end in the detected shell", got)
 	}
@@ -395,7 +395,7 @@ func TestWillRunCommandNamesDetectedShell(t *testing.T) {
 	// With no detection result the command keeps kube.ExecSpec's own
 	// in-container bash-then-sh fallback, rather than claiming a shell.
 	m.detected = map[string]shellResult{}
-	got = kube.ExecCommandString(m.namespace, m.podName, "gateway", m.preferredShell(0))
+	got = kube.ExecCommandString(kube.CommandTarget{}, m.namespace, m.podName, "gateway", m.preferredShell(0))
 	if !strings.Contains(got, "command -v bash") {
 		t.Errorf("undetected will-run command = %q, want the in-container fallback probe", got)
 	}

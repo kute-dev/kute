@@ -2,7 +2,6 @@ package kube
 
 import (
 	"os/exec"
-	"strings"
 )
 
 // DebugProfile is one of kubectl debug's --profile values (docs/design
@@ -67,21 +66,6 @@ func PodWontStayRunning(podPhase string, waiting bool) bool {
 	return waiting || (podPhase != "" && podPhase != "Running")
 }
 
-// commandString renders args as a copy-pasteable kubectl invocation,
-// quoting any argument containing whitespace — shared by every
-// *CommandString function in this file, mirroring ExecCommandString's own
-// quoting (exec.go) so the three debug builders can't drift apart in how
-// they document themselves.
-func commandString(args []string) string {
-	out := append([]string{"kubectl"}, args...)
-	for i, a := range out {
-		if strings.ContainsAny(a, " \t") {
-			out[i] = "'" + a + "'"
-		}
-	}
-	return strings.Join(out, " ")
-}
-
 // podDebugAttachArgs builds the kubectl debug argv for §41b: an ephemeral
 // container attached to a running pod, sharing target's process namespace.
 // Empty image/profile default rather than emit a malformed command — the
@@ -108,14 +92,14 @@ func podDebugAttachArgs(namespace, pod, image, target string, profile DebugProfi
 // (tea.ExecProcess), the same handoff as ExecSpec/NodeDebugSpec. kubectl
 // creates the ephemeral container as part of -it — there is no separate
 // cluster write kute makes first.
-func PodDebugAttachSpec(namespace, pod, image, target string, profile DebugProfile) *exec.Cmd {
-	return exec.Command("kubectl", podDebugAttachArgs(namespace, pod, image, target, profile)...)
+func PodDebugAttachSpec(target CommandTarget, namespace, pod, image, targetContainer string, profile DebugProfile) *exec.Cmd {
+	return kubectlCommand(target, podDebugAttachArgs(namespace, pod, image, targetContainer, profile)...)
 }
 
 // PodDebugAttachCommandString renders the exact kubectl invocation
 // PodDebugAttachSpec builds, for §41b's "will run" line.
-func PodDebugAttachCommandString(namespace, pod, image, target string, profile DebugProfile) string {
-	return commandString(podDebugAttachArgs(namespace, pod, image, target, profile))
+func PodDebugAttachCommandString(target CommandTarget, namespace, pod, image, targetContainer string, profile DebugProfile) string {
+	return kubectlCommandString(target, podDebugAttachArgs(namespace, pod, image, targetContainer, profile)...)
 }
 
 // podDebugCopyArgs builds the kubectl debug argv for §41c: a copy of pod
@@ -145,14 +129,14 @@ func podDebugCopyArgs(namespace, pod, copyName, container, entrypoint string, sh
 // PodDebugCopySpec builds the kubectl debug command for §41c's "copy pod"
 // launch. Same tea.ExecProcess handoff as PodDebugAttachSpec/ExecSpec; the
 // original pod is untouched, still crash-looping, once this exits.
-func PodDebugCopySpec(namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) *exec.Cmd {
-	return exec.Command("kubectl", podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile)...)
+func PodDebugCopySpec(target CommandTarget, namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) *exec.Cmd {
+	return kubectlCommand(target, podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile)...)
 }
 
 // PodDebugCopyCommandString renders the exact kubectl invocation
 // PodDebugCopySpec builds, for §41c's "will run" line.
-func PodDebugCopyCommandString(namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) string {
-	return commandString(podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile))
+func PodDebugCopyCommandString(target CommandTarget, namespace, pod, copyName, container, entrypoint string, shareProcesses bool, profile DebugProfile) string {
+	return kubectlCommandString(target, podDebugCopyArgs(namespace, pod, copyName, container, entrypoint, shareProcesses, profile)...)
 }
 
 // nodeDebugArgs builds the kubectl debug argv for §41d — the node-debug
@@ -185,14 +169,14 @@ func nodeDebugArgs(node, image string, profile DebugProfile) []string {
 // ExecSpec. kubectl leaves the node-debugger pod behind in a Completed
 // state after exit — its own documented behavior; it prints the pod name on
 // entry, so cleanup stays visible to (and with) the user for MVP.
-func NodeDebugSpec(node, image string, profile DebugProfile) *exec.Cmd {
-	return exec.Command("kubectl", nodeDebugArgs(node, image, profile)...)
+func NodeDebugSpec(target CommandTarget, node, image string, profile DebugProfile) *exec.Cmd {
+	return kubectlCommand(target, nodeDebugArgs(node, image, profile)...)
 }
 
 // NodeDebugCommandString renders the exact kubectl invocation NodeDebugSpec
 // builds, for the debug panel's "will run" line — the former 's' key never
 // had one; unlike the retired one-shot launch, this is now shown before the
 // launch ever runs.
-func NodeDebugCommandString(node, image string, profile DebugProfile) string {
-	return commandString(nodeDebugArgs(node, image, profile))
+func NodeDebugCommandString(target CommandTarget, node, image string, profile DebugProfile) string {
+	return kubectlCommandString(target, nodeDebugArgs(node, image, profile)...)
 }

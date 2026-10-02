@@ -450,31 +450,36 @@ func HelmReleaseHistory(all []HelmRelease, namespace, name string) []HelmRelease
 	return out
 }
 
-// HelmRollbackCommandString renders the exact `helm` invocation HelmRollback
-// runs — 18a's "will run" documentation line (the same copyable-command
-// idiom as 10a/13a/17b). toRevision 0 means "the previous revision" (plain
+// helmRollbackArgs builds the `helm rollback` argv shared by HelmRollback
+// and HelmRollbackCommandString, so 18a's "will run" line can't drift from
+// what runs. toRevision 0 means "the previous revision" (plain
 // `helm rollback <name>`, Helm's own default).
-func HelmRollbackCommandString(namespace, name string, toRevision int) string {
-	if toRevision > 0 {
-		return fmt.Sprintf("helm rollback %s %d -n %s", name, toRevision, namespace)
-	}
-	return fmt.Sprintf("helm rollback %s -n %s", name, namespace)
-}
-
-// HelmRollback shells out to the real `helm` binary — the one Helm verb
-// that isn't decoded from the watch cache (18a: "browsing needs no helm
-// binary" but rollback does). Returns a clear, inline-explainable error when
-// helm isn't on PATH rather than a raw exec.ErrNotFound.
-func HelmRollback(ctx context.Context, namespace, name string, toRevision int) error {
-	if _, err := exec.LookPath("helm"); err != nil {
-		return fmt.Errorf("helm not found in PATH — install helm to roll back releases")
-	}
+func helmRollbackArgs(target CommandTarget, namespace, name string, toRevision int) []string {
 	args := []string{"rollback", name}
 	if toRevision > 0 {
 		args = append(args, strconv.Itoa(toRevision))
 	}
-	args = append(args, "-n", namespace)
-	cmd := exec.CommandContext(ctx, "helm", args...)
+	return helmArgv(target, append(args, "-n", namespace)...)
+}
+
+// HelmRollbackCommandString renders the exact `helm` invocation HelmRollback
+// runs — 18a's "will run" documentation line (the same copyable-command
+// idiom as 10a/13a/17b).
+func HelmRollbackCommandString(target CommandTarget, namespace, name string, toRevision int) string {
+	return commandString(append([]string{"helm"}, helmRollbackArgs(target, namespace, name, toRevision)...))
+}
+
+// HelmRollback shells out to the real `helm` binary — the one Helm verb
+// that isn't decoded from the watch cache (18a: "browsing needs no helm
+// binary" but rollback does). target pins helm to the cluster kute is
+// connected to rather than the kubeconfig's current-context (see
+// CommandTarget). Returns a clear, inline-explainable error when helm isn't
+// on PATH rather than a raw exec.ErrNotFound.
+func HelmRollback(ctx context.Context, target CommandTarget, namespace, name string, toRevision int) error {
+	if _, err := exec.LookPath("helm"); err != nil {
+		return fmt.Errorf("helm not found in PATH — install helm to roll back releases")
+	}
+	cmd := exec.CommandContext(ctx, "helm", helmRollbackArgs(target, namespace, name, toRevision)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))

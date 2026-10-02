@@ -30,7 +30,7 @@ func (m *Model) beginEdit() (tea.Cmd, bool) {
 		return nil, false
 	}
 	if verbs.TierForEdit(m.isProd()) == actions.TierNone {
-		return editCmd(m.namespace, m.name), true
+		return editCmd(m.session.CommandTarget(), m.namespace, m.name), true
 	}
 	m.pendingEdit = &editTarget{namespace: m.namespace, name: m.name}
 	return nil, true
@@ -40,8 +40,8 @@ func (m *Model) beginEdit() (tea.Cmd, bool) {
 // (tea.ExecProcess over kube.EditSpec) — shared shape with browse's and
 // nodedetail's own editCmd, duplicated per the repo's package-local-seam
 // convention.
-func editCmd(namespace, name string) tea.Cmd {
-	spec := kube.EditSpec(kube.KindPod, namespace, name)
+func editCmd(target kube.CommandTarget, namespace, name string) tea.Cmd {
+	spec := kube.EditSpec(target, kube.KindPod, namespace, name)
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return editResultMsg{err: err}
 	})
@@ -54,7 +54,7 @@ func (m *Model) updateEditConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "y":
 		target := *m.pendingEdit
 		m.pendingEdit = nil
-		return m, editCmd(target.namespace, target.name)
+		return m, editCmd(m.session.CommandTarget(), target.namespace, target.name)
 	case "n", "esc":
 		m.pendingEdit = nil
 	}

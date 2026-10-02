@@ -19,7 +19,7 @@ func TestDebugProfileNextCycles(t *testing.T) {
 
 func TestPodDebugAttachSpec(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugAttachSpec("nva-stage", "nva-gateway-2b81x", "nicolaka/netshoot", "gateway", ProfileGeneral)
+	cmd := PodDebugAttachSpec(CommandTarget{}, "nva-stage", "nva-gateway-2b81x", "nicolaka/netshoot", "gateway", ProfileGeneral)
 	got := strings.Join(cmd.Args, " ")
 	want := "kubectl debug -it nva-gateway-2b81x -n nva-stage --image nicolaka/netshoot --target gateway --profile general"
 	if got != want {
@@ -29,7 +29,7 @@ func TestPodDebugAttachSpec(t *testing.T) {
 
 func TestPodDebugAttachSpecDefaultsImageAndProfile(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugAttachSpec("default", "api-1", "", "worker", "")
+	cmd := PodDebugAttachSpec(CommandTarget{}, "default", "api-1", "", "worker", "")
 	joined := strings.Join(cmd.Args, " ")
 	if !strings.Contains(joined, "--image "+DefaultDebugImage) {
 		t.Errorf("expected default image %q in %q", DefaultDebugImage, joined)
@@ -41,7 +41,7 @@ func TestPodDebugAttachSpecDefaultsImageAndProfile(t *testing.T) {
 
 func TestPodDebugAttachCommandStringMatchesSpec(t *testing.T) {
 	t.Parallel()
-	got := PodDebugAttachCommandString("nva-stage", "nva-gateway-2b81x", "nicolaka/netshoot", "gateway", ProfileGeneral)
+	got := PodDebugAttachCommandString(CommandTarget{}, "nva-stage", "nva-gateway-2b81x", "nicolaka/netshoot", "gateway", ProfileGeneral)
 	want := "kubectl debug -it nva-gateway-2b81x -n nva-stage --image nicolaka/netshoot --target gateway --profile general"
 	if got != want {
 		t.Fatalf("PodDebugAttachCommandString = %q, want %q", got, want)
@@ -50,7 +50,7 @@ func TestPodDebugAttachCommandStringMatchesSpec(t *testing.T) {
 
 func TestPodDebugCopySpecSharedProcesses(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileNetadmin)
+	cmd := PodDebugCopySpec(CommandTarget{}, "nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileNetadmin)
 	got := strings.Join(cmd.Args, " ")
 	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --profile netadmin --share-processes -- sh"
 	if got != want {
@@ -60,7 +60,7 @@ func TestPodDebugCopySpecSharedProcesses(t *testing.T) {
 
 func TestPodDebugCopySpecWithoutSharedProcesses(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", false, ProfileGeneral)
+	cmd := PodDebugCopySpec(CommandTarget{}, "nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", false, ProfileGeneral)
 	got := strings.Join(cmd.Args, " ")
 	if strings.Contains(got, "--share-processes") {
 		t.Fatalf("PodDebugCopySpec must omit --share-processes when false: %q", got)
@@ -69,7 +69,7 @@ func TestPodDebugCopySpecWithoutSharedProcesses(t *testing.T) {
 
 func TestPodDebugCopySpecDefaultsEntrypoint(t *testing.T) {
 	t.Parallel()
-	cmd := PodDebugCopySpec("default", "api-1", "api-1-debug", "worker", "", false, "")
+	cmd := PodDebugCopySpec(CommandTarget{}, "default", "api-1", "api-1-debug", "worker", "", false, "")
 	if !slices.Contains(cmd.Args, DefaultDebugCopyEntrypoint) {
 		t.Fatalf("expected default entrypoint %q in %v", DefaultDebugCopyEntrypoint, cmd.Args)
 	}
@@ -80,7 +80,7 @@ func TestPodDebugCopySpecDefaultsEntrypoint(t *testing.T) {
 
 func TestPodDebugCopyCommandStringMatchesSpec(t *testing.T) {
 	t.Parallel()
-	got := PodDebugCopyCommandString("nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileSysadmin)
+	got := PodDebugCopyCommandString(CommandTarget{}, "nva-stage", "nva-worker-9k2ss", "nva-worker-9k2ss-debug", "worker", "sh", true, ProfileSysadmin)
 	want := "kubectl debug -it nva-worker-9k2ss -n nva-stage --copy-to nva-worker-9k2ss-debug --container worker --profile sysadmin --share-processes -- sh"
 	if got != want {
 		t.Fatalf("PodDebugCopyCommandString = %q, want %q", got, want)
@@ -101,7 +101,7 @@ func TestDefaultDebugCopyName(t *testing.T) {
 // confirmation.
 func TestNodeDebugSpecMatchesLegacyNodeShellDefaults(t *testing.T) {
 	t.Parallel()
-	cmd := NodeDebugSpec("node-a", "", "")
+	cmd := NodeDebugSpec(CommandTarget{}, "node-a", "", "")
 	want := []string{
 		"kubectl", "debug", "node/node-a", "-it",
 		"--image", DefaultNodeShellImage,
@@ -116,7 +116,7 @@ func TestNodeDebugSpecMatchesLegacyNodeShellDefaults(t *testing.T) {
 
 func TestNodeDebugSpecCustomImageAndProfile(t *testing.T) {
 	t.Parallel()
-	cmd := NodeDebugSpec("node-a", "registry.internal/tools/debug:v2", ProfileNetadmin)
+	cmd := NodeDebugSpec(CommandTarget{}, "node-a", "registry.internal/tools/debug:v2", ProfileNetadmin)
 	joined := strings.Join(cmd.Args, " ")
 	if !strings.Contains(joined, "--image registry.internal/tools/debug:v2") {
 		t.Fatalf("NodeDebugSpec args missing custom image: %q", cmd.Args)
@@ -131,7 +131,7 @@ func TestNodeDebugSpecCustomImageAndProfile(t *testing.T) {
 
 func TestNodeDebugCommandStringMatchesSpec(t *testing.T) {
 	t.Parallel()
-	got := NodeDebugCommandString("node-a", "busybox:1.37", ProfileSysadmin)
+	got := NodeDebugCommandString(CommandTarget{}, "node-a", "busybox:1.37", ProfileSysadmin)
 	want := "kubectl debug node/node-a -it --image busybox:1.37 --profile sysadmin -- chroot /host sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
 	if got != want {
 		t.Fatalf("NodeDebugCommandString = %q, want %q", got, want)

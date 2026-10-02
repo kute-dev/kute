@@ -48,6 +48,7 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 		Theme:        theme,
 		Styles:       tui.NewStyles(theme),
 		Version:      sessionVersion(cfg.Version),
+		Kubeconfig:   cfg.Kubeconfig,
 		HelpScope:    helpScopeKeys(),
 		HelpList:     helpListKeys(),
 		HelpResource: helpResourceKeys(),

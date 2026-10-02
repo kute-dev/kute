@@ -312,7 +312,7 @@ func (m Model) confirmBody(width, height int) string {
 		if pending.Scope.Verb == "rollback" {
 			// 18a: "shell out to helm with a will run line" — shown in the
 			// PROD modal's detail slot alongside the confirm card.
-			detail = rollbackDetail(pending.Scope)
+			detail = rollbackDetail(m.session.CommandTarget(), pending.Scope)
 		}
 	}
 	styles := components.ConfirmStyles{

@@ -227,18 +227,18 @@ func (m *Model) beginRollback(row resources.Row) tea.Cmd {
 // rollbackPrompt renders 18a's inline (non-PROD) confirm line — the
 // generic actions.Controller.Prompt() plus the exact `helm rollback` command
 // that will run (18a: "shell out to helm with a will run line").
-func rollbackPrompt(scope tui.TaskScope) string {
+func rollbackPrompt(target kube.CommandTarget, scope tui.TaskScope) string {
 	// Kept short deliberately: insetChromeLine (tui/chrome.go) drops the
 	// whole RightNote rather than truncating it when the keybar line
 	// overflows width, so this stays terser than Controller.Prompt()'s own
 	// default "Rollback HelmRelease ns/name? (y) confirm (n) cancel" despite
 	// carrying more information (the actual command).
-	return kube.HelmRollbackCommandString(scope.Namespace, scope.ResourceName, scope.Revision)
+	return kube.HelmRollbackCommandString(target, scope.Namespace, scope.ResourceName, scope.Revision)
 }
 
 // rollbackDetail renders the PROD modal's detail line (nodes.go's
 // confirmBody) — the same "will run" command string, shown alongside the
 // confirm card instead of the keybar's single line.
-func rollbackDetail(scope tui.TaskScope) string {
-	return "will run: " + kube.HelmRollbackCommandString(scope.Namespace, scope.ResourceName, scope.Revision)
+func rollbackDetail(target kube.CommandTarget, scope tui.TaskScope) string {
+	return "will run: " + kube.HelmRollbackCommandString(target, scope.Namespace, scope.ResourceName, scope.Revision)
 }

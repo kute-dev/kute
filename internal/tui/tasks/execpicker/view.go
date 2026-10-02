@@ -241,7 +241,7 @@ func (m Model) willRunLine(theme tui.Theme) string {
 		return label
 	}
 	container := m.containers[m.selected].Name
-	cmdText := kube.ExecCommandString(m.namespace, m.podName, container, m.preferredShell(m.selected))
+	cmdText := kube.ExecCommandString(m.session.CommandTarget(), m.namespace, m.podName, container, m.preferredShell(m.selected))
 	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	indent := strings.Repeat(" ", lipgloss.Width(labelText))
 	wrapped := components.Wrap(cmdText, panelWidth-lipgloss.Width(labelText))

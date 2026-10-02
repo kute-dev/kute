@@ -24,6 +24,6 @@ func editArgs(kind ResourceKind, namespace, name string) []string {
 // NodeShellSpec. kubectl opens $EDITOR, owns schema validation and the
 // resourceVersion conflict retry, and aborts cleanly on an unchanged save —
 // no client-side diffing needed here.
-func EditSpec(kind ResourceKind, namespace, name string) *exec.Cmd {
-	return exec.Command("kubectl", editArgs(kind, namespace, name)...)
+func EditSpec(target CommandTarget, kind ResourceKind, namespace, name string) *exec.Cmd {
+	return kubectlCommand(target, editArgs(kind, namespace, name)...)
 }

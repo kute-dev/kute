@@ -202,7 +202,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case verbs.CronJobScheduleFullEdit.Key:
 		if m.mutator != nil && !m.conn.Offline() {
-			return m, editCmd(m.namespace, m.name)
+			return m, editCmd(m.session.CommandTarget(), m.namespace, m.name)
 		}
 		return m, nil
 	case "enter":
@@ -444,8 +444,8 @@ type editResultMsg struct{ err error }
 // confirmation of any tier: CronJobScheduleFullEdit's own doc comment says
 // why ("no Tier because kubectl owns the session once kute suspends"),
 // unlike browse's global 'E' which stages a PROD y/N first.
-func editCmd(namespace, name string) tea.Cmd {
-	spec := kube.EditSpec(kube.KindCronJob, namespace, name)
+func editCmd(target kube.CommandTarget, namespace, name string) tea.Cmd {
+	spec := kube.EditSpec(target, kube.KindCronJob, namespace, name)
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return editResultMsg{err: err}
 	})

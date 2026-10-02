@@ -151,10 +151,10 @@ func TestHelmReleaseHistorySortsNewestFirst(t *testing.T) {
 
 func TestHelmRollbackCommandString(t *testing.T) {
 	t.Parallel()
-	if got, want := HelmRollbackCommandString("production", "postgresql", 0), "helm rollback postgresql -n production"; got != want {
+	if got, want := HelmRollbackCommandString(CommandTarget{}, "production", "postgresql", 0), "helm rollback postgresql -n production"; got != want {
 		t.Fatalf("HelmRollbackCommandString(0) = %q, want %q", got, want)
 	}
-	if got, want := HelmRollbackCommandString("production", "postgresql", 2), "helm rollback postgresql 2 -n production"; got != want {
+	if got, want := HelmRollbackCommandString(CommandTarget{}, "production", "postgresql", 2), "helm rollback postgresql 2 -n production"; got != want {
 		t.Fatalf("HelmRollbackCommandString(2) = %q, want %q", got, want)
 	}
 }

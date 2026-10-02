@@ -58,7 +58,7 @@ var shellProbeScript = "for s in " + strings.Join(ShellCandidates, " ") +
 // (no kubectl, no pods/exec permission, connection down); callers must
 // render that as unknown, never as "no shell" and never as a fabricated
 // list.
-func DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error) {
+func DetectShells(ctx context.Context, target CommandTarget, namespace, pod, container string) ([]string, error) {
 	// Two attempts: the probe script needs a shell to run, so an image
 	// shipping bash but no sh (rare, but real) would otherwise report no
 	// shell. bash is the fallback runner precisely because it's the other
@@ -74,7 +74,7 @@ func DetectShells(ctx context.Context, namespace, pod, container string) ([]stri
 	// the answer: no shell, not an unknown probe result.
 	allMissing := true
 	for _, runner := range []string{"sh", "bash"} {
-		out, err := exec.CommandContext(ctx, "kubectl", shellProbeArgs(namespace, pod, container, runner)...).Output()
+		out, err := exec.CommandContext(ctx, "kubectl", kubectlArgv(target, shellProbeArgs(namespace, pod, container, runner)...)...).Output()
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -171,20 +171,14 @@ func execArgs(namespace, pod, container, shell string) []string {
 // or a probe that couldn't run); 10a passes DetectShells' answer once it has
 // one, so the picker's shells column, its "will run" line and this command
 // all name the same shell.
-func ExecSpec(namespace, pod, container, shell string) *exec.Cmd {
-	return exec.Command("kubectl", execArgs(namespace, pod, container, shell)...)
+func ExecSpec(target CommandTarget, namespace, pod, container, shell string) *exec.Cmd {
+	return kubectlCommand(target, execArgs(namespace, pod, container, shell)...)
 }
 
 // ExecCommandString renders the exact kubectl invocation ExecSpec builds,
 // for 10a's "will run" line (docs/design README.md §10a: "no magic,
 // copyable documentation") — quoting any argument containing whitespace
 // (the shell-fallback probe's `-c` payload).
-func ExecCommandString(namespace, pod, container, shell string) string {
-	args := append([]string{"kubectl"}, execArgs(namespace, pod, container, shell)...)
-	for i, a := range args {
-		if strings.ContainsAny(a, " \t") {
-			args[i] = "'" + a + "'"
-		}
-	}
-	return strings.Join(args, " ")
+func ExecCommandString(target CommandTarget, namespace, pod, container, shell string) string {
+	return kubectlCommandString(target, execArgs(namespace, pod, container, shell)...)
 }

@@ -135,7 +135,7 @@ func (m Model) execSelected() tea.Cmd {
 		return func() tea.Msg { return execResultMsg{err: kube.ErrDemoUnavailable} }
 	}
 	container := m.containers[m.selected].Name
-	cmd := kube.ExecSpec(m.namespace, m.podName, container, m.preferredShell(m.selected))
+	cmd := kube.ExecSpec(m.session.CommandTarget(), m.namespace, m.podName, container, m.preferredShell(m.selected))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return execResultMsg{err: err}
 	})

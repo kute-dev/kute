@@ -319,7 +319,7 @@ func (m Model) launchCmd() tea.Cmd {
 			return demoLaunchResultCmd(launchResultMsg{tgt: targetNode})
 		}
 		launchedAt := time.Now()
-		spec := kube.NodeDebugSpec(m.nodeName, m.nodeImage, m.nodeProfile)
+		spec := kube.NodeDebugSpec(m.session.CommandTarget(), m.nodeName, m.nodeImage, m.nodeProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
 			return launchResultMsg{err: err, tgt: targetNode, launchedAt: launchedAt}
 		})
@@ -330,7 +330,7 @@ func (m Model) launchCmd() tea.Cmd {
 		if m.demo {
 			return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeAttach})
 		}
-		spec := kube.PodDebugAttachSpec(m.namespace, m.podName, m.attachImage, target, m.podProfile)
+		spec := kube.PodDebugAttachSpec(m.session.CommandTarget(), m.namespace, m.podName, m.attachImage, target, m.podProfile)
 		return tea.ExecProcess(spec, func(err error) tea.Msg {
 			return launchResultMsg{err: err, tgt: targetPod, mode: modeAttach}
 		})
@@ -340,7 +340,7 @@ func (m Model) launchCmd() tea.Cmd {
 	if m.demo {
 		return demoLaunchResultCmd(launchResultMsg{tgt: targetPod, mode: modeCopy, copyName: copyName})
 	}
-	spec := kube.PodDebugCopySpec(m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
+	spec := kube.PodDebugCopySpec(m.session.CommandTarget(), m.namespace, m.podName, copyName, container, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
 	return tea.ExecProcess(spec, func(err error) tea.Msg {
 		return launchResultMsg{err: err, tgt: targetPod, mode: modeCopy, copyName: copyName}
 	})

@@ -299,11 +299,11 @@ func (m Model) willRunLine(theme tui.Theme) string {
 	var cmdText string
 	switch {
 	case m.tgt == targetNode:
-		cmdText = kube.NodeDebugCommandString(m.nodeName, m.nodeImage, m.nodeProfile)
+		cmdText = kube.NodeDebugCommandString(m.session.CommandTarget(), m.nodeName, m.nodeImage, m.nodeProfile)
 	case m.mode == modeAttach:
-		cmdText = kube.PodDebugAttachCommandString(m.namespace, m.podName, m.attachImage, m.attachTargetContainer().Name, m.podProfile)
+		cmdText = kube.PodDebugAttachCommandString(m.session.CommandTarget(), m.namespace, m.podName, m.attachImage, m.attachTargetContainer().Name, m.podProfile)
 	default:
-		cmdText = kube.PodDebugCopyCommandString(m.namespace, m.podName, m.copyName, m.copyContainer().Name, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
+		cmdText = kube.PodDebugCopyCommandString(m.session.CommandTarget(), m.namespace, m.podName, m.copyName, m.copyContainer().Name, m.copyEntrypoint, m.copyShareProcesses, m.podProfile)
 	}
 	cmdStyle := lipgloss.NewStyle().Foreground(theme.TextSecondary)
 	indent := strings.Repeat(" ", lipgloss.Width(labelText))

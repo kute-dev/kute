@@ -54,6 +54,10 @@ type Session struct {
 	Location Location
 	Theme    Theme
 	Styles   Styles
+	// Kubeconfig is --kubeconfig's value ("" when unset), set once at the
+	// composition root — the half of CommandTarget a kubectl/helm child
+	// process can't discover on its own.
+	Kubeconfig string
 	// Lister is the same RawLister browse reads through (the real
 	// *kube.Cluster or, in --demo, *fake.Cluster) — the root shell needs it
 	// too, to build the jump palette's live kind counts and resource-name
@@ -132,6 +136,19 @@ type Session struct {
 	// are literals baked in alongside the verb-sourced ones at the same call
 	// site.
 	HelpScope, HelpList, HelpResource, HelpMisc []KeyHint
+}
+
+// CommandTarget is the cluster every kubectl/helm subprocess a screen
+// launches (exec, debug, edit, and their "will run" lines) must target: the
+// active context kute itself is browsing, never the kubeconfig's own
+// current-context (see kube.CommandTarget). Zero with no real cluster — in
+// --demo nothing shells out, and the will-run lines stay free of a fake
+// context name no kubectl could resolve.
+func (s *Session) CommandTarget() kube.CommandTarget {
+	if s == nil || s.Cluster == nil {
+		return kube.CommandTarget{}
+	}
+	return kube.CommandTarget{Kubeconfig: s.Kubeconfig, Context: s.Location.Context}
 }
 
 // SyncLocationToPerContext snapshots s.Location's namespace/kind/filter into
