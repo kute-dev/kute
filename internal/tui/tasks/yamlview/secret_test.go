@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/kute-dev/kute/internal/kube"
 )
@@ -281,5 +282,154 @@ func TestNonSecretKindHasNoSecretSemantics(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "X"})
 	if m.revealAllConfirm {
 		t.Fatal("expected 'X' to be a no-op outside Secret semantics")
+	}
+}
+
+// marshalSecret renders sec the way kube.GetYAML does (sigs.k8s.io/yaml), so
+// tests see the real key quoting rather than a hand-written approximation.
+func marshalSecret(t *testing.T, sec *corev1.Secret) string {
+	t.Helper()
+	sec.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}
+	out, err := sigsyaml.Marshal(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+// assertNoSecretMaterial fails if any of leaks appears in the view, in any
+// rendered (searchable) or source line, or as a '/' search hit.
+func assertNoSecretMaterial(t *testing.T, m Model, leaks ...string) {
+	t.Helper()
+	view := plain(m.Render())
+	for _, leak := range leaks {
+		if strings.Contains(view, leak) {
+			t.Fatalf("view shows Secret material %q:\n%s", leak, view)
+		}
+		for _, rl := range m.rendered() {
+			if strings.Contains(strings.ToLower(rl.Text), strings.ToLower(leak)) {
+				t.Fatalf("rendered line %q holds Secret material %q", rl.Text, leak)
+			}
+		}
+		for _, l := range m.lines {
+			if strings.Contains(l, leak) {
+				t.Fatalf("source line %q holds Secret material %q", l, leak)
+			}
+		}
+		s := step(t, m, tea.KeyPressMsg{Text: "/"})
+		s.cursor = 0
+		s = step(t, s, tea.PasteMsg{Content: leak})
+		if got := s.rendered()[s.cursor].Text; strings.Contains(got, leak) {
+			t.Fatalf("'/' search for %q landed on %q", leak, got)
+		}
+	}
+}
+
+// TestSecretQuotedKeysAreMasked pins 09 H3: sigs.k8s.io/yaml quotes keys
+// that would otherwise read as bool/number ("true", "1", "on"), and the old
+// line regex didn't match a quoted key, so those values rendered as raw
+// base64.
+func TestSecretQuotedKeysAreMasked(t *testing.T) {
+	values := map[string]string{"true": "val-true-s3cret", "1": "val-one-s3cret", "on": "val-on-s3cret", "plain": "val-plain-s3cret"}
+	sec := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "quoted", Namespace: "staging"}, Data: map[string][]byte{}}
+	for k, v := range values {
+		sec.Data[k] = []byte(v)
+	}
+	text := marshalSecret(t, sec)
+	if !strings.Contains(text, `"true": `) {
+		t.Fatalf("fixture premise: expected a quoted key in\n%s", text)
+	}
+	m := newSecretModel(text, "quoted")
+	m = step(t, m, m.Init()())
+
+	var leaks []string
+	for _, v := range values {
+		leaks = append(leaks, v, b64(v))
+	}
+	assertNoSecretMaterial(t, m, leaks...)
+	if !strings.Contains(plain(m.Render()), "4 keys") {
+		t.Fatalf("expected every key counted:\n%s", plain(m.Render()))
+	}
+
+	// Revealing a quoted key still shows its real value, on explicit 'x'.
+	secretDataCursor(t, &m, "true")
+	m = step(t, m, tea.KeyPressMsg{Text: "x"})
+	if view := plain(m.Render()); !strings.Contains(view, `"true": val-true-s3cret`) {
+		t.Fatalf("expected the revealed quoted key's value:\n%s", view)
+	}
+}
+
+// TestSecretLastAppliedConfigurationIsRedacted pins 09 H3's second leak: a
+// kubectl-applied Secret carries its whole manifest (data, and plaintext
+// stringData) in the last-applied-configuration annotation.
+func TestSecretLastAppliedConfigurationIsRedacted(t *testing.T) {
+	const plaintext = "stringdata-hunter2"
+	dataB64 := b64("data-s3cret-value")
+	lastApplied := `{"apiVersion":"v1","data":{"token":"` + dataB64 + `"},"kind":"Secret","metadata":{"name":"applied","namespace":"staging"},"stringData":{"password":"` + plaintext + `"},"type":"Opaque"}`
+	sec := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "applied", Namespace: "staging",
+			Annotations: map[string]string{corev1.LastAppliedConfigAnnotation: lastApplied, "team": "platform"},
+		},
+		Data: map[string][]byte{"token": []byte("data-s3cret-value"), "password": []byte(plaintext)},
+		Type: corev1.SecretTypeOpaque,
+	}
+	m := newSecretModel(marshalSecret(t, sec), "applied")
+	m = step(t, m, m.Init()())
+
+	assertNoSecretMaterial(t, m, plaintext, b64(plaintext), dataB64, "data-s3cret-value")
+	view := plain(m.Render())
+	if !strings.Contains(view, "contains secret data") || !strings.Contains(view, "team: platform") {
+		t.Fatalf("expected the annotation redacted and the others kept:\n%s", view)
+	}
+	if strings.Contains(m.copyText, plaintext) || strings.Contains(m.copyText, "last-applied-configuration") {
+		t.Fatalf("Y copy carries the last-applied manifest:\n%s", m.copyText)
+	}
+	if !strings.Contains(m.copyText, dataB64) {
+		t.Fatalf("Y copy should keep data base64 (§21a):\n%s", m.copyText)
+	}
+}
+
+// TestSecretStringDataIsMasked covers a manifest that still carries
+// stringData (a saved Helm release manifest goes through this screen too):
+// plaintext values are masked, reveal on 'x', and Y copies them base64.
+func TestSecretStringDataIsMasked(t *testing.T) {
+	const plaintext = "manifest-plaintext-pw"
+	text := strings.Join([]string{
+		"apiVersion: v1",
+		"kind: Secret",
+		"metadata:",
+		"  name: chart-secret",
+		"stringData:",
+		"  password: " + plaintext,
+		`  "yes": also-` + plaintext,
+		"type: Opaque",
+	}, "\n")
+	m := newSecretModel(text, "chart-secret")
+	m = step(t, m, m.Init()())
+
+	assertNoSecretMaterial(t, m, plaintext)
+	if !strings.Contains(plain(m.Render()), "stringData · 21 B") {
+		t.Fatalf("expected the stringData placeholder:\n%s", plain(m.Render()))
+	}
+	if strings.Contains(m.copyText, plaintext) || !strings.Contains(m.copyText, b64(plaintext)) {
+		t.Fatalf("Y copy should carry stringData as base64 data:\n%s", m.copyText)
+	}
+
+	secretDataCursor(t, &m, "stringData/password")
+	m = step(t, m, tea.KeyPressMsg{Text: "x"})
+	if !strings.Contains(plain(m.Render()), "password: "+plaintext) {
+		t.Fatalf("expected the revealed stringData value:\n%s", plain(m.Render()))
+	}
+}
+
+// TestUnparseableSecretFailsClosed: if the YAML can't be parsed for
+// masking, nothing of it is shown or copied.
+func TestUnparseableSecretFailsClosed(t *testing.T) {
+	m := newSecretModel("data:\n  k: c2VjcmV0\n  - broken: [", "broken")
+	m = step(t, m, m.Init()())
+	assertNoSecretMaterial(t, m, "c2VjcmV0")
+	if _, cmd := m.Update(tea.KeyPressMsg{Text: "Y"}); cmd != nil {
+		t.Fatal("Y on an unparseable Secret must copy nothing")
 	}
 }

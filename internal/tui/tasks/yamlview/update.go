@@ -76,21 +76,31 @@ func (m *Model) applyLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 		m.feedback = msg.err.Error()
 		return m, nil
 	}
-	m.lines = strings.Split(msg.text, "\n")
+	text, copyText := msg.text, msg.text
+	if m.kind == kube.KindSecret {
+		// Mask before anything is stored: m.lines feeds the view, the fold
+		// index and '/' search, so it must never hold a Secret value
+		// (secret.go). An unparseable Secret fails closed.
+		m.isSecret = true
+		masked, err := maskSecretYAML(msg.text)
+		if err != nil {
+			masked = maskedSecret{text: secretUnparseableNotice, secretType: "Opaque"}
+		}
+		text, copyText = masked.text, masked.copyText
+		m.secretType = masked.secretType
+		m.secretData = masked.entries
+		if m.revealed == nil {
+			m.revealed = map[string]bool{}
+		}
+	}
+	m.lines = strings.Split(text, "\n")
+	m.copyText = copyText
 	m.resourceVersion = msg.resourceVersion
 	m.managedFieldsLines = splitManagedFieldsLines(msg.managedFieldsYAML)
 	if m.folded == nil {
 		m.folded = defaultFolds(m.lines)
 		if len(m.managedFieldsLines) > 0 {
 			m.folded["managedFields"] = true
-		}
-	}
-	if m.kind == kube.KindSecret {
-		m.isSecret = true
-		m.secretType = parseSecretType(m.lines)
-		m.secretData = parseSecretData(m.lines)
-		if m.revealed == nil {
-			m.revealed = map[string]bool{}
 		}
 	}
 	n := len(m.rendered())
@@ -144,7 +154,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.searchInput.Prompt = ""
 		m.searchInput.Focus()
 	case "Y":
-		return m, tea.SetClipboard(strings.Join(m.lines, "\n"))
+		// copyText, not m.lines: for a Secret, m.lines is the masked
+		// rendering, while §21a's full-YAML copy keeps values base64
+		// (with stringData folded into data and last-applied dropped, so
+		// it never carries plaintext — secret.go's maskedSecret.copyText).
+		if m.copyText == "" {
+			return m, nil
+		}
+		return m, tea.SetClipboard(m.copyText)
 	case "x":
 		if m.isSecret {
 			m.toggleRevealAtCursor()
@@ -182,7 +199,7 @@ func (m *Model) toggleRevealAtCursor() {
 }
 
 func (m *Model) hasUnrevealedSecretData() bool {
-	return slices.ContainsFunc(m.secretData, func(e secretDataLine) bool { return !m.revealed[e.key] })
+	return slices.ContainsFunc(m.secretData, func(e secretDataLine) bool { return !m.revealed[e.id] })
 }
 
 // updateRevealAllConfirmKey routes keys while the "X reveal all" inline y/N
@@ -194,7 +211,7 @@ func (m *Model) updateRevealAllConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.C
 			m.revealed = map[string]bool{}
 		}
 		for _, e := range m.secretData {
-			m.revealed[e.key] = true
+			m.revealed[e.id] = true
 		}
 	}
 	m.revealAllConfirm = false
@@ -221,7 +238,7 @@ func (m Model) copyDecodedSecretValue() tea.Cmd {
 		return nil
 	}
 	for _, e := range m.secretData {
-		if e.key == key && e.decodeOK {
+		if e.id == key && e.decodeOK {
 			return tea.SetClipboard(string(e.decoded))
 		}
 	}

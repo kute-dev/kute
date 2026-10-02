@@ -95,7 +95,7 @@ func (m Model) secretStripLine(theme tui.Theme, width int) string {
 
 	revealedCount := 0
 	for _, e := range m.secretData {
-		if m.revealed[e.key] {
+		if m.revealed[e.id] {
 			revealedCount++
 		}
 	}
@@ -206,7 +206,7 @@ func (m Model) renderRow(theme tui.Theme, rl renderLine, selected bool, gutterWi
 func secretKeyPrefixSplit(rl renderLine) (indent, value string, isKeyLine bool) {
 	trimmed := strings.TrimLeft(rl.Text, " ")
 	indent = rl.Text[:len(rl.Text)-len(trimmed)]
-	prefix := rl.SecretKey + ": "
+	prefix := rl.SecretLabel + ": "
 	if !strings.HasPrefix(trimmed, prefix) {
 		return indent, rl.Text, false
 	}
@@ -223,7 +223,7 @@ func renderSecretMaskedLine(theme tui.Theme, rl renderLine, bg color.Color) stri
 		return valStyle.Render(rl.Text)
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(theme.YamlKey).Background(bg)
-	return indent + keyStyle.Render(rl.SecretKey+":") + valStyle.Render(" "+value)
+	return indent + keyStyle.Render(rl.SecretLabel+":") + valStyle.Render(" "+value)
 }
 
 // renderSecretRevealedLine colors a revealed value in the real string color
@@ -246,10 +246,10 @@ func renderSecretRevealedLine(theme tui.Theme, rl renderLine, bg color.Color, av
 	}
 	keyStyle := lipgloss.NewStyle().Foreground(theme.YamlKey).Background(bg)
 	tag := revealedTag(theme)
-	prefixWidth := lipgloss.Width(indent + rl.SecretKey + ": ")
+	prefixWidth := lipgloss.Width(indent + rl.SecretLabel + ": ")
 	budget := avail - prefixWidth - lipgloss.Width(tag) - 1 // 1: space before the tag
 	value = components.Truncate(value, max(budget, 0))
-	return indent + keyStyle.Render(rl.SecretKey+":") + valStyle.Render(" "+value) + " " + tag
+	return indent + keyStyle.Render(rl.SecretLabel+":") + valStyle.Render(" "+value) + " " + tag
 }
 
 // revealedTag is 21a's "bordered revealed tag" — a filled pill (the

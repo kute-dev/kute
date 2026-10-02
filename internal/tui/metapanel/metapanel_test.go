@@ -874,3 +874,45 @@ func TestEnterRefusesAnnotationsThatCannotRoundTripTheSingleLineBuffer(t *testin
 		})
 	}
 }
+
+// TestSecretLastAppliedAnnotationIsMaskedAndUncopyable pins 09 H3 for 26a:
+// on a Secret, kubectl's last-applied-configuration is the whole manifest —
+// data and plaintext stringData — so its value must never reach the panel
+// or the clipboard.
+func TestSecretLastAppliedAnnotationIsMaskedAndUncopyable(t *testing.T) {
+	const plaintext = "hunter2-plaintext"
+	const b64 = "c3VwZXItc2VjcmV0LWI2NA=="
+	lastApplied := `{"apiVersion":"v1","data":{"token":"` + b64 + `"},"kind":"Secret","metadata":{"name":"nva-worker","namespace":"default"},"stringData":{"password":"` + plaintext + `"}}`
+	sec := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name: "nva-worker", Namespace: "default",
+		Annotations: map[string]string{corev1.LastAppliedConfigAnnotation: lastApplied},
+	}}
+	session := &tui.Session{
+		Registry: resources.DefaultRegistry(),
+		Location: tui.Location{Context: "microk8s-cluster", Namespace: "default", Kind: kube.KindSecret},
+		Theme:    tui.Dark(),
+	}
+	panel, ok := Open(Config{Session: session, Lister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{kube.KindSecret: {sec}}}}, kube.KindSecret, "default", "nva-worker")
+	if !ok {
+		t.Fatal("Open returned false")
+	}
+	ctrl := actions.New(&fakeMutator{})
+	panel.t.section = metaSectionAnnotations
+	panel.t.annotationIdx = 0
+
+	view := ansi.Strip(strings.Join(panel.PanelLines(160, &ctrl), "\n"))
+	for _, leak := range []string{plaintext, b64, `"stringData"`} {
+		if strings.Contains(view, leak) {
+			t.Fatalf("panel shows Secret material %q:\n%s", leak, view)
+		}
+	}
+	if !strings.Contains(view, "contains secret data") {
+		t.Fatalf("expected the masked placeholder:\n%s", view)
+	}
+	if _, cmd := panel.Update(tea.KeyPressMsg{Text: "y"}, &ctrl); cmd != nil {
+		t.Fatal("'y' on the masked last-applied row must not copy anything")
+	}
+	if _, cmd := panel.Update(tea.KeyPressMsg{Code: tea.KeyEnter}, &ctrl); cmd != nil || panel.t.editing {
+		t.Fatal("the masked row must not open for editing")
+	}
+}

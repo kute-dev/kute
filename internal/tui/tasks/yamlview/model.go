@@ -65,7 +65,12 @@ type Model struct {
 	name      string
 
 	resourceVersion string
-	lines           []string
+	// lines is the displayed source text — for a Secret, already masked
+	// (secret.go), so nothing reading it can surface a value.
+	lines []string
+	// copyText is what 'Y' copies: the loaded YAML for any other kind, the
+	// plaintext-free base64 form for a Secret.
+	copyText string
 	// managedFieldsLines is metadata.managedFields' own marshaled content
 	// (kube.ManagedFieldsYAML), spliced back in by applyManagedFields
 	// (managedfields.go) once the user unfolds it — nil for objects with no

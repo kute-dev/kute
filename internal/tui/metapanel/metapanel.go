@@ -120,6 +120,9 @@ type metaRow struct {
 	// recomputed against the in-progress (unapplied) buffer.
 	joinService  string
 	joinPodCount int
+	// secretMasked marks a row whose current is a mask placeholder, not the
+	// real value (maskSecretManifestRow) — 'y' copies nothing from it.
+	secretMasked bool
 }
 
 // changed reports whether r differs from its prefilled current value.
@@ -329,6 +332,9 @@ func (p *Model) buildTarget(kind kube.ResourceKind, namespace, name string) (*me
 		if controllerManagedAnnotationKey(a.key) {
 			a.readOnly, a.readOnlyNote = true, "controller-managed · read-only"
 		}
+		if kind == kube.KindSecret && a.key == corev1.LastAppliedConfigAnnotation {
+			maskSecretManifestRow(a)
+		}
 	}
 	return t, true
 }
@@ -455,6 +461,18 @@ func immutableSelectorKeys(obj runtime.Object) map[string]bool {
 	return out
 }
 
+// maskSecretManifestRow replaces a Secret's last-applied-configuration
+// value — the whole manifest, data and plaintext stringData included — with
+// a size-only placeholder before anything renders or copies it (§21a: a
+// Secret value is never on screen unless revealed, and 26a has no reveal).
+// The real value is dropped from the row entirely; the row is read-only, so
+// nothing ever needs it.
+func maskSecretManifestRow(r *metaRow) {
+	r.current = fmt.Sprintf("•••••••• · contains secret data · %d B", len(r.current))
+	r.setBuffer(r.current)
+	r.readOnly, r.readOnlyNote, r.secretMasked = true, "contains secret data · read-only", true
+}
+
 // controllerManagedAnnotationKey reports whether key is one of the
 // controller-written annotations §26a calls out as read-only:
 // deployment.kubernetes.io/revision and the kubectl.kubernetes.io/* family.
@@ -568,7 +586,7 @@ func (p *Model) Update(msg tea.KeyPressMsg, ctrl *actions.Controller) (closed bo
 		t.addValueInput.Prompt = ""
 		t.addOnValue = false
 	case "y":
-		if r := t.selectedRow(); r != nil {
+		if r := t.selectedRow(); r != nil && !r.secretMasked {
 			return false, tea.SetClipboard(r.key + "=" + r.current)
 		}
 	}

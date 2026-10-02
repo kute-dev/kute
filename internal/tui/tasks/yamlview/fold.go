@@ -71,8 +71,11 @@ type renderLine struct {
 	// docs/design README.md §21a) on a Secret's data: entries — non-empty
 	// SecretKey means this line (and, for a multi-line decoded value, the
 	// synthetic lines right after it) is a masked-or-revealed data value,
-	// not ordinary YAML, so view.go skips TokenizeLine for it.
+	// not ordinary YAML, so view.go skips TokenizeLine for it. SecretKey is
+	// the entry's reveal/copy id (secretDataLine.id); SecretLabel is the key
+	// as YAML rendered it, which is what the line displays.
 	SecretKey      string
+	SecretLabel    string
 	SecretRevealed bool
 }
 
