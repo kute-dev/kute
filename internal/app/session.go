@@ -30,11 +30,10 @@ func BuildSession(cfg Config) (sess *tui.Session, cluster *kube.Cluster, err err
 
 	userConfig := config.Load()
 	if cfg.NoUpdateCheck {
-		// Per-invocation override only — deliberately never written back via
-		// userConfig.save(), so the persisted config file (and every other
-		// kute session reading it) is untouched.
-		disabled := false
-		userConfig.Update.Check = &disabled
+		// Per-invocation override only — held outside the persisted fields,
+		// and SetProd only ever rewrites prodContexts, so the config file
+		// (and every other kute session reading it) is untouched.
+		userConfig.DisableUpdateCheck()
 	}
 	sessionState := state.Load()
 	theme := selectTheme(cfg.Theme, userConfig.Theme)
