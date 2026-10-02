@@ -89,7 +89,7 @@ func TestConfigMapMutationBreadthAndConsumerRestart(t *testing.T) {
 	a.selectRow(t, "mode")
 	a.Enter()
 	replaceTypedValue(a, "before", "after-restart")
-	a.Press("R")
+	a.Press("ctrl+r")
 	a.WaitFor("updated mode · restarted 1 consumer", Settle)
 	var finalRV, restartedAt string
 	waitForAPI(t, "configmap apply plus restart", func(ctx context.Context) (bool, error) {

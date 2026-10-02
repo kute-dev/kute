@@ -374,7 +374,7 @@ func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
 	for _, r := range "debug" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}
-	m = step(t, m, tea.KeyPressMsg{Text: "R"})
+	m = step(t, m, tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
 
 	if cm.Data["LOG_LEVEL"] != "debug" {
 		t.Fatalf("expected the edit applied, cm.Data = %+v", cm.Data)
@@ -391,6 +391,84 @@ func TestCtrlRChainsRolloutRestartOfEveryConsumer(t *testing.T) {
 	if !strings.Contains(m.message, "restarted 2 consumers") {
 		t.Fatalf("message = %q, want it to mention restarting 2 consumers", m.message)
 	}
+}
+
+// TestCapitalRInEveryBufferIsText is the regression for apply+restart being
+// bound to a bare 'R': every capital R typed into a value ("Release",
+// "REDIS_URL") committed the buffer and rollout-restarted every consumer.
+// While a buffer has focus every printable key must be text — in the edit
+// row, the add row's key and value buffers, and the multi-line editor.
+func TestCapitalRInEveryBufferIsText(t *testing.T) {
+	typeText := func(m Model, s string) Model {
+		for _, r := range s {
+			m = step(t, m, tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return m
+	}
+	setup := func() (*corev1.ConfigMap, *fakeMutator, Model) {
+		cm := cmObj("nva-stage", "nva-config", map[string]string{"MODE": "x", "nginx.conf": "a\nb"})
+		mut := &fakeMutator{cm: cm}
+		extra := map[kube.ResourceKind][]runtime.Object{
+			kube.KindDeployment: {deploymentEnvFrom("nva-stage", "web", "nva-config")},
+		}
+		return cm, mut, newModel(t, newSession(), cm, mut, extra)
+	}
+	assertNothingApplied := func(t *testing.T, cm *corev1.ConfigMap, mut *fakeMutator, m Model) {
+		t.Helper()
+		if len(mut.rolloutRestarts) != 0 {
+			t.Fatalf("typing text restarted consumers: %v", mut.rolloutRestarts)
+		}
+		if m.actions.Active() || m.pendingCommit != nil {
+			t.Fatal("typing text began a commit")
+		}
+		if cm.Data["MODE"] != "x" || cm.Data["nginx.conf"] != "a\nb" || len(cm.Data) != 2 {
+			t.Fatalf("typing text patched the ConfigMap: %+v", cm.Data)
+		}
+	}
+
+	t.Run("edit row", func(t *testing.T) {
+		cm, mut, m := setup()
+		m.selected = m.rowIndex(t, "MODE")
+		m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+		m = typeText(m, "Release")
+		if m.editing == nil || m.editing.valueInput.Value() != "xRelease" {
+			t.Fatalf("expected the edit row still open holding %q, got %+v", "xRelease", m.editing)
+		}
+		assertNothingApplied(t, cm, mut, m)
+	})
+	t.Run("add row", func(t *testing.T) {
+		cm, mut, m := setup()
+		m = step(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+		m = typeText(m, "REDIS_URL")
+		m = step(t, m, tea.KeyPressMsg{Code: tea.KeyTab})
+		m = typeText(m, "Release")
+		if m.adding == nil || m.adding.keyInput.Value() != "REDIS_URL" || m.adding.valueInput.Value() != "Release" {
+			t.Fatalf("expected the add row still open holding REDIS_URL=Release, got %+v", m.adding)
+		}
+		assertNothingApplied(t, cm, mut, m)
+	})
+	t.Run("buffer editor", func(t *testing.T) {
+		cm, mut, m := setup()
+		m.selected = m.rowIndex(t, "nginx.conf")
+		m = step(t, m, tea.KeyPressMsg{Code: 'e', Text: "e"})
+		m = typeText(m, "Release")
+		if m.multiline == nil || m.multiline.value() != "a\nbRelease" {
+			t.Fatalf("expected the buffer editor still open holding %q, got %+v", "a\nbRelease", m.multiline)
+		}
+		assertNothingApplied(t, cm, mut, m)
+	})
+}
+
+// rowIndex is the grid index of key, failing the test if it isn't listed.
+func (m Model) rowIndex(t *testing.T, key string) int {
+	t.Helper()
+	for i, row := range m.keys {
+		if row.key == key {
+			return i
+		}
+	}
+	t.Fatalf("key %q not in %+v", key, m.keys)
+	return 0
 }
 
 func TestRemoveKeyAlwaysRequiresConfirmRegardlessOfProd(t *testing.T) {

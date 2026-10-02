@@ -33,4 +33,4 @@ nginx.conf  alt+a apply · ctrl-r apply + restart consumers · esc discard
                                                                                                                         
                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   BUFFER EDITOR  alt+a apply  R apply + restart consumers  esc discard                                                 
+   BUFFER EDITOR  alt+a apply  ctrl+r apply + restart consumers  esc discard                                            

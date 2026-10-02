@@ -110,7 +110,7 @@ func TestRootModelCOpensContextPaletteWithProdTagAndCurrent(t *testing.T) {
 	}
 }
 
-// TestRootModelContextPTogglesProdAndPersists drives P end to end
+// TestRootModelContextCtrlPTogglesProdAndPersists drives ctrl+p end to end
 // (docs/design README.md §7a): toggling a non-prod context on shows PROD in
 // the view and persists it via config.SetProd (so a reload of the same
 // config.Path() sees it), and a second ctrl+p removes it again. The palette
@@ -130,7 +130,7 @@ func TestRootModelContextCtrlPTogglesProdAndPersists(t *testing.T) {
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "c"})
 	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyDown}) // land on prod-eks
-	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "P"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	m := updated.(tui.Model)
 
 	if !m.PaletteOpen() {
@@ -143,13 +143,46 @@ func TestRootModelContextCtrlPTogglesProdAndPersists(t *testing.T) {
 		t.Fatalf("expected prod-eks persisted via config.SetProd, got %+v", reloaded)
 	}
 
-	updated, _ = m.Update(tea.KeyPressMsg{Text: "P"})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 	if view := m.View().Content; strings.Contains(view, "PROD") {
 		t.Fatalf("expected PROD tag gone after a second ctrl+p:\n%s", view)
 	}
 	if config.Load().IsProd("prod-eks") {
 		t.Fatalf("expected prod-eks unmarked in config.Path() after a second ctrl+p")
+	}
+}
+
+// TestRootModelContextCapitalPIsQueryText is the regression for mark-prod
+// being a bare 'P': typing a context name that starts with a capital P
+// rewrote config.yaml's prodContexts for whichever row was selected instead
+// of narrowing the fuzzy query.
+func TestRootModelContextCapitalPIsQueryText(t *testing.T) {
+	writeContextTestKubeconfig(t)
+	testenv.SetHome(t, t.TempDir())
+
+	sess := &tui.Session{
+		Theme:    tui.Dark(),
+		Location: tui.Location{Context: "dev"},
+		State:    state.State{PerContext: map[string]state.PerContext{}},
+	}
+	model := tui.NewWithSession(&screenTask{name: "browse"}, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "c"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: tea.KeyDown}) // land on prod-eks
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'p', ShiftedCode: 'P', Mod: tea.ModShift, Text: "P"})
+	m := updated.(tui.Model)
+
+	if !m.PaletteOpen() {
+		t.Fatalf("typing P must not close the palette")
+	}
+	if len(config.Load().ProdContexts) != 0 {
+		t.Fatalf("typing P marked a context PROD: %+v", config.Load().ProdContexts)
+	}
+	// The query narrowed to prod-eks (stage-eks has no 'p'), proving the
+	// key reached the fuzzy input rather than a verb.
+	if view := m.View().Content; strings.Contains(view, "PROD") || strings.Contains(view, "stage-eks") {
+		t.Fatalf("expected P typed into the query and no PROD tag:\n%s", view)
 	}
 }
 

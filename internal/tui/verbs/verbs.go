@@ -369,15 +369,17 @@ var (
 	// schedule/timezone pair is exactly as reversible as the apply it
 	// undoes.
 	CronJobScheduleUndo = Verb{ID: "cronjob-schedule-undo", Key: "u", Label: "undo", Mutating: true}
-	// CronJobScheduleFullEdit is 36d's 'Y' escape hatch to the full
+	// CronJobScheduleFullEdit is 36d's 'ctrl-y' escape hatch to the full
 	// kubectl-edit subprocess (17a's existing tty-handoff machinery) for
 	// anything the schedule editor doesn't cover — concurrency, deadlines,
 	// history limits. Same tty-handoff shape as Edit/Exec/NodeShell: Mutating
 	// because it applies whatever the user saves, no Tier because kubectl
-	// owns the session once kute suspends. A dedicated key rather than
-	// reusing the global Edit verb's 'E' — 'E' would just be ordinary typed
-	// input while a schedule/timezone buffer is focused.
-	CronJobScheduleFullEdit = Verb{ID: "cronjob-schedule-full-edit", Key: "Y", Label: "full yaml edit", Mutating: true}
+	// owns the session once kute suspends. A chord rather than any bare
+	// letter (the global Edit verb's 'E', or the 'Y' 72af16b tried): a
+	// schedule or timezone buffer always has focus on this screen, and a
+	// bare 'Y' swallowed the first letter of "Asia/Yerevan" or
+	// "America/Yellowknife" and suspended into kubectl edit instead.
+	CronJobScheduleFullEdit = Verb{ID: "cronjob-schedule-full-edit", Key: "ctrl+y", Label: "full yaml edit", Mutating: true}
 	// FluxSource is §30a's 'o': jump to the object this one reconciles
 	// from. Read-only navigation, so no tier and not mutating.
 	FluxSource = Verb{
@@ -536,13 +538,18 @@ var (
 		ID: "remove-configmap-key", Key: "D", Label: "remove key",
 		Tier: actions.TierInline, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
-	// RestartConfigMapConsumers is 27a's R — chains a value apply with
+	// RestartConfigMapConsumers is 27a's ctrl-r — chains a value apply with
 	// `kubectl rollout restart` for every workload that consumes the
 	// ConfigMap. TierNone here is nominal like AddConfigMapKey/SetImage/etc:
 	// the real tier is TierForConfigMapData, the same PROD gate the plain
-	// apply uses (it's the same patch, plus extra restarts).
+	// apply uses (it's the same patch, plus extra restarts). It is only ever
+	// pressed while a value buffer has focus, so it must be a chord: as a
+	// bare 'R' (72af16b) every capital R typed into a value ("Release",
+	// "REDIS_URL") applied and restarted every consumer. A control chord
+	// never carries Text, so it can't collide with typed input, and neither
+	// textfield nor textarea binds ctrl+r.
 	RestartConfigMapConsumers = Verb{
-		ID: "restart-configmap-consumers", Key: "R", Label: "apply + restart consumers",
+		ID: "restart-configmap-consumers", Key: "ctrl+r", Label: "apply + restart consumers",
 		Tier: actions.TierNone, Kinds: []kube.ResourceKind{kube.KindConfigMap}, Mutating: true,
 	}
 )

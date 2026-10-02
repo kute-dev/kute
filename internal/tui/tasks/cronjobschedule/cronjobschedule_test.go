@@ -368,6 +368,23 @@ func TestPasteIntoTimeZoneWhenFocused(t *testing.T) {
 	}
 }
 
+// TestCapitalYInTimeZoneIsText is the regression for the full-YAML-edit
+// escape being a bare 'Y': it was matched before the focused buffer, so
+// "Asia/Yerevan" lost its Y and suspended into kubectl edit instead.
+func TestCapitalYInTimeZoneIsText(t *testing.T) {
+	t.Parallel()
+	c := newFakeCronJob("default", "nightly", "0 2 * * *", "")
+	c.SetTimeZoneCapability(kube.TimeZoneCapabilitySupported)
+	m := newModel(t, c, "default", "nightly")
+	m.capabilities = c
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyTab, Text: "tab"})
+	m = typeText(t, m, "Asia/Yerevan")
+	if m.tzInput.Value() != "Asia/Yerevan" {
+		t.Fatalf("tzInput = %q, want Asia/Yerevan typed literally", m.tzInput.Value())
+	}
+}
+
 func TestTimeZoneCapabilityGatesTabFocus(t *testing.T) {
 	t.Parallel()
 	c := newFakeCronJob("default", "nightly", "0 2 * * *", "")

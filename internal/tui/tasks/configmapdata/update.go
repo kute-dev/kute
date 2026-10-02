@@ -249,7 +249,8 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // updateAddKey routes keys while 'a'/insert's line-insert add row is
 // showing — every printable character inserts literally into whichever
 // buffer has focus (tab/shift+tab switches). ctrl+r commits and restarts
-// every consumer, the same alternate depth an edit's ctrl+r gives.
+// every consumer, the same alternate depth an edit's ctrl+r gives — a chord
+// (verbs.RestartConfigMapConsumers), so no printable key ever commits.
 func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	a := m.adding
 	switch msg.String() {
@@ -266,12 +267,7 @@ func (m *Model) updateAddKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m, m.commitAdd(false)
 	case verbs.RestartConfigMapConsumers.Key:
-		if a.onValue {
-			return m, m.commitAdd(true)
-		}
-		var cmd tea.Cmd
-		a.keyInput, cmd = a.keyInput.Update(msg)
-		return m, cmd
+		return m, m.commitAdd(true)
 	default:
 		var cmd tea.Cmd
 		input := a.focusedInput()

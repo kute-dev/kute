@@ -369,7 +369,7 @@ func TestCronJobScheduleModeVerbsRegistered(t *testing.T) {
 		{CronJobCopyCommand, "y", "copy"},
 		{CronJobFocusTimezone, "tab", "timezone"},
 		{CronJobScheduleUndo, "u", "undo"},
-		{CronJobScheduleFullEdit, "Y", "full yaml edit"},
+		{CronJobScheduleFullEdit, "ctrl+y", "full yaml edit"},
 	}
 	for _, tt := range tests {
 		if tt.verb.Key != tt.key || tt.verb.Label != tt.label {
