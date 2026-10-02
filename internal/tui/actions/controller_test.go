@@ -637,8 +637,10 @@ func TestEscalateSwitchesToForceDelete(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	c.Begin(TierModal, deleteAction())
-	c.Escalate()
-	for _, r := range "api" {
+	typeRune(&c, 'a')
+	c.Escalate("force-delete", TierModal)
+	// Escalating inside an already-open modal keeps the typed progress.
+	for _, r := range "pi" {
 		typeRune(&c, r)
 	}
 	cmd := c.Confirm()
@@ -654,135 +656,52 @@ func TestEscalateSwitchesToForceDelete(t *testing.T) {
 	}
 }
 
-func TestEscalateNoOpsForNonPodDelete(t *testing.T) {
-	c := New(&fakeMutator{})
-	c.Begin(TierModal, tui.TaskAction{
-		ID: "delete-deploy", Label: "delete deployment api",
-		Scope: tui.TaskScope{ResourceKind: "Deployment", ResourceName: "api", Namespace: "prod", Verb: "delete", IsMutating: true},
-	})
-	c.Escalate()
-	if c.Pending().Scope.Verb != "delete" {
-		t.Fatalf("expected Escalate to no-op for a non-Pod delete, got verb %q", c.Pending().Scope.Verb)
-	}
-}
-
-func TestEscalateNoOpsForDrain(t *testing.T) {
-	c := New(&fakeMutator{})
-	c.Begin(TierModal, tui.TaskAction{
-		ID: "drain-node", Label: "drain node-a",
-		Scope: tui.TaskScope{ResourceKind: string(kube.KindNode), ResourceName: "node-a", Verb: "drain", IsMutating: true},
-	})
-	c.Escalate()
-	if c.Pending().Scope.Verb != "drain" {
-		t.Fatalf("expected Escalate to no-op for a drain, got verb %q", c.Pending().Scope.Verb)
-	}
-}
-
-// TestArmForceDeleteStagesWithoutExecuting covers the non-prod inline
-// counterpart to Escalate: ctrl-k on a TierInline Pod delete must not run
-// anything by itself — DeleteResourceForced only fires once "y" (Confirm)
-// follows, same as a plain delete needs "y" after ctrl-d.
-func TestArmForceDeleteStagesWithoutExecuting(t *testing.T) {
+// TestEscalateFromInlineRaisesToTypedModal is the controller half of the
+// "force delete is always modal" rule: escalating an inline y/N must land on
+// TierModal, where "y"-style Confirm without the typed name runs nothing.
+func TestEscalateFromInlineRaisesToTypedModal(t *testing.T) {
 	mut := &fakeMutator{}
 	c := New(mut)
 	c.Begin(TierInline, deleteAction())
-	c.ArmForceDelete()
-	if !c.ForceArmed() {
-		t.Fatal("expected ForceArmed() = true after ArmForceDelete")
+	c.Escalate("force-delete", TierModal)
+	if c.Tier() != TierModal {
+		t.Fatalf("Tier() = %v, want TierModal after escalating an inline confirm", c.Tier())
 	}
-	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
-		t.Fatalf("expected ArmForceDelete alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	if c.Pending().Scope.Verb != "force-delete" {
+		t.Fatalf("verb = %q, want force-delete", c.Pending().Scope.Verb)
 	}
-	// The pending verb itself stays "delete" until Confirm actually runs —
-	// only the staged flag flips, so a stray read of Pending() mid-arm
-	// doesn't see a verb that hasn't executed yet.
-	if c.Pending().Scope.Verb != "delete" {
-		t.Fatalf("expected the pending verb to stay \"delete\" while armed, got %q", c.Pending().Scope.Verb)
+	if cmd := c.Confirm(); cmd != nil {
+		t.Fatal("expected Confirm without the typed name to run nothing")
 	}
-
+	for _, r := range "api" {
+		typeRune(&c, r)
+	}
 	cmd := c.Confirm()
 	if cmd == nil {
-		t.Fatal("expected Confirm to return a command once armed")
+		t.Fatal("expected Confirm to execute once the name matches")
 	}
 	cmd()
-	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "Pod/prod/api" {
-		t.Fatalf("forceDeleted = %v, want [Pod/prod/api]", mut.forceDeleted)
-	}
-	if len(mut.deleted) != 0 {
-		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
+	if len(mut.forceDeleted) != 1 || len(mut.deleted) != 0 {
+		t.Fatalf("forceDeleted=%v deleted=%v, want one force delete only", mut.forceDeleted, mut.deleted)
 	}
 }
 
-// TestDisarmForceDeleteBacksOutWithoutCancelling covers "n" while armed:
-// it must return to the plain delete prompt (still Active/TierInline, still
-// the same pending target), not cancel the confirm outright.
-func TestDisarmForceDeleteBacksOutWithoutCancelling(t *testing.T) {
-	mut := &fakeMutator{}
-	c := New(mut)
-	c.Begin(TierInline, deleteAction())
-	c.ArmForceDelete()
-	c.DisarmForceDelete()
-	if c.ForceArmed() {
-		t.Fatal("expected ForceArmed() = false after DisarmForceDelete")
-	}
-	if !c.Active() || c.Pending() == nil {
-		t.Fatal("expected DisarmForceDelete to leave the confirm active, not cancel it")
-	}
-
-	cmd := c.Confirm()
-	if cmd == nil {
-		t.Fatal("expected Confirm to still work after disarming")
-	}
-	cmd()
-	if len(mut.deleted) != 1 || mut.deleted[0] != "Pod/prod/api" {
-		t.Fatalf("deleted = %v, want [Pod/prod/api] (the plain delete, not force)", mut.deleted)
-	}
-	if len(mut.forceDeleted) != 0 {
-		t.Fatalf("expected no force-delete after disarming, got %v", mut.forceDeleted)
-	}
-}
-
-// TestCancelClearsForceArmed covers esc while armed: the whole confirm ends,
-// forceArmed doesn't leak into the next Begin.
-func TestCancelClearsForceArmed(t *testing.T) {
-	c := New(&fakeMutator{})
-	c.Begin(TierInline, deleteAction())
-	c.ArmForceDelete()
-	c.Cancel()
-	if c.ForceArmed() {
-		t.Fatal("expected Cancel to clear ForceArmed")
-	}
-	if c.Active() {
-		t.Fatal("expected Cancel to end the confirm entirely, even while armed")
-	}
-}
-
-// TestArmForceDeleteNoOpsAtTierModal: the PROD path keeps using Escalate,
-// not this — ArmForceDelete must stay inert there so the two mechanisms
-// never fight over the same pending action.
-func TestArmForceDeleteNoOpsAtTierModal(t *testing.T) {
+func TestEscalateNeverLowersTier(t *testing.T) {
 	c := New(&fakeMutator{})
 	c.Begin(TierModal, deleteAction())
-	c.ArmForceDelete()
-	if c.ForceArmed() {
-		t.Fatal("expected ArmForceDelete to no-op at TierModal")
-	}
-	if c.Pending().Scope.Verb != "delete" {
-		t.Fatalf("expected the pending verb untouched, got %q", c.Pending().Scope.Verb)
+	c.Escalate("force-delete", TierInline)
+	if c.Tier() != TierModal {
+		t.Fatalf("Tier() = %v, want TierModal kept", c.Tier())
 	}
 }
 
-// TestArmForceDeleteNoOpsForNonPodDelete mirrors Escalate's own kind gate —
-// force-delete is Pod-only (verbs.ForceDelete.Kinds).
-func TestArmForceDeleteNoOpsForNonPodDelete(t *testing.T) {
+func TestEscalateNoOpsWhenNotConfirming(t *testing.T) {
 	c := New(&fakeMutator{})
-	c.Begin(TierInline, tui.TaskAction{
-		ID: "delete-deploy", Label: "delete deployment api",
-		Scope: tui.TaskScope{ResourceKind: "Deployment", ResourceName: "api", Namespace: "prod", Verb: "delete", IsMutating: true},
-	})
-	c.ArmForceDelete()
-	if c.ForceArmed() {
-		t.Fatal("expected ArmForceDelete to no-op for a non-Pod delete")
+	c.Begin(TierModal, deleteAction())
+	c.Cancel()
+	c.Escalate("force-delete", TierModal)
+	if c.Active() || c.Pending() != nil {
+		t.Fatal("expected Escalate to no-op once the confirm is gone")
 	}
 }
 

@@ -211,6 +211,42 @@ func TestBulkDeleteProdOpensTypeCountModal(t *testing.T) {
 	}
 }
 
+// TestBulkNamespaceDeleteNonProdOpensTypeCountModal is the H3 regression for
+// the marked set: `*` `D` `y` on the Namespaces list used to delete every
+// listed namespace outside PROD. A cascade-scope kind's bulk delete is the
+// type-the-count modal regardless of context.
+func TestBulkNamespaceDeleteNonProdOpensTypeCountModal(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNamespace: {namespace("team-a"), namespace("team-b")},
+	}}
+	mut := &fakeMutator{}
+	sess := newSession()
+	sess.Location.Kind = kube.KindNamespace
+	m := New(Config{Session: sess, Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "*"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
+	if m.pendingBulkDelete == nil || m.pendingBulkDelete.tier != actions.TierModal {
+		t.Fatalf("expected the type-the-count modal, got %+v", m.pendingBulkDelete)
+	}
+	view := plain(m.Render())
+	if strings.Contains(view, "PROD CONTEXT") || !strings.Contains(view, "team-a") {
+		t.Fatalf("expected a non-prod modal listing the namespaces:\n%s", view)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.deleted) != 0 {
+		t.Fatalf("expected y/enter to run nothing before the count is typed, got %v", mut.deleted)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.deleted) != 2 {
+		t.Fatalf("deleted = %v, want both namespaces after typing the count", mut.deleted)
+	}
+}
+
 // TestMarksClearOnNamespaceSwitch covers "marks are per-view and drop on
 // kind/namespace switch."
 func TestMarksClearOnNamespaceSwitch(t *testing.T) {

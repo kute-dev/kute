@@ -654,12 +654,10 @@ func TestDeleteConfirmExecuteAndCancel(t *testing.T) {
 	_ = confirmed
 }
 
-// TestCtrlKArmsForceDeleteInsideInlineConfirm covers the non-prod path from
-// poddetail: ctrl-k stages force-delete inside the same inline y/N confirm
-// (not the PROD modal) — a bare ctrl-k runs nothing, "n" backs out to the
-// plain prompt instead of cancelling, and a second "y" after re-arming
-// executes DeleteResourceForced.
-func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
+// TestNonProdForceDeleteReachesTypeNameModal is poddetail's H2
+// regression: outside PROD the force chord must open the type-the-name
+// modal (force delete is always modal), never stage an inline "y".
+func TestNonProdForceDeleteReachesTypeNameModal(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {runningPod("api-0", "default", "node-a")},
 	}}
@@ -669,36 +667,22 @@ func TestCtrlKArmsForceDeleteInsideInlineConfirm(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Text: "D"})
-	m = step(t, m, tea.KeyPressMsg{Text: "C"})
-	if m.actions.Tier() != actions.TierInline {
-		t.Fatalf("expected force-delete to stay staged at TierInline, got %v", m.actions.Tier())
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	if m.actions.Tier() != actions.TierModal || m.actions.Pending().Scope.Verb != "force-delete" {
+		t.Fatalf("expected the type-the-name force-delete modal, tier=%v", m.actions.Tier())
 	}
-	if !m.actions.ForceArmed() {
-		t.Fatal("expected C to arm force-delete")
-	}
-	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
-		t.Fatalf("expected C alone to run nothing, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
-	}
-	kb := m.Keybar()
-	if kb.PillText != "FORCE DELETE" {
-		t.Fatalf("expected the FORCE DELETE pill once armed, got %q", kb.PillText)
-	}
-	if !strings.Contains(kb.RightNote, "--grace-period=0 --force") {
-		t.Fatalf("expected the synced force-delete will-run line, got %q", kb.RightNote)
-	}
-
-	m = step(t, m, tea.KeyPressMsg{Text: "n"})
-	if !m.actions.Active() || m.actions.ForceArmed() {
-		t.Fatalf("expected n to disarm back to the plain prompt, not cancel: active=%v armed=%v", m.actions.Active(), m.actions.ForceArmed())
-	}
-
-	m = step(t, m, tea.KeyPressMsg{Text: "C"})
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
-	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "api-0" {
-		t.Fatalf("forceDeleted = %v, want [api-0]", mut.forceDeleted)
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.deleted) != 0 || len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected nothing to run before the name is typed, deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
 	}
-	if len(mut.deleted) != 0 {
-		t.Fatalf("expected the plain delete path untouched, got %v", mut.deleted)
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	for _, r := range "api-0" {
+		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.forceDeleted) != 1 || mut.forceDeleted[0] != "api-0" || len(mut.deleted) != 0 {
+		t.Fatalf("deleted=%v forceDeleted=%v, want one force delete of api-0", mut.deleted, mut.forceDeleted)
 	}
 }
 
@@ -738,9 +722,13 @@ func TestDeleteInProdRequiresTypedName(t *testing.T) {
 		t.Fatal("expected esc to cancel the modal")
 	}
 
-	// Re-open and this time escalate to force-delete via ctrl-k.
+	// Re-open and this time escalate to force-delete via the chord the
+	// modal itself advertises.
 	m = step(t, m, tea.KeyPressMsg{Text: "D"})
-	m = step(t, m, tea.KeyPressMsg{Text: "C"})
+	if view := plain(m.Render()); !strings.Contains(view, verbs.ForceDeleteModalHint()) {
+		t.Fatalf("expected the modal to advertise %q:\n%s", verbs.ForceDeleteModalHint(), view)
+	}
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
 	for _, r := range "api-0" {
 		m = step(t, m, tea.KeyPressMsg{Text: string(r)})
 	}

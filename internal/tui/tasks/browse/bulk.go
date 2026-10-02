@@ -132,19 +132,18 @@ func (m Model) markedRows() []resources.Row {
 }
 
 // beginBulkDelete opens 20a's confirm for the marked set — inline y/N in
-// non-prod, the type-the-count modal in PROD (verbs.TierFor, the same
-// escalation rule single-row delete uses). A CustomResourceDefinition
-// deletes every instance of that kind too, so — like beginDelete — it always
-// gets the modal, even outside PROD.
+// non-prod, the type-the-count modal in PROD, resolved by the same
+// verbs.TierForDelete single-row delete uses. A marked set of Namespaces or
+// CustomResourceDefinitions therefore always gets the type-the-count modal,
+// even outside PROD: a set has no one name to type, and the count is the
+// fact a `*`-marked wipe is most likely to get wrong (§20a's PROD grammar,
+// reused rather than inventing a third confirm surface).
 func (m *Model) beginBulkDelete() tea.Cmd {
 	rows := m.markedRows()
 	if len(rows) == 0 || m.mutator == nil {
 		return nil
 	}
-	tier := verbs.TierFor(verbs.Delete, m.isProd())
-	if m.kind == kube.KindCustomResourceDefinition {
-		tier = actions.TierModal
-	}
+	tier := verbs.TierForDelete(verbs.Delete, m.kind, m.isProd())
 	input := textfield.New()
 	input.Prompt = ""
 	if tier == actions.TierModal {

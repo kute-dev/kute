@@ -13,6 +13,7 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
 	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func (m Model) View() tea.View { return tea.NewView(m.Render()) }
@@ -776,7 +777,7 @@ func (m Model) deleteConfirmModal(width, height int) string {
 		if pending.Scope.Verb == "force-delete" {
 			detail = "grace period 0 — force delete, immediate"
 		} else {
-			detail = "default grace period applies · C force delete (immediate)"
+			detail = "default grace period applies · " + verbs.ForceDeleteModalHint()
 		}
 	}
 

@@ -1,6 +1,7 @@
 package verbs
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kute-dev/kute/internal/kube"
@@ -402,5 +403,91 @@ func TestLogsAppliesToCronJob(t *testing.T) {
 	}
 	if Logs.AppliesTo(kube.KindNode) {
 		t.Error("Logs should not apply to Node rows")
+	}
+}
+
+// TestTierForDelete pins the delete family's whole confirm policy in one
+// table: force delete is always modal, and a Namespace or CRD delete —
+// which removes far more than the row — is always modal too, PROD or not.
+func TestTierForDelete(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		verb   Verb
+		kind   kube.ResourceKind
+		isProd bool
+		want   actions.Tier
+	}{
+		{Delete, kube.KindPod, false, actions.TierInline},
+		{Delete, kube.KindPod, true, actions.TierModal},
+		{Delete, kube.KindDeployment, false, actions.TierInline},
+		{Delete, kube.KindNamespace, false, actions.TierModal},
+		{Delete, kube.KindNamespace, true, actions.TierModal},
+		{Delete, kube.KindCustomResourceDefinition, false, actions.TierModal},
+		{Delete, kube.KindCustomResourceDefinition, true, actions.TierModal},
+		{ForceDelete, kube.KindPod, false, actions.TierModal},
+		{ForceDelete, kube.KindPod, true, actions.TierModal},
+	}
+	for _, tt := range tests {
+		if got := TierForDelete(tt.verb, tt.kind, tt.isProd); got != tt.want {
+			t.Errorf("TierForDelete(%s, %s, prod=%v) = %v, want %v", tt.verb.ID, tt.kind, tt.isProd, got, tt.want)
+		}
+	}
+}
+
+func podDeleteAction(kind kube.ResourceKind) tui.TaskAction {
+	return tui.TaskAction{
+		ID: "delete", Label: "Delete api?",
+		Scope: tui.TaskScope{ResourceKind: string(kind), ResourceName: "api", Namespace: "dev", Verb: Delete.ID, IsMutating: true},
+	}
+}
+
+type nopMutator struct{ kube.Mutator }
+
+// TestEscalateForceDeleteIsModalOutsideProd: escalating a non-prod inline
+// Pod delete must reach the type-the-name modal, never stay an inline y/N.
+func TestEscalateForceDeleteIsModalOutsideProd(t *testing.T) {
+	t.Parallel()
+
+	c := actions.New(nopMutator{})
+	c.Begin(TierForDelete(Delete, kube.KindPod, false), podDeleteAction(kube.KindPod))
+	if !EscalateForceDelete(&c, false) {
+		t.Fatal("expected EscalateForceDelete to claim a pending Pod delete")
+	}
+	if c.Tier() != actions.TierModal || c.Pending().Scope.Verb != ForceDelete.ID {
+		t.Fatalf("tier=%v verb=%q, want TierModal force-delete", c.Tier(), c.Pending().Scope.Verb)
+	}
+	if !actions.RequiresTypedName(c.Pending().Scope.Verb) {
+		t.Fatal("force-delete's modal must be type-the-name")
+	}
+}
+
+func TestEscalateForceDeleteIgnoresOtherKindsAndVerbs(t *testing.T) {
+	t.Parallel()
+
+	c := actions.New(nopMutator{})
+	c.Begin(actions.TierInline, podDeleteAction(kube.KindDeployment))
+	if EscalateForceDelete(&c, false) || c.Pending().Scope.Verb != Delete.ID || c.Tier() != actions.TierInline {
+		t.Fatalf("expected a Deployment delete to stay an inline delete, got tier=%v verb=%q", c.Tier(), c.Pending().Scope.Verb)
+	}
+
+	drain := podDeleteAction(kube.KindNode)
+	drain.Scope.Verb = Drain.ID
+	c.Begin(actions.TierModal, drain)
+	if EscalateForceDelete(&c, false) || c.Pending().Scope.Verb != Drain.ID {
+		t.Fatalf("expected a drain to be left alone, got %q", c.Pending().Scope.Verb)
+	}
+}
+
+// TestForceDeleteKeyIsAChord: the force chord is matched inside the
+// type-the-name modal's text buffer, so it must not be a bare printable key.
+func TestForceDeleteKeyIsAChord(t *testing.T) {
+	t.Parallel()
+
+	if !strings.HasPrefix(ForceDelete.Key, "ctrl+") {
+		t.Fatalf("ForceDelete.Key = %q, want a ctrl chord", ForceDelete.Key)
+	}
+	if !strings.Contains(ForceDeleteModalHint(), ForceDelete.Key) {
+		t.Fatalf("ForceDeleteModalHint() = %q, does not name %q", ForceDeleteModalHint(), ForceDelete.Key)
 	}
 }

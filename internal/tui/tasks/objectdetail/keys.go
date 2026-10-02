@@ -15,27 +15,11 @@ import (
 func (m Model) Keybar() tui.Keybar {
 	if m.actions.Active() {
 		if m.actions.Tier() == actions.TierInline {
-			if m.actions.ForceArmed() {
-				// force-delete staged inside this same inline confirm
-				// (ctrl-k, actions.Controller.ArmForceDelete) rather than the
-				// PROD type-the-name modal — browse's own delete confirm
-				// mirrors this exact treatment.
-				note := ""
-				if pending := m.actions.Pending(); pending != nil {
-					note = kube.ForceDeleteCommandString(kube.ResourceKind(pending.Scope.ResourceKind), pending.Scope.Namespace, pending.Scope.ResourceName)
-				}
-				return tui.Keybar{
-					Pill:      tui.ModeConfirm,
-					PillText:  "FORCE DELETE",
-					Groups:    [][]tui.KeyHint{{{Key: "y", Label: "force delete"}, {Key: "n", Label: "back"}}},
-					RightNote: note,
-				}
-			}
 			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
 			note := m.actions.Prompt()
 			if pending := m.actions.Pending(); pending != nil {
 				switch {
-				case pending.Scope.Verb == "delete" && pending.Scope.ResourceKind == string(kube.KindPod):
+				case pending.Scope.Verb == verbs.Delete.ID && verbs.ForceDelete.AppliesTo(kube.ResourceKind(pending.Scope.ResourceKind)):
 					// force-delete is only ever offered for Pods (verbs.ForceDelete's Kinds).
 					hints = append(hints, verbs.ForceDelete.Hint())
 				case pending.Scope.Verb == "set-meta":

@@ -291,13 +291,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // updateConfirmKey routes keys while a confirmation is showing: TierModal
 // (the type-the-name PROD modal) gets its own key handling — typing,
-// backspace, ctrl-k force-delete escalation, enter-when-matched — while
+// backspace, force-delete escalation, enter-when-matched — while
 // TierInline/TierNone stay the simple y/n/esc prompt (mvp-plan.md §8b), plus
-// ctrl-k on the inline delete confirm: rather than jumping to the PROD
-// modal, it stages force-delete right inside this same prompt
-// (ArmForceDelete) — "y" then runs DeleteResourceForced, "n" backs out of
-// just the force sub-state (DisarmForceDelete), "esc" still cancels
-// outright.
+// verbs.ForceDelete.Key on the inline delete confirm, which escalates it
+// into the type-the-name modal (verbs.EscalateForceDelete) — force delete
+// is always modal, PROD or not.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.actions.Tier() == actions.TierModal {
 		return m.updateModalConfirmKey(msg)
@@ -305,15 +303,9 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.ArmForceDelete()
-	case "n":
-		if m.actions.ForceArmed() {
-			m.actions.DisarmForceDelete()
-			return m, nil
-		}
-		m.cancelInlineConfirm()
-	case "esc":
+	case verbs.ForceDelete.Key:
+		verbs.EscalateForceDelete(&m.actions, m.isProd())
+	case "n", "esc":
 		m.cancelInlineConfirm()
 	}
 	return m, nil
@@ -332,16 +324,19 @@ func (m *Model) cancelInlineConfirm() {
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes
 // only once Controller.NameMatches (a no-op otherwise, "↵ stays dead until
-// the typed name matches"), backspace/typing edit the buffer, ctrl-k
-// escalates a pending Pod delete to force-delete, esc cancels.
+// the typed name matches"), backspace/typing edit the buffer,
+// verbs.ForceDelete.Key escalates a pending Pod delete to force-delete, esc cancels.
 func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.actions.Cancel()
 	case "enter":
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.Escalate()
+	case verbs.ForceDelete.Key:
+		if verbs.EscalateForceDelete(&m.actions, m.isProd()) {
+			return m, nil
+		}
+		return m, m.actions.HandleTypeKey(msg)
 	default:
 		return m, m.actions.HandleTypeKey(msg)
 	}
@@ -610,7 +605,7 @@ func (m *Model) beginDelete() tea.Cmd {
 	if !m.found {
 		return nil
 	}
-	return m.actions.Begin(verbs.TierFor(verbs.Delete, m.isProd()), tui.TaskAction{
+	return m.actions.Begin(verbs.TierForDelete(verbs.Delete, kube.KindPod, m.isProd()), tui.TaskAction{
 		ID:    "pod-delete-" + m.namespace + "/" + m.name,
 		Label: "Delete pod " + m.name + "?",
 		Owner: m.pod.Owner,

@@ -92,15 +92,17 @@ func TestForceDeleteEscalationUsesDisposablePod(t *testing.T) {
 	a.filterTo(t, name)
 	a.Press("D")
 	a.WaitFor("CONFIRM", Settle)
-	a.Press("C")
-	a.WaitFor("FORCE DELETE", Settle)
-	a.Press("y")
+	// Force delete is always the type-the-name modal, PROD or not.
+	a.Press("ctrl+k")
+	a.WaitForAll(Settle, "Force delete "+name+"?", TypeToConfirm)
+	a.Type(name)
+	a.Enter()
 
 	waitForDeleted(t, "force-deleted pod", func(ctx context.Context) error {
 		_, err := client.CoreV1().Pods(Namespace).Get(ctx, name, metav1.GetOptions{})
 		return err
 	})
-	a.WaitGone("FORCE DELETE", Settle)
+	a.WaitGone("Force delete "+name+"?", Settle)
 	a.WaitFor("Pods", Settle)
 	if pod.ResourceVersion == "" {
 		t.Fatal("created pod had no resourceVersion")

@@ -1054,13 +1054,12 @@ func (m *Model) openSelectedEnter() (tea.Model, tea.Cmd, bool) {
 // key handling; every other confirming case — TierNone/TierInline, and
 // Drain's TierModal (nodes.go's beginDrain, still Phase 9's plain
 // ConfirmCard, deliberately not upgraded — see mvp-tasks.md's Phase 5/8b
-// exit notes) — stays the simple y/n/esc prompt, plus ctrl-k on a pending
-// inline Pod delete: rather than jumping to the PROD type-the-name modal,
-// ctrl-k stages force-delete right inside this same inline confirm
-// (ArmForceDelete) — "y" then runs DeleteResourceForced, "n" backs out of
-// just the force sub-state (DisarmForceDelete) instead of cancelling
-// outright, and "esc" still cancels the whole confirm either way. Everything
-// else is swallowed so movement/filter can't act underneath.
+// exit notes) — stays the simple y/n/esc prompt, plus verbs.ForceDelete.Key
+// on a pending inline Pod delete, which escalates it to force-delete at
+// ForceDelete's own TierModal (verbs.EscalateForceDelete): the confirm
+// becomes the type-the-name modal, never a second inline "y" (CLAUDE.md:
+// "drain/force-delete always modal"). Everything else is swallowed so
+// movement/filter can't act underneath.
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.typingConfirmName() {
 		return m.updateModalConfirmKey(msg)
@@ -1068,24 +1067,16 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.ArmForceDelete()
-	case "n":
-		if m.actions.ForceArmed() {
-			m.actions.DisarmForceDelete()
-			return m, nil
-		}
-		m.cancelInlineConfirm()
-	case "esc":
+	case verbs.ForceDelete.Key:
+		verbs.EscalateForceDelete(&m.actions, m.isProd())
+	case "n", "esc":
 		m.cancelInlineConfirm()
 	}
 	return m, nil
 }
 
-// cancelInlineConfirm is updateConfirmKey's shared "actually cancel" path —
-// esc always takes it; n only when the confirm isn't mid force-delete
-// escalation (that case backs out to the plain delete prompt instead, see
-// updateConfirmKey's own doc comment).
+// cancelInlineConfirm is updateConfirmKey's shared "actually cancel" path
+// for n and esc.
 func (m *Model) cancelInlineConfirm() {
 	if m.pendingMeta != nil {
 		// The panel stayed open under this confirm (metapanel's doc comment)
@@ -1126,8 +1117,9 @@ func isSetResourcesActionID(id string) bool {
 
 // updateModalConfirmKey drives the 8b type-the-name modal: enter executes
 // only once Controller.NameMatches ("↵ stays dead until the typed name
-// matches"), backspace/typing edit the buffer, ctrl-k escalates a pending
-// Pod delete to force-delete, esc cancels.
+// matches"), backspace/typing edit the buffer, verbs.ForceDelete.Key
+// escalates a pending Pod delete to force-delete (the same chord the modal's
+// detail line advertises, verbs.ForceDeleteModalHint), esc cancels.
 //
 // A marked-set "cronjob-suspend" confirm (pendingBulkCronJobSuspend,
 // cronjob_bulk.go) reuses this same routing but against the count grammar
@@ -1146,8 +1138,11 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			return m, nil
 		}
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.Escalate()
+	case verbs.ForceDelete.Key:
+		if verbs.EscalateForceDelete(&m.actions, m.isProd()) {
+			return m, nil
+		}
+		return m, m.actions.HandleTypeKey(msg)
 	default:
 		if bulk && msg.Text != "" && !bulkCronJobSuspendKeyIsDigit(msg) {
 			return m, nil

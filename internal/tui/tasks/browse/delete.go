@@ -62,22 +62,12 @@ func deleteWillRunLine(scope tui.TaskScope) string {
 	return kube.DeleteCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, []string{scope.ResourceName})
 }
 
-// forceDeleteWillRunLine is deleteWillRunLine's counterpart for the inline
-// confirm's force-delete sub-state (ctrl-k, actions.Controller.ForceArmed) —
-// the same command plus the --grace-period=0 --force flags
-// DeleteResourceForced actually passes to the API, so the operator sees
-// exactly what the next "y" runs.
-func forceDeleteWillRunLine(scope tui.TaskScope) string {
-	return kube.ForceDeleteCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
-}
-
 // beginDelete confirms deleting row — inline y/N in non-prod contexts, the
-// full type-the-name modal in PROD (verbs.TierFor). Owner is only known for
-// the Pod kind (via m.pods, the fuller kube.Pod projection Row doesn't
-// carry) — every other kind's modal simply omits the "will be recreated"
-// line. Deleting a CustomResourceDefinition (14b) always gets the
-// type-the-name modal, even outside PROD — it deletes every instance of
-// that kind too, not just the one row.
+// full type-the-name modal in PROD, and always the modal for a Namespace or
+// CustomResourceDefinition (14b), which delete far more than the one row
+// (verbs.TierForDelete owns that rule). Owner is only known for the Pod kind
+// (via m.pods, the fuller kube.Pod projection Row doesn't carry) — every
+// other kind's modal simply omits the "will be recreated" line.
 func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 	var owner string
 	var gracePeriod *int64
@@ -87,11 +77,7 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 			gracePeriod = &pod.GracePeriodSeconds
 		}
 	}
-	tier := verbs.TierFor(verbs.Delete, m.isProd())
-	if m.kind == kube.KindCustomResourceDefinition {
-		tier = actions.TierModal
-	}
-	return m.actions.Begin(tier, tui.TaskAction{
+	return m.actions.Begin(verbs.TierForDelete(verbs.Delete, m.kind, m.isProd()), tui.TaskAction{
 		ID:                 "delete-" + string(m.kind) + "-" + row.Namespace + "/" + row.Name,
 		Label:              fmt.Sprintf("Delete %s %s?", singularDisplay(m.desc.Display), row.Name),
 		Owner:              owner,
@@ -110,7 +96,7 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 // actions.RequiresTypedName routes here (every other TierModal verb, i.e.
 // Drain, keeps rendering through nodes.go's existing confirmBody/
 // ConfirmCard, untouched by this file). The delete family gets 8b's owner/
-// grace-period detail and its ctrl-k force-delete hint; rollout-restart (9a)
+// grace-period detail and its force-delete hint (verbs.ForceDeleteModalHint); rollout-restart (9a)
 // and cronjob-suspend (36c) have neither concept, so each gets its own exact
 // "will run: kubectl …" line instead, the same one its non-prod inline
 // confirm's keybar already shows.
@@ -164,8 +150,8 @@ func (m Model) typeNameConfirmModal(width, height int) string {
 				} else {
 					detail = "default grace period applies"
 				}
-				if pending.Scope.ResourceKind == string(kube.KindPod) {
-					detail += " · ctrl-k force delete (immediate)"
+				if verbs.ForceDelete.AppliesTo(kube.ResourceKind(pending.Scope.ResourceKind)) {
+					detail += " · " + verbs.ForceDeleteModalHint()
 				}
 			}
 		}

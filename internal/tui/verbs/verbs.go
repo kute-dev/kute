@@ -199,8 +199,14 @@ var (
 		ID: "delete", Key: "D", Label: "delete",
 		Tier: actions.TierInline, Mutating: true, Bulk: true,
 	}
+	// ForceDelete is never a list-screen key of its own: it escalates a
+	// pending Pod delete confirm (inline or modal) to grace-period-0, and
+	// TierModal means that escalation always lands on the type-the-name
+	// modal, PROD or not (CLAUDE.md: "drain/force-delete always modal").
+	// A ctrl chord rather than a bare letter because the modal is a text
+	// buffer — a bare key would be swallowed as (or steal) a typed rune.
 	ForceDelete = Verb{
-		ID: "force-delete", Key: "C", Label: "force delete",
+		ID: "force-delete", Key: "ctrl+k", Label: "force delete",
 		Tier: actions.TierModal, Kinds: []kube.ResourceKind{kube.KindPod}, Mutating: true,
 	}
 	RolloutRestart = Verb{
@@ -663,7 +669,8 @@ func ByID(id string) (Verb, bool) {
 // TierInline to TierModal when isProd (mvp-plan.md §8b, docs/design
 // README.md §8b: "PROD contexts... = centered modal with type-the-name
 // confirmation"). Non-Inline tiers are untouched — Drain/ForceDelete are
-// always modal regardless of prod; Cordon is TierNone and never confirms at
+// always modal regardless of prod (the delete family resolves through
+// TierForDelete, which adds the cascade-kind rule on top of this); Cordon is TierNone and never confirms at
 // all. RolloutRestart is TierInline like Delete, so it escalates the same
 // way: inline y/N in non-prod, type-the-name modal in PROD (§9a/§419).
 //
@@ -678,6 +685,53 @@ func TierFor(v Verb, isProd bool) actions.Tier {
 		return actions.TierModal
 	}
 	return v.Tier
+}
+
+// cascadeDeleteKinds are the kinds whose delete removes far more than the
+// row: a Namespace takes every object inside it, a CustomResourceDefinition
+// every instance of its kind. Deleting one always gets the modal — the
+// type-the-name modal for one row, type-the-count for a marked set —
+// PROD or not (docs/design README.md §8b/§14b/§20a).
+var cascadeDeleteKinds = []kube.ResourceKind{kube.KindNamespace, kube.KindCustomResourceDefinition}
+
+// TierForDelete is the one confirm-policy resolver for the delete family
+// (Delete, ForceDelete) — every delete call site (browse single and bulk,
+// poddetail, objectdetail, debugpanel's cleanup, and ForceDelete's
+// escalation) asks it rather than combining TierFor with a kind check of its
+// own. It is TierFor plus the target-aware escalation: a cascadeDeleteKinds
+// target is always TierModal. ForceDelete's own Tier is already TierModal,
+// so TierFor returns it unchanged.
+func TierForDelete(v Verb, kind kube.ResourceKind, isProd bool) actions.Tier {
+	if slices.Contains(cascadeDeleteKinds, kind) {
+		return actions.TierModal
+	}
+	return TierFor(v, isProd)
+}
+
+// EscalateForceDelete is the handler for ForceDelete.Key inside any delete
+// confirm: when c's pending action is a Delete of a kind ForceDelete applies
+// to, it becomes a force-delete at TierForDelete(ForceDelete, …) — the
+// type-the-name modal, whether it started as an inline y/N or as PROD's
+// modal. Reports whether it escalated; anything else is left untouched, so a
+// modal's caller can hand an unclaimed chord on to its text buffer.
+func EscalateForceDelete(c *actions.Controller, isProd bool) bool {
+	p := c.Pending()
+	if !c.Active() || p == nil || p.Scope.Verb != Delete.ID {
+		return false
+	}
+	kind := kube.ResourceKind(p.Scope.ResourceKind)
+	if !ForceDelete.AppliesTo(kind) {
+		return false
+	}
+	c.Escalate(ForceDelete.ID, TierForDelete(ForceDelete, kind, isProd))
+	return true
+}
+
+// ForceDeleteModalHint is the type-the-name modal's detail-line pointer at
+// ForceDelete, rendered from the registry so the advertised chord is the one
+// EscalateForceDelete's callers match on.
+func ForceDeleteModalHint() string {
+	return ForceDelete.Key + " " + ForceDelete.Label + " (immediate)"
 }
 
 // TierForEdit resolves Edit's confirmation policy for the call sites

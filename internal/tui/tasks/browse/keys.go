@@ -122,24 +122,6 @@ func (m Model) Keybar() tui.Keybar {
 	}
 	if m.actions.Active() {
 		if m.actions.Tier() == actions.TierInline {
-			if m.actions.ForceArmed() {
-				// force-delete staged inside this same inline confirm
-				// (ctrl-k, actions.Controller.ArmForceDelete) rather than
-				// jumping to the PROD type-the-name modal — the destructive
-				// treatment (pill text + red-tagged hints) only kicks in once
-				// armed, and the will-run line keeps the extra flags in sync
-				// with what DeleteResourceForced actually sends.
-				note := ""
-				if pending := m.actions.Pending(); pending != nil {
-					note = forceDeleteWillRunLine(pending.Scope)
-				}
-				return tui.Keybar{
-					Pill:      tui.ModeConfirm,
-					PillText:  "FORCE DELETE",
-					Groups:    [][]tui.KeyHint{{{Key: "y", Label: "force delete"}, {Key: "n", Label: "back"}}},
-					RightNote: note,
-				}
-			}
 			note := m.actions.Prompt()
 			hints := []tui.KeyHint{{Key: "y", Label: "confirm"}, {Key: "esc", Label: "cancel"}}
 			if pending := m.actions.Pending(); pending != nil {
@@ -155,7 +137,7 @@ func (m Model) Keybar() tui.Keybar {
 					// confirm uses — replaces the generic verb/target prompt,
 					// which only duplicated the y/n hints already in Groups.
 					note = deleteWillRunLine(pending.Scope)
-					if pending.Scope.ResourceKind == string(kube.KindPod) {
+					if verbs.ForceDelete.AppliesTo(kube.ResourceKind(pending.Scope.ResourceKind)) {
 						hints = append(hints, verbs.ForceDelete.Hint())
 					}
 				case "set-image":

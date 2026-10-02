@@ -404,7 +404,7 @@ func (m *Model) beginCleanupDelete() tea.Cmd {
 	if m.cleanup == nil {
 		return nil
 	}
-	tier := verbs.TierFor(verbs.Delete, m.isProd())
+	tier := verbs.TierForDelete(verbs.Delete, kube.KindPod, m.isProd())
 	return m.actions.Begin(tier, tui.TaskAction{
 		ID:    "delete-" + string(kube.KindPod) + "-" + m.cleanup.namespace + "/" + m.cleanup.name,
 		Label: fmt.Sprintf("Delete Pod %s?", m.cleanup.name),

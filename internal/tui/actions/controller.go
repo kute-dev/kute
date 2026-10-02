@@ -90,13 +90,6 @@ type Controller struct {
 	// hand-rolling a 10th implementation. Paste reaches it through
 	// PasteTarget, not from here: a bracketed paste is never a keypress.
 	typedInput textfield.Model
-	// forceArmed stages a pending TierInline Pod "delete" for force-delete
-	// (ctrl-k) — the non-prod counterpart to Escalate's PROD-modal
-	// escalation: staged rather than immediate, so a second "y" is still
-	// required to actually execute and "n" backs out of just this
-	// sub-state (DisarmForceDelete) rather than cancelling the whole
-	// confirm. Confirm reads it to switch the verb that actually executes.
-	forceArmed bool
 	state      tui.TaskState
 	message    string
 	// offline mirrors the screen's kube.ConnState.Offline() (docs/design
@@ -185,7 +178,6 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 	c.tier = tier
 	c.typedInput = textfield.New()
 	c.typedInput.Focus()
-	c.forceArmed = false
 	c.message = ""
 	if tier == TierNone {
 		return c.execute()
@@ -214,10 +206,6 @@ func (c *Controller) Confirm() tea.Cmd {
 	if c.tier == TierModal && len(c.pending.Scope.BulkTargets) == 0 &&
 		RequiresTypedName(c.pending.Scope.Verb) && !c.NameMatches() {
 		return nil
-	}
-	if c.forceArmed {
-		c.pending.Scope.Verb = "force-delete"
-		c.pending.Label = "Force delete " + c.pending.Scope.ResourceName + "?"
 	}
 	return c.execute()
 }
@@ -265,13 +253,12 @@ func (c *Controller) Cancel() {
 	c.pending = nil
 	c.tier = TierNone
 	c.typedInput.Blur()
-	c.forceArmed = false
 	c.state = tui.TaskStateCancelled
 	c.message = "Cancelled " + label + "."
 }
 
 // HandleTypeKey routes a keypress that isn't one of the type-the-name
-// modal's own chords (esc/enter/ctrl-k, intercepted by the caller first)
+// modal's own chords (esc/enter/verbs.ForceDelete.Key, intercepted by the caller first)
 // into the type-ahead buffer — this is where Home/End and Ctrl-arrow
 // word-jump arrive for free. A no-op unless a TierModal confirmation is
 // active. Paste does *not* arrive here (it isn't a keypress at all) — see
@@ -297,54 +284,32 @@ func (c *Controller) PasteTarget() tui.PasteTarget {
 	return tui.PasteInto(&c.typedInput)
 }
 
-// Escalate switches a pending Pod "delete" into a "force-delete" (ctrl-k,
-// mvp-plan.md §8b's "harder chord for force delete") — a no-op for any
-// other pending verb/kind. The typed-name progress is kept: it's still
-// matching the same resource name regardless of which delete variant runs.
-// This is the PROD type-the-name modal's own escalation path (TierModal);
-// ArmForceDelete/DisarmForceDelete below is the separate, staged
-// counterpart for the non-prod inline confirm.
-func (c *Controller) Escalate() {
-	if c.pending == nil || c.pending.Scope.ResourceKind != string(kube.KindPod) || c.pending.Scope.Verb != "delete" {
+// Escalate switches the pending action to verb at tier — the delete
+// confirm's force-delete escalation (verbs.EscalateForceDelete, the only
+// caller, decides whether the pending action qualifies and resolves tier from
+// the verb registry; Controller never imports verbs). The tier only ever
+// rises: escalating an inline y/N to TierModal opens a fresh, focused
+// type-ahead buffer, while escalating inside an already-open modal keeps the
+// typed progress — it's still the same resource name either way. A no-op
+// unless a confirmation is showing.
+func (c *Controller) Escalate(verb string, tier Tier) {
+	if c.state != tui.TaskStateConfirming || c.pending == nil {
 		return
 	}
-	c.pending.Scope.Verb = "force-delete"
-	c.pending.Label = "Force delete " + c.pending.Scope.ResourceName + "?"
-}
-
-// ArmForceDelete stages a pending TierInline Pod "delete" confirm for
-// force-delete (ctrl-k) — a no-op for any other tier/verb/kind. Unlike
-// Escalate, this doesn't touch the pending verb yet: "y" (Confirm) still
-// has to follow before DeleteResourceForced actually runs, and "n"
-// (DisarmForceDelete) backs out to the plain delete prompt instead of
-// cancelling the whole confirm.
-func (c *Controller) ArmForceDelete() {
-	if c.state != tui.TaskStateConfirming || c.pending == nil || c.tier != TierInline {
-		return
+	c.pending.Scope.Verb = verb
+	c.pending.Label = capitalize(strings.ReplaceAll(verb, "-", " ")) + " " + c.pending.Scope.ResourceName + "?"
+	if tier > c.tier {
+		c.tier = tier
+		c.typedInput = textfield.New()
+		c.typedInput.Focus()
 	}
-	if c.pending.Scope.ResourceKind != string(kube.KindPod) || c.pending.Scope.Verb != "delete" {
-		return
-	}
-	c.forceArmed = true
 }
-
-// DisarmForceDelete backs a force-armed inline delete confirm out of the
-// force sub-state, back to the plain delete prompt — a no-op unless armed.
-func (c *Controller) DisarmForceDelete() {
-	c.forceArmed = false
-}
-
-// ForceArmed reports whether the pending inline delete confirm is staged
-// for force-delete — screens use it to swap the keybar into the
-// destructive treatment (pill text, hints, will-run line).
-func (c Controller) ForceArmed() bool { return c.forceArmed }
 
 // HandleResult applies an execution outcome, transitioning to success or error.
 func (c *Controller) HandleResult(msg ResultMsg) {
 	c.pending = nil
 	c.tier = TierNone
 	c.typedInput.Blur()
-	c.forceArmed = false
 	if msg.Err != nil {
 		c.state = tui.TaskStateError
 		verb := "run"
@@ -364,7 +329,6 @@ func (c *Controller) HandleBulkResult(msg BulkResultMsg) {
 	c.pending = nil
 	c.tier = TierNone
 	c.typedInput.Blur()
-	c.forceArmed = false
 	failed := msg.Failed()
 	if len(failed) == 0 {
 		c.state = tui.TaskStateSuccess

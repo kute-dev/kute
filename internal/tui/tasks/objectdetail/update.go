@@ -194,11 +194,9 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // updateConfirmKey/updateModalConfirmKey mirror poddetail's own — TierModal
 // (the type-the-name PROD modal) gets its own key handling; TierInline/
-// TierNone stay the simple y/n/esc prompt, plus ctrl-k on a pending inline
-// Pod delete: stages force-delete right inside this same prompt
-// (ArmForceDelete, a no-op for any other kind) rather than jumping to the
-// PROD modal — "y" then runs DeleteResourceForced, "n" backs out of just the
-// force sub-state (DisarmForceDelete), "esc" still cancels outright.
+// TierNone stay the simple y/n/esc prompt. verbs.ForceDelete.Key escalates
+// a pending delete of a kind ForceDelete applies to into the type-the-name
+// modal (verbs.EscalateForceDelete — a no-op for any other kind).
 func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.actions.Tier() == actions.TierModal {
 		return m.updateModalConfirmKey(msg)
@@ -206,15 +204,9 @@ func (m *Model) updateConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.ArmForceDelete()
-	case "n":
-		if m.actions.ForceArmed() {
-			m.actions.DisarmForceDelete()
-			return m, nil
-		}
-		m.cancelInlineConfirm()
-	case "esc":
+	case verbs.ForceDelete.Key:
+		verbs.EscalateForceDelete(&m.actions, m.isProd())
+	case "n", "esc":
 		m.cancelInlineConfirm()
 	}
 	return m, nil
@@ -237,8 +229,11 @@ func (m *Model) updateModalConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.actions.Cancel()
 	case "enter":
 		return m, m.actions.Confirm()
-	case "C":
-		m.actions.Escalate()
+	case verbs.ForceDelete.Key:
+		if verbs.EscalateForceDelete(&m.actions, m.isProd()) {
+			return m, nil
+		}
+		return m, m.actions.HandleTypeKey(msg)
 	default:
 		return m, m.actions.HandleTypeKey(msg)
 	}
@@ -303,16 +298,15 @@ func (m Model) openSelectedEvents() (tea.Model, tea.Cmd, bool) {
 }
 
 // beginDelete confirms deleting the object — inline y/N in non-prod
-// contexts, the full type-the-name modal in PROD (verbs.TierFor) — normal
-// tier resolution, no special-casing (only the CustomResourceDefinition
-// list's own delete forces modal unconditionally, in browse/delete.go).
+// contexts, the full type-the-name modal in PROD, always the modal for a
+// cascade-scope kind (verbs.TierForDelete, the same resolver browse uses).
 // Owner rides along for the modal's "will be recreated" line when the
 // object has an ownerReference.
 func (m *Model) beginDelete() tea.Cmd {
 	if !m.found {
 		return nil
 	}
-	return m.actions.Begin(verbs.TierFor(verbs.Delete, m.isProd()), tui.TaskAction{
+	return m.actions.Begin(verbs.TierForDelete(verbs.Delete, m.kind, m.isProd()), tui.TaskAction{
 		ID:    "delete-" + string(m.kind) + "-" + m.namespace + "/" + m.name,
 		Label: "Delete " + singularDisplay(m.desc.Display) + " " + m.name + "?",
 		Owner: firstOwnerRef(m.obj),
