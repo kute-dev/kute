@@ -21,8 +21,8 @@ kute --log-file /tmp/kute.log
 
 Everything client-go logs — reflector and watch errors, client-side throttling
 warnings, anything routed through `utilruntime.ErrorHandlers` — plus kute's own
-diagnostic lines (startup, every connection-state transition and its error) go
-to that file. It is opened append, mode `0600`, and its directory is created if
+diagnostic lines (startup, a `config.yaml` that didn't parse and what kute did
+about it, every connection-state transition and its error) go to that file. It is opened append, mode `0600`, and its directory is created if
 missing. An unwritable path is a startup error rather than a silent downgrade:
 a user who asked for a log and got none has no way to tell.
 

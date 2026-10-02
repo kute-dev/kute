@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,15 +17,79 @@ func TestLoadMissingFileYieldsNothingProd(t *testing.T) {
 	}
 }
 
-func TestLoadUnparsableFileYieldsZeroValue(t *testing.T) {
-	t.Parallel()
+func writeConfig(t *testing.T, body string) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("prodContexts: [unterminated"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := loadFrom(path)
-	if got.IsProd("anything") {
-		t.Fatalf("expected zero value from unparsable file")
+	return path
+}
+
+// TestLoadBrokenFileFailsClosed: a config file kute can't read must never
+// quietly drop every context back to non-PROD — that would turn every
+// delete into an inline y/N. Whatever prodContexts said is unknowable, so
+// every context reads as PROD and LoadErr says why.
+func TestLoadBrokenFileFailsClosed(t *testing.T) {
+	t.Parallel()
+	for name, body := range map[string]string{
+		"syntax error":           "prodContexts: [unterminated",
+		"prodContexts a mapping": "prodContexts:\n  prod-eu: true\n",
+		"one bad list element":   "prodContexts:\n  - prod-eu\n  - [nested]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := loadFrom(writeConfig(t, body))
+			if got.LoadErr == nil {
+				t.Fatalf("LoadErr = nil for %q", body)
+			}
+			if !got.ProdUnknown() || !got.IsProd("anything") {
+				t.Fatalf("a broken prodContexts must fail closed (every context PROD), got %+v", got)
+			}
+		})
+	}
+}
+
+// TestLoadSalvagesProdContextsPastABadField: one mistyped key elsewhere in
+// the file (nodeShellImage as a list) must not take prodContexts down with
+// it — and the mistake is still reported, not swallowed.
+func TestLoadSalvagesProdContextsPastABadField(t *testing.T) {
+	t.Parallel()
+	got := loadFrom(writeConfig(t, "prodContexts: [prod-eu]\ntheme: dark\nnodeShellImage: [x]\n"))
+	if got.LoadErr == nil {
+		t.Fatalf("LoadErr = nil; the bad nodeShellImage must be reported")
+	}
+	if got.ProdUnknown() {
+		t.Fatalf("prodContexts parsed fine; must not fall back to all-PROD")
+	}
+	if !got.IsProd("prod-eu") || got.IsProd("dev-kind") {
+		t.Fatalf("salvaged prodContexts wrong: %+v", got.ProdContexts)
+	}
+	if got.Theme != "dark" {
+		t.Fatalf("Theme = %q, want the salvaged dark", got.Theme)
+	}
+}
+
+// TestLoadAcceptsScalarProdContexts: `prodContexts: prod-eu` means exactly
+// what it looks like.
+func TestLoadAcceptsScalarProdContexts(t *testing.T) {
+	t.Parallel()
+	got := loadFrom(writeConfig(t, "prodContexts: prod-eu\n"))
+	if got.LoadErr != nil {
+		t.Fatalf("LoadErr = %v, want a scalar accepted as a one-element list", got.LoadErr)
+	}
+	if !got.IsProd("prod-eu") || got.IsProd("dev-kind") {
+		t.Fatalf("scalar prodContexts = %+v", got.ProdContexts)
+	}
+}
+
+func TestLoadUnreadableFileFailsClosed(t *testing.T) {
+	t.Parallel()
+	// A directory where the file should be: ReadFile fails with something
+	// other than not-exist.
+	got := loadFrom(t.TempDir())
+	if got.LoadErr == nil || !got.IsProd("anything") {
+		t.Fatalf("an unreadable config must fail closed, got %+v", got)
 	}
 }
 
@@ -152,5 +217,31 @@ func TestSetProdNoopWhenStatusUnchanged(t *testing.T) {
 	}
 	if _, err := os.Stat(Path()); err == nil {
 		t.Fatalf("SetProd must not write the file when status is unchanged")
+	}
+}
+
+// TestSetProdRefusesToOverwriteUnparsableFile: the in-memory Config after a
+// broken load is only what survived the parse, so marking a context PROD
+// must refuse rather than replace the user's file with that remnant.
+func TestSetProdRefusesToOverwriteUnparsableFile(t *testing.T) {
+	testenv.SetHome(t, t.TempDir())
+	const body = "# my prod list\nprodContexts: [prod-eu\n"
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := Load()
+	if err := c.SetProd("dev-kind", true); !errors.Is(err, ErrUnparsable) {
+		t.Fatalf("SetProd err = %v, want ErrUnparsable", err)
+	}
+	got, err := os.ReadFile(Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Fatalf("config.yaml was rewritten:\n%s", got)
 	}
 }

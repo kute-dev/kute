@@ -1682,6 +1682,7 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 	defer installPanicHandler(sink)()
 
 	model, cluster, demoCluster := NewModel(cfg)
+	logConfigLoad(sink, model.Session())
 	// ForwardManager sessions deliberately survive context switches, but they
 	// must not survive the process that owns them. Their reconnect loops are
 	// rooted independently from the active Cluster so a context swap cannot
@@ -1741,6 +1742,20 @@ func run(cfg Config, opts ...tea.ProgramOption) error {
 		_ = sess.State.Save()
 	}
 	return reportProgramCrash(sink, err)
+}
+
+// logConfigLoad records a config.yaml that didn't load cleanly — the header
+// chip (tui.BuildConfigChip) only has room to say *that* it's broken; the
+// log carries the parser's line-numbered reason.
+func logConfigLoad(sink *diag.Sink, sess *tui.Session) {
+	if sess == nil || sess.Config.LoadErr == nil {
+		return
+	}
+	if sess.Config.ProdUnknown() {
+		sink.Logf("config: %v (prodContexts unreadable: treating every context as PROD)", sess.Config.LoadErr)
+		return
+	}
+	sink.Logf("config: %v (keys that failed to parse are ignored)", sess.Config.LoadErr)
 }
 
 // openDiagnostics builds the process's one diagnostics sink and the live

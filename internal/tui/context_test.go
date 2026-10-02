@@ -367,3 +367,41 @@ func TestRootModelContextDigitPicksRecent(t *testing.T) {
 		t.Fatalf("RecentContexts[0] = %q, want stage-eks (the digit-picked target committed on enter)", got)
 	}
 }
+
+// TestRootModelContextCtrlPRefusesToOverwriteBrokenConfig: ctrl+p against a
+// config.yaml that failed to parse must leave the file byte-for-byte alone
+// and say why in the palette, rather than writing back the parse remnant.
+func TestRootModelContextCtrlPRefusesToOverwriteBrokenConfig(t *testing.T) {
+	writeContextTestKubeconfig(t)
+	testenv.SetHome(t, t.TempDir())
+	const body = "# hand-edited\nprodContexts: [prod-eks\n"
+	if err := os.MkdirAll(filepath.Dir(config.Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Path(), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sess := &tui.Session{
+		Theme:    tui.Dark(),
+		Location: tui.Location{Context: "dev"},
+		Config:   config.Load(),
+		State:    state.State{PerContext: map[string]state.PerContext{}},
+	}
+	model := tui.NewWithSession(&screenTask{name: "browse"}, sess)
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Text: "c"})
+	updated, _ = updated.(tui.Model).Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	m := updated.(tui.Model)
+
+	if view := m.View().Content; !strings.Contains(view, "config.yaml has errors") {
+		t.Fatalf("expected the refusal in the palette footer:\n%s", view)
+	}
+	got, err := os.ReadFile(config.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Fatalf("ctrl+p rewrote a config.yaml that failed to parse:\n%s", got)
+	}
+}

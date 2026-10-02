@@ -49,7 +49,7 @@ func (m Model) Header() tui.HeaderState {
 	} else {
 		conn = tui.ConnBadge{Text: tui.GlyphCompleted + " no cluster", Style: dim}
 	}
-	return tui.HeaderState{Crumbs: crumbs, Conn: conn}
+	return tui.HeaderState{Crumbs: crumbs, ConfigChip: tui.BuildConfigChip(theme, m.session), Conn: conn}
 }
 
 func (m Model) Strips(int) []string { return nil }

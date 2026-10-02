@@ -37,7 +37,7 @@ func (m Model) Header() tui.HeaderState {
 	if m.session != nil {
 		forward = tui.BuildForwardChip(theme, m.session.ForwardSummary())
 	}
-	return tui.HeaderState{Crumbs: crumbs, UpdateChip: tui.BuildUpdateChip(theme, m.session), ForwardChip: forward, Conn: tui.LiveConnBadge(theme, m.conn, tui.GlyphRunning+" connected")}
+	return tui.HeaderState{Crumbs: crumbs, ConfigChip: tui.BuildConfigChip(theme, m.session), UpdateChip: tui.BuildUpdateChip(theme, m.session), ForwardChip: forward, Conn: tui.LiveConnBadge(theme, m.conn, tui.GlyphRunning+" connected")}
 }
 
 func (m Model) Strips(width int) []string {

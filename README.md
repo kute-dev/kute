@@ -244,6 +244,8 @@ update:
 
 A context you haven't listed gets the lighter confirmations — including a production cluster kute has no way of recognizing. You can also mark or unmark the selected context with `ctrl+p` in the context palette (`c`), which writes back to this same file, so every other kute session picks it up.
 
+A broken config file never lowers these confirmations. A lone `prodContexts: prod-eu` is read as a one-element list. If some other key fails to parse (say `nodeShellImage: [x]`), kute keeps every key that did parse, including `prodContexts`, and shows a yellow `▲ config.yaml has errors` chip in the header. If `prodContexts` itself can't be read (a YAML syntax error, an unreadable file, or a list entry that isn't a string), kute treats **every** context as PROD and shows a red `▲ config.yaml unreadable · all PROD` chip. Either way the parser's line-numbered error goes to the diagnostics stream (`--log-file`), and `ctrl+p` refuses to write until you fix the file, so your hand edit isn't overwritten.
+
 ## Running From Source
 
 ```sh

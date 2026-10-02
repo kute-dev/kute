@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/kute-dev/kute/internal/config"
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
 	"github.com/kute-dev/kute/internal/tui/components"
@@ -240,7 +241,8 @@ func contextRecentFooter(target string) []palette.FooterSpan {
 // toggleSelectedContextProd flips the selected row's PROD status (7a's
 // ctrl+p key) via config.Config.SetProd, best-effort (a write failure — e.g.
 // an unwritable ~/.config — leaves the in-memory tag exactly where SetProd
-// left it, which is untouched on error). Unlike startContextProbe/
+// left it, which is untouched on error). A config.yaml that failed to load
+// is refused outright, with the reason in the palette footer. Unlike startContextProbe/
 // refreshContextPalette (which reset Sel to the alt-tab target on every
 // call), this keeps the toggled row selected — the whole point of the key
 // is to see its own tag change, so jumping the selection away would defeat
@@ -251,7 +253,13 @@ func (m *Model) toggleSelectedContextProd() {
 	if !ok || !isCtx || m.session == nil {
 		return
 	}
-	_ = m.session.Config.SetProd(target.name, !m.session.Config.IsProd(target.name))
+	if err := m.session.Config.SetProd(target.name, !m.session.Config.IsProd(target.name)); errors.Is(err, config.ErrUnparsable) {
+		// The in-memory Config is only what survived a broken parse, so
+		// SetProd refused to write it over the user's file — say so where
+		// they pressed the key rather than toggling nothing in silence.
+		m.palette.Footer = contextMarkProdRefusedFooter()
+		return
+	}
 
 	items := contextItems(m.session, m.probes)
 	if m.palette.Query() != "" {
@@ -260,6 +268,15 @@ func (m *Model) toggleSelectedContextProd() {
 	m.palette.Items = items
 	if i, ok := contextItemIndex(items, target.name); ok {
 		m.palette.Sel = i
+	}
+}
+
+// contextMarkProdRefusedFooter is ctrl+p's answer when config.yaml failed to
+// load: the file is left untouched until it's fixed by hand.
+func contextMarkProdRefusedFooter() []palette.FooterSpan {
+	return []palette.FooterSpan{
+		{Text: "config.yaml has errors", Tone: palette.FooterEm},
+		{Text: " — fix it by hand before changing PROD; kute won't overwrite it", Tone: palette.FooterDim},
 	}
 }
 

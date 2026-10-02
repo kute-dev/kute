@@ -88,6 +88,11 @@ func LiveConnBadge(theme Theme, conn kube.ConnState, connectedText string) ConnB
 type HeaderState struct {
 	Crumbs   []Crumb
 	SyncNote string // e.g. "sync 2s"
+	// ConfigChip is the persistent "config.yaml has errors" warning —
+	// empty (zero value) renders nothing, like UpdateChip/ForwardChip.
+	// Built via BuildConfigChip. Renders leftmost of the chips: it outlives
+	// every other one and changes what every destructive confirm asks.
+	ConfigChip ConnBadge
 	// UpdateChip is 28a's ambient "update available" indicator — empty
 	// (zero value) renders nothing at all, same "zero chrome when inert"
 	// contract as ForwardChip. Built via BuildUpdateChip. Renders left of
@@ -325,6 +330,9 @@ func renderHeaderV2(h HeaderState, theme Theme, width int) []string {
 	var right string
 	if h.SyncNote != "" {
 		right = dim.Render(h.SyncNote) + "  "
+	}
+	if h.ConfigChip.Text != "" {
+		right += h.ConfigChip.Style.Render(h.ConfigChip.Text) + "  "
 	}
 	if h.UpdateChip.Text != "" {
 		right += h.UpdateChip.Style.Render(h.UpdateChip.Text) + "  "
