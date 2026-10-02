@@ -28,6 +28,13 @@ type ResultMsg struct {
 	ActionID string
 	Label    string
 	Err      error
+	// Seq is the controller-assigned sequence number of the Begin that
+	// produced this result. HandleResult compares it against the latest
+	// Begin so a slow result from an earlier action (a TierNone cordon, a
+	// long drain) can't wipe a newer confirm the user has since opened.
+	// Zero (a hand-built message) is treated as belonging to the latest
+	// action.
+	Seq uint64
 	// CronJobSchedule is populated only on a successful "cronjob-set-
 	// schedule" action — the API's own accepted schedule/timezone plus the
 	// CronJob's new resourceVersion (0.8.0 plan Phase 2 task 10). nil for
@@ -55,6 +62,8 @@ type BulkResultMsg struct {
 	ActionID string
 	Label    string
 	Results  []TargetResult
+	// Seq is ResultMsg.Seq's bulk counterpart.
+	Seq uint64
 }
 
 // Failed returns the subset of Results with a non-nil Err — the marks a
@@ -92,6 +101,15 @@ type Controller struct {
 	typedInput textfield.Model
 	state      tui.TaskState
 	message    string
+	// result is the outcome line every controller-using screen renders in
+	// its keybar (tui.Keybar.Result) — set by HandleResult/HandleBulkResult
+	// and by Begin's own refusals, cleared by DismissResult on the next key
+	// or by the next Begin. Kept apart from state/message so a stale result
+	// can still be reported without touching a newer pending confirm.
+	result tui.ResultLine
+	// seq numbers every Begin; the newest one owns state/pending, and a
+	// ResultMsg carrying an older Seq is stale.
+	seq uint64
 	// offline mirrors the screen's kube.ConnState.Offline() (docs/design
 	// README.md §4a: "mutating actions disabled" while OFFLINE) — set via
 	// SetOffline from each screen's ConnStateMsg handler, checked in Begin
@@ -121,6 +139,32 @@ func (c Controller) State() tui.TaskState { return c.state }
 // Message is the human-readable status for the current state (prompt, success,
 // error, or cancellation text).
 func (c Controller) Message() string { return c.message }
+
+// Result is the last action's outcome line for the screen's keybar
+// (tui.Keybar.Result): a failure (red, persists until DismissResult) or a
+// success (green, same lifetime — "cleared the moment you do anything
+// else", docs/design README.md §26a). Empty while a confirmation is
+// showing, since the keybar is the confirm prompt then.
+func (c Controller) Result() tui.ResultLine {
+	if c.Active() {
+		return tui.ResultLine{}
+	}
+	return c.result
+}
+
+// DismissResult clears the outcome line. Every controller-using screen
+// calls it at the top of its key handling, so a result stays on screen
+// until the user acts, and the key still does what it would have. A no-op
+// while a confirmation is showing (a y/n into the confirm must not throw
+// away a result the user hasn't been able to see yet). Screens that render
+// a result on their own spec'd surface (26a's will-run strip, 27a/27b/36d)
+// also call it right after HandleResult so the keybar doesn't repeat it.
+func (c *Controller) DismissResult() {
+	if c.Active() {
+		return
+	}
+	c.result = tui.ResultLine{}
+}
 
 // Pending returns the action awaiting confirmation, if any.
 func (c Controller) Pending() *tui.TaskAction { return c.pending }
@@ -174,11 +218,13 @@ func (c *Controller) Begin(tier Tier, action tui.TaskAction) tea.Cmd {
 		c.fail("Cannot run " + action.Label + ": missing target metadata.")
 		return nil
 	}
+	c.seq++
 	c.pending = &action
 	c.tier = tier
 	c.typedInput = textfield.New()
 	c.typedInput.Focus()
 	c.message = ""
+	c.result = tui.ResultLine{}
 	if tier == TierNone {
 		return c.execute()
 	}
@@ -305,19 +351,44 @@ func (c *Controller) Escalate(verb string, tier Tier) {
 	}
 }
 
-// HandleResult applies an execution outcome, transitioning to success or error.
+// stale reports whether a result belongs to an action older than the
+// latest Begin — whose confirm/execution now owns pending/state.
+func (c *Controller) stale(seq uint64) bool {
+	return seq != 0 && seq != c.seq
+}
+
+// HandleResult applies an execution outcome, transitioning to success or
+// error and setting Result. A stale result (msg.Seq older than the latest
+// Begin) only reports its outcome line: it never clears the newer pending
+// confirm or execution.
 func (c *Controller) HandleResult(msg ResultMsg) {
+	label := summary(msg.Label)
+	var message string
+	if msg.Err != nil {
+		message = fmt.Sprintf("%s failed: %v", label, msg.Err)
+		c.result = tui.ResultLine{Text: message, Failed: true}
+	} else {
+		message = "Done: " + label + "."
+		c.result = tui.ResultLine{Text: label}
+	}
+	if c.stale(msg.Seq) {
+		return
+	}
 	c.pending = nil
 	c.tier = TierNone
 	c.typedInput.Blur()
+	c.message = message
 	if msg.Err != nil {
 		c.state = tui.TaskStateError
-		verb := "run"
-		c.message = fmt.Sprintf("Failed to %s %s: %v", verb, msg.Label, msg.Err)
 		return
 	}
 	c.state = tui.TaskStateSuccess
-	c.message = "Done: " + msg.Label + "."
+}
+
+// summary turns a confirm label phrased as a question ("Delete Pod x?")
+// into the statement a result line reports.
+func summary(label string) string {
+	return strings.TrimSuffix(strings.TrimSpace(label), "?")
 }
 
 // HandleBulkResult is HandleResult's counterpart for a bulk action (0.8.0
@@ -326,21 +397,32 @@ func (c *Controller) HandleResult(msg ResultMsg) {
 // only the failed rows marked) read msg.Results/msg.Failed() themselves —
 // this only drives the controller's own State()/Message().
 func (c *Controller) HandleBulkResult(msg BulkResultMsg) {
+	label := summary(msg.Label)
+	failed := msg.Failed()
+	var message string
+	switch {
+	case len(failed) == 0:
+		message = fmt.Sprintf("Done: %s (%d).", label, len(msg.Results))
+		c.result = tui.ResultLine{Text: fmt.Sprintf("%s (%d)", label, len(msg.Results))}
+	case len(failed) == len(msg.Results):
+		message = fmt.Sprintf("%s failed: all %d targets failed: %v", label, len(failed), failed[0].Err)
+		c.result = tui.ResultLine{Text: message, Failed: true}
+	default:
+		message = fmt.Sprintf("%s: %d of %d targets failed: %v", label, len(failed), len(msg.Results), failed[0].Err)
+		c.result = tui.ResultLine{Text: message, Failed: true}
+	}
+	if c.stale(msg.Seq) {
+		return
+	}
 	c.pending = nil
 	c.tier = TierNone
 	c.typedInput.Blur()
-	failed := msg.Failed()
+	c.message = message
 	if len(failed) == 0 {
 		c.state = tui.TaskStateSuccess
-		c.message = fmt.Sprintf("Done: %s (%d).", msg.Label, len(msg.Results))
 		return
 	}
 	c.state = tui.TaskStateError
-	if len(failed) == len(msg.Results) {
-		c.message = fmt.Sprintf("Failed to %s: all %d targets failed.", msg.Label, len(failed))
-		return
-	}
-	c.message = fmt.Sprintf("%s: %d of %d targets failed.", msg.Label, len(failed), len(msg.Results))
 }
 
 // Prompt is the confirmation question shown while Active.
@@ -361,11 +443,12 @@ func (c Controller) Prompt() string {
 func (c *Controller) execute() tea.Cmd {
 	action := *c.pending
 	mutator := c.mutator
+	seq := c.seq
 	c.state = tui.TaskStateLoading
 	c.message = capitalize(action.Scope.Verb) + " " + action.Scope.ResourceName + "…"
 
 	if len(action.Scope.BulkTargets) > 0 {
-		return executeBulk(mutator, action)
+		return executeBulk(mutator, action, seq)
 	}
 
 	// cronjob-set-schedule is handled outside executeScope because its
@@ -376,7 +459,7 @@ func (c *Controller) execute() tea.Cmd {
 		return func() tea.Msg {
 			result, err := mutator.SetCronJobSchedule(context.Background(),
 				action.Scope.Namespace, action.Scope.ResourceName, scheduleEdit(action.Scope))
-			msg := ResultMsg{ActionID: action.ID, Label: action.Label, Err: err}
+			msg := ResultMsg{ActionID: action.ID, Label: action.Label, Err: err, Seq: seq}
 			if err == nil {
 				msg.CronJobSchedule = &result
 			}
@@ -385,7 +468,7 @@ func (c *Controller) execute() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		return ResultMsg{ActionID: action.ID, Label: action.Label, Err: executeScope(mutator, action.Scope)}
+		return ResultMsg{ActionID: action.ID, Label: action.Label, Err: executeScope(mutator, action.Scope), Seq: seq}
 	}
 }
 
@@ -395,7 +478,7 @@ func (c *Controller) execute() tea.Cmd {
 // shared Scope. Every other Scope field (Verb, TriggerCreator, StagedAt, …)
 // stays common across every target — only the fields a per-target
 // precondition can differ on are overridden.
-func executeBulk(mutator kube.Mutator, action tui.TaskAction) tea.Cmd {
+func executeBulk(mutator kube.Mutator, action tui.TaskAction, seq uint64) tea.Cmd {
 	targets := append([]tui.BulkTarget(nil), action.Scope.BulkTargets...)
 	baseScope := action.Scope
 	baseScope.BulkTargets = nil
@@ -413,7 +496,7 @@ func executeBulk(mutator kube.Mutator, action tui.TaskAction) tea.Cmd {
 				Err:          executeScope(mutator, scope),
 			})
 		}
-		return BulkResultMsg{ActionID: action.ID, Label: action.Label, Results: results}
+		return BulkResultMsg{ActionID: action.ID, Label: action.Label, Results: results, Seq: seq}
 	}
 }
 
@@ -547,9 +630,16 @@ func executeScope(mutator kube.Mutator, scope tui.TaskScope) error {
 }
 
 func (c *Controller) fail(message string) {
+	if c.Active() {
+		// A refused Begin over an open confirm reports the refusal without
+		// wiping the confirm (same rule as a stale result).
+		c.result = tui.ResultLine{Text: message, Failed: true}
+		return
+	}
 	c.pending = nil
 	c.state = tui.TaskStateError
 	c.message = message
+	c.result = tui.ResultLine{Text: message, Failed: true}
 }
 
 func capitalize(s string) string {

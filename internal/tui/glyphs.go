@@ -4,9 +4,12 @@ package tui
 // these constants rather than inlining the Unicode runes, so a future ASCII
 // fallback (terminal degradation, deferred post-MVP) is a one-file change.
 const (
-	GlyphRunning   = "●"
-	GlyphPending   = "▲"
-	GlyphFailed    = "✕"
+	GlyphRunning = "●"
+	GlyphPending = "▲"
+	GlyphFailed  = "✕"
+	// GlyphSucceeded marks a mutation's success on the keybar result line
+	// (Keybar.Result) — ✕'s counterpart, the same ✓ §23b/§36a use.
+	GlyphSucceeded = "✓"
 	GlyphCompleted = "○"
 	GlyphProbing   = "◌"
 	GlyphRestarts  = "↺"

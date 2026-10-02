@@ -64,3 +64,8 @@ func (m Model) Keybar() tui.Keybar {
 // never does (no filter, and its two mutating verbs are TierNone), so the
 // root shell's global shortcuts always reach it as-is.
 func (m Model) CapturingInput() bool { return false }
+
+// ActionResult puts the actions controller's outcome line — a failed or
+// successful delete, drain, cordon, restart, … — on the keybar
+// (tui.ActionResulter, rendered by tui.Frame).
+func (m Model) ActionResult() tui.ResultLine { return m.actionsCtl.Result() }

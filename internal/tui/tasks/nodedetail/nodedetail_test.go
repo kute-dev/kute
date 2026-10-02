@@ -462,6 +462,7 @@ func (sentinelTask) View() tea.View                      { return tea.View{} }
 
 type fakeMutator struct {
 	drained []string
+	err     error // returned by Drain and Cordon when set
 }
 
 func (f *fakeMutator) DeleteResource(context.Context, kube.ResourceKind, string, string) error {
@@ -473,7 +474,7 @@ func (f *fakeMutator) DeleteResourceForced(context.Context, kube.ResourceKind, s
 func (f *fakeMutator) RolloutRestart(context.Context, kube.ResourceKind, string, string) error {
 	return nil
 }
-func (f *fakeMutator) Cordon(context.Context, string, bool) error              { return nil }
+func (f *fakeMutator) Cordon(context.Context, string, bool) error              { return f.err }
 func (f *fakeMutator) HelmRollback(context.Context, string, string, int) error { return nil }
 func (f *fakeMutator) RolloutUndo(context.Context, string, string, int) error  { return nil }
 func (f *fakeMutator) Scale(context.Context, kube.ResourceKind, string, string, int32) error {
@@ -531,6 +532,9 @@ func (f *fakeMutator) SetCronJobSchedule(_ context.Context, namespace, name stri
 	return kube.CronJobScheduleResult{}, nil
 }
 func (f *fakeMutator) Drain(_ context.Context, node string) (int, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
 	f.drained = append(f.drained, node)
 	return 1, nil
 }

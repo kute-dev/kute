@@ -87,6 +87,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.meta.HandleResult(msg) {
 				m.meta = nil
 			}
+			// The panel's will-run strip is this result's surface.
+			m.actions.DismissResult()
 			if msg.Err == nil {
 				return m, m.load()
 			}
@@ -110,6 +112,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case podShellsProbedMsg:
 		return m.routePodShellsProbed(msg)
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actions.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil

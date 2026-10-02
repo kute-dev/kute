@@ -58,8 +58,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reloadEpoch++
 			return m, m.load()
 		}
-		m.feedback = "rollback failed: " + msg.Err.Error()
+		// A failed rollback (helm missing from PATH included) is the
+		// controller's keybar result line (ActionResult).
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actions.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil

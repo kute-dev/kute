@@ -501,3 +501,8 @@ func (m Model) CapturingInput() bool {
 		m.pendingScale != nil || m.pendingSetImage != nil || m.pendingSetResources != nil || m.pendingMeta != nil ||
 		m.pendingBulkDelete != nil || m.pendingJobRerun != nil
 }
+
+// ActionResult puts the actions controller's outcome line — a failed or
+// successful delete, drain, cordon, restart, … — on the keybar
+// (tui.ActionResulter, rendered by tui.Frame).
+func (m Model) ActionResult() tui.ResultLine { return m.actions.Result() }

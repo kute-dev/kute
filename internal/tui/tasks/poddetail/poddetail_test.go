@@ -131,9 +131,13 @@ func (f fakeEvents) ObjectEvents(context.Context, string, kube.ResourceKind, str
 type fakeMutator struct {
 	deleted      []string
 	forceDeleted []string
+	err          error // returned by DeleteResource when set
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, _ kube.ResourceKind, _ string, name string) error {
+	if f.err != nil {
+		return f.err
+	}
 	f.deleted = append(f.deleted, name)
 	return nil
 }

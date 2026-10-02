@@ -56,6 +56,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actions.ResultMsg:
 		return m, m.handleResult(msg)
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actionsCtl.DismissResult()
 		return m.handleKey(msg)
 	}
 	return m, nil
@@ -106,11 +109,13 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 	return nil
 }
 
-// handleResult lands a verb's outcome on the will-run line and reloads, so
+// handleResult lands a verb's outcome on the keybar result line and reloads, so
 // the row reflects what just happened rather than what it said before.
 func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 	m.actionsCtl.HandleResult(msg)
-	m.execFeedback = m.actionsCtl.Message()
+	// The outcome is the controller's keybar result line (ActionResult),
+	// red on failure; the will-run command it answered is cleared.
+	m.execFeedback = ""
 	if msg.Err != nil {
 		return nil
 	}

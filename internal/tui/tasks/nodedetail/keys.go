@@ -114,3 +114,8 @@ func (m Model) Keybar() tui.Keybar {
 func (m Model) CapturingInput() bool {
 	return m.actions.Active() || m.filterActive || m.pendingEdit != nil || m.meta != nil
 }
+
+// ActionResult puts the actions controller's outcome line — a failed or
+// successful delete, drain, cordon, restart, … — on the keybar
+// (tui.ActionResulter, rendered by tui.Frame).
+func (m Model) ActionResult() tui.ResultLine { return m.actions.Result() }

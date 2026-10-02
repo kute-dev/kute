@@ -178,6 +178,33 @@ type Keybar struct {
 	// a plain RightNote always renders dim, with no room for its own color.
 	RightWarnNote string
 	RightHints    []KeyHint // e.g. the ? help verb; rendered after RightNote/RightWarnNote
+	// Result is a mutation's outcome line (Frame fills it from
+	// ActionResulter). The keybar is where a non-prod inline y/N asked the
+	// question, so it is where the answer lands: a failure replaces the
+	// hint groups and is truncated, never dropped; a success replaces
+	// RightNote in green and keeps the hints.
+	Result ResultLine
+}
+
+// ResultLine is a mutating action's outcome as the keybar shows it: a
+// failure renders red behind GlyphFailed, a success green behind
+// GlyphSucceeded. Text is folded onto one line, never wrapped.
+type ResultLine struct {
+	Text   string
+	Failed bool
+}
+
+// Empty reports whether there is no outcome to show.
+func (r ResultLine) Empty() bool { return r.Text == "" }
+
+// ActionResulter is implemented by every screen that executes mutations
+// through actions.Controller: ActionResult returns the controller's
+// Result(), and Frame renders it on the keybar. One
+// rendering path, so a failed delete/drain/cordon/restart can never just
+// make the confirm vanish as success does (actions/guard_test.go enforces
+// that every controller-embedding screen implements this).
+type ActionResulter interface {
+	ActionResult() ResultLine
 }
 
 // Screen is the Chrome v2 contract every redesigned task implements. Frame
@@ -266,7 +293,11 @@ func Frame(width, height int, s Screen) string {
 	for i, line := range strips {
 		stripLines[i] = PadLine(line, width)
 	}
-	keybar := renderKeybarV2(s.Keybar(), theme, width)
+	kb := s.Keybar()
+	if r, ok := s.(ActionResulter); ok && kb.Result.Empty() {
+		kb.Result = r.ActionResult()
+	}
+	keybar := renderKeybarV2(kb, theme, width)
 
 	bodyHeight := FrameBodyHeight(height, len(strips))
 	body := fitBody(s.Body(width, bodyHeight), width, bodyHeight)
@@ -371,6 +402,10 @@ func renderKeybarV2(k Keybar, theme Theme, width int) string {
 		return strings.Join(hints, "  ")
 	}
 
+	if k.Result.Failed {
+		return renderFailedKeybar(k, left.String(), renderHints, theme, width)
+	}
+
 	groupStrs := make([]string, 0, len(k.Groups))
 	for _, group := range k.Groups {
 		groupStrs = append(groupStrs, renderHints(group))
@@ -378,8 +413,17 @@ func renderKeybarV2(k Keybar, theme Theme, width int) string {
 	left.WriteString(strings.Join(groupStrs, sep.Render(" │ ")))
 
 	right := ""
+	if !k.Result.Empty() {
+		// A success answers on the right, ahead of a TierNone verb's
+		// will-run note, and keeps the hints: it's low-stakes, and a narrow
+		// keybar may drop it the way it drops any right-side note.
+		right = lipgloss.NewStyle().Foreground(theme.Good).Render(GlyphSucceeded + " " + singleLine(k.Result.Text))
+	}
 	if k.RightNote != "" {
-		right = dim.Render(k.RightNote)
+		if right != "" {
+			right += "   "
+		}
+		right += dim.Render(k.RightNote)
 	}
 	if k.RightWarnNote != "" {
 		if right != "" {
@@ -394,6 +438,34 @@ func renderKeybarV2(k Keybar, theme Theme, width int) string {
 		right += renderHints(k.RightHints)
 	}
 	return insetChromeLine(left.String(), right, width)
+}
+
+// renderFailedKeybar is the keybar while a failed ResultLine is showing:
+// the mode pill, then the error in Bad behind GlyphFailed, truncated (never
+// dropped, unlike a right-side note) so the right-side hints (? help) still
+// fit when they can. The hint groups come back on the next key.
+func renderFailedKeybar(k Keybar, pill string, renderHints func([]KeyHint) string, theme Theme, width int) string {
+	right := ""
+	if len(k.RightHints) > 0 {
+		right = renderHints(k.RightHints)
+	}
+	inner := max(width-2*FrameInset, 0)
+	avail := inner - lipgloss.Width(pill)
+	if right != "" {
+		avail -= lipgloss.Width(right) + 3
+		if avail < 20 {
+			right = ""
+			avail = inner - lipgloss.Width(pill)
+		}
+	}
+	text := Truncate(GlyphFailed+" "+singleLine(k.Result.Text), max(avail, 0))
+	return insetChromeLine(pill+lipgloss.NewStyle().Foreground(theme.Bad).Render(text), right, width)
+}
+
+// singleLine folds a multi-line error (a joined drain error, a webhook
+// denial) onto one keybar line.
+func singleLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // pillStyle picks the mode pill's hue per docs/design/README.md §Design

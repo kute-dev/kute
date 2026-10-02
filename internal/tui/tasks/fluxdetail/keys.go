@@ -54,3 +54,8 @@ func (m Model) pillText() string {
 		return "FLUX"
 	}
 }
+
+// ActionResult puts the actions controller's outcome line — a failed or
+// successful delete, drain, cordon, restart, … — on the keybar
+// (tui.ActionResulter, rendered by tui.Frame).
+func (m Model) ActionResult() tui.ResultLine { return m.actions.Result() }

@@ -240,9 +240,13 @@ func TestMoveSiblingLoadsNextObject(t *testing.T) {
 
 type fakeMutator struct {
 	deleted []string
+	err     error // returned by DeleteResource when set
 }
 
 func (f *fakeMutator) DeleteResource(_ context.Context, _ kube.ResourceKind, _, name string) error {
+	if f.err != nil {
+		return f.err
+	}
 	f.deleted = append(f.deleted, name)
 	return nil
 }

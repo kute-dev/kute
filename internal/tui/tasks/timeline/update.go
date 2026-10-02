@@ -78,8 +78,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err == nil {
 			return m, m.load()
 		}
-		m.feedback = "rollback failed: " + msg.Err.Error()
+		// A failed rollback is the controller's keybar result line
+		// (ActionResult).
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actionsCtl.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil

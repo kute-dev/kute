@@ -93,6 +93,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case actions.ResultMsg:
 		m.actions.HandleResult(msg)
+		// This screen's own will-run strip is the result's surface (the
+		// spec'd inline result line), so the keybar doesn't repeat it.
+		m.actions.DismissResult()
 		return m, m.handleResult(msg)
 	case editResultMsg:
 		if msg.err != nil {
@@ -101,6 +104,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reloadEpoch++
 		return m, m.load()
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actions.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil

@@ -47,11 +47,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadedMsg:
 		return m, m.applyLoaded(msg)
 	case actions.ResultMsg:
+		// The outcome is the controller's keybar result line
+		// (ActionResult); the will-run command it replaces is cleared.
+		m.actions.HandleResult(msg)
+		if m.state == tui.TaskStateReady {
+			m.feedback = ""
+		}
 		if msg.Err == nil {
 			return m, m.load()
 		}
-		m.feedback = msg.Err.Error()
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actions.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil

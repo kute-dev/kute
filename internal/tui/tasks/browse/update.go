@@ -284,22 +284,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// routed through actions.Controller's own structured payload rather
 		// than bulkDeleteResultMsg's simpler joined-error shape, so its
 		// per-target detail is handled here instead.
+		// The outcome itself ("… (N)" / "N of M targets failed") is the
+		// controller's keybar result line (ActionResult).
 		m.actions.HandleBulkResult(msg)
 		failed := msg.Failed()
 		if len(failed) == 0 {
 			m.marks = nil
-			m.execFeedback = fmt.Sprintf("✓ %s (%d)", msg.Label, len(msg.Results))
 		} else {
 			retained := make(map[string]bool, len(failed))
 			for _, f := range failed {
 				retained[markKey(f.Namespace, f.ResourceName)] = true
 			}
 			m.marks = retained
-			if len(failed) == len(msg.Results) {
-				m.execFeedback = fmt.Sprintf("%s: all %d targets failed — %v", msg.Label, len(failed), failed[0].Err)
-			} else {
-				m.execFeedback = fmt.Sprintf("%s: %d of %d targets failed", msg.Label, len(failed), len(msg.Results))
-			}
 		}
 		return m, m.load()
 	case actions.ResultMsg:
@@ -316,6 +312,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.pendingMeta.HandleResult(msg) {
 				m.pendingMeta = nil
 			}
+			// The panel's will-run strip is this result's surface.
+			m.actions.DismissResult()
 			if msg.Err == nil {
 				return m, m.load()
 			}
@@ -327,6 +325,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// table's ROLLOUT/IMAGE columns behind the still-open panel on
 			// success, same as the meta/cron-schedule branches above.
 			cmd := m.handleSetImageResult(msg)
+			m.actions.DismissResult() // shown in the panel
 			if msg.Err == nil {
 				return m, tea.Batch(cmd, m.load())
 			}
@@ -334,6 +333,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if isSetResourcesActionID(msg.ActionID) && m.pendingSetResources != nil {
 			cmd := m.handleSetResourcesResult(msg)
+			m.actions.DismissResult() // shown in the panel
 			if msg.Err == nil {
 				return m, tea.Batch(cmd, m.load())
 			}
@@ -352,34 +352,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 			case errors.Is(msg.Err, kube.ErrManualJobNameConflict):
 				m.execFeedback = "job name taken since staging — press ctrl-r to restage"
-			case msg.Err != nil:
-				m.execFeedback = "run now failed: " + msg.Err.Error()
-			default:
+				m.actions.DismissResult()
+			case msg.Err == nil:
 				m.execFeedback = "✓ job created · " + m.lastCronJobRunName
+				m.actions.DismissResult()
 			}
 			return m, m.load()
 		}
-		if strings.HasPrefix(msg.ActionID, "cronjob-resume-") {
-			if msg.Err != nil {
-				m.execFeedback = "resume failed: " + msg.Err.Error()
-			}
+		// Every other verb — delete, force-delete, cordon, drain, rollout
+		// restart, rollback, suspend/resume, argo/flux, cert renew, job
+		// replace — reports through the controller's keybar result line
+		// (ActionResult), success or failure.
+		if msg.Err == nil || strings.HasPrefix(msg.ActionID, "cronjob-") {
 			return m, m.load()
-		}
-		if strings.HasPrefix(msg.ActionID, "cronjob-suspend-") {
-			if msg.Err != nil {
-				m.execFeedback = "suspend failed: " + msg.Err.Error()
-			}
-			return m, m.load()
-		}
-		if msg.Err == nil {
-			return m, m.load()
-		}
-		if strings.HasPrefix(msg.ActionID, "rollback-") {
-			// 18a: "helm missing from PATH explained inline" — routed
-			// through execFeedback (the same transient keybar-note channel
-			// exec/node-shell/edit already use), since actions.Controller's
-			// own error message has no render path in browse today.
-			m.execFeedback = "rollback failed: " + msg.Err.Error()
 		}
 	case execResultMsg:
 		if msg.err != nil {
@@ -398,6 +383,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dryRunSetResourcesMsg:
 		return m.handleDryRunSetResources(msg)
 	case tea.KeyPressMsg:
+		// Any key acknowledges the last action's outcome line; the key
+		// still does what it would have.
+		m.actions.DismissResult()
 		return m.updateKey(msg)
 	}
 	return m, nil
