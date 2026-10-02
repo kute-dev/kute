@@ -3,6 +3,7 @@ package kube
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -678,7 +679,7 @@ func TestSetCronJobSchedulePropagatesConflict(t *testing.T) {
 func TestRolloutUndoPatchesTemplateToTargetRevision(t *testing.T) {
 	t.Parallel()
 	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default", ResourceVersion: "1"},
 		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app", Image: "api:2.0.0"}},
 		}}},
@@ -714,6 +715,91 @@ func TestRolloutUndoPatchesTemplateToTargetRevision(t *testing.T) {
 	}
 	if len(got.Spec.Template.Spec.Containers) != 1 || got.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
 		t.Fatalf("expected the deployment's template to match revision 4's image, got %+v", got.Spec.Template.Spec.Containers)
+	}
+}
+
+// TestRolloutUndoReplacesTemplateWholesale is the H1 regression: rolling
+// back must restore revision 1's template exactly, as `kubectl rollout
+// undo` does — an env var, a sidecar and a template annotation added in
+// revision 2 must be gone (a strategic merge patch kept all three), the
+// ReplicaSet's pod-template-hash must not leak into the Deployment, and
+// the Deployment's annotations follow kubectl's copy/skip rule.
+func TestRolloutUndoReplacesTemplateWholesale(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web", Namespace: "default", ResourceVersion: "42",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "2",
+				corev1.LastAppliedConfigAnnotation:  "{}",
+				"kubernetes.io/change-cause":        "bump to v2",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels:      map[string]string{"app": "web"},
+				Annotations: map[string]string{"new": "yes"},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{
+				{Name: "app", Image: "web:2", Env: []corev1.EnvVar{{Name: "OLD", Value: "1"}, {Name: "NEW", Value: "2"}}},
+				{Name: "sidecar", Image: "proxy:1"},
+			}},
+		}},
+	}
+	rev1Template := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"app": "web", appsv1.DefaultDeploymentUniqueLabelKey: "abc"},
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "app", Image: "web:1", Env: []corev1.EnvVar{{Name: "OLD", Value: "1"}}},
+		}},
+	}
+	rs1 := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-abc", Namespace: "default",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+				"kubernetes.io/change-cause":        "initial",
+			},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
+		},
+		Spec: appsv1.ReplicaSetSpec{Template: rev1Template},
+	}
+	c, cs := newTestCluster(deploy, rs1)
+
+	if err := c.RolloutUndo(t.Context(), "default", "web", 1); err != nil {
+		t.Fatalf("RolloutUndo: %v", err)
+	}
+	got, err := cs.AppsV1().Deployments("default").Get(t.Context(), "web", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	want := rev1Template.DeepCopy()
+	delete(want.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
+	if !reflect.DeepEqual(got.Spec.Template, *want) {
+		t.Fatalf("template after rollback = %+v\nwant revision 1's minus pod-template-hash = %+v", got.Spec.Template, *want)
+	}
+	wantAnn := map[string]string{
+		"deployment.kubernetes.io/revision": "2",
+		corev1.LastAppliedConfigAnnotation:  "{}",
+		"kubernetes.io/change-cause":        "initial",
+	}
+	if !reflect.DeepEqual(got.Annotations, wantAnn) {
+		t.Fatalf("annotations after rollback = %v, want %v", got.Annotations, wantAnn)
+	}
+}
+
+// TestRolloutUndoRefusesPausedDeployment matches kubectl rollout undo,
+// which refuses a paused Deployment rather than queue a hidden rollback.
+func TestRolloutUndoRefusesPausedDeployment(t *testing.T) {
+	t.Parallel()
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+		Spec:       appsv1.DeploymentSpec{Paused: true},
+	}
+	c, _ := newTestCluster(deploy)
+	if err := c.RolloutUndo(t.Context(), "default", "web", 1); err == nil || !strings.Contains(err.Error(), "paused") {
+		t.Fatalf("expected a paused-deployment error, got %v", err)
 	}
 }
 

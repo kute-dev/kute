@@ -168,9 +168,12 @@ func TestRolloutUndoPatchesTemplateAndAppendsNewRevision(t *testing.T) {
 				Annotations:     map[string]string{"deployment.kubernetes.io/revision": "4"},
 				OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
 			},
-			Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "app", Image: "api:1.0.0"}},
-			}}},
+			Spec: appsv1.ReplicaSetSpec{Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", appsv1.DefaultDeploymentUniqueLabelKey: "old"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Image: "api:1.0.0"}},
+				},
+			}},
 		},
 		&appsv1.ReplicaSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -192,6 +195,9 @@ func TestRolloutUndoPatchesTemplateAndAppendsNewRevision(t *testing.T) {
 	deploy := deployObjs[0].(*appsv1.Deployment)
 	if deploy.Spec.Template.Spec.Containers[0].Image != "api:1.0.0" {
 		t.Fatalf("expected the deployment's template patched to revision 4's image, got %q", deploy.Spec.Template.Spec.Containers[0].Image)
+	}
+	if _, ok := deploy.Spec.Template.Labels[appsv1.DefaultDeploymentUniqueLabelKey]; ok {
+		t.Fatalf("expected pod-template-hash stripped from the restored template, got labels %v", deploy.Spec.Template.Labels)
 	}
 
 	rsObjs, _ := c.ListRaw(t.Context(), kube.KindReplicaSet, "default")

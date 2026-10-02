@@ -908,14 +908,41 @@ func RenewCertificateCommandString(namespace, name string) string {
 		KindCertificate.ResourceArg(), name, renewCertificatePatch, namespace)
 }
 
+// rolloutUndoSkippedAnnotations are the Deployment annotations RolloutUndo
+// keeps from the Deployment itself rather than copying from the target
+// ReplicaSet — kubectl's DeploymentRollbacker annotationsToSkip, verbatim.
+var rolloutUndoSkippedAnnotations = map[string]bool{
+	corev1.LastAppliedConfigAnnotation:          true,
+	"deployment.kubernetes.io/revision":         true,
+	"deployment.kubernetes.io/revision-history": true,
+	"deployment.kubernetes.io/desired-replicas": true,
+	"deployment.kubernetes.io/max-replicas":     true,
+	appsv1.DeprecatedRollbackTo:                 true,
+}
+
 // RolloutUndo finds the ReplicaSet owned by name whose
 // "deployment.kubernetes.io/revision" annotation equals toRevision and
-// strategic-merge-patches the Deployment's spec.template to match it — see
-// the Mutator interface doc comment for why this (rather than a dedicated
-// rollback API call) is the correct mechanism.
+// restores it exactly as `kubectl rollout undo` does: a JSON patch that
+// *replaces* /spec/template with the ReplicaSet's template (minus the
+// controller-added pod-template-hash label) and /metadata/annotations
+// with the ReplicaSet's own, keeping kubectl's skip-list from the
+// Deployment. A strategic merge patch is wrong here — it merges lists by
+// key and never drops absent map keys, so env vars, containers and
+// annotations added after toRevision would survive the "rollback". A
+// leading `test` op on metadata.resourceVersion makes the Get the patch
+// was computed from a precondition. See the Mutator interface doc comment
+// for why this (rather than a dedicated rollback API call) is the correct
+// mechanism.
 func (c *Cluster) RolloutUndo(ctx context.Context, namespace, name string, toRevision int) error {
 	if name == "" {
 		return fmt.Errorf("cannot roll back: empty deployment name")
+	}
+	dep, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get deployment %s: %w", name, err)
+	}
+	if dep.Spec.Paused {
+		return fmt.Errorf("cannot roll back a paused deployment; resume it first")
 	}
 	rsList, err := c.clientset.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -925,13 +952,41 @@ func (c *Cluster) RolloutUndo(ctx context.Context, namespace, name string, toRev
 	if !ok {
 		return fmt.Errorf("deployment %q has no revision %d to roll back to", name, toRevision)
 	}
-	templateJSON, err := json.Marshal(target.Spec.Template)
+	template, annotations := RolloutUndoTarget(dep, target)
+
+	patch, err := json.Marshal([]map[string]any{
+		{"op": "test", "path": "/metadata/resourceVersion", "value": dep.ResourceVersion},
+		{"op": "replace", "path": "/spec/template", "value": template},
+		{"op": "replace", "path": "/metadata/annotations", "value": annotations},
+	})
 	if err != nil {
 		return fmt.Errorf("encode revision %d template: %w", toRevision, err)
 	}
-	patch := fmt.Appendf(nil, `{"spec":{"template":%s}}`, templateJSON)
-	_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+	_, err = c.clientset.AppsV1().Deployments(namespace).Patch(ctx, name, types.JSONPatchType, patch, metav1.PatchOptions{})
 	return err
+}
+
+// RolloutUndoTarget computes what `kubectl rollout undo` writes back onto
+// dep to restore rs's revision: rs's pod template minus the controller's
+// pod-template-hash label, and rs's annotations with kubectl's skip-list
+// carried over from dep instead. Shared by Cluster.RolloutUndo and
+// fake.Cluster's so --demo restores exactly what a real cluster would.
+func RolloutUndoTarget(dep *appsv1.Deployment, rs *appsv1.ReplicaSet) (*corev1.PodTemplateSpec, map[string]string) {
+	template := rs.Spec.Template.DeepCopy()
+	delete(template.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
+
+	annotations := map[string]string{}
+	for k := range rolloutUndoSkippedAnnotations {
+		if v, ok := dep.Annotations[k]; ok {
+			annotations[k] = v
+		}
+	}
+	for k, v := range rs.Annotations {
+		if !rolloutUndoSkippedAnnotations[k] {
+			annotations[k] = v
+		}
+	}
+	return template, annotations
 }
 
 // replicaSetForRevision finds the ReplicaSet owned by deploymentName whose

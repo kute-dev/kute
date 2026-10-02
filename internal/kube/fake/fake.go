@@ -1062,6 +1062,9 @@ func (c *Cluster) RolloutUndo(_ context.Context, namespace, name string, toRevis
 	if dep == nil {
 		return fmt.Errorf("deployment %q not found in namespace %q", name, namespace)
 	}
+	if dep.Spec.Paused {
+		return fmt.Errorf("cannot roll back a paused deployment; resume it first")
+	}
 
 	var target *appsv1.ReplicaSet
 	maxRevision := 0
@@ -1083,7 +1086,11 @@ func (c *Cluster) RolloutUndo(_ context.Context, namespace, name string, toRevis
 		return fmt.Errorf("deployment %q has no revision %d to roll back to", name, toRevision)
 	}
 
-	dep.Spec.Template = *target.Spec.Template.DeepCopy()
+	// Same wholesale replace as kube.Cluster.RolloutUndo (kubectl rollout
+	// undo semantics): template and annotations, not a merge.
+	template, annotations := kube.RolloutUndoTarget(dep, target)
+	dep.Spec.Template = *template
+	dep.Annotations = annotations
 
 	next := target.DeepCopy()
 	next.Name = fmt.Sprintf("%s-%x", name, time.Now().UnixNano())
