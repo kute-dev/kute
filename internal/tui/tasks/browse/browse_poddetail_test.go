@@ -18,11 +18,11 @@ func TestEnterOpensPodDetail(t *testing.T) {
 		kube.KindPod: {pod("default", "api-0"), pod("default", "worker-0")},
 	}}
 	var openedName string
-	var openedSiblings []string
+	var openedSiblings []PodSiblingRef
 	var openedIndex int
 	m := New(Config{
 		Session: newSession(), Lister: lister,
-		OpenPodDetail: func(p kube.Pod, siblings []string, index int, w, h int) (tea.Model, tea.Cmd) {
+		OpenPodDetail: func(p kube.Pod, siblings []PodSiblingRef, index int, w, h int) (tea.Model, tea.Cmd) {
 			openedName = p.Name
 			openedSiblings = siblings
 			openedIndex = index
@@ -36,7 +36,7 @@ func TestEnterOpensPodDetail(t *testing.T) {
 	if openedName != "api-0" {
 		t.Fatalf("expected api-0 to be opened, got %q", openedName)
 	}
-	if len(openedSiblings) != 2 || openedSiblings[openedIndex] != "api-0" {
+	if len(openedSiblings) != 2 || openedSiblings[openedIndex].Name != "api-0" {
 		t.Fatalf("expected siblings to include api-0 at its own index, got %v index %d", openedSiblings, openedIndex)
 	}
 	if _, ok := updated.(stubTask); !ok {
@@ -57,7 +57,7 @@ func TestEnterCommitsFilterThenOpensPodDetail(t *testing.T) {
 	var openedName string
 	m := New(Config{
 		Session: newSession(), Lister: lister,
-		OpenPodDetail: func(p kube.Pod, siblings []string, index int, w, h int) (tea.Model, tea.Cmd) {
+		OpenPodDetail: func(p kube.Pod, siblings []PodSiblingRef, index int, w, h int) (tea.Model, tea.Cmd) {
 			openedName = p.Name
 			return stubTask{}, nil
 		},
@@ -101,7 +101,7 @@ func TestPodKeybarOmitsGenericOpenButShowsLogs(t *testing.T) {
 	}}
 	m := New(Config{
 		Session: newSession(), Lister: lister,
-		OpenPodDetail: func(kube.Pod, []string, int, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
+		OpenPodDetail: func(kube.Pod, []PodSiblingRef, int, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
 		OpenLogs:      func(kube.Pod, string, int, int) (tea.Model, tea.Cmd) { return stubTask{}, nil },
 	})
 	m.SetSize(120, 36)

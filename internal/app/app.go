@@ -924,12 +924,12 @@ func kubeconfigPathOrEmpty() string {
 // against the same seams as browse. nodedetail's pod rows now open a real
 // poddetail (5a) via openPodDetail rather than the log-stream stand-in
 // nodedetail's own exit notes flagged — as a single-pod handoff (siblings
-// = [pod.Name]), so poddetail's j/k is inert from this entry point; wiring
+// = [pod]), so poddetail's j/k is inert from this entry point; wiring
 // real prev/next through nodedetail's own pod table is a natural follow-up,
 // not required here.
 func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, openNodeDebug func(name string, podCount, width, height int) (tea.Model, tea.Cmd)) browse.OpenNodeDetailFunc {
 	openPod := func(pod kube.Pod, width, height int) (tea.Model, tea.Cmd) {
-		return openPodDetail(pod, []string{pod.Name}, 0, width, height)
+		return openPodDetail(pod, []browse.PodSiblingRef{{Namespace: pod.Namespace, Name: pod.Name}}, 0, width, height)
 	}
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
@@ -964,7 +964,11 @@ func openNodeDetailFunc(sess *tui.Session, active seams, openPodDetail browse.Op
 func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, openExec func(namespace, name string, containers []kube.ContainerInfo, width, height int) (tea.Model, tea.Cmd), openForward browse.OpenForwardFunc, shells poddetail.ShellDetector, openDebug func(namespace, name string, containers []kube.ContainerInfo, podPhase string, waiting bool, width, height int) (tea.Model, tea.Cmd)) browse.OpenPodDetailFunc {
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
 	openObjectTimeline := openObjectTimelineFunc(sess, active, openObjectEvents)
-	return func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd) {
+	return func(pod kube.Pod, siblings []browse.PodSiblingRef, index int, width, height int) (tea.Model, tea.Cmd) {
+		refs := make([]poddetail.SiblingRef, len(siblings))
+		for i, s := range siblings {
+			refs[i] = poddetail.SiblingRef{Namespace: s.Namespace, Name: s.Name}
+		}
 		pd := poddetail.New(poddetail.Config{
 			Session:      sess,
 			Lister:       active,
@@ -986,7 +990,7 @@ func openPodDetailFunc(sess *tui.Session, active seams, openLogs browse.OpenLogs
 			OpenFluxDetail: poddetail.OpenFluxDetailFunc(openFluxDetailFunc(sess, active, openYAML)),
 			Namespace:      pod.Namespace,
 			Name:           pod.Name,
-			Siblings:       siblings,
+			Siblings:       refs,
 			SiblingIndex:   index,
 		})
 		pd.SetSize(width, height)
@@ -1281,6 +1285,15 @@ func openCronJobDetailFunc(sess *tui.Session, active seams, openLogs browse.Open
 // kube.AnnotationTriggeredBy.
 func openJobAttemptsFunc(sess *tui.Session, active seams, openPodDetail browse.OpenPodDetailFunc, openLogs browse.OpenLogsFunc, openYAML browse.OpenYAMLFunc, currentUser string) browse.OpenJobAttemptsFunc {
 	openObjectEvents := openObjectEventsFunc(sess, active, openYAML)
+	// A Job's attempt pods all live in the Job's own namespace, so
+	// jobattempts' plain name siblings qualify with the opened pod's.
+	openAttemptPod := func(pod kube.Pod, siblings []string, index, width, height int) (tea.Model, tea.Cmd) {
+		refs := make([]browse.PodSiblingRef, len(siblings))
+		for i, s := range siblings {
+			refs[i] = browse.PodSiblingRef{Namespace: pod.Namespace, Name: s}
+		}
+		return openPodDetail(pod, refs, index, width, height)
+	}
 	return func(namespace, name string, siblings []browse.JobSiblingRef, index, width, height int) (tea.Model, tea.Cmd) {
 		refs := make([]jobattempts.SiblingRef, len(siblings))
 		for i, s := range siblings {
@@ -1291,7 +1304,7 @@ func openJobAttemptsFunc(sess *tui.Session, active seams, openPodDetail browse.O
 			Lister:        active,
 			Mutator:       active,
 			OpenLogs:      jobattempts.OpenLogsFunc(openLogs),
-			OpenPodDetail: jobattempts.OpenPodDetailFunc(openPodDetail),
+			OpenPodDetail: jobattempts.OpenPodDetailFunc(openAttemptPod),
 			OpenYAML:      jobattempts.OpenYAMLFunc(openYAML),
 			OpenEvents:    jobattempts.OpenEventsFunc(openObjectEvents),
 			Namespace:     namespace,

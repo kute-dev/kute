@@ -94,7 +94,7 @@ func (m *Model) beginExecOrDebug() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	pod, ok := m.pods[row.Name]
+	pod, ok := m.pods[kube.PodKey(row.Namespace, row.Name)]
 	if !ok || len(pod.ContainerInfos) == 0 {
 		return nil, nil, false
 	}
@@ -135,7 +135,7 @@ func (m *Model) openPodDebug(namespace, podName string, containers []kube.Contai
 // execpicker as before.
 func (m *Model) routePodShellsProbed(msg podShellsProbedMsg) (tea.Model, tea.Cmd) {
 	if msg.allShellless() {
-		podPhase, waiting := m.selectedPodStatusAndWaiting(msg.podName)
+		podPhase, waiting := m.selectedPodStatusAndWaiting(msg.namespace, msg.podName)
 		return m.openPodDebug(msg.namespace, msg.podName, msg.containers, podPhase, waiting)
 	}
 	if len(msg.containers) == 1 {
@@ -179,8 +179,8 @@ func (m *Model) decorateDebugCopies() {
 // whether any container currently sits Waiting. The phase, not the display
 // Reason, is load-bearing for terminal Job pods: kubectl exec rejects both
 // Succeeded and Failed.
-func (m Model) selectedPodStatusAndWaiting(podName string) (string, bool) {
-	pod, ok := m.pods[podName]
+func (m Model) selectedPodStatusAndWaiting(namespace, podName string) (string, bool) {
+	pod, ok := m.pods[kube.PodKey(namespace, podName)]
 	if !ok {
 		return "", false
 	}

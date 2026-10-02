@@ -6,20 +6,42 @@ import (
 	"github.com/kute-dev/kute/internal/tui"
 )
 
+// rowRef identifies a row by namespace + name — never name alone, since
+// all-namespaces mode lists same-named objects from different namespaces
+// side by side. An empty namespace matches any (cluster-scoped kinds, or a
+// caller that only knows the name).
+type rowRef struct {
+	namespace, name string
+}
+
+func (r rowRef) matches(row resources.Row) bool {
+	return r.name != "" && row.Name == r.name && (r.namespace == "" || row.Namespace == r.namespace)
+}
+
 // recomputeVisible reapplies the filter to m.rows (called after a reload or
 // a filter-query edit), rebuilds m.display (grouping.go's buildDisplayRows)
 // from the freshly filtered m.visible, and tries to keep the same row
-// selected by name. A pendingSelect (a jump-palette resource Enter) wins
-// over the previously selected name and is consumed here.
+// selected by namespace + name. A pendingSelect (a jump-palette resource
+// Enter) wins over the previously selected row and is consumed here.
 func (m *Model) recomputeVisible() {
-	name := m.selectedName()
-	if m.pendingSelect != "" {
-		name = m.pendingSelect
-		m.pendingSelect = ""
+	ref := m.selectedRef()
+	if m.pendingSelect.name != "" {
+		ref = m.pendingSelect
+		m.pendingSelect = rowRef{}
 	}
 	m.visible = applyFilter(m.rows, m.filterInput.Value())
 	m.rebuildDisplay()
-	m.restoreSelection(name)
+	m.restoreSelection(ref)
+}
+
+// selectedRef is the selected data row's namespace + name, or the zero
+// rowRef when nothing (or a synthetic group line) is selected.
+func (m Model) selectedRef() rowRef {
+	row, ok := m.selectedRow()
+	if !ok {
+		return rowRef{}
+	}
+	return rowRef{namespace: row.Namespace, name: row.Name}
 }
 
 // rebuildDisplay recomputes m.display from the current m.visible +
@@ -74,15 +96,15 @@ func (m Model) selectedNamespace() (string, bool) {
 	return m.display[m.selected].namespace, true
 }
 
-// restoreSelection re-finds name among m.display's data rows (just
+// restoreSelection re-finds ref among m.display's data rows (just
 // rebuilt), falling back to a clamped index when it's gone — filtered out,
 // deleted, or now folded away inside a collapsed group (indistinguishable
 // from "not found" here, same as the other two cases: press j/k or tab to
 // reach it).
-func (m *Model) restoreSelection(name string) {
-	if name != "" {
+func (m *Model) restoreSelection(ref rowRef) {
+	if ref.name != "" {
 		for i, dr := range m.display {
-			if dr.kind == rowKindData && dr.row.row.Name == name {
+			if dr.kind == rowKindData && ref.matches(dr.row.row) {
 				m.selected = i
 				m.clampOffset()
 				return
@@ -221,9 +243,9 @@ func (m *Model) toggleGroup() {
 		m.expandedGroups = make(map[string]bool)
 	}
 	m.expandedGroups[ns] = !m.expandedGroups[ns]
-	name := m.selectedName()
+	ref := m.selectedRef()
 	m.rebuildDisplay()
-	m.restoreSelection(name)
+	m.restoreSelection(ref)
 }
 
 // clampOffset keeps the selected line within the table's rendered viewport.

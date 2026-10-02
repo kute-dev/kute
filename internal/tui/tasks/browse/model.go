@@ -91,11 +91,19 @@ type KindSyncChecker interface {
 // OpenNodeDetailFunc pushes tasks/nodedetail (11b) for the named node.
 type OpenNodeDetailFunc func(nodeName string, width, height int) (tea.Model, tea.Cmd)
 
+// PodSiblingRef names one sibling Pod row for OpenPodDetailFunc's `[`/`]`
+// movement — namespace-qualified, same reasoning as CronJobSiblingRef:
+// all-namespaces mode lists same-named pods side by side.
+type PodSiblingRef struct {
+	Namespace string
+	Name      string
+}
+
 // OpenPodDetailFunc pushes tasks/poddetail (5a) for pod. siblings/index are
-// the current visible list's ordered pod names + the selected row's
-// position, so poddetail's j/k can move to the next/prev pod without
-// leaving detail (mvp-plan.md §5a).
-type OpenPodDetailFunc func(pod kube.Pod, siblings []string, index int, width, height int) (tea.Model, tea.Cmd)
+// the current visible list's ordered namespace-qualified pod refs + the
+// selected row's position, so poddetail's j/k can move to the next/prev pod
+// without leaving detail (mvp-plan.md §5a).
+type OpenPodDetailFunc func(pod kube.Pod, siblings []PodSiblingRef, index int, width, height int) (tea.Model, tea.Cmd)
 
 // OpenYAMLFunc pushes tasks/yamlview (8a) for the named object of kind —
 // works for any kind, unlike OpenLogsFunc/OpenPodDetailFunc which are
@@ -178,8 +186,8 @@ type OpenCertChainFunc func(namespace, name string, width, height int) (tea.Mode
 
 // CronJobSiblingRef names one sibling CronJob row for OpenCronJobDetailFunc's
 // `[`/`]` movement (0.8.0 plan §3.6, tasks/cronjobdetail Phase 7) —
-// namespace-qualified, unlike OpenPodDetailFunc/OpenObjectDetailFunc's plain
-// name lists, because all-namespaces mode can list two different CronJobs
+// namespace-qualified, like OpenPodDetailFunc's and unlike
+// OpenObjectDetailFunc's plain name list, because all-namespaces mode can list two different CronJobs
 // sharing a name (Phase 4 test 11: "including all-namespaces mode and
 // duplicate names across namespaces").
 type CronJobSiblingRef struct {
@@ -500,13 +508,14 @@ type Model struct {
 	// health ping loop re-emits ConnStateMsg on every attempt.
 	now time.Time
 	// podMetrics is nil until the first successful poll (browse renders "–"
-	// bars until then); it's namespace-scoped like rows, so pod names alone
-	// key it safely.
+	// bars until then); keyed by kube.PodKey(namespace, name), never bare
+	// name — all-namespaces mode lists same-named pods side by side.
 	podMetrics map[string]kube.PodMetrics
 	// pods is the fuller kube.PodFromObject projection (Pod and CronJob
 	// kinds only — the CronJob branch reuses its own best-effort Pod read,
 	// see loadCronJobRows) — Row only carries display Cells, but the 'l'
-	// logs verb needs each pod's container names.
+	// logs verb needs each pod's container names. Keyed by
+	// kube.PodKey(namespace, name) for the same reason as podMetrics.
 	pods map[string]kube.Pod
 	// helmReleases is the fuller decoded kube.HelmRelease (HelmRelease kind
 	// only), keyed by namespace/name — Row only carries display Cells, but
@@ -547,8 +556,9 @@ type Model struct {
 	offset   int
 	// pendingSelect names a row to select once the next rowsLoadedMsg lands
 	// — set by a jump-palette resource Enter (tui.GotoResourceMsg) that
-	// switched kind, consumed by recomputeVisible.
-	pendingSelect string
+	// switched kind, consumed by recomputeVisible. An empty namespace
+	// matches the first row with that name.
+	pendingSelect rowRef
 	// pendingFollow names the object a tui.FollowObjectMsg asked to reopen
 	// once the new namespace's rows land (follow.go); followNote says it
 	// wasn't there, and followedAway marks this instance as having handed
@@ -1176,7 +1186,7 @@ func (m *Model) setFilter(query string) {
 // pendingSelect silently finds nothing to select.
 func (m *Model) goToResource(msg tui.GotoResourceMsg) tea.Cmd {
 	m.clearOrigin()
-	m.pendingSelect = msg.Name
+	m.pendingSelect = rowRef{namespace: msg.Namespace, name: msg.Name}
 
 	if m.session == nil {
 		m.recomputeVisible()
@@ -1191,6 +1201,9 @@ func (m *Model) goToResource(msg tui.GotoResourceMsg) tea.Cmd {
 			return nil
 		}
 		desc = d
+	}
+	if desc.ClusterScoped {
+		m.pendingSelect.namespace = ""
 	}
 	namespaceChanged := !desc.ClusterScoped && msg.Namespace != "" && msg.Namespace != m.namespace
 
@@ -1422,7 +1435,10 @@ func podsByName(ctx context.Context, lister resources.RawLister, namespace strin
 	return podsFromObjs(objs)
 }
 
-// podsFromObjs indexes an already-fetched Pod slice by name — the same
+// podsFromObjs indexes an already-fetched Pod slice by
+// kube.PodKey(namespace, name) — never bare name, since all-namespaces mode
+// lists same-named pods (StatefulSet ordinals, a chart installed twice) side
+// by side and they would silently overwrite each other. The same
 // projection podsByName builds from its own ListRaw, split out so
 // loadCronJobRows can reuse the Pod read it already does for
 // resources.BuildCronJobSummaries instead of listing Pods twice (mirrors
@@ -1431,7 +1447,7 @@ func podsFromObjs(objs []runtime.Object) map[string]kube.Pod {
 	out := make(map[string]kube.Pod, len(objs))
 	for _, obj := range objs {
 		if p, ok := obj.(*corev1.Pod); ok {
-			out[p.Name] = kube.PodFromObject(p)
+			out[kube.PodKey(p.Namespace, p.Name)] = kube.PodFromObject(p)
 		}
 	}
 	return out

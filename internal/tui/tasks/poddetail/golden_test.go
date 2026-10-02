@@ -137,7 +137,7 @@ func goldenPodDetailModel(t *testing.T, width, height int) Model {
 		OpenYAML:   openObjStub,
 		OpenEvents: openObjStub,
 		Namespace:  "nva-stage", Name: "nva-worker-9k2ss",
-		Siblings: []string{"nva-worker-9k2ss", "nva-worker-x4b7t"},
+		Siblings: []SiblingRef{{Namespace: "nva-stage", Name: "nva-worker-9k2ss"}, {Namespace: "nva-stage", Name: "nva-worker-x4b7t"}},
 	})
 	m.SetSize(width, height)
 	m = step(t, m, m.Init()())

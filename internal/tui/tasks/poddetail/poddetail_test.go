@@ -762,7 +762,7 @@ func TestSiblingNavigationMovesAndClamps(t *testing.T) {
 	}}
 	m := New(Config{
 		Session: newSession(), Lister: lister, Namespace: "default", Name: "a",
-		Siblings: []string{"a", "b"}, SiblingIndex: 0,
+		Siblings: []SiblingRef{{Namespace: "default", Name: "a"}, {Namespace: "default", Name: "b"}}, SiblingIndex: 0,
 	})
 	m.SetSize(120, 40)
 	m = step(t, m, m.Init()())
@@ -787,6 +787,29 @@ func TestSiblingNavigationMovesAndClamps(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Text: "]"})
 	if m.name != afterLast.name || m.siblingIndex != afterLast.siblingIndex {
 		t.Fatalf("expected ] at the end to no-op, got name=%q index=%d", m.name, m.siblingIndex)
+	}
+}
+
+// TestSiblingNavigationCrossesNamespaces covers 6b's all-namespaces list:
+// stepping onto a same-named sibling in another namespace must load that
+// namespace's pod, not look the name up in the one detail opened on.
+func TestSiblingNavigationCrossesNamespaces(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {
+			runningPod("postgres-0", "aaa", "node-a"),
+			runningPod("postgres-0", "bbb", "node-b"),
+		},
+	}}
+	m := New(Config{
+		Session: newSession(), Lister: lister, Namespace: "aaa", Name: "postgres-0",
+		Siblings: []SiblingRef{{Namespace: "aaa", Name: "postgres-0"}, {Namespace: "bbb", Name: "postgres-0"}}, SiblingIndex: 0,
+	})
+	m.SetSize(120, 40)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "]"})
+	if m.namespace != "bbb" || m.state != tui.TaskStateReady || m.pod.Namespace != "bbb" {
+		t.Fatalf("expected ] to load bbb/postgres-0, got namespace=%q state=%s pod=%s/%s", m.namespace, m.state, m.pod.Namespace, m.pod.Name)
 	}
 }
 

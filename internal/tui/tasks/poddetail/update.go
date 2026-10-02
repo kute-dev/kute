@@ -372,7 +372,8 @@ func (m *Model) moveSibling(delta int) tea.Cmd {
 		return nil
 	}
 	m.siblingIndex = next
-	m.name = m.siblings[next]
+	m.namespace = m.siblings[next].Namespace
+	m.name = m.siblings[next].Name
 	m.gone = false
 	m.found = false
 	m.pod = kube.Pod{}

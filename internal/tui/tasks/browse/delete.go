@@ -82,7 +82,7 @@ func (m *Model) beginDelete(row resources.Row) tea.Cmd {
 	var owner string
 	var gracePeriod *int64
 	if m.kind == kube.KindPod {
-		if pod, ok := m.pods[row.Name]; ok {
+		if pod, ok := m.pods[kube.PodKey(row.Namespace, row.Name)]; ok {
 			owner = pod.Owner
 			gracePeriod = &pod.GracePeriodSeconds
 		}

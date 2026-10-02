@@ -1236,16 +1236,17 @@ func (m Model) openSelectedLogs() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	pod, ok := m.pods[row.Name]
+	pod, ok := m.pods[kube.PodKey(row.Namespace, row.Name)]
 	if !ok {
-		pod = kube.Pod{Namespace: m.namespace, Name: row.Name}
+		pod = kube.Pod{Namespace: row.Namespace, Name: row.Name}
 	}
 	task, cmd := m.openLogs(pod, "", m.width, m.height)
 	return task, cmd, task != nil
 }
 
 // openSelectedPodDetail pushes 5a for the selected Pod row, handing over
-// the current visible list's ordered names + the selected row's position so
+// the current visible list's ordered namespace-qualified refs + the
+// selected row's position so
 // poddetail's j/k can move to the next/prev pod without leaving detail
 // (works the same in 6b's grouped view — m.visible stays name-ordered
 // regardless of the interspersed GroupHeader rendering, per grouping.go).
@@ -1257,15 +1258,15 @@ func (m Model) openSelectedPodDetail() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	pod, ok := m.pods[row.Name]
+	pod, ok := m.pods[kube.PodKey(row.Namespace, row.Name)]
 	if !ok {
-		pod = kube.Pod{Namespace: m.namespace, Name: row.Name}
+		pod = kube.Pod{Namespace: row.Namespace, Name: row.Name}
 	}
-	siblings := make([]string, len(m.visible))
+	siblings := make([]PodSiblingRef, len(m.visible))
 	index := 0
 	for i, fm := range m.visible {
-		siblings[i] = fm.row.Name
-		if fm.row.Name == row.Name {
+		siblings[i] = PodSiblingRef{Namespace: fm.row.Namespace, Name: fm.row.Name}
+		if fm.row.Namespace == row.Namespace && fm.row.Name == row.Name {
 			index = i
 		}
 	}
@@ -1386,7 +1387,7 @@ func (m Model) openSelectedExec() (tea.Model, tea.Cmd, bool) {
 	if !ok {
 		return nil, nil, false
 	}
-	pod, ok := m.pods[row.Name]
+	pod, ok := m.pods[kube.PodKey(row.Namespace, row.Name)]
 	if !ok || len(pod.ContainerInfos) == 0 {
 		return nil, nil, false
 	}

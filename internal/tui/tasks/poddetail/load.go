@@ -41,7 +41,7 @@ func (m Model) load() tea.Cmd {
 		if err != nil {
 			return loadedMsg{err: err}
 		}
-		obj := findPod(objs, name)
+		obj := findPod(objs, namespace, name)
 		if obj == nil {
 			return loadedMsg{found: false}
 		}
@@ -329,9 +329,9 @@ func resolveFluxItem(ctx context.Context, lister resources.RawLister, registry r
 	return relatedItem{Kind: kind, Namespace: ns, Name: name, Label: label}, true
 }
 
-func findPod(objs []runtime.Object, name string) *corev1.Pod {
+func findPod(objs []runtime.Object, namespace, name string) *corev1.Pod {
 	for _, obj := range objs {
-		if p, ok := obj.(*corev1.Pod); ok && p.Name == name {
+		if p, ok := obj.(*corev1.Pod); ok && p.Name == name && (namespace == "" || p.Namespace == namespace) {
 			return p
 		}
 	}

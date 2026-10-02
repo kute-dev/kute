@@ -76,7 +76,7 @@ func (m Model) jobLogsTarget(row resources.Row) (pod kube.Pod, reason string, ok
 	if !sumOK || summary.NewestPodName == "" {
 		return kube.Pod{}, row.Name + ": no pod collected for this job yet", false
 	}
-	pod, ok = m.pods[summary.NewestPodName]
+	pod, ok = m.pods[kube.PodKey(row.Namespace, summary.NewestPodName)]
 	if !ok {
 		pod = kube.Pod{Namespace: row.Namespace, Name: summary.NewestPodName}
 	}
@@ -187,7 +187,7 @@ func (m Model) cronJobLogsTarget() (pod kube.Pod, reason string, ok bool) {
 	if run.PodName == "" {
 		return kube.Pod{}, row.Name + ": no pod collected for this run yet", false
 	}
-	pod, ok = m.pods[run.PodName]
+	pod, ok = m.pods[kube.PodKey(row.Namespace, run.PodName)]
 	if !ok {
 		pod = kube.Pod{Namespace: row.Namespace, Name: run.PodName}
 	}

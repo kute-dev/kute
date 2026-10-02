@@ -346,3 +346,65 @@ func TestFoldLineVerbNoOp(t *testing.T) {
 		t.Fatalf("expected ctrl-d to no-op while a fold/summary line is selected")
 	}
 }
+
+// TestAllNamespacesSameNamedPodsResolveByNamespace pins H2: in 6b two
+// same-named pods (a StatefulSet's postgres-0 in two namespaces) must stay
+// distinct — 'l' and ↵ act on the pod under the cursor, the sibling list
+// handed to 5a is namespace-qualified, and a reload keeps the cursor on the
+// same namespace's row rather than the first same-named one.
+func TestAllNamespacesSameNamedPodsResolveByNamespace(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {crashPod("aaa", "postgres-0"), crashPod("bbb", "postgres-0")},
+	}}
+	var logsNS, detailNS string
+	var detailSiblings []PodSiblingRef
+	var detailIndex int
+	m := New(Config{
+		Session: newSession(), Lister: lister,
+		OpenLogs: func(p kube.Pod, _ string, _, _ int) (tea.Model, tea.Cmd) {
+			logsNS = p.Namespace
+			return stubTask{}, nil
+		},
+		OpenPodDetail: func(p kube.Pod, siblings []PodSiblingRef, index int, _, _ int) (tea.Model, tea.Cmd) {
+			detailNS = p.Namespace
+			detailSiblings = siblings
+			detailIndex = index
+			return stubTask{}, nil
+		},
+	})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: ""})
+
+	for _, want := range []string{"aaa", "bbb"} {
+		for {
+			row, ok := m.selectedRow()
+			if ok && row.Namespace == want {
+				break
+			}
+			before := m.selected
+			m = step(t, m, tea.KeyPressMsg{Text: "j"})
+			if m.selected == before {
+				t.Fatalf("never reached %s/postgres-0", want)
+			}
+		}
+
+		m.recomputeVisible()
+		if row, _ := m.selectedRow(); row.Namespace != want {
+			t.Fatalf("reload moved the cursor from %s/postgres-0 to %s/%s", want, row.Namespace, row.Name)
+		}
+
+		logsNS, detailNS = "", ""
+		m.Update(tea.KeyPressMsg{Text: "l"})
+		if logsNS != want {
+			t.Fatalf("cursor on %s/postgres-0: logs opened for namespace %q", want, logsNS)
+		}
+		m.Update(tea.KeyPressMsg{Text: "enter"})
+		if detailNS != want {
+			t.Fatalf("cursor on %s/postgres-0: pod detail opened for namespace %q", want, detailNS)
+		}
+		if got := detailSiblings[detailIndex]; got != (PodSiblingRef{Namespace: want, Name: "postgres-0"}) {
+			t.Fatalf("cursor on %s/postgres-0: sibling index points at %+v", want, got)
+		}
+	}
+}

@@ -99,9 +99,17 @@ type ShellDetector interface {
 	DetectShells(ctx context.Context, namespace, pod, container string) ([]string, error)
 }
 
+// SiblingRef names one sibling pod for [/] movement — namespace-qualified,
+// because all-namespaces mode lists same-named pods side by side (mirrors
+// browse.PodSiblingRef, duplicated per the repo's package-local-seam
+// convention since task packages can't import one another).
+type SiblingRef struct {
+	Namespace, Name string
+}
+
 // Config are poddetail's dependencies, per repo convention (package-local
 // Config struct, interface-typed fields, New fills zero values). Siblings/
-// SiblingIndex are the ordered pod-name list + cursor browse hands over so
+// SiblingIndex are the ordered pod-ref list + cursor browse hands over so
 // [/] can move to the next/prev pod without leaving detail (docs/design
 // README.md §5a).
 type Config struct {
@@ -128,7 +136,7 @@ type Config struct {
 	OpenFluxDetail OpenFluxDetailFunc
 	Namespace      string
 	Name           string
-	Siblings       []string
+	Siblings       []SiblingRef
 	SiblingIndex   int
 	LoadTimeout    time.Duration
 }
@@ -171,7 +179,7 @@ type Model struct {
 
 	namespace    string
 	name         string
-	siblings     []string
+	siblings     []SiblingRef
 	siblingIndex int
 
 	pod   kube.Pod
@@ -226,8 +234,9 @@ type Model struct {
 
 // loadedMsg carries one load()'s result for m.name/m.namespace as of when it
 // was issued — applyLoaded doesn't need a name guard the way browse's
-// rowsLoadedMsg does, since a sibling move (moveSibling) updates m.name
-// before re-issuing load(), and no other path changes it mid-flight.
+// rowsLoadedMsg does, since a sibling move (moveSibling) updates m.name and
+// m.namespace before re-issuing load(), and no other path changes them
+// mid-flight.
 type loadedMsg struct {
 	pod    kube.Pod
 	found  bool
