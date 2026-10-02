@@ -907,6 +907,137 @@ func TestDeleteResourceForcedUsesZeroGracePeriod(t *testing.T) {
 	}
 }
 
+// deletePolicies returns the PropagationPolicy of every delete action
+// recorded on actions ("<nil>" for none).
+func deletePolicies(actions []k8stesting.Action) []string {
+	var out []string
+	for _, a := range actions {
+		d, ok := a.(k8stesting.DeleteAction)
+		if !ok {
+			continue
+		}
+		p := "<nil>"
+		if pp := d.GetDeleteOptions().PropagationPolicy; pp != nil {
+			p = string(*pp)
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// TestDeleteSendsBackgroundPropagation pins H4: an empty DeleteOptions
+// leaves a batch/v1 Job on its server default, orphan, so ctrl-d on a running
+// Job left its pods running ownerless. Every delete — plain or forced, typed
+// or dynamic — sends kubectl's Background explicitly.
+func TestDeleteSendsBackgroundPropagation(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []ResourceKind{KindJob, KindNamespace, KindDeployment, KindPod} {
+		for _, forced := range []bool{false, true} {
+			c, cs := newTestCluster(
+				&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "default"}},
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "x"}},
+				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "default"}},
+				&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "default"}},
+			)
+			del := c.DeleteResource
+			if forced {
+				del = c.DeleteResourceForced
+			}
+			if err := del(t.Context(), kind, "default", "x"); err != nil {
+				t.Fatalf("delete %s (forced=%t): %v", kind, forced, err)
+			}
+			if got := deletePolicies(cs.Actions()); !reflect.DeepEqual(got, []string{"Background"}) {
+				t.Errorf("delete %s (forced=%t) propagation = %v, want [Background]", kind, forced, got)
+			}
+		}
+	}
+	c, dyn := newDynTestCluster(newWidget("thing", "default"))
+	if err := c.DeleteResource(t.Context(), ResourceKind("Widget"), "default", "thing"); err != nil {
+		t.Fatalf("DeleteResource(Widget): %v", err)
+	}
+	if got := deletePolicies(dyn.Actions()); !reflect.DeepEqual(got, []string{"Background"}) {
+		t.Errorf("CRD delete propagation = %v, want [Background]", got)
+	}
+}
+
+func replaceTestJob() *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "migrate", Namespace: "default", UID: "old-uid"},
+		Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "app:1.0"}}},
+		}},
+	}
+}
+
+// TestReplaceJobDeletesInBackgroundWithUIDPrecondition pins 06 H3: the
+// replace's delete takes the old attempt's pods with it and can only hit the
+// exact Job the user confirmed.
+func TestReplaceJobDeletesInBackgroundWithUIDPrecondition(t *testing.T) {
+	t.Parallel()
+	c, cs := newTestCluster(replaceTestJob())
+	if err := c.ReplaceJob(t.Context(), "default", "migrate"); err != nil {
+		t.Fatalf("ReplaceJob: %v", err)
+	}
+	var verbs []string
+	for _, a := range cs.Actions() {
+		verbs = append(verbs, a.GetVerb())
+		if d, ok := a.(k8stesting.DeleteAction); ok {
+			o := d.GetDeleteOptions()
+			if o.PropagationPolicy == nil || *o.PropagationPolicy != metav1.DeletePropagationBackground {
+				t.Errorf("delete propagation = %v, want Background", o.PropagationPolicy)
+			}
+			if o.Preconditions == nil || o.Preconditions.UID == nil || *o.Preconditions.UID != "old-uid" {
+				t.Errorf("delete preconditions = %+v, want UID old-uid", o.Preconditions)
+			}
+		}
+	}
+	// get, delete, then at least one get confirming it's gone, then create.
+	if len(verbs) < 4 || verbs[1] != "delete" || verbs[2] != "get" || verbs[len(verbs)-1] != "create" {
+		t.Errorf("verbs = %v, want get, delete, get…, create", verbs)
+	}
+}
+
+// TestReplaceJobWaitsAndNeverCreatesOverALingeringJob: when the deleted Job
+// is still there (an orphan/foreground finalizer pending), ReplaceJob must
+// not race a Create into AlreadyExists — it waits, bounded, and then says
+// plainly that the original is gone and no replacement was made.
+func TestReplaceJobWaitsAndNeverCreatesOverALingeringJob(t *testing.T) {
+	t.Parallel()
+	c, cs := newTestCluster(replaceTestJob())
+	c.replaceJobGoneTimeout = 300 * time.Millisecond
+	lingering := replaceTestJob()
+	cs.PrependReactor("delete", "jobs", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, nil // accepted, but the object stays (finalizer pending)
+	})
+	cs.PrependReactor("get", "jobs", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, lingering, nil
+	})
+	err := c.ReplaceJob(t.Context(), "default", "migrate")
+	if err == nil || !strings.Contains(err.Error(), "original deleted, replacement not created") {
+		t.Fatalf("ReplaceJob err = %v, want an explicit not-created error", err)
+	}
+	for _, a := range cs.Actions() {
+		if a.GetVerb() == "create" {
+			t.Fatalf("Create issued while the old Job still existed: %v", cs.Actions())
+		}
+	}
+}
+
+// TestReplaceJobReportsARecreateFailureExplicitly: a Create that still fails
+// (AlreadyExists from a racing writer, quota, …) is reported as such, never
+// as a bare error that reads like the delete failed.
+func TestReplaceJobReportsARecreateFailureExplicitly(t *testing.T) {
+	t.Parallel()
+	c, cs := newTestCluster(replaceTestJob())
+	cs.PrependReactor("create", "jobs", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewAlreadyExists(batchv1.Resource("jobs"), "migrate")
+	})
+	err := c.ReplaceJob(t.Context(), "default", "migrate")
+	if err == nil || !strings.Contains(err.Error(), "original deleted, recreate failed") || !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("ReplaceJob err = %v, want a wrapped AlreadyExists naming the lost original", err)
+	}
+}
+
 func TestSetImagePatchesNamedContainer(t *testing.T) {
 	t.Parallel()
 	deploy := &appsv1.Deployment{

@@ -18,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -297,14 +298,29 @@ type ConfigMapConsumerRef struct {
 // verbs are called, so authorization failures surface uniformly through
 // IsPermissionError at the call site.
 func (c *Cluster) DeleteResource(ctx context.Context, kind ResourceKind, namespace, name string) error {
-	return c.deleteResource(ctx, kind, namespace, name, metav1.DeleteOptions{})
+	return c.deleteResource(ctx, kind, namespace, name, backgroundDelete())
 }
 
 // DeleteResourceForced deletes with GracePeriodSeconds 0 (ctrl-k force
 // delete — always modal-confirmed, see actions.Tier).
 func (c *Cluster) DeleteResourceForced(ctx context.Context, kind ResourceKind, namespace, name string) error {
 	zero := int64(0)
-	return c.deleteResource(ctx, kind, namespace, name, metav1.DeleteOptions{GracePeriodSeconds: &zero})
+	opts := backgroundDelete()
+	opts.GracePeriodSeconds = &zero
+	return c.deleteResource(ctx, kind, namespace, name, opts)
+}
+
+// backgroundDelete is the DeleteOptions every kute delete starts from:
+// explicit Background propagation, which is kubectl's default
+// (--cascade=background). An empty DeleteOptions leaves the choice to the
+// kind's REST strategy, and for batch/v1 Jobs that default is still
+// orphan — deleting a running Job would leave its pods running, ownerless
+// and invisible to every Job view (they join by owner UID). Background is
+// accepted by every kind, built-in or CRD, and is already the default for
+// the rest, so it is sent unconditionally.
+func backgroundDelete() metav1.DeleteOptions {
+	policy := metav1.DeletePropagationBackground
+	return metav1.DeleteOptions{PropagationPolicy: &policy}
 }
 
 func (c *Cluster) deleteResource(ctx context.Context, kind ResourceKind, namespace, name string, opts metav1.DeleteOptions) error {
@@ -484,8 +500,11 @@ func (c *Cluster) RetryJob(ctx context.Context, namespace, name, newName, creato
 	return err
 }
 
-// ReplaceJob implements the Mutator interface: get, delete, create-under-
-// the-same-name from the deleted Job's own spec. Like CloneJobSpec/RetryJob,
+// ReplaceJob implements the Mutator interface: get, delete (Background
+// propagation, UID precondition), wait until the old object is actually
+// gone, then create-under-the-same-name from the deleted Job's own spec. A
+// failure after the delete says so explicitly ("original deleted, …") rather
+// than surfacing a bare AlreadyExists. Like CloneJobSpec/RetryJob,
 // Suspend is forced false and the selector/generated template labels are
 // stripped so the API server assigns fresh ones — a replace should actually
 // run, not silently inherit a paused/selector-collision state. Unlike
@@ -497,12 +516,24 @@ func (c *Cluster) ReplaceJob(ctx context.Context, namespace, name string) error 
 	if name == "" {
 		return fmt.Errorf("cannot replace job: empty name")
 	}
-	old, err := c.clientset.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	jobs := c.clientset.BatchV1().Jobs(namespace)
+	old, err := jobs.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	if err := c.clientset.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+	// Background propagation (not the Job default, orphan) so the old
+	// attempt's pods go with it, and a UID precondition so a Job someone
+	// else recreated between the Get and here is never the one deleted.
+	opts := backgroundDelete()
+	opts.Preconditions = metav1.NewUIDPreconditions(string(old.UID))
+	if err := jobs.Delete(ctx, name, opts); err != nil {
 		return err
+	}
+	// The delete returns while the object can still exist (finalizers,
+	// graceful deletion); a Create in that window fails AlreadyExists and
+	// leaves the user with neither Job. Wait, bounded, until it's gone.
+	if err := c.waitJobGone(ctx, namespace, name, old.UID); err != nil {
+		return fmt.Errorf("replace job/%s: original deleted, replacement not created: %w", name, err)
 	}
 	replacement := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -515,8 +546,46 @@ func (c *Cluster) ReplaceJob(ctx context.Context, namespace, name string) error 
 		Spec: *CloneJobSpec(&old.Spec),
 	}
 	delete(replacement.Annotations, "kubectl.kubernetes.io/last-applied-configuration")
-	_, err = c.clientset.BatchV1().Jobs(namespace).Create(ctx, replacement, metav1.CreateOptions{})
-	return err
+	if _, err := jobs.Create(ctx, replacement, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("replace job/%s: original deleted, recreate failed: %w", name, err)
+	}
+	return nil
+}
+
+// replaceJobGoneTimeout bounds ReplaceJob's wait for the deleted Job to
+// disappear; Cluster.replaceJobGoneTimeout overrides it (tests).
+const replaceJobGoneTimeout = 30 * time.Second
+
+// waitJobGone polls until job name with UID uid no longer exists — NotFound,
+// or the name now belongs to a different object, which is reported as an
+// error since creating over it would fail anyway. It stops on ctx and on
+// replaceJobGoneTimeout, whichever comes first.
+func (c *Cluster) waitJobGone(ctx context.Context, namespace, name string, uid types.UID) error {
+	timeout := c.replaceJobGoneTimeout
+	if timeout <= 0 {
+		timeout = replaceJobGoneTimeout
+	}
+	jobs := c.clientset.BatchV1().Jobs(namespace)
+	var recreated bool
+	err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, timeout, true, func(ctx context.Context) (bool, error) {
+		cur, err := jobs.Get(ctx, name, metav1.GetOptions{})
+		switch {
+		case apierrors.IsNotFound(err):
+			return true, nil
+		case err == nil && cur.UID != uid:
+			recreated = true
+			return true, nil
+		}
+		// Still there, or a transient read failure: keep waiting until the bound.
+		return false, nil
+	})
+	if recreated {
+		return fmt.Errorf("a different job/%s was created while the original was deleting", name)
+	}
+	if err != nil {
+		return fmt.Errorf("still terminating after %s: %w", timeout, err)
+	}
+	return nil
 }
 
 // SetJobSuspend patches spec.suspend on a Job — the same JSON body

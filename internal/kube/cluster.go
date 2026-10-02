@@ -75,6 +75,10 @@ type Cluster struct {
 	authGate      *authenticationGate
 	watcher       *watchObserver
 
+	// replaceJobGoneTimeout overrides ReplaceJob's bounded wait for the
+	// deleted Job to disappear (zero = replaceJobGoneTimeout); tests only.
+	replaceJobGoneTimeout time.Duration
+
 	// scoped is set once via SetNamespaceScope, before Start, and never
 	// cleared — a session that launched cluster-wide stays cluster-wide, and
 	// vice versa (docs/lazy-informers.md §5.6: "not
