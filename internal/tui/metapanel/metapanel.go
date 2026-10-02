@@ -535,7 +535,11 @@ func (p *Model) Update(msg tea.KeyPressMsg, ctrl *actions.Controller) (closed bo
 		}
 	case "enter":
 		r := t.selectedRow()
-		if r == nil || r.readOnly {
+		if r == nil || r.readOnly || !textfield.RoundTrips(r.current) {
+			// A multi-line (or non-UTF-8) value would open already
+			// flattened in the single-line buffer, so ↵ on the untouched
+			// buffer would write the corruption back — the will-run strip
+			// explains the refusal instead (view.go).
 			return false, nil
 		}
 		r.setBuffer(r.current)

@@ -590,3 +590,41 @@ func TestKeybarGoesOfflineAndHidesAddRemove(t *testing.T) {
 		t.Fatalf("PillText = %q after reconnect, want DATA", kb.PillText)
 	}
 }
+
+// A value the single-line buffer can't hold verbatim — a PEM's newlines, a
+// keystore's control/invalid-UTF-8 bytes — must never open for an in-place
+// edit: the buffer would start already flattened, read as "changed", and a
+// second ↵ would write the corruption back (review 09 H1).
+func TestEnterRefusesValuesThatCannotRoundTripTheSingleLineBuffer(t *testing.T) {
+	cases := map[string][]byte{
+		"pem":    []byte("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"),
+		"binary": {0x00, 0xff, 0x10, 0x61},
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"tls.crt": value})
+			mut := &fakeMutator{secret: secret}
+			m := newModel(t, newSession(), secret, mut)
+
+			m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+			m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+
+			if m.editing != nil {
+				t.Fatal("expected ↵ to refuse opening a multi-line/binary value in the single-line buffer")
+			}
+			if m.actions.Active() || m.pendingCommit != nil {
+				t.Fatal("expected no commit")
+			}
+			if got := secret.Data["tls.crt"]; string(got) != string(value) {
+				t.Fatalf("value was rewritten: got %q, want %q", got, value)
+			}
+			strip := plain(m.willRunStrip(m.Theme(), 120))
+			if !strings.Contains(strip, "tls.crt is multi-line or binary") {
+				t.Fatalf("expected an inline refusal naming the key, got %q", strip)
+			}
+			if strings.Contains(strip, "MIIB") || strings.Contains(strip, "BEGIN") {
+				t.Fatalf("refusal leaked the value: %q", strip)
+			}
+		})
+	}
+}

@@ -379,6 +379,8 @@ func (p *Model) WillRunStrip(width int, ctrl *actions.Controller) string {
 		case removing:
 			left += joinPrefix(r) + cmd.Render(kube.MetaCommandString(t.kind, t.namespace, t.name, r.isAnnotation, r.key, "", true, false))
 			right = rightNote.Render("metadata only — no rollout")
+		case !textfield.RoundTrips(r.current):
+			left += cmd.Render("multi-line value — ↵ can't edit it in place · E edits the whole object")
 		case !r.changed():
 			left += cmd.Render("no changes — ↵ has nothing to apply")
 		default:

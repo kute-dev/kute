@@ -165,6 +165,10 @@ type Model struct {
 	// the next time a key is pressed in navigation mode.
 	message   string
 	lastError string
+	// notice explains why ↵ refused to open a value that can't round-trip
+	// through the single-line buffer (multi-line or binary) — the key
+	// alone, never the value. Cleared on the next navigation key.
+	notice string
 
 	conn        kube.ConnState
 	reloadEpoch int

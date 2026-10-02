@@ -3,9 +3,11 @@ package metapanel
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -839,5 +841,36 @@ func TestVanishedObjectClosesPanelOnSuccess(t *testing.T) {
 
 	if h.panel != nil {
 		t.Fatal("a successful commit against a vanished object should close the panel")
+	}
+}
+
+// A multi-line (or non-UTF-8) annotation can't round-trip through the
+// single-line buffer, so ↵ must refuse to open it rather than open it
+// already flattened — where a second ↵ would patch the corruption back
+// (review 09 H1).
+func TestEnterRefusesAnnotationsThatCannotRoundTripTheSingleLineBuffer(t *testing.T) {
+	cases := map[string]string{
+		"pem":    "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+		"binary": string([]byte{0x00, 0xff, 0x10, 0x61}),
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			dep := metaDeployment("default", "nva-worker", nil, map[string]string{"kute.dev/cert": value}, nil)
+			mut := &fakeMutator{}
+			h := newHost(t, mut, map[kube.ResourceKind][]runtime.Object{kube.KindDeployment: {dep}})
+
+			h.step(tea.KeyPressMsg{Code: tea.KeyTab}) // focus ANNOTATIONS
+			h.step(tea.KeyPressMsg{Code: tea.KeyEnter})
+			if h.panel.t.editing {
+				t.Fatal("expected ↵ to refuse opening a multi-line/binary annotation in the single-line buffer")
+			}
+			h.step(tea.KeyPressMsg{Code: tea.KeyEnter})
+			if len(mut.metaPatches) != 0 {
+				t.Fatalf("expected no patch, got %v", mut.metaPatches)
+			}
+			if strip := ansi.Strip(h.panel.WillRunStrip(120, &h.ctrl)); !strings.Contains(strip, "can't edit it in place") {
+				t.Errorf("expected the will-run strip to explain the refusal, got %q", strip)
+			}
+		})
 	}
 }

@@ -129,3 +129,21 @@ func TestCharLimitAndSanitization(t *testing.T) {
 		t.Fatalf("limited sanitized paste = %q, want ab cd", got)
 	}
 }
+
+func TestRoundTrips(t *testing.T) {
+	cases := map[string]bool{
+		"postgres://old": true,
+		"":               true,
+		"héllo · ✓":      true,
+		"a\nb":           false,
+		"a\tb":           false,
+		"a\r\n":          false,
+		"\x00\xff\x10a":  false,
+		"\xff":           false,
+	}
+	for value, want := range cases {
+		if got := RoundTrips(value); got != want {
+			t.Errorf("RoundTrips(%q) = %v, want %v", value, got, want)
+		}
+	}
+}

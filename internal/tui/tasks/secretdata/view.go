@@ -324,6 +324,8 @@ func (m Model) willRunStrip(theme tui.Theme, width int) string {
 		left = label.Render("error") + fill.Render(" ") + fill.Foreground(theme.Bad).Render(m.lastError)
 	case m.message != "":
 		left = fill.Foreground(theme.Good).Render(m.message)
+	case m.notice != "":
+		left = fill.Foreground(theme.Warn).Render(m.notice)
 	case removing:
 		left += cmd.Render(kube.SecretDataCommandString(m.namespace, m.name, removeKey, true))
 	case editConfirming:

@@ -8,6 +8,7 @@ package textfield
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -488,6 +489,16 @@ func boolWidth(ok bool) int {
 		return 1
 	}
 	return 0
+}
+
+// RoundTrips reports whether value survives SetValue unchanged — valid
+// UTF-8 with no newline, tab, carriage return or other control rune. A
+// value that doesn't (a PEM, an SSH key, a binary keystore, a multi-line
+// annotation) must never be opened in this single-line buffer for an
+// in-place edit: SetValue would already have flattened or dropped part of
+// it, so saving the untouched buffer would write a corrupted value.
+func RoundTrips(value string) bool {
+	return utf8.ValidString(value) && string(sanitize([]rune(value))) == value
 }
 
 func sanitize(input []rune) []rune {

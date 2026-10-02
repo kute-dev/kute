@@ -152,7 +152,7 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// A leftover "added SMTP_PASSWORD"/error line from the last commit
 		// only answers "what just happened" — stale the moment the user
 		// does anything else, same rule 26a's meta.go uses.
-		m.message, m.lastError = "", ""
+		m.message, m.lastError, m.notice = "", "", ""
 	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
@@ -177,6 +177,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {
+				if !textfield.RoundTrips(row.value) {
+					// A PEM, SSH key or binary keystore can't survive the
+					// single-line buffer: it would open already flattened,
+					// and ↵ on the untouched buffer would write that back.
+					// Refuse up front, naming the key only — never the value.
+					m.notice = row.key + " is multi-line or binary · can't edit it here — use E on the Secrets list"
+					return m, nil
+				}
 				valueInput := newSecretInput(m.Theme())
 				valueInput.SetValue(row.value)
 				valueInput.CursorEnd()
