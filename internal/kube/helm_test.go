@@ -298,3 +298,46 @@ func TestDecodeHelmReleaseSecretAcceptsAPayloadUpToTheLimit(t *testing.T) {
 		t.Fatalf("decoded %+v, want the fixture back", got)
 	}
 }
+
+// TestDecodeHelmReleaseSecretAcceptsHelmsEmptyTimestamps pins the shape Helm
+// 3 actually writes: its own time type stores a zero time as "", which every
+// release with a not-yet-run hook (a chart's `test` hook) carries. A decoder
+// that rejects it silently drops the release from the list.
+func TestDecodeHelmReleaseSecretAcceptsHelmsEmptyTimestamps(t *testing.T) {
+	t.Parallel()
+	doc := `{"name":"aim-bp-api","namespace":"aim-prod","version":63,` +
+		`"info":{"first_deployed":"2023-02-02T16:23:29.355764319+03:00","last_deployed":"2026-10-12T06:51:59.659887818Z","deleted":"","status":"deployed"},` +
+		`"chart":{"metadata":{"name":"aim-bp-api","version":"1.0.1","appVersion":"1.18.0"}},` +
+		`"hooks":[{"name":"aim-bp-api-test-connection","kind":"Pod","events":["test"],"last_run":{"started_at":"","completed_at":"","phase":""}}]}`
+	var gzBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzBuf)
+	if _, err := gz.Write([]byte(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "sh.helm.release.v1.aim-bp-api.v63", Namespace: "aim-prod",
+			Labels: map[string]string{"owner": "helm", "name": "aim-bp-api", "version": "63"}},
+		Type: HelmReleaseSecretType,
+		Data: map[string][]byte{"release": []byte(base64.StdEncoding.EncodeToString(gzBuf.Bytes()))},
+	}
+
+	got, err := DecodeHelmReleaseSecret(secret)
+	if err != nil {
+		t.Fatalf("DecodeHelmReleaseSecret: %v", err)
+	}
+	if got.Revision != 63 || got.Status != "deployed" || len(got.Hooks) != 1 {
+		t.Fatalf("decoded %+v, want revision 63 deployed with one hook", got)
+	}
+	if !got.Hooks[0].LastRun.StartedAt.IsZero() {
+		t.Errorf("a never-run hook's StartedAt = %v, want zero", got.Hooks[0].LastRun.StartedAt)
+	}
+	if want := time.Date(2026, 10, 12, 6, 51, 59, 659887818, time.UTC); !got.Updated.Equal(want) {
+		t.Errorf("Updated = %v, want %v", got.Updated, want)
+	}
+	if rows := DecodeLatestHelmReleases([]runtime.Object{secret}); len(rows) != 1 {
+		t.Fatalf("DecodeLatestHelmReleases returned %d rows, want the release listed", len(rows))
+	}
+}
