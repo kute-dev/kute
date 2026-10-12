@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -162,18 +163,13 @@ func TestSetImageUpdatesInitContainers(t *testing.T) {
 	RequireCluster(t)
 	const name = "set-image-init"
 	client := mutationClient(t)
-	dep := createDeployment(t, name, 0, "")
 	restartAlways := corev1.ContainerRestartPolicyAlways
-	dep.Spec.Template.Spec.InitContainers = []corev1.Container{
-		{Name: "prepare", Image: "busybox:1.35", Command: []string{"true"}},
-		{Name: "mesh", Image: "busybox:1.35", Command: []string{"sleep", "infinity"}, RestartPolicy: &restartAlways},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	created, err := client.AppsV1().Deployments(Namespace).Update(ctx, dep, metav1.UpdateOptions{})
-	cancel()
-	if err != nil {
-		t.Fatalf("adding init containers to deployment %s: %v", name, err)
-	}
+	created := createDeployment(t, name, 0, "", func(dep *appsv1.Deployment) {
+		dep.Spec.Template.Spec.InitContainers = []corev1.Container{
+			{Name: "prepare", Image: "busybox:1.35", Command: []string{"true"}},
+			{Name: "mesh", Image: "busybox:1.35", Command: []string{"sleep", "infinity"}, RestartPolicy: &restartAlways},
+		}
+	})
 
 	a := Launch(t)
 	a.WaitFor("api-", Connect)

@@ -226,7 +226,11 @@ func createSecret(t *testing.T, name string, data map[string][]byte) *corev1.Sec
 	return secret
 }
 
-func createDeployment(t *testing.T, name string, replicas int32, configMap string) *appsv1.Deployment {
+// createDeployment creates a Deployment, applying mutate before the Create so
+// callers never follow it with an Update: the deployment controller writes its
+// revision annotation straight after creation, and an Update carrying the
+// created resourceVersion races that write into a 409.
+func createDeployment(t *testing.T, name string, replicas int32, configMap string, mutate ...func(*appsv1.Deployment)) *appsv1.Deployment {
 	t.Helper()
 	client := mutationClient(t)
 	labels := map[string]string{"app": name, "phase3": "before"}
@@ -248,6 +252,9 @@ func createDeployment(t *testing.T, name string, replicas int32, configMap strin
 			Replicas: &replicas, Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}},
 			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}}, Spec: corev1.PodSpec{Containers: []corev1.Container{container}}},
 		},
+	}
+	for _, m := range mutate {
+		m(dep)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
