@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -353,7 +354,8 @@ func TestSetProdPreservesFileMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fi.Mode().Perm() != 0o640 {
+	// Windows keeps only the read-only attribute, so 0640 reads back as 0666.
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o640 {
 		t.Fatalf("mode = %v, want 0640", fi.Mode().Perm())
 	}
 	entries, _ := os.ReadDir(filepath.Dir(Path()))
@@ -374,7 +376,8 @@ func TestSetProdCreatesMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.yaml not created: %v", err)
 	}
-	if fi.Mode().Perm() != 0o600 {
+	// Windows keeps only the read-only attribute, so 0600 reads back as 0666.
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("new file mode = %v, want 0600", fi.Mode().Perm())
 	}
 	if !Load().IsProd("prod-eu") {
