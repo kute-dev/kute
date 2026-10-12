@@ -20,14 +20,29 @@ import (
 const authExpiredMarker = "KUTE-E2E-AUTH-EXPIRED: run the test login command"
 
 // TestDirectUnauthorizedPausesHealthChecks covers the apiserver-originated
-// half of ConnUnauthenticated separately from exec plugin failures. A 401 is
-// a whole-connection fact: cached rows stay useful, writes disappear, and no
-// automatic /livez loop keeps retrying until the user asks it to.
+// half of ConnUnauthenticated separately from exec plugin failures: the
+// plugin keeps minting successfully, and the apiserver (the proxy) rejects
+// the credential it minted. A 401 is a whole-connection fact: cached rows
+// stay useful, writes disappear, and no automatic /livez loop keeps retrying
+// until the user asks it to.
+//
+// The context must be plugin-backed. A static cert/token context (kind's
+// default kubeconfig) deliberately retries a 401 as Reconnecting instead of
+// latching (see kube.health.needsReauth), so injecting the 401 there proves
+// nothing about this phase.
 func TestDirectUnauthorizedPausesHealthChecks(t *testing.T) {
 	RequireCluster(t)
-	a := Launch(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("the temporary exec credential plugin is a POSIX shell script")
+	}
+
+	proxy := NewAPIProxyForwardingClientAuth(t, KubeconfigPath())
+	plugin := newCredentialPlugin(t, partialServiceAccountToken(t))
+	// Valid for the whole test: the only failure here is the apiserver's 401.
+	plugin.succeed(t, time.Now().Add(10*time.Minute))
+	execConfig := execCredentialKubeconfig(t, proxy.KubeconfigPath(), plugin)
+	a := Launch(t, WithKubeconfig(execConfig), WithoutAPIProxy())
 	a.WaitForAll(Connect, "api-", "worker-")
-	proxy := a.Proxy()
 
 	fence := proxy.Fence()
 	proxy.FailNext(RequestMatcher{Path: "/livez"}, http.StatusUnauthorized, 1)
