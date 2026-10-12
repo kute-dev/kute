@@ -341,3 +341,25 @@ func TestDecodeHelmReleaseSecretAcceptsHelmsEmptyTimestamps(t *testing.T) {
 		t.Fatalf("DecodeLatestHelmReleases returned %d rows, want the release listed", len(rows))
 	}
 }
+
+// TestUnreadableHelmReleasesCountsMissingAndStaleReleases covers both ways a
+// failed decode misreports a release: it vanishes, or an older revision is
+// shown as current. A release shown at its newest revision isn't counted.
+func TestUnreadableHelmReleasesCountsMissingAndStaleReleases(t *testing.T) {
+	t.Parallel()
+	secret := func(name string, revision int) runtime.Object {
+		return EncodeHelmReleaseSecret(HelmRelease{Name: name, Namespace: "aim-prod", Revision: revision})
+	}
+	secrets := []runtime.Object{
+		secret("redis", 3),
+		secret("aim-bp-app", 55), secret("aim-bp-app", 61),
+		secret("aim-bp-api", 63),
+	}
+	shown := []HelmRelease{
+		{Namespace: "aim-prod", Name: "redis", Revision: 3},
+		{Namespace: "aim-prod", Name: "aim-bp-app", Revision: 55},
+	}
+	if got := UnreadableHelmReleases(secrets, shown); got != 2 {
+		t.Fatalf("UnreadableHelmReleases = %d, want 2 (aim-bp-app stale, aim-bp-api missing)", got)
+	}
+}

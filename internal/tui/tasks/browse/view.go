@@ -336,6 +336,14 @@ func (m Model) healthStripLine(theme tui.Theme, width int) string {
 		parts = append(parts, glyphStyle.Render(tui.GlyphWarning)+" "+
 			numStyle.Render(strconv.Itoa(counts.Outdated))+" "+labelStyle.Render("outdated"))
 	}
+	if m.kind == kube.KindHelmRelease && m.helmUnreadable > 0 {
+		// Not a health tally: these releases aren't in the rows at all (or
+		// show an older revision), because their newest release Secret
+		// failed to decode. Without this the list is silently short.
+		glyphStyle := lipgloss.NewStyle().Foreground(theme.Warn)
+		parts = append(parts, glyphStyle.Render(tui.GlyphWarning)+" "+
+			numStyle.Render(strconv.Itoa(m.helmUnreadable))+" "+labelStyle.Render("unreadable"))
+	}
 	if counts.ExpiringSoon > 0 {
 		// §35b's own cross-cutting segment, same reasoning as Outdated
 		// above: a ready-but-expiring cert is already counted "ready".

@@ -509,6 +509,44 @@ func decodeLatestHelmReleases(objs []runtime.Object, decode func(*corev1.Secret)
 	return LatestHelmReleases(releases)
 }
 
+// UnreadableHelmReleases counts the releases in secrets whose newest
+// revision is not the one shown: absent from shown entirely, or shown at an
+// older revision because the newest failed to decode and
+// DecodeLatestHelmReleases fell back past it. Either way the list is wrong
+// about that release, and without this count it says nothing about it.
+//
+// It reads only the `name`/`version` labels Helm writes on every revision
+// Secret, so it costs no decode; a Secret missing them can't be attributed
+// to a release and isn't counted.
+func UnreadableHelmReleases(secrets []runtime.Object, shown []HelmRelease) int {
+	key := func(namespace, name string) string { return namespace + "\x00" + name }
+	newest := map[string]int{}
+	for _, obj := range secrets {
+		secret, ok := obj.(*corev1.Secret)
+		if !ok || secret.Type != HelmReleaseSecretType {
+			continue
+		}
+		name := secret.Labels["name"]
+		version, err := strconv.Atoi(secret.Labels["version"])
+		if name == "" || err != nil {
+			continue
+		}
+		k := key(secret.Namespace, name)
+		newest[k] = max(newest[k], version)
+	}
+	shownRevision := make(map[string]int, len(shown))
+	for _, r := range shown {
+		shownRevision[key(r.Namespace, r.Name)] = r.Revision
+	}
+	n := 0
+	for k, version := range newest {
+		if revision, ok := shownRevision[k]; !ok || revision < version {
+			n++
+		}
+	}
+	return n
+}
+
 // HelmReleaseSecretsFor narrows release Secrets to one release's own
 // revisions, before anything decodes them.
 //

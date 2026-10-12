@@ -533,6 +533,7 @@ var (
 	_ tui.LiveCounter              = helmAwareLister{}
 	_ helmhistory.HelmSecretLister = helmAwareLister{}
 	_ helmdetail.HelmSecretLister  = helmAwareLister{}
+	_ browse.HelmSecretLister      = helmAwareLister{}
 	_ routetable.TLSSecretLister   = helmAwareLister{}
 	_ certchain.TLSSecretLister    = helmAwareLister{}
 	// Only the outermost decorator can answer this one — nothing below it
