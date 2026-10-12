@@ -219,17 +219,40 @@ func (o *HelmReleaseObject) DeepCopyObject() runtime.Object {
 	return &cp
 }
 
+// helmTime is Helm 3's own release timestamp (helm.sh/helm/v3/pkg/time):
+// a time.Time that writes its zero value as "" rather than
+// "0001-01-01T00:00:00Z". Every hook that hasn't run yet — a chart's `test`
+// hook, a pre-delete hook — is stored with "started_at": "", which a plain
+// time.Time rejects, failing the whole document. DecodeHelmReleases skips
+// what it can't decode, so the release vanished from 18a's list, or an older
+// revision that predated the hook was shown as current.
+type helmTime struct{ time.Time }
+
+func (t helmTime) MarshalJSON() ([]byte, error) {
+	if t.IsZero() {
+		return []byte(`""`), nil
+	}
+	return t.Time.MarshalJSON()
+}
+
+func (t *helmTime) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" || string(b) == `""` {
+		return nil
+	}
+	return t.Time.UnmarshalJSON(b)
+}
+
 // helmReleaseData mirrors just the fields kute reads off Helm 3's own
 // release.Release JSON schema (helm.sh/helm/v3/pkg/release) — reproduced
 // locally rather than importing the Helm SDK for a handful of fields.
 type helmReleaseData struct {
 	Name string `json:"name"`
 	Info struct {
-		Status        string    `json:"status"`
-		Description   string    `json:"description"`
-		LastDeployed  time.Time `json:"last_deployed"`
-		FirstDeployed time.Time `json:"first_deployed"`
-		Notes         string    `json:"notes"`
+		Status        string   `json:"status"`
+		Description   string   `json:"description"`
+		LastDeployed  helmTime `json:"last_deployed"`
+		FirstDeployed helmTime `json:"first_deployed"`
+		Notes         string   `json:"notes"`
 	} `json:"info"`
 	Chart struct {
 		Metadata struct {
@@ -251,9 +274,9 @@ type helmReleaseData struct {
 		Weight         int      `json:"weight"`
 		DeletePolicies []string `json:"delete_policies"`
 		LastRun        struct {
-			StartedAt   time.Time `json:"started_at"`
-			CompletedAt time.Time `json:"completed_at"`
-			Phase       string    `json:"phase"`
+			StartedAt   helmTime `json:"started_at"`
+			CompletedAt helmTime `json:"completed_at"`
+			Phase       string   `json:"phase"`
 		} `json:"last_run"`
 	} `json:"hooks"`
 }
@@ -338,7 +361,7 @@ func decodeHelmReleaseSecret(secret *corev1.Secret, maxPayload int64) (HelmRelea
 		Revision:     data.Version,
 		Status:       data.Info.Status,
 		StatusReason: data.Info.Description,
-		Updated:      data.Info.LastDeployed,
+		Updated:      data.Info.LastDeployed.Time,
 		Values:       valuesYAML,
 		Manifest:     data.Manifest,
 		Notes:        data.Info.Notes,
@@ -348,7 +371,7 @@ func decodeHelmReleaseSecret(secret *corev1.Secret, maxPayload int64) (HelmRelea
 			Name: hook.Name, Kind: hook.Kind, Path: hook.Path, Manifest: hook.Manifest,
 			Events: append([]string(nil), hook.Events...), Weight: hook.Weight,
 			DeletePolicies: append([]string(nil), hook.DeletePolicies...),
-			LastRun:        HelmHookRun{StartedAt: hook.LastRun.StartedAt, CompletedAt: hook.LastRun.CompletedAt, Phase: hook.LastRun.Phase},
+			LastRun:        HelmHookRun{StartedAt: hook.LastRun.StartedAt.Time, CompletedAt: hook.LastRun.CompletedAt.Time, Phase: hook.LastRun.Phase},
 		})
 	}
 	return release, nil
@@ -486,6 +509,44 @@ func decodeLatestHelmReleases(objs []runtime.Object, decode func(*corev1.Secret)
 	return LatestHelmReleases(releases)
 }
 
+// UnreadableHelmReleases counts the releases in secrets whose newest
+// revision is not the one shown: absent from shown entirely, or shown at an
+// older revision because the newest failed to decode and
+// DecodeLatestHelmReleases fell back past it. Either way the list is wrong
+// about that release, and without this count it says nothing about it.
+//
+// It reads only the `name`/`version` labels Helm writes on every revision
+// Secret, so it costs no decode; a Secret missing them can't be attributed
+// to a release and isn't counted.
+func UnreadableHelmReleases(secrets []runtime.Object, shown []HelmRelease) int {
+	key := func(namespace, name string) string { return namespace + "\x00" + name }
+	newest := map[string]int{}
+	for _, obj := range secrets {
+		secret, ok := obj.(*corev1.Secret)
+		if !ok || secret.Type != HelmReleaseSecretType {
+			continue
+		}
+		name := secret.Labels["name"]
+		version, err := strconv.Atoi(secret.Labels["version"])
+		if name == "" || err != nil {
+			continue
+		}
+		k := key(secret.Namespace, name)
+		newest[k] = max(newest[k], version)
+	}
+	shownRevision := make(map[string]int, len(shown))
+	for _, r := range shown {
+		shownRevision[key(r.Namespace, r.Name)] = r.Revision
+	}
+	n := 0
+	for k, version := range newest {
+		if revision, ok := shownRevision[k]; !ok || revision < version {
+			n++
+		}
+	}
+	return n
+}
+
 // HelmReleaseSecretsFor narrows release Secrets to one release's own
 // revisions, before anything decodes them.
 //
@@ -603,8 +664,8 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 	}
 	data.Info.Status = r.Status
 	data.Info.Description = r.StatusReason
-	data.Info.LastDeployed = r.Updated
-	data.Info.FirstDeployed = r.Updated
+	data.Info.LastDeployed = helmTime{r.Updated}
+	data.Info.FirstDeployed = helmTime{r.Updated}
 	data.Info.Notes = r.Notes
 	data.Chart.Metadata.Name = r.Chart
 	data.Chart.Metadata.Version = r.ChartVersion
@@ -619,14 +680,14 @@ func EncodeHelmReleaseSecret(r HelmRelease) *corev1.Secret {
 			Weight         int      `json:"weight"`
 			DeletePolicies []string `json:"delete_policies"`
 			LastRun        struct {
-				StartedAt   time.Time `json:"started_at"`
-				CompletedAt time.Time `json:"completed_at"`
-				Phase       string    `json:"phase"`
+				StartedAt   helmTime `json:"started_at"`
+				CompletedAt helmTime `json:"completed_at"`
+				Phase       string   `json:"phase"`
 			} `json:"last_run"`
 		}
 		encoded.Name, encoded.Kind, encoded.Path, encoded.Manifest = hook.Name, hook.Kind, hook.Path, hook.Manifest
 		encoded.Events, encoded.Weight, encoded.DeletePolicies = append([]string(nil), hook.Events...), hook.Weight, append([]string(nil), hook.DeletePolicies...)
-		encoded.LastRun.StartedAt, encoded.LastRun.CompletedAt, encoded.LastRun.Phase = hook.LastRun.StartedAt, hook.LastRun.CompletedAt, hook.LastRun.Phase
+		encoded.LastRun.StartedAt, encoded.LastRun.CompletedAt, encoded.LastRun.Phase = helmTime{hook.LastRun.StartedAt}, helmTime{hook.LastRun.CompletedAt}, hook.LastRun.Phase
 		data.Hooks = append(data.Hooks, encoded)
 	}
 	if r.Values != "" {

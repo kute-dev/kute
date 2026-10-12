@@ -8,10 +8,14 @@
 package browse
 
 import (
+	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/helmrepo"
 	"github.com/kute-dev/kute/internal/kube"
@@ -31,6 +35,36 @@ import (
 // silently stops caveating a stale answer.
 type ChartIndexReporter interface {
 	ChartIndexStatus() helmrepo.Status
+}
+
+// HelmSecretLister is implemented by a lister that can hand back a
+// namespace's helm.sh/release.v1 Secrets from a cache holding only those —
+// see app.helmAwareLister's copy. The list reads it for one thing: the
+// revision labels behind unreadableHelmReleases. Optional, and with no
+// fallback: reading the shared Secret cache instead would start the largest
+// informer on most clusters just to caveat this one.
+//
+// Exported so app can assert its lister decorators against it at compile
+// time — a decorator that forgets to forward it still builds, and the strip
+// silently stops saying a release is missing.
+type HelmSecretLister interface {
+	ListHelmReleaseSecrets(ctx context.Context, namespace string) ([]runtime.Object, error)
+}
+
+// unreadableHelmReleases counts the releases in namespace whose newest
+// revision Secret couldn't be decoded, so the strip can say the list is
+// short rather than let a missing or stale row pass as the cluster's state.
+// 0 when the lister can't answer.
+func unreadableHelmReleases(ctx context.Context, lister resources.RawLister, namespace string, shown map[string]kube.HelmRelease) int {
+	hs, ok := lister.(HelmSecretLister)
+	if !ok {
+		return 0
+	}
+	secrets, err := hs.ListHelmReleaseSecrets(ctx, namespace)
+	if err != nil {
+		return 0
+	}
+	return kube.UnreadableHelmReleases(secrets, slices.Collect(maps.Values(shown)))
 }
 
 // chartCacheStale is how old the repo cache gets before its age stops being

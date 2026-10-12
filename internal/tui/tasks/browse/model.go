@@ -551,6 +551,9 @@ type Model struct {
 	// strip ("repo cache 6d old" / "no helm repo cache"), resolved in load()
 	// because it depends on the clock and Render must not read one.
 	chartCacheNote chartCacheNote
+	// helmUnreadable counts releases whose newest revision Secret failed to
+	// decode — each one missing from the list or shown at an older revision.
+	helmUnreadable int
 
 	// nodeMetrics/nodeCapacity/podCountByNode/clusterPodTotal/nodePodHealth
 	// back 11a's Nodes columns and health-strip right side (Node kind only)
@@ -707,6 +710,7 @@ type rowsLoadedMsg struct {
 	nodePodHealth      map[string]resources.HealthCounts
 	drainImpactByNode  map[string]kube.DrainImpact
 	chartCacheNote     chartCacheNote
+	helmUnreadable     int
 	// cronJobSummaries/cronJobJobsErr ride along for KindCronJob only —
 	// loadCronJobRows' own aggregation output, applyRowsLoaded stores them
 	// as m.cronJobSummaries/m.cronJobJobsErr.
@@ -1128,6 +1132,7 @@ func (m Model) load() tea.Cmd {
 		var pods map[string]kube.Pod
 		var helmReleases map[string]kube.HelmRelease
 		var cacheNote chartCacheNote
+		helmUnreadable := 0
 		nodeCount := 0
 		var nodeCap map[string]nodeCapacity
 		var podCountByNode map[string]int
@@ -1151,6 +1156,7 @@ func (m Model) load() tea.Cmd {
 		case kube.KindHelmRelease:
 			helmReleases = helmReleasesFromObjs(helmObjs)
 			cacheNote = chartCacheNoteFor(lister, time.Now())
+			helmUnreadable = unreadableHelmReleases(ctx, lister, ns, helmReleases)
 		}
 		return rowsLoadedMsg{
 			epoch: epoch, namespace: ns,
@@ -1158,6 +1164,7 @@ func (m Model) load() tea.Cmd {
 			rows: rows, pods: pods, helmReleases: helmReleases, nodeCount: nodeCount,
 			nodeCapacity: nodeCap, podCountByNode: podCountByNode, clusterPodTotal: clusterPodTotal,
 			nodePodHealth: nodePodHealth, drainImpactByNode: drainImpactByNode, chartCacheNote: cacheNote,
+			helmUnreadable: helmUnreadable,
 		}
 	}
 }
@@ -1415,6 +1422,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.releasePodSources = nil
 	m.releasePodView = false
 	m.chartCacheNote = chartCacheNote{}
+	m.helmUnreadable = 0
 	m.visible = nil
 	m.expandedGroups = nil
 	m.display = nil

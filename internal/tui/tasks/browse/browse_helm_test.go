@@ -735,3 +735,60 @@ func TestHelmReleaseLoadReadsReleasesOnce(t *testing.T) {
 		t.Fatalf("helmReleases[postgresql] = %+v, want revision 3 of chart postgresql", got)
 	}
 }
+
+// helmSecretsLister serves release Secrets alongside the decoded releases,
+// so a test can stage Secrets that never made it into the release list.
+type helmSecretsLister struct {
+	fakeLister
+	secrets []runtime.Object
+}
+
+func (l helmSecretsLister) ListHelmReleaseSecrets(context.Context, string) ([]runtime.Object, error) {
+	return l.secrets, nil
+}
+
+// TestHelmStripCountsUnreadableReleases: a release whose newest revision
+// Secret failed to decode must not leave the list silently short.
+func TestHelmStripCountsUnreadableReleases(t *testing.T) {
+	lister := helmSecretsLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+			kube.KindHelmRelease: {helmRelease("default", "redis", "redis", "0.1.0", "7.0.0", "deployed", 3)},
+		}},
+		secrets: []runtime.Object{
+			kube.EncodeHelmReleaseSecret(kube.HelmRelease{Namespace: "default", Name: "redis", Revision: 3}),
+			kube.EncodeHelmReleaseSecret(kube.HelmRelease{Namespace: "default", Name: "aim-bp-api", Revision: 63}),
+		},
+	}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateReady {
+		t.Fatalf("expected ready state, got %s (feedback=%q)", m.state, m.feedback)
+	}
+	if strip := plain(m.healthStripLine(m.Theme(), 120)); !strings.Contains(strip, "1 unreadable") {
+		t.Fatalf("health strip %q should count the release that failed to decode", strip)
+	}
+}
+
+// TestHelmAllUnreadableIsNotAnEmptyState: when every release fails to decode,
+// "no helm releases" would be false — the screen has to say what happened.
+func TestHelmAllUnreadableIsNotAnEmptyState(t *testing.T) {
+	lister := helmSecretsLister{
+		fakeLister: fakeLister{objs: map[kube.ResourceKind][]runtime.Object{}},
+		secrets: []runtime.Object{
+			kube.EncodeHelmReleaseSecret(kube.HelmRelease{Namespace: "default", Name: "aim-bp-api", Revision: 63}),
+		},
+	}
+	session := newSession()
+	session.Location.Kind = kube.KindHelmRelease
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	if m.state != tui.TaskStateError || !strings.Contains(m.feedback, "none could be decoded") {
+		t.Fatalf("state = %s, feedback = %q; want an error naming the decode failure", m.state, m.feedback)
+	}
+}

@@ -495,6 +495,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.pods = msg.pods
 	m.helmReleases = msg.helmReleases
 	m.chartCacheNote = msg.chartCacheNote
+	m.helmUnreadable = msg.helmUnreadable
 	m.nodeCount = msg.nodeCount
 	m.nodeCapacity = msg.nodeCapacity
 	m.podCountByNode = msg.podCountByNode
@@ -528,6 +529,16 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 		err := tui.KindsError(m.lister, m.namespace, m.kind)
 		if err == nil {
 			err = m.auxKindsError(m.currentAuxKinds())
+		}
+		if err == nil && msg.helmUnreadable > 0 {
+			// Every release here failed to decode: "no helm releases" would
+			// be a claim about the cluster that's simply false. Not the
+			// retrying error below either — nothing will retry a decode
+			// until the release Secrets themselves change.
+			m.pendingFollow = ""
+			m.state = tui.TaskStateError
+			m.feedback = fmt.Sprintf("found %d helm release(s), but none could be decoded from their %s secrets", msg.helmUnreadable, kube.HelmReleaseSecretType)
+			return m, nil
 		}
 		if err != nil {
 			// Settled, but with nothing to show and a reason why. Saying so
