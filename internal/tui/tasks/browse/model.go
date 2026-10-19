@@ -1231,6 +1231,14 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 		m.session.Location.Namespace = namespace
 	}
 	query, active, focused := m.filterInput.Value(), m.filterActive, m.filterListFocused
+	if m.originName != "" {
+		// An owner's child view (openDeploymentPods and its twins) scopes by
+		// pre-filling the query without opening the filter strip — the
+		// breadcrumb's origin segment is its only visible trace, and
+		// resetAndLoad drops that. Carrying the query over would leave every
+		// namespace silently narrowed to one workload's pods.
+		query, active, focused = "", false, false
+	}
 	cmd := m.resetAndLoad()
 	m.filterActive = active
 	m.filterListFocused = focused

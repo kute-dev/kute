@@ -8,6 +8,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/state"
+	"github.com/kute-dev/kute/internal/tui"
 )
 
 // TestAllNamespacesHotkeySyncsSessionLocation confirms 'a' (browse's
@@ -103,6 +104,39 @@ func TestOpenDaemonSetPodsSyncsSessionLocationKind(t *testing.T) {
 	}
 	if session.Location.Kind != kube.KindPod {
 		t.Fatalf("expected Session.Location.Kind synced to Pods, got %s", session.Location.Kind)
+	}
+}
+
+// TestNamespaceSwitchDropsOwnerFilter pins that leaving a Deployment's
+// filtered pods view for another namespace drops the owner's pre-filled
+// query along with its breadcrumb segment. The query lives behind a closed
+// filter strip, so carrying it over left all namespaces silently showing
+// only that one Deployment's pods.
+func TestNamespaceSwitchDropsOwnerFilter(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api")},
+		kube.KindPod:        {pod("default", "api-abc123"), pod("kube-system", "coredns-xyz12")},
+	}}
+	session := newSession()
+	session.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: session, Lister: lister})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+	if got := m.filterInput.Value(); got != "api" {
+		t.Fatalf("expected the deployment's pods filtered by its name, got query %q", got)
+	}
+
+	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: ""})
+	if got := m.filterInput.Value(); got != "" {
+		t.Fatalf("expected the owner filter dropped on namespace switch, got query %q", got)
+	}
+	if session.Location.Filter != "" {
+		t.Fatalf("expected Session.Location.Filter cleared, got %q", session.Location.Filter)
+	}
+	if len(m.visible) != 2 {
+		t.Fatalf("expected both namespaces' pods visible, got %d", len(m.visible))
 	}
 }
 
