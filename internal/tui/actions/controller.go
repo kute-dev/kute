@@ -421,10 +421,10 @@ func (c *Controller) PasteTarget() tui.PasteTarget {
 // EscalateForceDelete is the handler for verbs.ForceDelete.Key inside any
 // delete confirm: when the pending action is a Delete of a kind ForceDelete
 // applies to, it becomes a force-delete under verbs.Resolve(ForceDelete, …)
-// — the type-the-name modal, whether it started as an inline y/N or as
-// PROD's modal. Reports whether it escalated; anything else — a marked-set
-// delete included, which has no force-delete form — is left untouched, so a
-// modal's caller can hand an unclaimed chord on to its text buffer.
+// — the type-the-name modal (a marked set: type-the-count), whether it
+// started as an inline y/N or as PROD's modal. Reports whether it
+// escalated; anything else is left untouched, so a modal's caller can hand
+// an unclaimed chord on to its text buffer.
 func (c *Controller) EscalateForceDelete(isProd bool) bool {
 	if !c.deleteEscalates() {
 		return false
@@ -434,25 +434,34 @@ func (c *Controller) EscalateForceDelete(isProd bool) bool {
 	return true
 }
 
-// deleteEscalates reports whether the pending confirm is a single-target
-// Delete of a kind ForceDelete applies to — EscalateForceDelete's gate.
+// deleteEscalates reports whether the pending confirm is a Delete — one row
+// or a marked set — of a kind ForceDelete applies to: EscalateForceDelete's
+// gate.
 func (c Controller) deleteEscalates() bool {
 	p := c.pending
-	return c.Active() && p != nil && p.Scope.Verb == verbs.Delete.ID && len(p.Scope.BulkTargets) == 0 &&
+	return c.Active() && p != nil && p.Scope.Verb == verbs.Delete.ID &&
 		verbs.ForceDelete.AppliesTo(kube.ResourceKind(p.Scope.ResourceKind))
 }
 
 // escalate switches the pending action to verb under policy p. The tier
 // only ever rises: escalating an inline y/N to TierModal opens a fresh,
 // focused type-ahead buffer, while escalating inside an already-open modal
-// keeps the typed progress — it's still the same resource name either way.
+// keeps the typed progress — it's still the same resource name (or marked
+// count) either way. A marked set's label keeps its kind ("Delete pods"
+// becomes "Force delete pods"), since it has no one name to put there.
 // A no-op unless a confirmation is showing.
 func (c *Controller) escalate(verb string, p verbs.Policy) {
 	if c.state != tui.TaskStateConfirming || c.pending == nil {
 		return
 	}
 	c.pending.Scope.Verb = verb
-	c.pending.Label = capitalize(strings.ReplaceAll(verb, "-", " ")) + " " + c.pending.Scope.ResourceName + "?"
+	action := capitalize(strings.ReplaceAll(verb, "-", " "))
+	if len(c.pending.Scope.BulkTargets) > 0 {
+		_, rest, _ := strings.Cut(c.pending.Label, " ")
+		c.pending.Label = strings.TrimSpace(action + " " + rest)
+	} else {
+		c.pending.Label = action + " " + c.pending.Scope.ResourceName + "?"
+	}
 	c.typed = c.typed || p.TypedName
 	if p.Tier > c.tier {
 		c.tier = p.Tier

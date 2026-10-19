@@ -299,14 +299,58 @@ func TestBulkNodeDeleteNonProdOpensTypeCountModal(t *testing.T) {
 	}
 }
 
-// TestBulkDeleteIgnoresForceDeleteChord: a marked set has no force-delete
-// form, so ctrl-k on its inline confirm leaves the y/N exactly as it was.
-func TestBulkDeleteIgnoresForceDeleteChord(t *testing.T) {
+// TestBulkDeleteEscalatesForceDelete: ctrl-k on a marked set of Pods'
+// inline confirm opens the force-delete type-the-count modal, which
+// force-deletes every marked pod once the count is typed.
+func TestBulkDeleteEscalatesForceDelete(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindPod: {pod("default", "api-0"), pod("default", "api-1")},
 	}}
 	mut := &fakeMutator{}
 	m := New(Config{Session: newSession(), Lister: lister, Mutator: mut})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+
+	m = step(t, m, tea.KeyPressMsg{Text: "*"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
+	if bar := plain(m.Render()); !strings.Contains(bar, "ctrl+k force delete") {
+		t.Fatalf("expected the inline bulk confirm to offer ctrl+k:\n%s", bar)
+	}
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	if !m.pendingBulkDelete() || m.actions.Tier() != actions.TierModal {
+		t.Fatalf("expected the force-delete count modal, pending=%v tier=%v", m.pendingBulkDelete(), m.actions.Tier())
+	}
+	view := plain(m.Render())
+	for _, want := range []string{"Force delete 2 pods?", "grace period 0", "api-0", "api-1"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected %q in the force-delete modal:\n%s", want, view)
+		}
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "y"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.deleted)+len(mut.forceDeleted) != 0 {
+		t.Fatalf("expected nothing before the count is typed: deleted=%v forceDeleted=%v", mut.deleted, mut.forceDeleted)
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "2"})
+	m = step(t, m, tea.KeyPressMsg{Text: "enter"})
+	if len(mut.forceDeleted) != 2 || len(mut.deleted) != 0 {
+		t.Fatalf("deleted = %v, forceDeleted = %v, want both force-deleted", mut.deleted, mut.forceDeleted)
+	}
+	if len(m.marks) != 0 {
+		t.Fatalf("expected the deleted rows unmarked, marks = %v", m.marks)
+	}
+}
+
+// TestBulkDeleteNonPodIgnoresForceDeleteChord: only Pods have a force-delete
+// form, so ctrl-k on a marked set of Deployments leaves the y/N as it was.
+func TestBulkDeleteNonPodIgnoresForceDeleteChord(t *testing.T) {
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindDeployment: {deploymentObj("default", "api"), deploymentObj("default", "web")},
+	}}
+	mut := &fakeMutator{}
+	sess := newSession()
+	sess.Location.Kind = kube.KindDeployment
+	m := New(Config{Session: sess, Lister: lister, Mutator: mut})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 

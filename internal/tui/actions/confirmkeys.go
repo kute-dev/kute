@@ -35,9 +35,10 @@ const (
 // never matches a confirm key itself (guard_test.go). Its keys all come from
 // the verbs registry:
 //
-//   - verbs.ForceDelete.Key escalates a pending single-target delete Begun
-//     as verbs.Delete of a kind ForceDelete applies to, under that Begin's
-//     own PROD tag, from an inline y/N or the type-the-name modal alike;
+//   - verbs.ForceDelete.Key escalates a pending delete — one row or a marked
+//     set — Begun as verbs.Delete of a kind ForceDelete applies to, under
+//     that Begin's own PROD tag, from an inline y/N or the type-the-name/
+//     type-the-count modal alike;
 //   - in a type-the-name modal (TypeToConfirm), verbs.ConfirmCancel cancels,
 //     verbs.ConfirmSubmit executes once the name matches (a marked set: the
 //     count, whose buffer only takes digits), and anything else edits the

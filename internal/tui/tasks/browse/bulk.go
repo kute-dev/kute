@@ -137,7 +137,9 @@ const bulkDeleteActionPrefix = "bulk-delete-"
 // reused rather than inventing a third confirm surface). Begin owns the
 // OFFLINE refusal (docs/design README.md §4a), and executeBulk runs
 // kube.Mutator.DeleteResource once per marked row, recording each row's
-// outcome rather than stopping at the first failure.
+// outcome rather than stopping at the first failure. verbs.ForceDelete.Key
+// escalates a marked set of Pods to force delete (always the type-the-count
+// modal), the same Controller.EscalateForceDelete path a single row takes.
 func (m *Model) beginBulkDelete() tea.Cmd {
 	rows := m.markedRows()
 	if len(rows) == 0 || m.mutator == nil {
@@ -160,11 +162,11 @@ func (m *Model) beginBulkDelete() tea.Cmd {
 }
 
 // pendingBulkDelete reports whether the active confirm is 20a's marked-set
-// delete — Body()'s modal dispatch and the inline keybar's will-run line
-// read it.
+// delete, or its force-delete escalation — Body()'s modal dispatch and the
+// inline keybar's will-run line read it.
 func (m Model) pendingBulkDelete() bool {
 	pending := m.actions.Pending()
-	return pending != nil && pending.Scope.Verb == verbs.Delete.ID && len(pending.Scope.BulkTargets) > 0
+	return pending != nil && isDeleteVerb(pending.Scope.Verb) && len(pending.Scope.BulkTargets) > 0
 }
 
 // pendingBulkCount reports whether the active confirm is a marked-set
@@ -245,9 +247,11 @@ func (m Model) bulkDeleteWillRunLine(scope tui.TaskScope) string {
 }
 
 // bulkDeleteConfirmModal renders 20a's type-the-count modal: title
-// ("Delete N pods?"), every marked object, the grace-period detail line, and
-// the type-ahead prompt against the count (components.TypeCountModal),
-// sourced from the controller's pending BulkTargets and typed buffer.
+// ("Delete N pods?", or "Force delete N pods?" once ctrl+k escalated it),
+// every marked object, the grace-period detail line (with the force-delete
+// hint while it's still on offer), and the type-ahead prompt against the
+// count (components.TypeCountModal), sourced from the controller's pending
+// BulkTargets and typed buffer.
 func (m Model) bulkDeleteConfirmModal(width, height int) string {
 	theme := m.Theme()
 	pending := m.actions.Pending()
@@ -257,6 +261,13 @@ func (m Model) bulkDeleteConfirmModal(width, height int) string {
 	targets := pending.Scope.BulkTargets
 	count := len(targets)
 	title := fmt.Sprintf("✕ Delete %d %s?", count, lowerDisplay(m.desc.Display))
+	detail := "default grace period applies"
+	if pending.Scope.Verb == verbs.ForceDelete.ID {
+		title = fmt.Sprintf("✕ Force delete %d %s?", count, lowerDisplay(m.desc.Display))
+		detail = "grace period 0 — force delete, immediate"
+	} else if verbs.ForceDelete.AppliesTo(kube.ResourceKind(pending.Scope.ResourceKind)) {
+		detail += " · " + verbs.ForceDeleteModalHint()
+	}
 
 	_, uniform := bulkTargetNamespace(targets)
 	objectsLine := wrapLabels(bulkTargetLabels(targets, uniform), 56)
@@ -274,5 +285,5 @@ func (m Model) bulkDeleteConfirmModal(width, height int) string {
 		Key:       lipgloss.NewStyle().Foreground(theme.Bad).Background(theme.ConfirmHeaderBg),
 		Label:     lipgloss.NewStyle().Foreground(theme.TextDim).Background(theme.ConfirmHeaderBg),
 	}
-	return components.TypeCountModal(title, objectsLine, "default grace period applies", count, m.actions.TypedInput(), m.isProd(), styles, width, height)
+	return components.TypeCountModal(title, objectsLine, detail, count, m.actions.TypedInput(), m.isProd(), styles, width, height)
 }

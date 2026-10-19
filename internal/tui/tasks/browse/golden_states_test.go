@@ -702,6 +702,27 @@ func goldenMarksModel(t *testing.T, width, height int) Model {
 	return m
 }
 
+// goldenMarksForceDeleteModel is goldenMarksModel's marked pair after D and
+// ctrl+k: the force-delete type-the-count modal, outside PROD.
+func goldenMarksForceDeleteModel(t *testing.T, width, height int) Model {
+	t.Helper()
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindPod: {
+			pod("default", "api-0"),
+			pod("default", "api-1"),
+			pod("default", "worker-0"),
+		},
+	}}
+	m := New(Config{Session: newSession(), Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(width, height)
+	m = step(t, m, m.load()())
+	m = step(t, m, tea.KeyPressMsg{Text: "space"})
+	m = step(t, m, tea.KeyPressMsg{Text: "space"})
+	m = step(t, m, tea.KeyPressMsg{Text: "D"})
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	return m
+}
+
 // --- 24a: set-image inline editor ---
 
 func goldenSetImageModel(t *testing.T, width, height int) Model {
@@ -901,7 +922,7 @@ func goldenMetaConfirmModel(t *testing.T, width, height int) Model {
 // below.
 var goldenStatePrefixes = []string{
 	"offline", "denied", "allns", "deployments", "empty", "nodes", "nodes-drain",
-	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks",
+	"forwards", "crd-instances", "crd-list", "loading", "helm", "marks", "marks-force-delete",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
 	"flux", "argo", "certificates",
 	"cronjobs", "cronjobs-failed", "cronjobs-suspended", "cronjobs-runnow",
@@ -937,6 +958,8 @@ func goldenStateModel(t *testing.T, prefix string, width, height int) Model {
 		return goldenHelmModel(t, width, height)
 	case "marks":
 		return goldenMarksModel(t, width, height)
+	case "marks-force-delete":
+		return goldenMarksForceDeleteModel(t, width, height)
 	case "confirm-inline":
 		return goldenConfirmInlineModel(t, width, height)
 	case "confirm-modal":
@@ -1016,7 +1039,7 @@ func TestGoldenStateFixtures(t *testing.T) {
 // color tokens (health glyphs, selection bar) are already pinned by other
 // truecolor fixtures in this package.
 var truecolorStatePrefixes = []string{
-	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks",
+	"offline", "denied", "allns", "deployments", "nodes", "forwards", "helm", "marks", "marks-force-delete",
 	"confirm-inline", "confirm-modal", "set-image", "set-resources", "meta", "meta-confirm",
 	// §30a's status mapping is the entire justification for the curated
 	// descriptor, and it is a colour claim: suspended must not read as

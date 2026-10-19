@@ -113,19 +113,25 @@ func TestHandleConfirmKeyTypeTheName(t *testing.T) {
 	}
 }
 
+// bulkDeleteOf is deleteOf for a marked set of two kind objects in "dev".
+func bulkDeleteOf(kind kube.ResourceKind) tui.TaskAction {
+	bulk := deleteOf(kind)
+	bulk.Label = "Delete things"
+	bulk.Scope.ResourceName = ""
+	bulk.Scope.BulkTargets = []tui.BulkTarget{{Namespace: "dev", ResourceName: "a"}, {Namespace: "dev", ResourceName: "b"}}
+	return bulk
+}
+
 // TestHandleConfirmKeyCountTakesDigitsOnly: a marked set's type-the-count
 // buffer refuses letters but keeps backspace.
 func TestHandleConfirmKeyCountTakesDigitsOnly(t *testing.T) {
-	bulk := deleteOf(kube.KindPod)
-	bulk.Scope.ResourceName = ""
-	bulk.Scope.BulkTargets = []tui.BulkTarget{{Namespace: "dev", ResourceName: "a"}, {Namespace: "dev", ResourceName: "b"}}
 	c := New(&fakeMutator{})
-	c.Begin(Request{Verb: verbs.Delete, Prod: true}, bulk)
+	c.Begin(Request{Verb: verbs.Delete, Prod: true}, bulkDeleteOf(kube.KindDeployment))
 	if _, got := c.HandleConfirmKey(keyPress("x")); got != ConfirmSwallowed {
 		t.Fatalf("a letter into the count: %v", got)
 	}
 	if _, got := c.HandleConfirmKey(keyPress(verbs.ForceDelete.Key)); got != ConfirmTyped {
-		t.Fatalf("a marked set has no force delete; ctrl+k reaches the buffer: %v", got)
+		t.Fatalf("a Deployment set has no force delete; ctrl+k reaches the buffer: %v", got)
 	}
 	c.HandleConfirmKey(keyPress("2"))
 	if c.TypedName() != "2" {
@@ -152,6 +158,43 @@ func TestHandleConfirmKeyEscalatesForceDelete(t *testing.T) {
 	// Already a force delete: the chord goes to the buffer.
 	if _, got := c.HandleConfirmKey(keyPress(verbs.ForceDelete.Key)); got != ConfirmTyped {
 		t.Fatalf("ctrl+k inside the force-delete modal: %v", got)
+	}
+}
+
+// TestHandleConfirmKeyEscalatesBulkForceDelete: ctrl+k on a marked set of
+// Pods' inline y/N escalates to the type-the-count modal and force-deletes
+// every target once the count is typed.
+func TestHandleConfirmKeyEscalatesBulkForceDelete(t *testing.T) {
+	mut := &fakeMutator{}
+	c := New(mut)
+	c.Begin(Request{Verb: verbs.Delete}, bulkDeleteOf(kube.KindPod))
+	if c.Tier() != TierInline {
+		t.Fatalf("tier %v, want the inline y/N", c.Tier())
+	}
+	want := append(verbs.ConfirmHints(), verbs.ForceDelete.Hint())
+	if got := c.ConfirmHints(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("hints %v, want %v", got, want)
+	}
+	if _, got := c.HandleConfirmKey(keyPress(verbs.ForceDelete.Key)); got != ConfirmEscalated {
+		t.Fatalf("ctrl+k on a marked pod set: %v", got)
+	}
+	if p := c.Pending(); p.Scope.Verb != verbs.ForceDelete.ID || p.Label != "Force delete things" || c.Tier() != TierModal || !c.TypeToConfirm() {
+		t.Fatalf("escalated to %q %q tier=%v typed=%v", p.Scope.Verb, p.Label, c.Tier(), c.TypeToConfirm())
+	}
+	if _, got := c.HandleConfirmKey(keyPress("y")); got != ConfirmSwallowed {
+		t.Fatalf("y into the count: %v", got)
+	}
+	c.HandleConfirmKey(keyPress("2"))
+	cmd, got := c.HandleConfirmKey(keyPress("enter"))
+	if got != ConfirmExecuted || cmd == nil {
+		t.Fatalf("enter with the count typed: %v", got)
+	}
+	msg, ok := cmd().(BulkResultMsg)
+	if !ok || len(msg.Results) != 2 {
+		t.Fatalf("result %#v", msg)
+	}
+	if len(mut.deleted) != 0 || !reflect.DeepEqual(mut.forceDeleted, []string{"Pod/dev/a", "Pod/dev/b"}) {
+		t.Fatalf("deleted=%v forceDeleted=%v, want both force-deleted", mut.deleted, mut.forceDeleted)
 	}
 }
 

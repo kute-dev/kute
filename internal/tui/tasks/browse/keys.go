@@ -127,8 +127,7 @@ func (m Model) Keybar() tui.Keybar {
 					// documentation idiom every other mutating verb's inline
 					// confirm uses — replaces the generic verb/target prompt,
 					// which only duplicated the y/n hints already in Groups.
-					// A marked set names every target and offers no
-					// force-delete escalation.
+					// A marked set names every target.
 					if len(pending.Scope.BulkTargets) > 0 {
 						note = m.bulkDeleteWillRunLine(pending.Scope)
 						break
