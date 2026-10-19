@@ -412,6 +412,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Any key acknowledges the last action's outcome line; the key
 		// still does what it would have.
 		m.actions.DismissResult()
+		m.scopeNote = ""
 		return m.updateKey(msg)
 	}
 	return m, nil

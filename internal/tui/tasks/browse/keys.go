@@ -495,5 +495,12 @@ func (m Model) CapturingInput() bool {
 
 // ActionResult puts the actions controller's outcome line — a failed or
 // successful delete, drain, cordon, restart, … — on the keybar
-// (tui.ActionResulter, rendered by tui.Frame).
-func (m Model) ActionResult() tui.ResultLine { return m.actions.Result() }
+// (tui.ActionResulter, rendered by tui.Frame). With none to show, a
+// namespace pick on a cluster-scoped list reports there instead
+// (scopeNote).
+func (m Model) ActionResult() tui.ResultLine {
+	if r := m.actions.Result(); !r.Empty() || m.scopeNote == "" {
+		return r
+	}
+	return tui.ResultLine{Text: m.scopeNote}
+}

@@ -663,7 +663,11 @@ type Model struct {
 
 	state    tui.TaskState
 	feedback string
-	spinner  spinner.Model
+	// scopeNote is the keybar line a namespace pick leaves on a
+	// cluster-scoped list (switchNamespace), shown through ActionResult
+	// beneath any action outcome and cleared by the next key.
+	scopeNote string
+	spinner   spinner.Model
 	// loadStartedAt is when the current TaskStateLoading spell began — 15a's
 	// header timer ("▲ loading pods · 0.4s") measures elapsed against this
 	// rather than reading the clock in Render (render must stay pure:
@@ -1230,6 +1234,15 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	if m.session != nil {
 		m.session.Location.Namespace = namespace
 	}
+	if m.desc.ClusterScoped && m.rows != nil {
+		// A cluster-scoped list (Nodes, Namespaces, CRDs, …) reads the same
+		// rows whatever the namespace, so the pick only retargets the
+		// session for the next namespaced kind: no reload, and selection,
+		// filter and metrics stay put. Its breadcrumb carries no namespace
+		// segment (11a), so the keybar note is the switch's only trace.
+		m.scopeNote = "namespace → " + scopeNoteNamespace(namespace) + " · applies to namespaced views"
+		return nil
+	}
 	query, active, focused := m.filterInput.Value(), m.filterActive, m.filterListFocused
 	if m.originName != "" {
 		// An owner's child view (openDeploymentPods and its twins) scopes by
@@ -1244,6 +1257,15 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	m.filterListFocused = focused
 	m.setFilter(query)
 	return cmd
+}
+
+// scopeNoteNamespace names a namespace pick in scopeNote: "" is the
+// all-namespaces pick, worded the way the header renders it.
+func scopeNoteNamespace(namespace string) string {
+	if namespace == "" {
+		return tui.GlyphAllNS + " all namespaces"
+	}
+	return namespace
 }
 
 // setFilter updates the live filter query, keeping Session.Location.Filter
@@ -1424,6 +1446,7 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	m.state = tui.TaskStateLoading
 	m.feedback = "Loading " + m.desc.Display + "..."
 	m.loadStartedAt = time.Now()
+	m.scopeNote = ""
 	m.rows = nil
 	m.pods = nil
 	m.helmReleases = nil

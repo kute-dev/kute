@@ -483,3 +483,51 @@ func TestContextSwitchNeverSeedsPreviousClusterRows(t *testing.T) {
 		t.Fatalf("cachedView=%v rows=%d: cluster-a's rows seeded cluster-b's loading view", m.cachedView, len(m.rows))
 	}
 }
+
+// TestSwitchNamespaceMsgOnNodesKeepsPlace: a namespace pick on a
+// cluster-scoped list retargets the session without reloading the rows it
+// can't change — selection survives, the keybar says what happened, and the
+// next namespaced kind opens in the picked namespace.
+func TestSwitchNamespaceMsgOnNodesKeepsPlace(t *testing.T) {
+	session := newSession()
+	session.Location.Kind = kube.KindNode
+	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+		kube.KindNode: {nodeObj("node-a", true, false), nodeObj("node-b", true, false), nodeObj("node-c", true, false)},
+		kube.KindPod:  {pod("default", "api-1"), pod("nva-stage", "worker-1")},
+	}}
+	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
+	m.SetSize(120, 36)
+	m = step(t, m, m.Init()())
+	m = step(t, m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m = step(t, m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	want, _ := m.selectedRow()
+
+	updated, cmd := m.Update(tui.SwitchNamespaceMsg{Namespace: "nva-stage"})
+	m = *updated.(*Model)
+
+	if cmd != nil {
+		t.Fatal("namespace switch on Nodes issued a command, want no reload")
+	}
+	if m.state == tui.TaskStateLoading {
+		t.Fatal("namespace switch on Nodes put the list back into loading")
+	}
+	if got, _ := m.selectedRow(); got.Name != want.Name {
+		t.Fatalf("selected = %q, want %q kept", got.Name, want.Name)
+	}
+	if m.namespace != "nva-stage" || session.Location.Namespace != "nva-stage" {
+		t.Fatalf("namespace = %q, Location.Namespace = %q, want nva-stage for both", m.namespace, session.Location.Namespace)
+	}
+	if r := m.ActionResult(); !strings.Contains(r.Text, "nva-stage") || r.Failed {
+		t.Fatalf("ActionResult = %+v, want a success note naming nva-stage", r)
+	}
+
+	m = step(t, m, tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if r := m.ActionResult(); !r.Empty() {
+		t.Fatalf("ActionResult = %+v after a key, want cleared", r)
+	}
+
+	m = step(t, m, tui.GotoKindMsg{Kind: kube.KindPod})
+	if row, ok := m.selectedRow(); !ok || row.Name != "worker-1" {
+		t.Fatalf("Pods after the switch selected %+v, %v, want nva-stage's worker-1", row, ok)
+	}
+}
