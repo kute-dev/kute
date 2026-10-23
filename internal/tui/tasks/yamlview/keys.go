@@ -30,6 +30,9 @@ func (m Model) Keybar() tui.Keybar {
 		{verbs.YAMLFold.Hint(), verbs.YAMLUnfoldAll.Hint()},
 		{verbs.Search.Hint(), verbs.YAMLCopy.Hint()},
 	}
+	if m.searchInput.Value() != "" {
+		groups[2] = append([]tui.KeyHint{verbs.SearchNext.Hint()}, groups[2]...)
+	}
 	pillText := "YAML"
 	if m.isSecret {
 		pillText = "SECRET"

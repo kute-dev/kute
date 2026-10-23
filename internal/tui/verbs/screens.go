@@ -22,6 +22,9 @@ var (
 	// YAMLCopy copies the whole document — a screen-local 'Y', the same
 	// reuse CopyRouteYAML makes.
 	YAMLCopy = Verb{ID: "yaml-copy", Key: "Y", Label: "copy"}
+	// SearchNext steps through a committed '/' search, vim's n/N — the
+	// screen claims n from the root shell's namespace palette meanwhile.
+	SearchNext = Verb{ID: "search-next", Key: "n/N", Label: "next/prev match", Presses: []string{"n", "N"}}
 	// SecretRevealToggle/SecretRevealAll/SecretCopyValue are 8a's Secret
 	// mode (§21a): x reveals or masks the cursor key, X reveals every key
 	// behind an inline y/N, y copies the decoded cursor value.
@@ -139,7 +142,7 @@ var (
 
 // screenVerbs is every entry above, for All.
 var screenVerbs = []Verb{
-	YAMLFold, YAMLUnfoldAll, YAMLCopy, SecretRevealToggle, SecretRevealAll, SecretCopyValue,
+	YAMLFold, YAMLUnfoldAll, YAMLCopy, SearchNext, SecretRevealToggle, SecretRevealAll, SecretCopyValue,
 	WarningsOnly, TimeWindow, TimelineFocusRail, CopyRevision,
 	MetaAddKey, ForwardLocalPort, ForwardOtherPort, ConfigMapBufferEdit,
 	DebugMode, DebugImage, DebugCopyName, DebugTarget, DebugContainer, DebugProfile,

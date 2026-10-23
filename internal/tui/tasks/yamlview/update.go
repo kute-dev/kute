@@ -127,6 +127,14 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.revealAllConfirm {
 		return m.updateRevealAllConfirmKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveCursor(mo.Delta(m.bodyRows()))
+		return m, nil
+	}
+	if m.ClaimsKey(msg.String()) {
+		m.stepMatch(msg.String() == "n")
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -253,7 +261,13 @@ func (m Model) copyDecodedSecretValue() tea.Cmd {
 
 func (m *Model) updateSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc", "enter":
+	case "esc":
+		// esc abandons the search (its keybar says "clear"); enter keeps it
+		// highlighted for n/N.
+		m.searchActive = false
+		m.searchInput.SetValue("")
+		m.searchInput.Blur()
+	case "enter":
 		m.searchActive = false
 		m.searchInput.Blur()
 	case "up":
@@ -289,6 +303,32 @@ func (m *Model) jumpToMatch() {
 	for i := range m.cursor {
 		if strings.Contains(strings.ToLower(rendered[i].Text), query) {
 			m.cursor = i
+			m.clampOffset()
+			return
+		}
+	}
+}
+
+// ClaimsKey takes n/N from the root shell while a committed search is on
+// screen (tui.KeyClaimer).
+func (m Model) ClaimsKey(key string) bool {
+	return !m.searchActive && m.searchInput.Value() != "" && verbs.SearchNext.Matches(key)
+}
+
+// stepMatch moves to the next (or previous) line matching the committed
+// search, wrapping like vim's n/N.
+func (m *Model) stepMatch(forward bool) {
+	query := strings.ToLower(m.searchInput.Value())
+	rendered := m.rendered()
+	n := len(rendered)
+	step := 1
+	if !forward {
+		step = -1
+	}
+	for i := 1; i <= n; i++ {
+		j := ((m.cursor+step*i)%n + n) % n
+		if strings.Contains(strings.ToLower(rendered[j].Text), query) {
+			m.cursor = j
 			m.clampOffset()
 			return
 		}

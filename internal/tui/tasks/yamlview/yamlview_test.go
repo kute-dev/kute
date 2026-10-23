@@ -3,6 +3,7 @@ package yamlview
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -403,5 +404,70 @@ func TestAnOlderLoadNeverOverwritesANewerOne(t *testing.T) {
 	m = step(t, m, olderMsg)
 	if m.resourceVersion != "2" {
 		t.Fatalf("resourceVersion = %q after the older load landed last, want 2", m.resourceVersion)
+	}
+}
+
+// TestSearchNextStepsAndWraps is vim's n/N over a committed search: enter
+// keeps the query, n/N walk its matches with wrap, and the screen claims n
+// from the root shell's namespace palette only while a query is committed.
+func TestSearchNextStepsAndWraps(t *testing.T) {
+	m, _ := newModel("a: x\nb: y\nc: x\nd: y\ne: x\n")
+	m = step(t, m, m.Init()())
+	if m.ClaimsKey("n") {
+		t.Fatal("claimed n with no search")
+	}
+	m = step(t, m, tea.KeyPressMsg{Text: "/"})
+	m = step(t, m, tea.KeyPressMsg{Text: "x"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !m.ClaimsKey("n") || !m.ClaimsKey("N") {
+		t.Fatal("a committed search must claim n/N")
+	}
+	start := m.cursor
+	var seen []int
+	for range 3 {
+		m = step(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
+		seen = append(seen, m.cursor)
+	}
+	if seen[2] != start {
+		t.Fatalf("three n's over three matches visited %v, want to wrap back to %d", seen, start)
+	}
+	m = step(t, m, tea.KeyPressMsg{Code: 'N', Text: "N"})
+	if m.cursor != seen[1] {
+		t.Fatalf("N went to %d, want %d", m.cursor, seen[1])
+	}
+
+	// esc abandons a search, releasing n.
+	m = step(t, m, tea.KeyPressMsg{Text: "/"})
+	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.ClaimsKey("n") {
+		t.Fatal("esc must clear the search and release n")
+	}
+}
+
+func TestMotionsMoveTheCursor(t *testing.T) {
+	var b strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&b, "k%03d: v\n", i)
+	}
+	m, _ := newModel(b.String())
+	m = step(t, m, m.Init()())
+	last := len(m.rendered()) - 1
+	page := m.bodyRows()
+	for _, tc := range []struct {
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{tea.KeyPressMsg{Code: 'G', Text: "G"}, last},
+		{tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, page/2 + 1},
+		{tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page/2 + 1 + page},
+		{tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}, page/2 + 1},
+		{tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+	} {
+		m = step(t, m, tc.key)
+		if m.cursor != tc.want {
+			t.Fatalf("%s: cursor %d, want %d", tc.key, m.cursor, tc.want)
+		}
 	}
 }
