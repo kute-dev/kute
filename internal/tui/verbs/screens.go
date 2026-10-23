@@ -74,6 +74,10 @@ var (
 	// ConfigMapBufferEdit opens a folded multi-line value in the buffer
 	// editor (whose apply is ConfigMapBufferApply).
 	ConfigMapBufferEdit = Verb{ID: "configmap-buffer-edit", Key: "e", Label: "buffer editor", Kinds: []kube.ResourceKind{kube.KindConfigMap}}
+	// ConfigMapBufferExternal hands the open buffer to $KUBE_EDITOR/$VISUAL/
+	// $EDITOR and loads the result back for review — nothing is applied
+	// until ConfigMapBufferApply. ctrl+o is free in the textarea's keymap.
+	ConfigMapBufferExternal = Verb{ID: "configmap-buffer-external", Key: "ctrl+o", Label: "open in $EDITOR", Kinds: []kube.ResourceKind{kube.KindConfigMap}}
 )
 
 // §41 debug panel fields. Each key edits or cycles one field of the
@@ -144,7 +148,7 @@ var (
 var screenVerbs = []Verb{
 	YAMLFold, YAMLUnfoldAll, YAMLCopy, SearchNext, SecretRevealToggle, SecretRevealAll, SecretCopyValue,
 	WarningsOnly, TimeWindow, TimelineFocusRail, CopyRevision,
-	MetaAddKey, ForwardLocalPort, ForwardOtherPort, ConfigMapBufferEdit,
+	MetaAddKey, ForwardLocalPort, ForwardOtherPort, ConfigMapBufferEdit, ConfigMapBufferExternal,
 	DebugMode, DebugImage, DebugCopyName, DebugTarget, DebugContainer, DebugProfile,
 	DebugEntrypoint, DebugProcesses, DebugRecents,
 	SetupEditPath, SetupEnterPath,

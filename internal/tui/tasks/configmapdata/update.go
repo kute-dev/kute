@@ -88,6 +88,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.actions.SetOffline(m.conn.Offline())
 	case loadedMsg:
 		return m.applyLoaded(msg)
+	case externalEditMsg:
+		m.applyExternalEdit(msg)
 	case spinner.TickMsg:
 		if m.state != tui.TaskStateLoading {
 			return m, nil
@@ -376,9 +378,12 @@ func (m *Model) updateEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // backspace at column 0 joins with the previous line.
 func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	e := m.multiline
+	m.notice = ""
 	switch msg.String() {
 	case "esc":
 		m.multiline = nil
+	case verbs.ConfigMapBufferExternal.Key:
+		return m, externalEditCmd(e.key, e.value())
 	case verbs.ConfigMapBufferApply.Key:
 		return m, m.commitMultiline(false)
 	case verbs.RestartConfigMapConsumers.Key:
@@ -389,6 +394,23 @@ func (m *Model) updateMultilineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// applyExternalEdit loads what the editor saved back into the still-open
+// buffer for review; nothing is applied until alt+a. A result the textarea
+// can't hold unchanged (tabs, CRLF) is refused rather than silently altered.
+func (m *Model) applyExternalEdit(msg externalEditMsg) {
+	if m.multiline == nil || m.multiline.key != msg.key {
+		return
+	}
+	switch {
+	case msg.err != nil:
+		m.notice = "editor: " + msg.err.Error() + " · buffer unchanged"
+	case !textareaRoundTrips(msg.value):
+		m.notice = "the edited value has tabs or CRLF, which this buffer can't hold · buffer unchanged"
+	default:
+		m.multiline.textarea.SetValue(msg.value)
+	}
 }
 
 func (m *Model) moveSelection(delta int) {

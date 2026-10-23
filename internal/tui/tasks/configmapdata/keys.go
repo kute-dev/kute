@@ -67,6 +67,7 @@ func (m Model) Keybar() tui.Keybar {
 			Groups: [][]tui.KeyHint{{
 				verbs.ConfigMapBufferApply.Hint(),
 				verbs.RestartConfigMapConsumers.Hint(),
+				verbs.ConfigMapBufferExternal.Hint(),
 				verbs.Back.HintAs("discard"),
 			}},
 		}
