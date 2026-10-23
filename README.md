@@ -130,6 +130,24 @@ Run `kute` with no arguments and it opens on the context you last used, in the n
 
 Everything else is a keystroke: `?` from any screen lists the keys for that screen plus the global ones.
 
+### Coming from vim
+
+| Keys | In kute |
+| --- | --- |
+| `j` `k` | move, on every screen |
+| `gg` `G` | first/last row (`home`/`end` too) |
+| `ctrl+d` `ctrl+u` | half page down/up |
+| `ctrl+f` `ctrl+b` | page down/up (`pgdown`/`pgup` too) |
+| `ctrl+e` `ctrl+y` | one row down/up |
+| `/` then `n` `N` | search the YAML view, then step through matches (`↵` keeps the search, `esc` clears it) |
+| `:` | the goto palette, same as `g` |
+| `:q` `:q!` | quit, after a confirm / without one |
+| `esc` | back exactly one level |
+| `E` | edit the object in `$KUBE_EDITOR`/`$EDITOR` (via `kubectl edit`) |
+| `ctrl+o` | in a ConfigMap's buffer editor (`e`), edit that one value in the same editor; it comes back for review before `alt+a` applies |
+
+`g` still opens the goto palette: a second `g` pressed straight away (with nothing typed after it) is `gg`, so `g` then `gitlab` still searches for gitlab.
+
 ### Reporting a bug
 
 If kute crashes it writes a crash report — build, context, namespace, kind, screen, terminal size, the panic and the tail of the log — to `~/.local/state/kute/kute-crash-<timestamp>.log`, and prints the path. Attach that file to the [bug form](https://github.com/kute-dev/kute/issues/new?template=bug_report.yml).
