@@ -10,6 +10,7 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/jobactions"
 	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
@@ -234,6 +235,14 @@ func (m *Model) moveJobSelection(delta int) {
 	m.clampOffset()
 }
 
+// moveJobsBy applies a shared motion verb to the Jobs table, scrolling its
+// window with the cursor.
+func (m *Model) moveJobsBy(mo verbs.Motion) {
+	rows := m.tableDataRows()
+	pos := components.MoveBy(m.selectedJob, m.offset, rows, len(m.summary.Runs), mo.Delta(rows))
+	m.selectedJob, m.offset = pos.Selected, pos.Offset
+}
+
 // clampOffset keeps the selected Job row within the table's rendered
 // viewport — mirrors browse/nodedetail's own clampOffset.
 func (m *Model) clampOffset() {
@@ -328,6 +337,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m, func() tea.Msg { return tui.BackMsg{} }
 		}
+	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveJobsBy(mo)
+		return m, nil
 	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":

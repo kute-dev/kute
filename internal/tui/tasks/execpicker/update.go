@@ -49,6 +49,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(m.pageRows()))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -58,10 +62,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveSelection(max(1, m.height/2))
-	case "ctrl+u":
-		m.moveSelection(-max(1, m.height/2))
 	case "enter":
 		// Exec is Mutating, so it's refused while offline (docs/design
 		// README.md §52). Unlike the list screens this one can't lean on a
@@ -103,6 +103,12 @@ func (m Model) selectedShellless() bool {
 	}
 	res, ok := m.detected[m.containers[m.selected].Name]
 	return ok && res.err == nil && len(res.shells) == 0
+}
+
+// pageRows is the motion verbs' page: the panel's body height (the
+// container list renders unscrolled, so this only sizes jumps).
+func (m Model) pageRows() int {
+	return tui.FrameBodyHeight(m.height, len(m.Strips(m.width)))
 }
 
 func (m *Model) moveSelection(delta int) {

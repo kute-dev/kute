@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -704,5 +705,44 @@ func TestFailingPodDoesNotRedASameNamedOtherKind(t *testing.T) {
 	}
 	if got := m.severityStyle(theme, svc).GetForeground(); got != theme.Warn {
 		t.Fatalf("Service/redis warning = %v, want Warn, not red off the same-named failing pod", got)
+	}
+}
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	var evs []kube.Event
+	for i := range 60 {
+		evs = append(evs, kube.Event{Type: "Warning", Reason: fmt.Sprintf("Reason%02d", i), Object: fmt.Sprintf("Pod/p-%02d", i), Message: "m", Count: 1, LastSeen: time.Now()})
+	}
+	load := func() Model {
+		m := New(Config{Session: newSession(), Events: fakeEvents{namespaceEvents: evs}, Namespace: "default"})
+		m.SetSize(120, 36)
+		return step(t, m, m.Init()())
+	}
+	page := load().pageRows()
+	last := len(load().rows) - 1
+	if page < 4 || last <= page {
+		t.Fatalf("fixture too small: page %d, last %d", page, last)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 0, tea.KeyPressMsg{Text: "G", Code: 'G'}, last},
+		{"end", 0, tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{"ctrl+d", 0, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{"ctrl+f", 0, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page},
+		{"ctrl+e", 0, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := load()
+			m.selected = tc.from
+			m = step(t, m, tc.key)
+			if m.selected != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", m.selected, tc.want, page)
+			}
+		})
 	}
 }

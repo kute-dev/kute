@@ -193,7 +193,7 @@ func TestEveryDeclaredVerbIsInAll(t *testing.T) {
 						continue
 					}
 					switch name.Name {
-					case "All", "screenVerbs":
+					case "All", "screenVerbs", "motionVerbs":
 						ast.Inspect(vs.Values[i], func(n ast.Node) bool {
 							if id, ok := n.(*ast.Ident); ok {
 								listed[id.Name] = true

@@ -217,7 +217,7 @@ func goldenDrainImpact() kube.DrainImpact {
 	})
 }
 
-// goldenDrainConfirmModel is 11b with ctrl-d's drain confirm open, pinning
+// goldenDrainConfirmModel is 11b with X's drain confirm open, pinning
 // the red ConfirmBorder and the impact line's Bad (unmanaged) and Warn
 // (emptyDir) spans in the truecolor fixtures.
 func goldenDrainConfirmModel(t *testing.T, width, height int) Model {

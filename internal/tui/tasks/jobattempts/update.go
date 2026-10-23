@@ -10,6 +10,7 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -277,6 +278,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case verbs.JobAttemptDiff.Key, "esc":
 			m.diffMode = false
 		}
+		return m, nil
+	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		rows := m.tableDataRows()
+		pos := components.MoveBy(m.selectedAttempt, m.offset, rows, len(m.attemptList()), mo.Delta(rows))
+		m.selectedAttempt, m.offset = pos.Selected, pos.Offset
 		return m, nil
 	}
 	switch msg.String() {

@@ -3,6 +3,7 @@ package execpicker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -442,5 +443,39 @@ func TestEnterRefusedWhileOffline(t *testing.T) {
 	m = *updated.(*Model)
 	if _, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
 		t.Error("enter stayed refused after reconnecting")
+	}
+}
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	base := newModel()
+	base.containers = nil
+	for i := range 60 {
+		base.containers = append(base.containers, kube.ContainerInfo{Name: fmt.Sprintf("c%02d", i), State: "Running"})
+	}
+	page, last := base.pageRows(), len(base.containers)-1
+	if page < 4 || last <= page {
+		t.Fatalf("fixture too small: page %d, last %d", page, last)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 0, tea.KeyPressMsg{Text: "G", Code: 'G'}, last},
+		{"end", 0, tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{"ctrl+d", 0, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{"ctrl+f", 0, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page},
+		{"ctrl+e", 0, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := base
+			m.selected = tc.from
+			upd, _ := m.Update(tc.key)
+			if got := upd.(*Model).selected; got != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", got, tc.want, page)
+			}
+		})
 	}
 }

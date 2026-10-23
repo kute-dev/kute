@@ -12,7 +12,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -196,6 +195,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// anything else, same rule secretdata's own updateKey uses.
 		m.message, m.lastError, m.notice = "", "", ""
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(m.pageRows()))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -205,10 +208,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveHalfPage(1)
-	case "ctrl+u":
-		m.moveHalfPage(-1)
 	case verbs.AddConfigMapKey.Key, "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
@@ -400,9 +399,11 @@ func (m *Model) moveSelection(delta int) {
 	m.selected = clamp(m.selected+delta, 0, len(m.keys)-1)
 }
 
-func (m *Model) moveHalfPage(direction int) {
-	position := components.MoveHalfPage(m.selected, 0, 8, len(m.keys), direction)
-	m.selected = position.Selected
+// pageRows is the motion verbs' page: the grid's body less its column
+// header (the grid renders unscrolled, so this only sizes jumps).
+func (m Model) pageRows() int {
+	size := tui.NormalizeSize(m.width, m.height)
+	return max(tui.FrameBodyHeight(size.Height, len(m.Strips(size.Width)))-1, 1)
 }
 
 // beginCommit runs the shared "figure out the tier, hand it to

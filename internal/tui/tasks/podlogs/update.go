@@ -127,6 +127,20 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		switch mo {
+		case verbs.MotionTop:
+			m.view.VerticalOffset = 0
+			m.view.AutoScroll = false
+		case verbs.MotionBottom:
+			m.view.AutoScroll = false
+			m.view.VerticalOffset = m.maxVerticalOffset()
+		default:
+			m.moveVertical(mo.Delta(m.entryViewportHeight()))
+		}
+		m.clampOffsets()
+		return m, nil
+	}
 
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
@@ -149,20 +163,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveHorizontal(-1)
 	case "l", "right":
 		m.moveHorizontal(1)
-	case "home":
-		m.view.VerticalOffset = 0
-		m.view.AutoScroll = false
-	case "G", "end":
-		m.view.AutoScroll = false
-		m.view.VerticalOffset = m.maxVerticalOffset()
-	case "pgdown", "ctrl+f":
-		m.moveVertical(m.entryViewportHeight())
-	case "pgup", "ctrl+b":
-		m.moveVertical(-m.entryViewportHeight())
-	case "ctrl+d":
-		m.moveVertical(max(1, m.entryViewportHeight()/2))
-	case "ctrl+u":
-		m.moveVertical(-max(1, m.entryViewportHeight()/2))
 	case verbs.LogPause.Key:
 		m.view.AutoScroll = !m.view.AutoScroll
 	case verbs.LogToggleWrap.Key:

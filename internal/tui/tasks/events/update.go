@@ -224,6 +224,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(m.pageRows()))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -288,6 +292,16 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// pageRows is how many rows the feed shows around the selection — the
+// motion verbs' page, from the same visibleWindow Body lays out.
+func (m Model) pageRows() int {
+	size := tui.NormalizeSize(m.width, m.height)
+	height := tui.FrameBodyHeight(size.Height, len(m.Strips(size.Width))) -
+		len(m.columnHeaderLines(m.Theme(), size.Width))
+	start, end := visibleWindow(m.rows, m.selected, height, size.Width)
+	return max(end-start, 1)
 }
 
 func (m *Model) moveSelection(delta int) {

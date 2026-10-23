@@ -10,7 +10,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/metapanel"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
@@ -262,6 +261,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return tui.BackMsg{} }
 		}
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.applyMotion(mo)
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -275,14 +278,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveContainerSelection(-1)
 	case "down", "j":
 		m.moveContainerSelection(1)
-	case "ctrl+d":
-		m.moveContainerHalfPage(1)
-	case "ctrl+u":
-		m.moveContainerHalfPage(-1)
-	case verbs.PageDown.Key:
-		m.moveBodyPage(1)
-	case verbs.PageUp.Key:
-		m.moveBodyPage(-1)
 	case verbs.Logs.Key:
 		if task, cmd, ok := m.openSelectedLogs(); ok {
 			return task, cmd
@@ -477,10 +472,18 @@ func (m *Model) moveContainerSelection(delta int) {
 	m.selectedContainer = next
 }
 
-func (m *Model) moveContainerHalfPage(direction int) {
-	n := m.totalContainerRows()
-	position := components.MoveHalfPage(m.selectedContainer, 0, max(n, 1), n, direction)
-	m.selectedContainer = position.Selected
+// applyMotion routes a shared motion: a full page (pgdown/pgup, ctrl+f/b)
+// scrolls the body, as the keybar's page hints say; every other motion
+// moves the CONTAINERS selection, whose whole grid is always on screen.
+func (m *Model) applyMotion(mo verbs.Motion) {
+	switch mo {
+	case verbs.MotionPageDown:
+		m.moveBodyPage(1)
+	case verbs.MotionPageUp:
+		m.moveBodyPage(-1)
+	default:
+		m.moveContainerSelection(mo.Delta(m.totalContainerRows()))
+	}
 }
 
 func (m *Model) moveBodyPage(direction int) {

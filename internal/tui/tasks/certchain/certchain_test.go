@@ -420,3 +420,35 @@ func TestSecretRefMissNeverStartsSharedSecretCache(t *testing.T) {
 		t.Fatalf("resolveSecretRef = %+v, want a miss naming the type checked", ref)
 	}
 }
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	base := demoModel(t, "default", "web-tls")
+	base.chain = make([]chainNode, 50)
+	base.haveSecret, base.haveIssuer = false, false
+	page, last := base.pageRows(), base.selectableCount()-1
+	if page < 4 || last <= page {
+		t.Fatalf("fixture too small: page %d, last %d", page, last)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 0, tea.KeyPressMsg{Text: "G", Code: 'G'}, last},
+		{"end", 0, tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{"ctrl+d", 0, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{"ctrl+f", 0, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page},
+		{"ctrl+e", 0, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := base
+			m.selected = tc.from
+			upd, _ := m.Update(tc.key)
+			if got := upd.(*Model).selected; got != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", got, tc.want, page)
+			}
+		})
+	}
+}

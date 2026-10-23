@@ -825,3 +825,43 @@ func TestStaleLoadNeverOverwritesANewerTree(t *testing.T) {
 		t.Fatalf("a stale load replaced the tree: %d groups, state %v", len(m.groups), m.state)
 	}
 }
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	base := demoModel(t)
+	page := base.bodyRowCount()
+	// A sub line first, at the ctrl+f target, and a fold line last: every
+	// motion must land on a selectable row.
+	const n = 80
+	lines := make([]line, n)
+	lines[0].kind, lines[1+page].kind, lines[n-1].kind = lineSub, lineSub, lineFold
+	if page < 4 || n <= 2*page {
+		t.Fatalf("fixture too small: page %d", page)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 1, tea.KeyPressMsg{Text: "G", Code: 'G'}, n - 2},
+		{"end", 1, tea.KeyPressMsg{Code: tea.KeyEnd}, n - 2},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 1},
+		{"ctrl+d", 1, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, 1 + page/2},
+		{"ctrl+f skips a sub line", 1, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, 2 + page},
+		{"ctrl+e", 1, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := *base
+			m.lines = lines
+			m.selected, m.offset = tc.from, 0
+			upd, _ := m.Update(tc.key)
+			got := upd.(*Model)
+			if got.selected != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", got.selected, tc.want, page)
+			}
+			if got.selected < got.offset || got.selected >= got.offset+page {
+				t.Fatalf("selected %d outside window [%d,%d)", got.selected, got.offset, got.offset+page)
+			}
+		})
+	}
+}

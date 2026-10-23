@@ -17,6 +17,19 @@ type ListPosition struct {
 // MoveHalfPage moves a list cursor and its window together by half the active
 // viewport. The result is always a valid, visible cursor position.
 func MoveHalfPage(selected, offset, viewportRows, total, direction int) ListPosition {
+	step := max(1, max(viewportRows, 1)/2)
+	if direction < 0 {
+		step = -step
+	} else if direction == 0 {
+		step = 0
+	}
+	return MoveBy(selected, offset, viewportRows, total, step)
+}
+
+// MoveBy moves the selection step rows (clamped to the list) and scrolls the
+// window by the same amount — the shape every vim motion takes on a list
+// (pass verbs.Motion.Delta(viewportRows) as step).
+func MoveBy(selected, offset, viewportRows, total, step int) ListPosition {
 	if total <= 0 {
 		return ListPosition{}
 	}
@@ -29,12 +42,10 @@ func MoveHalfPage(selected, offset, viewportRows, total, direction int) ListPosi
 		maxOffset = 0
 	}
 	offset = clampState(offset, 0, maxOffset)
-	step := max(1, viewportRows/2)
-	if direction < 0 {
-		step = -step
-	} else if direction == 0 {
+	if step == 0 {
 		return ListPosition{Selected: selected, Offset: offset}
 	}
+	step = clampState(step, -total, total)
 	selected = clampState(selected+step, 0, total-1)
 	offset = clampState(offset+step, 0, maxOffset)
 	if selected < offset {

@@ -117,6 +117,14 @@ func TestVerticalNavigationKeys(t *testing.T) {
 	if model.view.VerticalOffset != 0 {
 		t.Fatalf("home offset = %d", model.view.VerticalOffset)
 	}
+	press(&model, "ctrl+e")
+	if model.view.VerticalOffset != 1 {
+		t.Fatalf("ctrl+e offset = %d", model.view.VerticalOffset)
+	}
+	press(&model, "ctrl+y")
+	if model.view.VerticalOffset != 0 {
+		t.Fatalf("ctrl+y offset = %d", model.view.VerticalOffset)
+	}
 }
 
 func TestVerticalNavigationMovesByWrappedPhysicalRow(t *testing.T) {

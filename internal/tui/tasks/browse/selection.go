@@ -4,6 +4,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // rowRef identifies a row by namespace + name — never name alone, since
@@ -191,14 +192,25 @@ func (m *Model) moveSelection(delta int) {
 }
 
 func (m *Model) moveHalfPage(direction int) {
+	mo := verbs.MotionHalfDown
+	if direction < 0 {
+		mo = verbs.MotionHalfUp
+	}
+	m.moveMotion(mo)
+}
+
+// moveMotion applies a shared vim motion (verbs.MotionFor), counting only
+// selectable rows so a group header never eats a step.
+func (m *Model) moveMotion(mo verbs.Motion) {
 	if len(m.display) == 0 {
 		m.selected, m.offset = 0, 0
 		return
 	}
-	step := max(1, m.tableDataRows()/2)
-	if direction < 0 {
-		step = -step
+	step := mo.Delta(m.tableDataRows())
+	if step == 0 {
+		return
 	}
+	direction := sign(step)
 	next := m.selected
 	for moved := 0; moved < abs(step); {
 		candidate := clamp(next+sign(step), 0, len(m.display)-1)
@@ -215,9 +227,9 @@ func (m *Model) moveHalfPage(direction int) {
 	// Move the window with the cursor, then apply the normal visibility clamp.
 	rows := m.tableDataRows()
 	if direction > 0 {
-		m.offset = min(m.offset+abs(step), max(len(m.display)-rows, 0))
+		m.offset = min(m.offset+min(abs(step), len(m.display)), max(len(m.display)-rows, 0))
 	} else {
-		m.offset = max(m.offset-abs(step), 0)
+		m.offset = max(m.offset-min(abs(step), len(m.display)), 0)
 	}
 	m.snapPastHeader()
 	m.clampOffset()

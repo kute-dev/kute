@@ -2,7 +2,6 @@ package fluxtree
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -164,18 +163,16 @@ func (m *Model) handleResult(msg actions.ResultMsg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveBy(mo.Delta(m.bodyRowCount()))
+		return m, nil
+	}
 	switch msg.String() {
 	case "up", "k":
 		m.moveSelection(-1)
 		return m, nil
 	case "down", "j":
 		m.moveSelection(1)
-		return m, nil
-	case "home":
-		m.selectFirst()
-		return m, nil
-	case "end":
-		m.selectLast()
 		return m, nil
 	case verbs.ToggleGroup.Key:
 		if m.foldedSources > 0 || m.expanded {
@@ -456,14 +453,37 @@ func (m *Model) selectFirst() {
 	m.selected = 0
 }
 
-func (m *Model) selectLast() {
-	for i := range slices.Backward(m.lines) {
+// moveBy is a motion verb's jump: delta lines on, landing on the nearest
+// selectable row past that point (else the nearest one back toward the
+// cursor), with the window scrolled by the same amount.
+func (m *Model) moveBy(delta int) {
+	n := len(m.lines)
+	if n == 0 || delta == 0 {
+		return
+	}
+	dir := 1
+	if delta < 0 {
+		dir = -1
+	}
+	target := min(max(m.selected+delta, 0), n-1)
+	next := -1
+	for i := target; i >= 0 && i < n; i += dir {
 		if m.selectable(i) {
-			m.selected = i
-			m.clampOffset()
-			return
+			next = i
+			break
 		}
 	}
+	for i := target - dir; next < 0 && i != m.selected && i >= 0 && i < n; i -= dir {
+		if m.selectable(i) {
+			next = i
+		}
+	}
+	if next < 0 {
+		return
+	}
+	m.offset += next - m.selected
+	m.selected = next
+	m.clampOffset()
 }
 
 // clampOffset keeps the selected line inside the rendered viewport.

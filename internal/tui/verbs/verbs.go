@@ -540,8 +540,10 @@ var (
 		ID: "cordon", Key: "C", Label: "cordon", ReverseID: "uncordon",
 		Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
+	// Drain is X, not ctrl+d — ctrl+d is half-page-down on every list
+	// (motion.go), and a node list must page like any other.
 	Drain = Verb{
-		ID: "drain", Key: "ctrl+d", Label: "drain",
+		ID: "drain", Key: "X", Label: "drain",
 		Kinds: []kube.ResourceKind{kube.KindNode}, Mutating: true,
 	}
 	// Rollback is 18a's 'R' on a Helm release — "inherits 8b friction":
@@ -793,7 +795,7 @@ var All = append([]Verb{
 	CopyRouteURL, OpenParentGateway, CopyRouteYAML, FocusTLSStrip, OpenTLSSecret,
 	ConfirmAccept, ConfirmDecline, ConfirmCancel, ConfirmSubmit,
 	Move, Back, NextPanel, Siblings, Search, Quit,
-}, screenVerbs...)
+}, append(screenVerbs, motionVerbs...)...)
 
 // ByID looks up a registered verb by its stable ID.
 func ByID(id string) (Verb, bool) {

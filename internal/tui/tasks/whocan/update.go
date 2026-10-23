@@ -8,6 +8,8 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/components"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // Reload implements tui.Reloader — see its doc comment: this screen misses
@@ -232,6 +234,12 @@ func buildRows(result kube.WhoCanResult) []whoCanRow {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		rows := m.tableDataRows()
+		pos := components.MoveBy(m.selected, m.offset, rows, len(m.rows), mo.Delta(rows))
+		m.selected, m.offset = pos.Selected, pos.Offset
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -241,10 +249,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveSelection(max(1, m.height/2))
-	case "ctrl+u":
-		m.moveSelection(-max(1, m.height/2))
 	case "enter":
 		if task, cmd, ok := m.openSelectedBinding(); ok {
 			return task, cmd

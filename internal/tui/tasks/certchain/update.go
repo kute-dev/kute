@@ -146,6 +146,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.actions.Active() {
 		return m.updateConfirmKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(m.pageRows()))
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
@@ -210,6 +214,13 @@ func (m *Model) beginCertRenew() tea.Cmd {
 // renders, duplicated per the repo's package-local-seam convention.
 func certRenewWillRunLine(scope tui.TaskScope) string {
 	return "will run: " + kube.RenewCertificateCommandString(scope.Namespace, scope.ResourceName)
+}
+
+// pageRows is the motion verbs' page: the body less the chain table's
+// header and rule (the chain renders unscrolled, so this only sizes jumps).
+func (m Model) pageRows() int {
+	size := tui.NormalizeSize(m.width, m.height)
+	return max(tui.FrameBodyHeight(size.Height, len(m.Strips(size.Width)))-2, 1)
 }
 
 func (m *Model) moveSelection(delta int) {

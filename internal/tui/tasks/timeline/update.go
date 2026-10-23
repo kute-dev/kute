@@ -13,6 +13,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -285,6 +286,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.applyMotion(mo)
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -301,18 +306,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.moveRailSelection(1)
 		} else {
 			m.moveSelection(1)
-		}
-	case "ctrl+d":
-		if m.railFocused {
-			m.moveRailSelection(1)
-		} else {
-			m.moveSelection(1)
-		}
-	case "ctrl+u":
-		if m.railFocused {
-			m.moveRailSelection(-1)
-		} else {
-			m.moveSelection(-1)
 		}
 	case verbs.TimelineFocusRail.Key, verbs.ToggleGroup.Key:
 		if len(m.rail) > 0 {
@@ -498,6 +491,46 @@ func (m *Model) updateFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// applyMotion moves whichever pane has focus, like j/k. Feed rows wrap, so
+// a feed page is budgeted in rendered lines, not rows.
+func (m *Model) applyMotion(mo verbs.Motion) {
+	height, width := m.feedViewport()
+	if m.railFocused {
+		// Each rail card is three lines plus a blank separator.
+		m.moveRailSelection(mo.Delta(max((height+1)/4, 1)))
+		return
+	}
+	switch mo {
+	case verbs.MotionHalfDown, verbs.MotionHalfUp, verbs.MotionPageDown, verbs.MotionPageUp:
+		heights := make([]int, len(m.rows))
+		for i, e := range m.rows {
+			heights[i] = m.rowLineCount(e, width)
+		}
+		budget := mo.Delta(height)
+		dir := 1
+		if budget < 0 {
+			budget, dir = -budget, -1
+		}
+		m.selected = components.MoveByLineBudget(heights, m.selected, budget, dir)
+	default:
+		m.moveSelection(mo.Delta(height))
+	}
+}
+
+// feedViewport is the feed's row budget and width, as timelineBody lays it
+// out: the frame body less the feed header and rule (and 16a's fold line).
+func (m Model) feedViewport() (height, width int) {
+	width = m.width
+	if len(m.rail) > 0 {
+		width = max(m.width-m.railWidth(m.width)-1, 8)
+	}
+	height = max(tui.FrameBodyHeight(m.height, len(m.Strips(m.width)))-2, 1)
+	if m.foldedNormalLine(m.Theme(), width) != "" {
+		height = max(height-1, 1)
+	}
+	return height, width
 }
 
 func (m *Model) moveSelection(delta int) {

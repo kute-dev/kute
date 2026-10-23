@@ -190,6 +190,11 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.nextPanel()
 		return m, nil
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		// A panel never shows more than maxPanelRows, so that's its page.
+		m.moveSelection(mo.Delta(maxPanelRows))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit

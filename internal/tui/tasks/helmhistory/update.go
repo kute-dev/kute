@@ -10,6 +10,7 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -147,6 +148,12 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.actions.Active() {
 		return m.updateConfirmKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		rows := m.tableDataRows()
+		pos := components.MoveBy(m.selected, m.offset, rows, len(m.revisions), mo.Delta(rows))
+		m.selected, m.offset = pos.Selected, pos.Offset
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -156,10 +163,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveSelection(max(1, m.tableDataRows()/2))
-	case "ctrl+u":
-		m.moveSelection(-max(1, m.tableDataRows()/2))
 	case verbs.Rollback.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if m.selected == 0 {

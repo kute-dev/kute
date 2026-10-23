@@ -10,6 +10,7 @@ import (
 
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
@@ -209,6 +210,17 @@ func (m Model) backendNamespaces() []string {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		if m.tlsFocused {
+			// The TLS strip is one line of chips, all on screen.
+			m.tlsSelected = mo.Apply(m.tlsSelected, len(m.tlsFacts), len(m.tlsFacts))
+			return m, nil
+		}
+		rows := m.tableDataRows()
+		pos := components.MoveBy(m.selected, m.offset, rows, m.rowCount(), mo.Delta(rows))
+		m.selected, m.offset = pos.Selected, pos.Offset
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit

@@ -22,6 +22,7 @@ import (
 	"github.com/kute-dev/kute/internal/resources"
 	"github.com/kute-dev/kute/internal/testutil/goldentest"
 	"github.com/kute-dev/kute/internal/tui"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 func nodeObj(name string, ready bool, cordoned bool) *corev1.Node {
@@ -534,7 +535,7 @@ func TestDKeyShowsDrainConfirmAndYExecutes(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	if !m.actions.Active() {
 		t.Fatal("expected D to open a drain confirmation")
 	}
@@ -566,7 +567,7 @@ func TestDrainConfirmOmitsZeroRiskSegments(t *testing.T) {
 	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	view := plain(m.Render())
 	if !strings.Contains(view, "1 evictable") || strings.Contains(view, "unmanaged") || strings.Contains(view, "emptyDir") {
 		t.Fatalf("want a bare evictable count:\n%s", view)
@@ -587,7 +588,7 @@ func TestDrainConfirmFitsNarrowTerminal(t *testing.T) {
 	m := New(Config{Session: session, Lister: lister, Mutator: &fakeMutator{}})
 	m.SetSize(60, 24)
 	m = step(t, m, m.Init()())
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	view := plain(m.Render())
 	if !strings.Contains(view, "1 evictable") || !strings.Contains(view, "…") {
 		t.Fatalf("want the consequence line ellipsized:\n%s", view)
@@ -615,7 +616,7 @@ func TestDKeyThenNCancelsWithoutDraining(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	m = step(t, m, tea.KeyPressMsg{Text: "n"})
 	if m.actions.Active() {
 		t.Fatal("expected n to cancel the drain confirmation")
@@ -730,9 +731,9 @@ func TestDrainConfirmBorderIsRed(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	if !m.actions.Active() {
-		t.Fatal("expected ctrl+d to open a drain confirmation")
+		t.Fatal("expected X to open a drain confirmation")
 	}
 	red := lipgloss.NewStyle().Foreground(m.Theme().ConfirmBorder).Render("╭")
 	red = red[:strings.Index(red, "╭")+len("╭")]
@@ -741,9 +742,9 @@ func TestDrainConfirmBorderIsRed(t *testing.T) {
 	}
 }
 
-// TestPgDownPagesNodesWithoutDraining: ctrl+u pages up, but ctrl+d is
-// Drain on the Nodes list — pgdown/pgup are the page pair that works there.
-func TestPgDownPagesNodesWithoutDraining(t *testing.T) {
+// TestCtrlDPagesNodesWithoutDraining: drain is X, so ctrl+d is the vim
+// half-page-down on the Nodes list like every other — and never a drain.
+func TestCtrlDPagesNodesWithoutDraining(t *testing.T) {
 	var nodes []runtime.Object
 	for i := range 60 {
 		nodes = append(nodes, nodeObj(fmt.Sprintf("node-%02d", i), true, false))
@@ -754,15 +755,17 @@ func TestPgDownPagesNodesWithoutDraining(t *testing.T) {
 	m.SetSize(120, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyPgDown})
-	if m.actions.Active() {
-		t.Fatal("pgdown opened a confirm")
-	}
-	if m.selected == 0 {
-		t.Fatal("pgdown didn't move the selection")
-	}
-	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyPgUp})
-	if m.selected != 0 {
-		t.Fatalf("pgup left the selection at %d, want 0", m.selected)
+	for _, down := range []tea.KeyPressMsg{{Code: 'd', Mod: tea.ModCtrl}, {Code: tea.KeyPgDown}} {
+		m = step(t, m, down)
+		if m.actions.Active() {
+			t.Fatalf("%s opened a confirm", down)
+		}
+		if m.selected == 0 {
+			t.Fatalf("%s didn't move the selection", down)
+		}
+		m = step(t, m, tea.KeyPressMsg{Code: tea.KeyHome})
+		if m.selected != 0 {
+			t.Fatalf("home left the selection at %d, want 0", m.selected)
+		}
 	}
 }

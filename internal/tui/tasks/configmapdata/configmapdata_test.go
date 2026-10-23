@@ -3,6 +3,7 @@ package configmapdata
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -1136,5 +1137,38 @@ func TestBinaryDataKeysAreListedReadOnly(t *testing.T) {
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if len(mut.dataResourceVersions) != 0 || m.adding == nil {
 		t.Fatalf("add over a binaryData key was sent (patches %d) or closed the row", len(mut.dataResourceVersions))
+	}
+}
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	data := map[string]string{}
+	for i := range 60 {
+		data[fmt.Sprintf("KEY_%02d", i)] = "v"
+	}
+	base := newModel(t, newSession(), cmObj("ns", "big", data), nil, nil)
+	page, last := base.pageRows(), len(base.keys)-1
+	if page < 4 || last <= page {
+		t.Fatalf("fixture too small: page %d, last %d", page, last)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 0, tea.KeyPressMsg{Text: "G", Code: 'G'}, last},
+		{"end", 0, tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{"ctrl+d", 0, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{"ctrl+f", 0, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page},
+		{"ctrl+e", 0, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := base
+			m.selected = tc.from
+			if m = step(t, m, tc.key); m.selected != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", m.selected, tc.want, page)
+			}
+		})
 	}
 }

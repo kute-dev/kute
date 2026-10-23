@@ -71,6 +71,8 @@ func (m Model) Strips(width int) []string {
 	return lines
 }
 
+var diagnosticColumns = []components.Column{{Title: "Source", Min: 15}, {Title: "Resource", Min: 18, Flex: true}, {Title: "Helm state", Min: 12}, {Title: "Live evidence", Min: 22, Flex: true}}
+
 func (m Model) Body(width, height int) string {
 	switch m.state {
 	case tui.TaskStateLoading:
@@ -82,9 +84,8 @@ func (m Model) Body(width, height int) string {
 		return components.CenterLines([]string{"This release contains no saved hooks or manifest objects."}, width, height)
 	}
 	theme := m.Theme()
-	columns := []components.Column{{Title: "Source", Min: 15}, {Title: "Resource", Min: 18, Flex: true}, {Title: "Helm state", Min: 12}, {Title: "Live evidence", Min: 22, Flex: true}}
 	table := components.Table{
-		Columns: columns, Selected: m.selected, Width: width, Height: max(height, 3),
+		Columns: diagnosticColumns, Selected: m.selected, Width: width, Height: max(height, 3),
 		HeaderStyle:    lipgloss.NewStyle().Foreground(theme.TextFaint).Bold(true),
 		SelBarStyle:    lipgloss.NewStyle().Foreground(theme.AccentHi).Background(theme.SelBg),
 		SelRowStyle:    lipgloss.NewStyle().Foreground(theme.Text).Background(theme.SelBg),

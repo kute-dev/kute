@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kute-dev/kute/internal/kube"
+	"github.com/kute-dev/kute/internal/tui/verbs"
 )
 
 // keybarLine is the rendered screen's last line — the keybar band.
@@ -62,7 +63,7 @@ func TestFailedDrainShowsErrorOnKeybar(t *testing.T) {
 	m.SetSize(160, 36)
 	m = step(t, m, m.Init()())
 
-	m = step(t, m, tea.KeyPressMsg{Text: "ctrl+d"})
+	m = step(t, m, tea.KeyPressMsg{Text: verbs.Drain.Key})
 	m = step(t, m, tea.KeyPressMsg{Text: "y"})
 	if bar := keybarLine(m); !strings.Contains(bar, "disruption budget") {
 		t.Fatalf("expected the drain error on the keybar, got %q", bar)

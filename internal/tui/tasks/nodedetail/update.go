@@ -350,6 +350,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive {
 		return m.updateFilterKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveMotion(mo)
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -359,13 +363,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+u", verbs.PageUp.Key:
-		m.moveHalfPage(-1)
-	// ctrl+d is Drain on a node here, so pgdown is the half-page-down
-	// that works in both modes — paging a node's pods must never open a
-	// drain confirm.
-	case verbs.PageDown.Key:
-		m.moveHalfPage(1)
 	case verbs.Filter.Key:
 		if m.state == tui.TaskStateReady {
 			m.filterActive = true
@@ -510,6 +507,12 @@ func (m *Model) moveSelection(delta int) {
 
 func (m *Model) moveHalfPage(direction int) {
 	position := components.MoveHalfPage(m.selected, m.offset, m.tableDataRows(), len(m.pods), direction)
+	m.selected, m.offset = position.Selected, position.Offset
+}
+
+func (m *Model) moveMotion(mo verbs.Motion) {
+	rows := m.tableDataRows()
+	position := components.MoveBy(m.selected, m.offset, rows, len(m.pods), mo.Delta(rows))
 	m.selected, m.offset = position.Selected, position.Offset
 }
 

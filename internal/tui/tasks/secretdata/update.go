@@ -11,7 +11,6 @@ import (
 	"github.com/kute-dev/kute/internal/kube"
 	"github.com/kute-dev/kute/internal/tui"
 	"github.com/kute-dev/kute/internal/tui/actions"
-	"github.com/kute-dev/kute/internal/tui/components"
 	"github.com/kute-dev/kute/internal/tui/verbs"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -169,6 +168,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// does anything else, same rule 26a's meta.go uses.
 		m.message, m.lastError, m.notice = "", "", ""
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(motionPageRows))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -178,10 +181,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveHalfPage(1)
-	case "ctrl+u":
-		m.moveHalfPage(-1)
 	case verbs.AddSecretKey.Key, "insert":
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			theme := m.Theme()
@@ -303,10 +302,9 @@ func (m *Model) moveSelection(delta int) {
 	m.selected = clamp(m.selected+delta, 0, len(m.keys)-1)
 }
 
-func (m *Model) moveHalfPage(direction int) {
-	position := components.MoveHalfPage(m.selected, 0, 8, len(m.keys), direction)
-	m.selected = position.Selected
-}
+// motionPageRows is the page a motion steps by — the grid isn't windowed,
+// so this is the fixed 8-row page ctrl+d/ctrl+u have always halved.
+const motionPageRows = 8
 
 // commitAdd executes the add row's key=value through actions.Controller —
 // TierNone (applies immediately) outside PROD, TierInline (inline y/N)

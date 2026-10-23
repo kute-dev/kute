@@ -150,6 +150,10 @@ func (m *Model) applyLoaded(msg loadedMsg) tea.Cmd {
 }
 
 func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveBy(mo)
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc", "backspace":
 		return m, func() tea.Msg { return tui.BackMsg{} }
@@ -157,10 +161,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveHalfPage(1)
-	case "ctrl+u":
-		m.moveHalfPage(-1)
 	case verbs.ToggleGroup.Key:
 		m.invExpanded = !m.invExpanded
 		m.clampOffset(m.inventoryViewportRows())
@@ -208,10 +208,10 @@ func (m *Model) moveSelection(delta int) {
 	m.clampOffset(m.inventoryViewportRows())
 }
 
-func (m *Model) moveHalfPage(direction int) {
-	position := components.MoveHalfPage(
-		m.selected, m.offset, m.inventoryViewportRows(),
-		len(m.visibleInventory()), direction,
-	)
+// moveBy applies a shared motion verb to the inventory, scrolling its
+// window with the cursor.
+func (m *Model) moveBy(mo verbs.Motion) {
+	rows := m.inventoryViewportRows()
+	position := components.MoveBy(m.selected, m.offset, rows, len(m.visibleInventory()), mo.Delta(rows))
 	m.selected, m.offset = position.Selected, position.Offset
 }

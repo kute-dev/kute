@@ -518,6 +518,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case tea.KeyPressMsg:
+		if mo, ok := verbs.MotionFor(msg.String()); ok {
+			m.applyMotion(mo)
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
@@ -548,6 +552,34 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// applyMotion moves the selection by a shared motion verb. Rows wrap, so a
+// page is budgeted in rendered lines, the way Body lays them out.
+func (m *Model) applyMotion(mo verbs.Motion) {
+	height := m.pageLines()
+	switch mo {
+	case verbs.MotionHalfDown, verbs.MotionHalfUp, verbs.MotionPageDown, verbs.MotionPageUp:
+		widths := components.Table{Columns: diagnosticColumns}.ColumnWidths(tui.NormalizeSize(m.width, m.height).Width)
+		heights := make([]int, len(m.rows))
+		for i, row := range m.rows {
+			heights[i] = diagnosticRowHeight(row, widths, m.now)
+		}
+		budget, dir := mo.Delta(height), 1
+		if budget < 0 {
+			budget, dir = -budget, -1
+		}
+		m.selected = components.MoveByLineBudget(heights, m.selected, budget, dir)
+	default:
+		m.selected = mo.Apply(m.selected, len(m.rows), height)
+	}
+}
+
+// pageLines is Body's row budget: the frame body less the table header
+// and rule.
+func (m Model) pageLines() int {
+	size := tui.NormalizeSize(m.width, m.height)
+	return max(tui.FrameBodyHeight(size.Height, len(m.Strips(size.Width)))-2, 1)
 }
 
 func (m Model) selectedRow() (diagnosticRow, bool) {

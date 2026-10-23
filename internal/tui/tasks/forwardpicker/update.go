@@ -92,6 +92,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.editing() {
 		return m.updateEditKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveSelection(mo.Delta(m.height))
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -101,10 +105,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+d":
-		m.moveSelection(max(1, m.height/2))
-	case "ctrl+u":
-		m.moveSelection(-max(1, m.height/2))
 	case "enter":
 		return m, m.startSelected()
 	default:

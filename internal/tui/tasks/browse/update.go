@@ -654,6 +654,10 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.filterActive && !m.filterListFocused {
 		return m.updateFilterKey(msg)
 	}
+	if mo, ok := verbs.MotionFor(msg.String()); ok {
+		m.moveMotion(mo)
+		return m, nil
+	}
 	switch msg.String() {
 	case "ctrl+q", "ctrl+c":
 		return m, tea.Quit
@@ -690,13 +694,6 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.moveSelection(-1)
 	case "down", "j":
 		m.moveSelection(1)
-	case "ctrl+u", verbs.PageUp.Key:
-		m.moveHalfPage(-1)
-	// ctrl+d is Drain on a node here, so pgdown is the half-page-down
-	// that works in both modes — paging a node's pods must never open a
-	// drain confirm.
-	case verbs.PageDown.Key:
-		m.moveHalfPage(1)
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if m.state == tui.TaskStateReady {
 			m.handleSortKey(int(msg.String()[0] - '0'))
@@ -949,14 +946,15 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		}
-	case verbs.Drain.Key:
-		if m.kind == kube.KindNode {
+	// Drain and stop-all share X on different kinds; one case, so neither
+	// shadows the other.
+	case verbs.Drain.Key, verbs.StopAllForwards.Key:
+		if m.kind == kube.KindNode && verbs.Drain.Matches(msg.String()) {
 			if row, ok := m.selectedRow(); ok {
 				return m, m.beginDrain(row)
 			}
 		}
-	case verbs.StopAllForwards.Key:
-		if m.kind == kube.KindForward && m.state == tui.TaskStateReady {
+		if m.kind == kube.KindForward && verbs.StopAllForwards.Matches(msg.String()) && m.state == tui.TaskStateReady {
 			m.beginStopAllForwards()
 		}
 	case verbs.FluxSuspend.Key:

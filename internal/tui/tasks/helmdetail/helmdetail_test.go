@@ -442,3 +442,38 @@ func TestBodyWindowMatchesWholeListLayout(t *testing.T) {
 		}
 	}
 }
+
+func TestMotionKeysMoveSelection(t *testing.T) {
+	base := New(Config{Session: diagnosticSession(), Lister: &recordingLister{}, Events: fakeEvents{}, Release: pendingRelease()})
+	base.SetSize(120, 36)
+	base.state = tui.TaskStateReady
+	for range 60 {
+		base.rows = append(base.rows, diagnosticRow{typeLabel: "object", ref: kube.HelmObjectRef{Kind: "ConfigMap", Name: "cm"}, helmState: "declared", liveState: "live", kindType: rowObject})
+	}
+	page, last := base.pageLines(), len(base.rows)-1
+	if page < 4 || last <= page {
+		t.Fatalf("fixture too small: page %d, last %d", page, last)
+	}
+	for _, tc := range []struct {
+		name string
+		from int
+		key  tea.KeyPressMsg
+		want int
+	}{
+		{"G", 0, tea.KeyPressMsg{Text: "G", Code: 'G'}, last},
+		{"end", 0, tea.KeyPressMsg{Code: tea.KeyEnd}, last},
+		{"home", 5, tea.KeyPressMsg{Code: tea.KeyHome}, 0},
+		{"ctrl+d", 0, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}, page / 2},
+		{"ctrl+f", 0, tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}, page},
+		{"ctrl+e", 0, tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := base
+			m.selected = tc.from
+			upd, _ := m.Update(tc.key)
+			if got := upd.(*Model).selected; got != tc.want {
+				t.Fatalf("selected = %d, want %d (page %d)", got, tc.want, page)
+			}
+		})
+	}
+}
