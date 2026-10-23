@@ -41,6 +41,10 @@ const (
 	// typing searches "kinds/resources/namespaces/contexts"); its name is
 	// gotoTarget.name, and Enter switches exactly as 7a's palette does.
 	gotoSwitchContext
+	// gotoQuit is the vim ":q" family (gotoQuitItem) — never fuzzy, offered
+	// only for an exact command, so "q" still reaches ResourceQuotas below
+	// it and "qu…" is an ordinary query.
+	gotoQuit
 )
 
 type gotoTarget struct {
@@ -48,6 +52,7 @@ type gotoTarget struct {
 	kind      kube.ResourceKind
 	namespace string
 	name      string
+	force     bool // gotoQuit: skip the quit confirm (":q!")
 }
 
 // maxGotoResults caps the resource-name *results* shown for a query
@@ -323,6 +328,9 @@ func gotoFuzzyItems(sess *Session, query string, resourceCorpus *gotoResourceCor
 	corpus = append(corpus, gotoUpdateItem())
 
 	var pinned []palette.Item
+	if item, ok := gotoQuitItem(query); ok {
+		pinned = append(pinned, item)
+	}
 	if kind, ok := gotoAliasMatch(query); ok {
 		if desc, ok := sess.Registry.Descriptor(kind); ok {
 			match := gotoRankedItem(sess, desc, gotoNamespace(sess), gotoAliasFor(kind))
@@ -429,6 +437,33 @@ func gotoUpdateItem() palette.Item {
 		Detail: "what's new · upgrade",
 		Data:   gotoTarget{action: gotoOpenUpdatePanel},
 	}
+}
+
+// gotoQuitCommands are the vim quit commands ":" understands, and whether
+// each skips the confirm.
+var gotoQuitCommands = map[string]bool{
+	"q": false, "quit": false, "qa": false, "qall": false, "wq": false,
+	"q!": true, "quit!": true, "qa!": true, "qall!": true,
+}
+
+// gotoQuitItem is the pinned rank-1 row for an exact vim quit command. It is
+// a visible row rather than an intercept, so what ↵ will do is on screen
+// before it's pressed, and ↓ still reaches whatever "q" fuzzy-matches.
+func gotoQuitItem(query string) (palette.Item, bool) {
+	force, ok := gotoQuitCommands[strings.TrimSpace(query)]
+	if !ok {
+		return palette.Item{}, false
+	}
+	item := palette.Item{
+		Label:  "quit",
+		Detail: "exit kute",
+		Data:   gotoTarget{action: gotoQuit, force: force},
+	}
+	if force {
+		item.Label = "quit!"
+		item.Detail = "exit kute now · no confirm"
+	}
+	return item, true
 }
 
 func gotoKindItems(sess *Session) []palette.Item {
@@ -744,6 +779,9 @@ func gotoDispatch(sess *Session, item palette.Item) tea.Cmd {
 		return func() tea.Msg { return SwitchNamespaceMsg{Namespace: ns} }
 	case gotoOpenUpdatePanel:
 		return func() tea.Msg { return OpenUpdatePanelMsg{} }
+	case gotoQuit:
+		force := target.force
+		return func() tea.Msg { return QuitRequestMsg{Force: force} }
 	case gotoSwitchContext:
 		return switchContextCmd(sess, target.name)
 	}

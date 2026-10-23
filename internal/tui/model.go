@@ -284,6 +284,13 @@ type ClusterlessScreen interface {
 	Clusterless() bool
 }
 
+// KeyClaimer is a Screen that, for the moment, owns a key the root shell
+// would otherwise take — 8a's n/N while a committed search is on screen,
+// which would open the namespace palette instead.
+type KeyClaimer interface {
+	ClaimsKey(key string) bool
+}
+
 // Transient is implemented by a Task that hands its place in the navigation
 // stack to the task it swaps itself out for. tasks/objectdetail's 14d
 // redirect is the case that needs it: an object with neither conditions nor
@@ -410,6 +417,10 @@ type Model struct {
 	// since-closed/reopened jump palette) landing after a newer one —
 	// mirrors namespaceGen.
 	gotoGen int
+	// gg/ggSeq track a possible vim gg while the goto palette is open (gg.go).
+	gg        ggPhase
+	ggSeq     int
+	ggArmedAt time.Time
 
 	// whoCanVerbItemsCache/whoCanResourceItemsCache hold tasks/whocan's (22a)
 	// 'v'/'K' palette's unfiltered item lists for the palette session
@@ -987,6 +998,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case OpenUpdatePanelMsg:
 		return m, m.openUpdatePanel()
+	case QuitRequestMsg:
+		if msg.Force {
+			return m, tea.Quit
+		}
+		m.quitConfirm = true
+		m.mode = ModeConfirm
+		return m, nil
+	case ggTimeoutMsg:
+		return m, m.handleGGTimeout(msg)
 	case contextProbeMsg:
 		// A stale gen (a since-superseded probe run) still drains its own
 		// channel to completion — see contextProbeMsg's doc comment — but
@@ -1155,6 +1175,9 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 			return true, m, m.openResourcePalette(resource)
 		}
 	}
+	if kc, ok := m.task.(KeyClaimer); ok && kc.ClaimsKey(msg.String()) {
+		return false, m, nil
+	}
 	if cl, ok := m.task.(ClusterlessScreen); ok && cl.Clusterless() {
 		switch msg.String() {
 		case "g", ":", "n":
@@ -1163,7 +1186,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "g", ":":
-		return true, m, m.openPalette(palette.ScopeGoto, "›", "jump anywhere")
+		cmd := m.openPalette(palette.ScopeGoto, "›", "jump anywhere")
+		if msg.String() == "g" {
+			m.ggArm()
+		}
+		return true, m, cmd
 	case "n":
 		return true, m, m.openPalette(palette.ScopeNamespace, "ns ›", "")
 	case "c":
@@ -1192,6 +1219,15 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 // straight back to it — same two keystrokes the old "n n"/"c c" double-tap
 // used, now visible through the palette instead of bypassing it.
 func (m Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
+	consumed, held := m.ggResolve(msg)
+	if consumed {
+		return true, m, held
+	}
+	handled, next, cmd := m.handlePaletteKeyAfterGG(msg)
+	return handled, next, tea.Batch(held, cmd)
+}
+
+func (m Model) handlePaletteKeyAfterGG(msg tea.KeyPressMsg) (bool, Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.palette = nil
@@ -1461,6 +1497,12 @@ func (m *Model) pasteQuery(msg tea.Msg) (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
+	if m.gg == ggPending {
+		// RoutePaste already wrote the paste; put the held g before it.
+		m.palette.Input.SetValue("g" + m.palette.Input.Value())
+		m.palette.Input.CursorEnd()
+	}
+	m.gg = ggIdle // any paste ends an arm window too
 	return m.afterQueryEdit(cmd), true
 }
 

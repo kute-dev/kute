@@ -146,6 +146,10 @@ type UpdateCheckedMsg struct {
 // same push without needing a message hop.
 type OpenUpdatePanelMsg struct{}
 
+// QuitRequestMsg is the goto palette's ":q" — Force is ":q!", which skips
+// the quit confirm the way the bare 'q' key's overlay would ask first.
+type QuitRequestMsg struct{ Force bool }
+
 type ReplaceRootMsg struct {
 	Task Task
 	// Commit, when set, replaces Task: the root calls it on the Update loop
