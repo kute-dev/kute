@@ -208,6 +208,16 @@ func (m *Model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.openBuffer()
 			}
 		}
+	case verbs.SecretCopyValue.Key:
+		// 21a's "the only plaintext export", here too: the decoded value
+		// goes to the clipboard, and the result line names the key alone.
+		// A local write, so it needs neither a mutator nor a connection.
+		if m.state == tui.TaskStateReady {
+			if row, ok := m.selectedKeyRow(); ok {
+				m.message = "copied " + row.key
+				return m, tea.SetClipboard(row.value)
+			}
+		}
 	case verbs.RemoveSecretKey.Key:
 		if m.mutator != nil && m.state == tui.TaskStateReady {
 			if row, ok := m.selectedKeyRow(); ok {

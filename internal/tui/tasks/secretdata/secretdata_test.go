@@ -907,3 +907,24 @@ func TestCancelledProdConfirmRestoresTheBuffer(t *testing.T) {
 		})
 	}
 }
+
+// 'y' copies the selected key's decoded value — the plaintext goes to the
+// clipboard, never the screen: the result line names the key alone.
+func TestYCopiesDecodedValueWithoutShowingIt(t *testing.T) {
+	secret := secretObj("nva-stage", "nva-secrets", map[string][]byte{"SA_PASSWORD": []byte("hunter2-staging")})
+	m := newModel(t, newSession(), secret, nil)
+
+	if !strings.Contains(plain(m.View().Content), "y copy value") {
+		t.Fatalf("expected the keybar to teach y copy value, got:\n%s", plain(m.View().Content))
+	}
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "y"})
+	if cmd == nil || cmd() == nil {
+		t.Fatal("expected y to return a clipboard command")
+	}
+	if m.message != "copied SA_PASSWORD" {
+		t.Fatalf("message = %q, want %q", m.message, "copied SA_PASSWORD")
+	}
+	if view := plain(m.View().Content); strings.Contains(view, "hunter2-staging") {
+		t.Fatalf("copy leaked the value onto the screen:\n%s", view)
+	}
+}

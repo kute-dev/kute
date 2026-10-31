@@ -59,6 +59,9 @@ func (m Model) Keybar() tui.Keybar {
 	}
 
 	groups := [][]tui.KeyHint{{verbs.Move.Hint()}}
+	if len(m.keys) > 0 {
+		groups[0] = append(groups[0], verbs.SecretCopyValue.Hint())
+	}
 	if m.mutator != nil && !verbs.AddSecretKey.HiddenWhileOffline(m.conn.Offline()) {
 		groups = append(groups, []tui.KeyHint{
 			verbs.Open.HintAs("edit"), verbs.AddSecretKey.Hint(), verbs.RemoveSecretKey.Hint(),
