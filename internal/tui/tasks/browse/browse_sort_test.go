@@ -127,22 +127,38 @@ func TestSortNoopWhileGrouped(t *testing.T) {
 	}
 }
 
-func TestSortResetsOnNamespaceSwitch(t *testing.T) {
+func TestSortSurvivesNamespaceSwitch(t *testing.T) {
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindPod: {pod("default", "zeta"), pod("other", "alpha")},
+		kube.KindPod: {
+			pod("default", "zeta"), pod("default", "alpha"),
+			pod("other", "beta"), pod("other", "omega"), pod("other", "gamma"),
+		},
 	}}
 	m := New(Config{Session: newSession(), Lister: lister})
 	m.SetSize(120, 36)
 	m = step(t, m, m.load()())
-	m = step(t, m, tea.KeyPressMsg{Text: "4"})
-	if m.sortColumn == 0 {
-		t.Fatalf("expected a manual sort to be active before switching namespace")
+	m = step(t, m, tea.KeyPressMsg{Text: "1"})
+	m = step(t, m, tea.KeyPressMsg{Text: "1"}) // name, flipped to descending
+	if m.sortColumn != 1 || m.sortAsc {
+		t.Fatalf("sortColumn=%d sortAsc=%v, want 1/false before switching namespace", m.sortColumn, m.sortAsc)
 	}
 
-	cmd := m.switchNamespace("other")
-	m = step(t, m, cmd())
-	if m.sortColumn != 0 || m.sortAsc {
-		t.Fatalf("sortColumn=%d sortAsc=%v, want 0/false after a namespace switch", m.sortColumn, m.sortAsc)
+	m = step(t, m, m.switchNamespace("other")())
+	if m.sortColumn != 1 || m.sortAsc {
+		t.Fatalf("sortColumn=%d sortAsc=%v, want 1/false after a namespace switch", m.sortColumn, m.sortAsc)
+	}
+	if want := []string{"omega", "gamma", "beta"}; !equalStrings(displayRowNames(m), want) {
+		t.Fatalf("names = %v, want %v (descending name kept)", displayRowNames(m), want)
+	}
+
+	// The grouped all-namespaces view sets it aside rather than dropping it.
+	m = step(t, m, m.switchNamespace("")())
+	if !m.grouped() {
+		t.Fatalf("expected grouped() true for an all-namespaces Pods view")
+	}
+	m = step(t, m, m.switchNamespace("other")())
+	if want := []string{"omega", "gamma", "beta"}; !equalStrings(displayRowNames(m), want) {
+		t.Fatalf("names = %v, want %v after a round trip through all namespaces", displayRowNames(m), want)
 	}
 }
 

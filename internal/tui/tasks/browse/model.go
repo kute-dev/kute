@@ -603,8 +603,10 @@ type Model struct {
 	// with a 1-9 key (sort.go's handleSortKey) — 0 means no manual override,
 	// so applySort falls back to sortForDisplay's built-in default. Reset by
 	// resetAndLoad alongside the rest of the per-view state, since a column
-	// index only means something against the kind/namespace it was chosen
-	// on. sortAsc is only meaningful while sortColumn is non-zero.
+	// index only means something against the kind it was chosen on —
+	// switchNamespace carries it over, as it does the filter, because the
+	// columns are the kind's own. sortAsc is only meaningful while
+	// sortColumn is non-zero.
 	sortColumn int
 	sortAsc    bool
 
@@ -1212,7 +1214,10 @@ func (m *Model) switchKind(kind kube.ResourceKind) tea.Cmd {
 // per-view state (right for a kind switch, whose query no longer means
 // anything against a different kind's names), so a namespace switch snapshots
 // filterQuery/filterActive first and restores them after — docs/design
-// README.md §6a: "switching keeps kind + filter".
+// README.md §6a: "switching keeps kind + filter". A manual 1-9 sort rides
+// along the same way (2a): its column index is into the kind's own
+// columns, which a namespace switch doesn't change, and the all-namespaces
+// grouped view simply ignores it until a single namespace is picked again.
 //
 // Mirrors Session.Location.Namespace the same way setFilter mirrors
 // Location.Filter: this is the only place browse mutates m.namespace, but
@@ -1252,7 +1257,13 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 		// namespace silently narrowed to one workload's pods.
 		query, active, focused = "", false, false
 	}
+	sortColumn, sortAsc := m.sortColumn, m.sortAsc
 	cmd := m.resetAndLoad()
+	m.sortColumn, m.sortAsc = sortColumn, sortAsc
+	if m.rows != nil {
+		// resetAndLoad may have seeded cached rows, sorted for the default.
+		m.applySort()
+	}
 	m.filterActive = active
 	m.filterListFocused = focused
 	m.setFilter(query)
@@ -1486,9 +1497,9 @@ func (m *Model) resetAndLoad() tea.Cmd {
 	if m.pendingBulkDelete() {
 		m.actions.Cancel()
 	}
-	// A manual column choice only means something against the kind/
-	// namespace it was picked on, so it resets here too — same lifecycle as
-	// the filter box above.
+	// A manual column choice only means something against the kind it was
+	// picked on, so it resets here too — same lifecycle as the filter box
+	// above, and like it switchNamespace restores it afterwards.
 	m.sortColumn = 0
 	m.sortAsc = false
 	m.reloadEpoch++
