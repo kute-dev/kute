@@ -18,7 +18,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
       - name: Verify module files
         run: go mod tidy -diff
       - name: go vet
@@ -86,7 +86,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
       - name: Create the cluster and apply fixtures
         run: scripts/e2e-cluster.sh up
       # ./internal/kube/... is in the same invocation because the
@@ -125,7 +125,7 @@ jobs:
       # along too even though signing is skipped (see below). MISE_ENV=release
       # pulls mise.release.toml's tools in on top of mise.toml's.
       - name: Setup mise
-        uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         env:
           MISE_ENV: release
       - name: Run GoReleaser check
