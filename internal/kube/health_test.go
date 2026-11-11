@@ -599,6 +599,29 @@ func TestHealthReauthenticatedPingDropsStaleCredentialError(t *testing.T) {
 	}
 }
 
+// After a network outage ends, /livez answers before client-go's reflectors
+// re-dial their watches: the banner must stop quoting the dial error for a
+// link that is demonstrably back, while staying Reconnecting until they do.
+func TestHealthRestoredLinkPingDropsStaleDialError(t *testing.T) {
+	t.Parallel()
+	h := newHealth()
+	refused := errors.New(`Get "https://127.0.0.1:10443/livez": dial tcp 127.0.0.1:10443: connect: connection refused`)
+	h.recordPing(0, refused, true, true, time.Now())
+	h.recordPing(5*time.Millisecond, nil, false, true, time.Now())
+
+	got := h.get()
+	if got.Phase != ConnReconnecting {
+		t.Fatalf("Phase = %v, want Reconnecting until the watches re-sync", got.Phase)
+	}
+	if got.Err != errLinkRestoredWatchesPending {
+		t.Errorf("Err = %q, want %q rather than the outage's dial error", got.Err, errLinkRestoredWatchesPending)
+	}
+	h.recordPing(5*time.Millisecond, nil, true, true, time.Now())
+	if got := h.get(); got.Phase != ConnConnected {
+		t.Errorf("Phase = %v once watches re-sync, want Connected", got.Phase)
+	}
+}
+
 func TestHealthWatchErrorDoesNotChurnWhileUnauthenticated(t *testing.T) {
 	t.Parallel()
 	h := newHealth()

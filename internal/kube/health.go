@@ -426,6 +426,10 @@ func (c *Cluster) ping(probe healthProbeSnapshot) {
 // proves a re-authenticated credential works and the watches re-attaching.
 const errReestablishingWatches = "signed in · re-establishing watches"
 
+// errLinkRestoredWatchesPending is the same gap after a network outage: the
+// /livez ping is answered again but the informer watches haven't re-attached.
+const errLinkRestoredWatchesPending = "API server reachable again · re-establishing watches"
+
 func (h *health) recordPing(latency time.Duration, err error, synced, reached bool, now time.Time) {
 	prev := h.get()
 
@@ -437,11 +441,15 @@ func (h *health) recordPing(latency time.Duration, err error, synced, reached bo
 			// expired NextRetryAt in place would reset the timer to zero and turn
 			// a healthy /livez plus broken WATCH into a tight probe loop.
 			attempt := prev.Attempt + 1
-			msg := prev.Err
+			// The endpoint answers again; only the watches are still down,
+			// and client-go's reflectors re-dial on their own backoff (up
+			// to a minute after a long outage), so this state can last
+			// through several presses of r. Carrying the outage's own text
+			// forward — "connection refused", "Token has expired…" — tells
+			// the user the link they just restored, or the login they just
+			// did, didn't take.
+			msg := errLinkRestoredWatchesPending
 			if prev.Phase == ConnUnauthenticated {
-				// The credential works again; only the watches are still
-				// down. Carrying "Token has expired…" forward would tell
-				// the user the login they just did didn't take.
 				msg = errReestablishingWatches
 			}
 			h.set(ConnState{
