@@ -225,7 +225,7 @@ func (m Model) factsGridRows() [][2]string {
 		{"DEADLINE", deadline},
 		{"BACKOFF LIMIT", backoff},
 		{"ACTIVE", strconv.Itoa(len(m.summary.ActiveRuns))},
-		{"HISTORY KEPT", fmt.Sprintf("%d succeeded · %d failed", succ, fail)},
+		{"HISTORY LIMITS", fmt.Sprintf("%d succeeded / %d failed", succ, fail)},
 		{"LAST SCHEDULE", lastSchedule},
 		{"CONTROLLER", controller},
 	}

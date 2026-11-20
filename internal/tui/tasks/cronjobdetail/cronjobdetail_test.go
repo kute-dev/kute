@@ -180,8 +180,8 @@ func TestFactsGridDefaultsForNilPointerFields(t *testing.T) {
 	if got["BACKOFF LIMIT"] != "6 (default)" {
 		t.Errorf("BACKOFF LIMIT = %q, want the documented Kubernetes default", got["BACKOFF LIMIT"])
 	}
-	if got["HISTORY KEPT"] != "3 succeeded · 1 failed" {
-		t.Errorf("HISTORY KEPT = %q, want the documented Kubernetes defaults (3/1)", got["HISTORY KEPT"])
+	if got["HISTORY LIMITS"] != "3 succeeded / 1 failed" {
+		t.Errorf("HISTORY LIMITS = %q, want the documented Kubernetes defaults (3/1)", got["HISTORY LIMITS"])
 	}
 	if got["LAST SCHEDULE"] != "never" {
 		t.Errorf("LAST SCHEDULE = %q, want never for an unset status.lastScheduleTime", got["LAST SCHEDULE"])
