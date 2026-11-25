@@ -18,7 +18,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
       - name: Verify module files
         run: go mod tidy -diff
       - name: go vet
@@ -67,7 +67,7 @@ jobs:
           [ -n "$version" ] || { echo "no go version found in mise.toml" >&2; exit 1; }
           echo "version=${version}" >> "$GITHUB_OUTPUT"
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: ${{ steps.goversion.outputs.version }}
       - name: go build
@@ -86,7 +86,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup mise
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
       - name: Create the cluster and apply fixtures
         run: scripts/e2e-cluster.sh up
       # ./internal/kube/... is in the same invocation because the
@@ -125,7 +125,7 @@ jobs:
       # along too even though signing is skipped (see below). MISE_ENV=release
       # pulls mise.release.toml's tools in on top of mise.toml's.
       - name: Setup mise
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
         env:
           MISE_ENV: release
       - name: Run GoReleaser check
