@@ -46,14 +46,32 @@ func TestEditorFileExt(t *testing.T) {
 	}
 }
 
+// fakeEditorEnv makes this test binary act as the editor: a shell script
+// can't be executed on Windows, and the binary itself can everywhere.
+const fakeEditorEnv = "KUTE_TEST_FAKE_EDITOR"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(fakeEditorEnv) != "" {
+		if err := os.WriteFile(os.Args[len(os.Args)-1], []byte("line1\nedited\n"), 0o600); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
 // TestExternalEditRunsTheEditor drives Run with a fake editor that rewrites
 // the file, the way vim would on :wq.
 func TestExternalEditRunsTheEditor(t *testing.T) {
-	script := filepath.Join(t.TempDir(), "fake-editor")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'line1\\nedited\\n' > \"$1\"\n"), 0o700); err != nil {
+	exe, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("KUBE_EDITOR", script)
+	// Found through PATH, since editorCommand splits on whitespace and the
+	// build directory may contain some.
+	t.Setenv("PATH", filepath.Dir(exe))
+	t.Setenv("KUBE_EDITOR", filepath.Base(exe))
+	t.Setenv(fakeEditorEnv, "1")
 	e := &externalEdit{key: "cfg.ini", initial: "line1\nline2"}
 	if err := e.Run(); err != nil {
 		t.Fatal(err)
