@@ -3,7 +3,7 @@ module github.com/kute-dev/kute
 go 1.26.0
 
 require (
-	charm.land/bubbles/v2 v2.2.1
+	charm.land/bubbles/v2 v2.2.2
 	charm.land/bubbletea/v2 v2.1.2
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/atotto/clipboard v0.1.4
@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/creack/pty v1.1.24
 	github.com/mattn/go-runewidth v0.0.31
-	github.com/rivo/uniseg v0.4.7
+	github.com/rivo/uniseg v0.4.8-0.20261110175422-3a370411ca06
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sahilm/fuzzy v0.1.3
 	golang.org/x/sync v0.25.0
