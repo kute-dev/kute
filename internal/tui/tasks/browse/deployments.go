@@ -44,46 +44,59 @@ func rolloutRestartWillRunLine(scope tui.TaskScope) string {
 	return "will run: " + kube.RolloutRestartCommandString(kube.ResourceKind(scope.ResourceKind), scope.Namespace, scope.ResourceName)
 }
 
-// openDeploymentPods switches kind to Pods with row's name pre-applied as
-// the filter query (docs/design README.md §9a: "↵ = the deployment's pods
-// ... not a new screen"): switchKind's resetAndLoad clears filterQuery
-// synchronously before returning its load Cmd, so setting filterQuery right
-// after is safe — it's still in place once the loaded rows reach
-// recomputeVisible. Pod names conventionally start with the owning
-// deployment's name (deploy-<rs-hash>-<pod-hash>), so the existing fuzzy
-// filter already reads as an "owner match" without a second filter
-// mechanism.
+// openDeploymentPods switches kind to Pods narrowed to the Deployment's own
+// Pods (docs/design README.md §9a: "↵ = the deployment's pods ... not a new
+// screen"), resolved through owner references (Deployment → ReplicaSet →
+// Pod) rather than by name. It used to pre-fill the fuzzy filter with the
+// Deployment's name, which also matched every sibling whose name contains
+// the same letters in order — aim-bp-api's pods listed aim-bp-integration-
+// api's too.
 func (m *Model) openDeploymentPods(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
-	// switchKind's resetAndLoad clears originKind/originName along with
-	// filterQuery, so they're set here for the same reason filterQuery is:
-	// still in place once the loaded rows reach recomputeVisible.
-	m.originKind, m.originName = kube.KindDeployment, row.Name
-	return cmd
+	return m.openWorkloadPods(kube.KindDeployment, row)
 }
 
-// openStatefulSetPods is openDeploymentPods's StatefulSet twin: same "filter
-// Pods by the owning row's name" recipe, since StatefulSet pod names also
-// start with the owning StatefulSet's name (<statefulset>-0, <statefulset>-1,
-// ...), so the existing fuzzy filter reads as an owner match here too.
+// openStatefulSetPods is openDeploymentPods's StatefulSet twin: the
+// StatefulSet owns its Pods directly.
 func (m *Model) openStatefulSetPods(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
-	m.originKind, m.originName = kube.KindStatefulSet, row.Name
-	return cmd
+	return m.openWorkloadPods(kube.KindStatefulSet, row)
 }
 
-// openDaemonSetPods is openDeploymentPods's DaemonSet twin: same "filter
-// Pods by the owning row's name" recipe — a DaemonSet's own pods are named
-// <daemonset>-<hash> (assigned directly by the DaemonSet controller, no
-// intermediate ReplicaSet), so they also start with the owning DaemonSet's
-// name.
+// openDaemonSetPods is openDeploymentPods's DaemonSet twin: the DaemonSet
+// owns its Pods directly, no intermediate ReplicaSet.
 func (m *Model) openDaemonSetPods(row resources.Row) tea.Cmd {
-	cmd := m.switchKind(kube.KindPod)
-	m.setFilter(row.Name)
-	m.originKind, m.originName = kube.KindDaemonSet, row.Name
-	return cmd
+	return m.openWorkloadPods(kube.KindDaemonSet, row)
+}
+
+func (m *Model) openWorkloadPods(kind kube.ResourceKind, row resources.Row) tea.Cmd {
+	return m.openOwnedPods(kind, row, []kube.HelmReleasePodSource{{Kind: kind, Namespace: row.Namespace, Name: row.Name}})
+}
+
+// openOwnedPods switches to Pods narrowed to the Pods sources' controller
+// chains own (kube.HelmReleasePodKeys, resolved from the informer caches in
+// load()) — the one owner-scoped child view, shared by a Helm release's ↵
+// and a workload's. The association is kept apart from the user's fuzzy
+// filter, so '/' still narrows within it and the query box stays empty.
+func (m *Model) openOwnedPods(originKind kube.ResourceKind, row resources.Row, sources []kube.HelmReleasePodSource) tea.Cmd {
+	_ = m.switchKind(kube.KindPod)
+	m.releasePodSources = sources
+	m.releasePodView = true
+	// resetAndLoad may have restored an ordinary Pods cached view before the
+	// owner association was installed. It is not a valid preview of this
+	// narrower view.
+	m.rows, m.visible, m.display = nil, nil, nil
+	m.cachedView = false
+	// switchKind's resetAndLoad clears the origin, so it's set here, after.
+	m.originKind, m.originName, m.originRowNamespace = originKind, row.Name, row.Namespace
+	// switchKind created its load command before the association was
+	// installed. Supersede it so the first Pods read cannot briefly use the
+	// ordinary unfiltered path.
+	m.reloadEpoch++
+	m.metricsEpoch++
+	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
+	if m.pollsMetrics() {
+		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
+	}
+	return tea.Batch(cmds...)
 }
 
 // backToOrigin reverses openDeploymentPods/openStatefulSetPods/

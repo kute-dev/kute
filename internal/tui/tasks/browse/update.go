@@ -484,7 +484,7 @@ func (m *Model) applyRowsLoaded(msg rowsLoadedMsg) (tea.Model, tea.Cmd) {
 			if kube.IsPermissionError(err) {
 				m.state = tui.TaskStatePermissionDenied
 			}
-			m.feedback = fmt.Sprintf("couldn't resolve release Pods: %v", err)
+			m.feedback = fmt.Sprintf("couldn't resolve %s's Pods: %v", m.originName, err)
 			return m, nil
 		}
 	}

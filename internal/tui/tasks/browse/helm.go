@@ -169,26 +169,9 @@ func (m *Model) openReleaseObjects(row resources.Row) tea.Cmd {
 			break
 		}
 	}
-	_ = m.switchKind(kube.KindPod)
-	m.releasePodSources = sources
-	m.releasePodView = true
-	// resetAndLoad may have restored an ordinary Pods cached view before the
-	// release association was installed. It is not a valid preview of this
-	// narrower semantic view.
-	m.rows, m.visible, m.display = nil, nil, nil
-	m.cachedView = false
-	m.originKind, m.originName = kube.KindHelmRelease, row.Name
-	m.originNamespace, m.originWidened, m.originRowNamespace = prevNamespace, widened, row.Namespace
-	// switchKind created its load command before the semantic association was
-	// installed. Supersede it so the first Pods read cannot briefly use the
-	// ordinary unfiltered path.
-	m.reloadEpoch++
-	m.metricsEpoch++
-	cmds := []tea.Cmd{m.load(), m.spinner.Tick}
-	if m.pollsMetrics() {
-		cmds = append(cmds, m.loadMetricsCmd(m.metricsEpoch), m.scheduleMetricsTick(m.metricsEpoch))
-	}
-	return tea.Batch(cmds...)
+	cmd := m.openOwnedPods(kube.KindHelmRelease, row, sources)
+	m.originNamespace, m.originWidened = prevNamespace, widened
+	return cmd
 }
 
 // openSelectedHelmValues pushes 18a's 'v' — the selected release's decoded

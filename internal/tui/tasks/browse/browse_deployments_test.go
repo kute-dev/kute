@@ -159,37 +159,70 @@ func TestCtrlRProdOpensTypeNameModal(t *testing.T) {
 	}
 }
 
-func TestEnterOnDeploymentSwitchesToPodsFilteredByName(t *testing.T) {
-	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
-		kube.KindDeployment: {deploymentObj("default", "api")},
-		kube.KindPod: {
-			pod("default", "api-abc123"),
-			pod("default", "worker-0"),
-		},
-	}}
-	session := newSession()
-	session.Location.Kind = kube.KindDeployment
-	m := New(Config{Session: session, Lister: lister})
-	m.SetSize(120, 36)
-	m = step(t, m, m.Init()())
+// controlledBy marks obj's controller owner reference, the link
+// kube.HelmReleasePodKeys follows from a workload to its Pods.
+func controlledBy(obj metav1.Object, kind, name string) {
+	controller := true
+	obj.SetOwnerReferences([]metav1.OwnerReference{{Kind: kind, Name: name, Controller: &controller}})
+}
 
-	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	next := *updated.(*Model)
-	if cmd != nil {
-		next = step(t, next, cmd())
-	}
-	if next.kind != kube.KindPod {
-		t.Fatalf("expected kind switched to Pod, got %s", next.kind)
-	}
-	if next.filterInput.Value() != "api" {
-		t.Fatalf("filterQuery = %q, want %q", next.filterInput.Value(), "api")
-	}
-	view := plain(next.Render())
-	if !strings.Contains(view, "api-abc123") {
-		t.Fatalf("expected the owned pod to remain visible:\n%s", view)
-	}
-	if strings.Contains(view, "worker-0") {
-		t.Fatalf("expected the unrelated pod to be filtered out:\n%s", view)
+// deploymentPod returns a Pod owned by deployment through a ReplicaSet
+// named after it, plus that ReplicaSet.
+func deploymentPod(ns, deployment, rsHash, podHash string) (*appsv1.ReplicaSet, *corev1.Pod) {
+	rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: deployment + "-" + rsHash}}
+	controlledBy(rs, "Deployment", deployment)
+	p := pod(ns, rs.Name+"-"+podHash)
+	controlledBy(p, "ReplicaSet", rs.Name)
+	return rs, p
+}
+
+// TestEnterOnWorkloadShowsOnlyOwnedPods pins that ↵ on a workload scopes its
+// pods by owner reference, not by name: aim-bp-api's name fuzzy-matches
+// aim-bp-integration-api's pods (and a StatefulSet "db" matches "db-backup-0"),
+// which the old pre-filled filter listed as the workload's own.
+func TestEnterOnWorkloadShowsOnlyOwnedPods(t *testing.T) {
+	apiRS, apiPod := deploymentPod("default", "aim-bp-api", "5c4f775bf7", "lmbld")
+	intRS, intPod := deploymentPod("default", "aim-bp-integration-api", "6dc86456b8", "dc866")
+	dbPod, dbBackupPod := pod("default", "db-0"), pod("default", "db-backup-0")
+	controlledBy(dbPod, "StatefulSet", "db")
+	controlledBy(dbBackupPod, "StatefulSet", "db-backup")
+	agentPod, agentExtraPod := pod("default", "agent-x7k2p"), pod("default", "agent-extra-q9w3r")
+	controlledBy(agentPod, "DaemonSet", "agent")
+	controlledBy(agentExtraPod, "DaemonSet", "agent-extra")
+	pods := []runtime.Object{apiPod, intPod, dbPod, dbBackupPod, agentPod, agentExtraPod}
+
+	for _, tc := range []struct {
+		kind  kube.ResourceKind
+		owner runtime.Object
+		want  string
+	}{
+		{kube.KindDeployment, deploymentObj("default", "aim-bp-api"), apiPod.Name},
+		{kube.KindStatefulSet, statefulSetObj("default", "db", 1, 1), dbPod.Name},
+		{kube.KindDaemonSet, daemonSetObj("default", "agent", 1, 1), agentPod.Name},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
+				tc.kind:             {tc.owner},
+				kube.KindReplicaSet: {apiRS, intRS},
+				kube.KindPod:        pods,
+			}}
+			session := newSession()
+			session.Location.Kind = tc.kind
+			m := New(Config{Session: session, Lister: lister})
+			m.SetSize(120, 36)
+			m = step(t, m, m.Init()())
+
+			m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
+			if m.kind != kube.KindPod {
+				t.Fatalf("expected kind switched to Pod, got %s", m.kind)
+			}
+			if got := m.filterInput.Value(); got != "" {
+				t.Fatalf("owner scope leaked into the user filter: %q", got)
+			}
+			if got := displayRowNames(m); !equalStrings(got, []string{tc.want}) {
+				t.Fatalf("pods = %v, want [%s]", got, tc.want)
+			}
+		})
 	}
 }
 

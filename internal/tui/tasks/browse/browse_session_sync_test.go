@@ -108,14 +108,16 @@ func TestOpenDaemonSetPodsSyncsSessionLocationKind(t *testing.T) {
 }
 
 // TestNamespaceSwitchDropsOwnerFilter pins that leaving a Deployment's
-// filtered pods view for another namespace drops the owner's pre-filled
-// query along with its breadcrumb segment. The query lives behind a closed
-// filter strip, so carrying it over left all namespaces silently showing
-// only that one Deployment's pods.
+// owner-scoped pods view for another namespace drops both the owner scope and
+// any query typed inside it, along with the breadcrumb's origin segment.
+// Carrying either over left all namespaces silently showing only that one
+// Deployment's pods.
 func TestNamespaceSwitchDropsOwnerFilter(t *testing.T) {
+	rs, apiPod := deploymentPod("default", "api", "5c4f775bf7", "abc12")
 	lister := fakeLister{objs: map[kube.ResourceKind][]runtime.Object{
 		kube.KindDeployment: {deploymentObj("default", "api")},
-		kube.KindPod:        {pod("default", "api-abc123"), pod("kube-system", "coredns-xyz12")},
+		kube.KindReplicaSet: {rs},
+		kube.KindPod:        {apiPod, pod("kube-system", "coredns-xyz12")},
 	}}
 	session := newSession()
 	session.Location.Kind = kube.KindDeployment
@@ -124,16 +126,20 @@ func TestNamespaceSwitchDropsOwnerFilter(t *testing.T) {
 	m = step(t, m, m.Init()())
 
 	m = step(t, m, tea.KeyPressMsg{Code: tea.KeyEnter, Text: "enter"})
-	if got := m.filterInput.Value(); got != "api" {
-		t.Fatalf("expected the deployment's pods filtered by its name, got query %q", got)
+	if got := displayRowNames(m); !equalStrings(got, []string{apiPod.Name}) {
+		t.Fatalf("expected only the deployment's own pod, got %v", got)
 	}
+	m.setFilter("abc")
 
 	m = step(t, m, tui.SwitchNamespaceMsg{Namespace: ""})
 	if got := m.filterInput.Value(); got != "" {
-		t.Fatalf("expected the owner filter dropped on namespace switch, got query %q", got)
+		t.Fatalf("expected the owner view's query dropped on namespace switch, got %q", got)
 	}
 	if session.Location.Filter != "" {
 		t.Fatalf("expected Session.Location.Filter cleared, got %q", session.Location.Filter)
+	}
+	if m.releasePodView || m.originName != "" {
+		t.Fatalf("expected the owner scope dropped, got releasePodView=%v origin=%q", m.releasePodView, m.originName)
 	}
 	if len(m.visible) != 2 {
 		t.Fatalf("expected both namespaces' pods visible, got %d", len(m.visible))

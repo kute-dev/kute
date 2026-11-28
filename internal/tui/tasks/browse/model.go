@@ -645,9 +645,11 @@ type Model struct {
 	originNamespace    string
 	originWidened      bool
 	originRowNamespace string
-	// releasePodSources narrows the current Pods view to controller-owned Pods
-	// declared by the Helm release Enter was pressed on. It is deliberately
-	// separate from the user's fuzzy filter.
+	// releasePodSources narrows the current Pods view to the Pods these
+	// sources' controller chains own — the Helm release's manifest workloads,
+	// or the one Deployment/StatefulSet/DaemonSet ↵ was pressed on
+	// (openOwnedPods). It is deliberately separate from the user's fuzzy
+	// filter: a name is not a Pod identity.
 	releasePodSources []kube.HelmReleasePodSource
 	releasePodView    bool
 
@@ -1250,11 +1252,11 @@ func (m *Model) switchNamespace(namespace string) tea.Cmd {
 	}
 	query, active, focused := m.filterInput.Value(), m.filterActive, m.filterListFocused
 	if m.originName != "" {
-		// An owner's child view (openDeploymentPods and its twins) scopes by
-		// pre-filling the query without opening the filter strip — the
-		// breadcrumb's origin segment is its only visible trace, and
-		// resetAndLoad drops that. Carrying the query over would leave every
-		// namespace silently narrowed to one workload's pods.
+		// An owner's child view (openOwnedPods) is scoped by owner refs, not
+		// the query, and resetAndLoad drops that scope along with the
+		// breadcrumb's origin segment. A query typed inside it narrowed one
+		// workload's pods; carrying it over would leave every namespace
+		// silently narrowed by it.
 		query, active, focused = "", false, false
 	}
 	sortColumn, sortAsc := m.sortColumn, m.sortAsc
